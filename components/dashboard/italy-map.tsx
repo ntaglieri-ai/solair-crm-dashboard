@@ -4,9 +4,8 @@ import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps
 import { cn } from "@/lib/utils"
 import { MAP_MARKERS, type MapMarker } from "@/lib/mock-data"
 
-// TopoJSON delle regioni italiane (sorgente pubblica, nessuna API a runtime)
-const ITALY_GEO =
-  "https://raw.githubusercontent.com/deldersveld/topojson/master/countries/italy/italy-regions.json"
+// TopoJSON delle regioni italiane servito localmente (nessuna fetch esterna a runtime)
+const ITALY_GEO = "/italy-regions.json"
 
 const INTENSITY_COLOR: Record<MapMarker["intensity"], string> = {
   caldo: "var(--destructive)",
@@ -42,12 +41,12 @@ export function ItalyMap() {
                 <Geography
                   key={geo.rsmKey}
                   geography={geo}
-                  fill="var(--card)"
-                  stroke="var(--border)"
-                  strokeWidth={0.5}
+                  fill="var(--secondary)"
+                  stroke="var(--primary)"
+                  strokeWidth={0.6}
                   style={{
                     default: { outline: "none" },
-                    hover: { outline: "none", fill: "var(--secondary)" },
+                    hover: { outline: "none", fill: "var(--accent)" },
                     pressed: { outline: "none" },
                   }}
                 />

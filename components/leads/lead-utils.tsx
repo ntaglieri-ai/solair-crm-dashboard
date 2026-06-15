@@ -1,8 +1,10 @@
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
+import { Check, Minus } from "lucide-react"
 import {
   type StatoLead,
   type OrigineLead,
+  type StatoEmail,
   STATO_LEAD_TONE,
   tagTone,
   leadInitials,
@@ -52,7 +54,7 @@ export function LeadAvatar({
   )
 }
 
-export function StatusBadge({ stato }: { stato: StatoLead }) {
+export function StatoLeadBadge({ stato }: { stato: StatoLead }) {
   const tone = STATO_LEAD_TONE[stato]
   return (
     <Badge
@@ -66,7 +68,7 @@ export function StatusBadge({ stato }: { stato: StatoLead }) {
   )
 }
 
-export function TagBadges({ tags }: { tags: string[] }) {
+export function TagList({ tags }: { tags: string[] }) {
   if (!tags.length) {
     return <span className="text-xs text-muted-foreground">—</span>
   }
@@ -127,5 +129,42 @@ export function ScoreBar({ score }: { score: number }) {
         {score}
       </span>
     </div>
+  )
+}
+
+const EMAIL_STATO_STYLES: Record<StatoEmail, string> = {
+  Aperta: "bg-success/10 text-success",
+  Recapitata: "bg-info/10 text-info",
+  "Non recapitata": "bg-destructive/10 text-destructive",
+  "—": "bg-muted text-muted-foreground",
+}
+
+export function EmailStatoBadge({ stato }: { stato: StatoEmail }) {
+  if (stato === "—") {
+    return <span className="text-muted-foreground">—</span>
+  }
+  return (
+    <Badge
+      className={cn(
+        "rounded-md px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap",
+        EMAIL_STATO_STYLES[stato],
+      )}
+    >
+      {stato}
+    </Badge>
+  )
+}
+
+export function BoolDot({ value }: { value: boolean }) {
+  return value ? (
+    <span className="inline-flex items-center gap-1 text-success">
+      <Check className="size-4" />
+      <span className="text-xs">Sì</span>
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-muted-foreground">
+      <Minus className="size-4" />
+      <span className="text-xs">No</span>
+    </span>
   )
 }

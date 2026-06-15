@@ -27,17 +27,20 @@ import {
 } from "@/components/ui/select"
 import {
   mockLeads,
-  nomeCompleto,
   DUPLICATI_COUNT,
   LEAD_TOTAL,
+  LEAD_COLUMNS,
+  DEFAULT_VISIBLE_COLUMNS,
   type Lead,
+  type LeadColumnId,
 } from "@/lib/mock-data"
 import {
   LeadFilters,
   DEFAULT_FILTERS,
   type LeadFilterState,
 } from "@/components/leads/lead-filters"
-import { LeadTable } from "@/components/leads/lead-table"
+import { LeadTable, type SortDir } from "@/components/leads/lead-table"
+import { ColumnManager } from "@/components/leads/column-manager"
 
 const ROWS_ITEMS: Record<string, string> = {
   "10": "10 righe",
@@ -52,6 +55,11 @@ function matchesScore(score: number, filter: LeadFilterState["score"]) {
   return true
 }
 
+// Estrae l'elenco tag unico dal dataset
+const ALL_TAGS = Array.from(
+  new Set(mockLeads.flatMap((l) => l.Tag)),
+).sort((a, b) => a.localeCompare(b))
+
 export default function LeadsPage() {
   const [filters, setFilters] = useState<LeadFilterState>(DEFAULT_FILTERS)
   const [onlyDuplicates, setOnlyDuplicates] = useState(false)
@@ -61,34 +69,61 @@ export default function LeadsPage() {
   const [page, setPage] = useState(1)
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
   const [convertTarget, setConvertTarget] = useState<Lead | null>(null)
+  const [visibleCols, setVisibleCols] = useState<LeadColumnId[]>(
+    DEFAULT_VISIBLE_COLUMNS,
+  )
+  const [sortBy, setSortBy] = useState<LeadColumnId | null>("Valutazione")
+  const [sortDir, setSortDir] = useState<SortDir>("desc")
+
+  const columns = useMemo(
+    () => LEAD_COLUMNS.filter((c) => visibleCols.includes(c.id)),
+    [visibleCols],
+  )
 
   const filtered = useMemo(() => {
     const q = filters.search.trim().toLowerCase()
-    return mockLeads.filter((lead) => {
+    const rows = mockLeads.filter((lead) => {
       if (onlyDuplicates && !lead.possibileDuplicato) return false
       if (q) {
         const haystack = [
-          nomeCompleto(lead),
-          lead.email ?? "",
-          lead.telefono ?? "",
+          lead["Nome Lead"],
+          lead["E-mail"],
+          lead.Telefono,
         ]
           .join(" ")
           .toLowerCase()
         if (!haystack.includes(q)) return false
       }
-      if (filters.stato !== "all" && lead.status !== filters.stato) return false
-      if (filters.sede !== "all" && lead.sede !== filters.sede) return false
+      if (filters.stato !== "all" && lead["Stato Lead"] !== filters.stato)
+        return false
+      if (filters.sede !== "all" && lead.Sede !== filters.sede) return false
       if (
         filters.commerciale !== "all" &&
-        lead.commerciale !== filters.commerciale
+        lead["Lead Proprietario"] !== filters.commerciale
       )
         return false
-      if (filters.origine !== "all" && lead.origine !== filters.origine)
+      if (filters.origine !== "all" && lead["Origine Lead"] !== filters.origine)
         return false
-      if (!matchesScore(lead.score, filters.score)) return false
+      if (filters.tag !== "all" && !lead.Tag.includes(filters.tag)) return false
+      if (!matchesScore(lead.Valutazione, filters.score)) return false
       return true
     })
-  }, [filters, onlyDuplicates])
+
+    if (sortBy) {
+      rows.sort((a, b) => {
+        const av = a[sortBy]
+        const bv = b[sortBy]
+        let cmp = 0
+        if (typeof av === "number" && typeof bv === "number") {
+          cmp = av - bv
+        } else {
+          cmp = String(av ?? "").localeCompare(String(bv ?? ""), "it")
+        }
+        return sortDir === "asc" ? cmp : -cmp
+      })
+    }
+    return rows
+  }, [filters, onlyDuplicates, sortBy, sortDir])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
   const currentPage = Math.min(page, totalPages)
@@ -106,6 +141,15 @@ export default function LeadsPage() {
     setFilters(DEFAULT_FILTERS)
     setOnlyDuplicates(false)
     setPage(1)
+  }
+
+  const handleSort = (col: LeadColumnId) => {
+    if (sortBy === col) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+    } else {
+      setSortBy(col)
+      setSortDir("asc")
+    }
   }
 
   const toggle = (id: string) => {
@@ -137,10 +181,13 @@ export default function LeadsPage() {
             {LEAD_TOTAL.toLocaleString("it-IT")} lead totali nel CRM
           </p>
         </div>
-        <Button className="bg-teal text-teal-foreground hover:bg-teal/90">
-          <Plus data-icon="inline-start" />
-          Nuovo lead
-        </Button>
+        <div className="flex items-center gap-2">
+          <ColumnManager visible={visibleCols} onChange={setVisibleCols} />
+          <Button className="bg-teal text-teal-foreground hover:bg-teal/90">
+            <Plus data-icon="inline-start" />
+            Nuovo lead
+          </Button>
+        </div>
       </div>
 
       {/* Banner duplicati */}
@@ -196,16 +243,21 @@ export default function LeadsPage() {
         filters={filters}
         onChange={handleFilterChange}
         onReset={handleReset}
+        tags={ALL_TAGS}
       />
 
       {/* Tabella */}
       <LeadTable
         leads={pageRows}
+        columns={columns}
         selected={selected}
         onToggle={toggle}
         onToggleAll={toggleAll}
         onConvert={(lead) => setConvertTarget(lead)}
         onDelete={(lead) => setDeleteTarget(lead)}
+        sortBy={sortBy}
+        sortDir={sortDir}
+        onSort={handleSort}
       />
 
       {/* Footer paginazione */}
@@ -276,7 +328,7 @@ export default function LeadsPage() {
             <DialogDescription>
               Sei sicuro di voler eliminare{" "}
               <span className="font-semibold text-foreground">
-                {deleteTarget ? nomeCompleto(deleteTarget) : ""}
+                {deleteTarget?.["Nome Lead"] ?? ""}
               </span>
               ? L&apos;azione non può essere annullata.
             </DialogDescription>
@@ -285,10 +337,7 @@ export default function LeadsPage() {
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>
               Annulla
             </Button>
-            <Button
-              variant="destructive"
-              onClick={() => setDeleteTarget(null)}
-            >
+            <Button variant="destructive" onClick={() => setDeleteTarget(null)}>
               Elimina
             </Button>
           </DialogFooter>
@@ -306,7 +355,7 @@ export default function LeadsPage() {
             <DialogDescription>
               Vuoi convertire{" "}
               <span className="font-semibold text-foreground">
-                {convertTarget ? nomeCompleto(convertTarget) : ""}
+                {convertTarget?.["Nome Lead"] ?? ""}
               </span>{" "}
               in cliente? Verrà creata una nuova scheda cliente con i dati del lead.
             </DialogDescription>

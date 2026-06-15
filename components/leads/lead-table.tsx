@@ -1,7 +1,8 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { MoreHorizontal, ExternalLink, UserCheck, Trash2 } from "lucide-react"
+import { MoreHorizontal, ExternalLink, UserCheck, Trash2, ArrowUpDown } from "lucide-react"
+import { cn } from "@/lib/utils"
 import {
   Table,
   TableBody,
@@ -20,58 +21,79 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { type Lead, SEDI, nomeCompleto } from "@/lib/mock-data"
 import {
-  LeadAvatar,
-  StatusBadge,
-  OrigineBadge,
-  ScoreBar,
-} from "./lead-utils"
+  type Lead,
+  type LeadColumn,
+  type LeadColumnId,
+} from "@/lib/mock-data"
+import { LeadCell, NUMERIC_COLUMNS } from "./lead-cell"
 
-const SEDE_LABEL = SEDI.reduce<Record<string, string>>((acc, s) => {
-  acc[s.id] = s.label
-  return acc
-}, {})
+export type SortDir = "asc" | "desc"
 
 export function LeadTable({
   leads,
+  columns,
   selected,
   onToggle,
   onToggleAll,
   onConvert,
   onDelete,
+  sortBy,
+  sortDir,
+  onSort,
 }: {
   leads: Lead[]
+  columns: LeadColumn[]
   selected: Set<string>
   onToggle: (id: string) => void
   onToggleAll: () => void
   onConvert: (lead: Lead) => void
   onDelete: (lead: Lead) => void
+  sortBy: LeadColumnId | null
+  sortDir: SortDir
+  onSort: (col: LeadColumnId) => void
 }) {
   const router = useRouter()
   const allSelected = leads.length > 0 && leads.every((l) => selected.has(l.id))
+  const colSpan = columns.length + 2
 
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-card">
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
-            <TableHead className="w-10">
+            <TableHead className="sticky left-0 z-10 w-10 bg-muted/50">
               <Checkbox
                 checked={allSelected}
                 onCheckedChange={onToggleAll}
                 aria-label="Seleziona tutti"
               />
             </TableHead>
-            <TableHead>Lead</TableHead>
-            <TableHead className="hidden md:table-cell">Città</TableHead>
-            <TableHead className="hidden lg:table-cell">Configurazione</TableHead>
-            <TableHead className="hidden xl:table-cell">Origine</TableHead>
-            <TableHead className="hidden xl:table-cell">Sede</TableHead>
-            <TableHead className="hidden lg:table-cell">Commerciale</TableHead>
-            <TableHead>Stato</TableHead>
-            <TableHead>Score</TableHead>
-            <TableHead className="hidden md:table-cell">Creato</TableHead>
+            {columns.map((col) => {
+              const numeric = NUMERIC_COLUMNS.includes(col.id)
+              const active = sortBy === col.id
+              return (
+                <TableHead
+                  key={col.id}
+                  className={cn("whitespace-nowrap", numeric && "text-right")}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onSort(col.id)}
+                    className={cn(
+                      "inline-flex items-center gap-1 text-xs font-semibold transition-colors hover:text-foreground",
+                      active ? "text-foreground" : "text-muted-foreground",
+                      numeric && "flex-row-reverse",
+                    )}
+                  >
+                    {col.label}
+                    <ArrowUpDown
+                      className={cn("size-3", active ? "opacity-100" : "opacity-40")}
+                    />
+                  </button>
+                </TableHead>
+              )
+            })}
             <TableHead className="w-10 text-right">Azioni</TableHead>
           </TableRow>
         </TableHeader>
@@ -82,68 +104,28 @@ export function LeadTable({
               onClick={() => router.push(`/leads/${lead.id}`)}
               className="cursor-pointer"
             >
-              <TableCell onClick={(e) => e.stopPropagation()}>
+              <TableCell
+                onClick={(e) => e.stopPropagation()}
+                className="sticky left-0 z-10 bg-card"
+              >
                 <Checkbox
                   checked={selected.has(lead.id)}
                   onCheckedChange={() => onToggle(lead.id)}
-                  aria-label={`Seleziona ${nomeCompleto(lead)}`}
+                  aria-label={`Seleziona ${lead["Nome Lead"]}`}
                 />
               </TableCell>
 
-              <TableCell>
-                <div className="flex items-center gap-3">
-                  <LeadAvatar lead={lead} />
-                  <div className="flex min-w-0 flex-col">
-                    <span className="truncate text-sm font-semibold text-foreground">
-                      {nomeCompleto(lead)}
-                    </span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {lead.email}
-                    </span>
-                  </div>
-                </div>
-              </TableCell>
-
-              <TableCell className="hidden md:table-cell">
-                <span className="text-sm text-foreground">{lead.citta}</span>
-                <span className="text-xs text-muted-foreground"> ({lead.provincia})</span>
-              </TableCell>
-
-              <TableCell className="hidden lg:table-cell">
-                <span className="text-sm text-muted-foreground">
-                  {lead.configurazione}
-                </span>
-              </TableCell>
-
-              <TableCell className="hidden xl:table-cell">
-                <OrigineBadge origine={String(lead.origine)} />
-              </TableCell>
-
-              <TableCell className="hidden xl:table-cell">
-                <span className="text-sm text-muted-foreground">
-                  {SEDE_LABEL[lead.sede]}
-                </span>
-              </TableCell>
-
-              <TableCell className="hidden lg:table-cell">
-                <span className="text-sm text-muted-foreground">
-                  {lead.commerciale ?? "—"}
-                </span>
-              </TableCell>
-
-              <TableCell>
-                <StatusBadge status={lead.status} />
-              </TableCell>
-
-              <TableCell>
-                <ScoreBar score={lead.score} />
-              </TableCell>
-
-              <TableCell className="hidden md:table-cell">
-                <span className="text-xs text-muted-foreground">
-                  {lead.dataCreazione}
-                </span>
-              </TableCell>
+              {columns.map((col) => (
+                <TableCell
+                  key={col.id}
+                  className={cn(
+                    "whitespace-nowrap text-sm",
+                    NUMERIC_COLUMNS.includes(col.id) && "text-right",
+                  )}
+                >
+                  <LeadCell lead={lead} column={col.id} />
+                </TableCell>
+              ))}
 
               <TableCell onClick={(e) => e.stopPropagation()} className="text-right">
                 <DropdownMenu>
@@ -178,7 +160,10 @@ export function LeadTable({
 
           {leads.length === 0 ? (
             <TableRow className="hover:bg-transparent">
-              <TableCell colSpan={11} className="py-12 text-center text-sm text-muted-foreground">
+              <TableCell
+                colSpan={colSpan}
+                className="py-12 text-center text-sm text-muted-foreground"
+              >
                 Nessun lead corrisponde ai filtri selezionati.
               </TableCell>
             </TableRow>

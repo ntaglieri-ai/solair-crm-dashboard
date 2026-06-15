@@ -28,14 +28,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { type Lead, nomeCompleto } from "@/lib/mock-data"
-import { LeadAvatar, StatusBadge, ScoreBar } from "./lead-utils"
+import { type Lead } from "@/lib/mock-data"
+import { LeadAvatar, StatoLeadBadge, ScoreBar, TagList } from "./lead-utils"
 
 export function LeadDetailHeader({ lead }: { lead: Lead }) {
   const router = useRouter()
   const [showDelete, setShowDelete] = useState(false)
   const [showLost, setShowLost] = useState(false)
   const [showConvert, setShowConvert] = useState(false)
+  const nome = lead["Nome Lead"]
 
   return (
     <div className="flex flex-col gap-4">
@@ -45,20 +46,21 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
           Lead
         </Link>
         <ChevronRight className="size-4" />
-        <span className="font-medium text-foreground">{nomeCompleto(lead)}</span>
+        <span className="font-medium text-foreground">{nome}</span>
       </nav>
 
       {/* Titolo + azioni */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-4">
-          <LeadAvatar lead={lead} className="size-14 text-base" />
+          <LeadAvatar nome={nome} className="size-14 text-base" />
           <div className="flex flex-col gap-2">
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              {nomeCompleto(lead)}
+              {nome}
             </h1>
-            <div className="flex items-center gap-3">
-              <StatusBadge status={lead.status} />
-              <ScoreBar score={lead.score} />
+            <div className="flex flex-wrap items-center gap-3">
+              <StatoLeadBadge stato={lead["Stato Lead"]} />
+              <ScoreBar score={lead.Valutazione} />
+              <TagList tags={lead.Tag} />
             </div>
           </div>
         </div>
@@ -107,7 +109,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
             <DialogTitle>Elimina lead</DialogTitle>
             <DialogDescription>
               Sei sicuro di voler eliminare{" "}
-              <span className="font-semibold text-foreground">{nomeCompleto(lead)}</span>?
+              <span className="font-semibold text-foreground">{nome}</span>?
               L&apos;azione non può essere annullata.
             </DialogDescription>
           </DialogHeader>
@@ -135,7 +137,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
             <DialogTitle>Segna come perso</DialogTitle>
             <DialogDescription>
               Confermi di voler contrassegnare{" "}
-              <span className="font-semibold text-foreground">{nomeCompleto(lead)}</span>{" "}
+              <span className="font-semibold text-foreground">{nome}</span>{" "}
               come lead perso?
             </DialogDescription>
           </DialogHeader>
@@ -157,7 +159,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
             <DialogTitle>Converti a cliente</DialogTitle>
             <DialogDescription>
               Vuoi convertire{" "}
-              <span className="font-semibold text-foreground">{nomeCompleto(lead)}</span>{" "}
+              <span className="font-semibold text-foreground">{nome}</span>{" "}
               in cliente? Verrà creata una nuova scheda cliente con i dati del lead.
             </DialogDescription>
           </DialogHeader>

@@ -34,23 +34,29 @@ import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import type { Lead, LeadAttivita, LeadDocumento } from "@/lib/mock-data"
+import {
+  type Lead,
+  type LeadActivity,
+  type LeadDoc,
+  LEAD_COLUMNS,
+  type LeadColumnId,
+} from "@/lib/mock-data"
 
-const ATTIVITA_ICONS: Record<LeadAttivita["tipo"], typeof Mail> = {
+const ATTIVITA_ICONS: Record<LeadActivity["tipo"], typeof Mail> = {
   "email-open": Mail,
   "cambio-stato": ArrowRightLeft,
   nota: StickyNote,
   "nuovo-lead": Star,
 }
 
-const ATTIVITA_TONE: Record<LeadAttivita["tipo"], string> = {
+const ATTIVITA_TONE: Record<LeadActivity["tipo"], string> = {
   "email-open": "bg-info/10 text-info",
   "cambio-stato": "bg-navy/10 text-navy",
   nota: "bg-warning/10 text-warning",
   "nuovo-lead": "bg-teal/10 text-teal",
 }
 
-const DOC_ICONS: Record<LeadDocumento["formato"], typeof FileText> = {
+const DOC_ICONS: Record<LeadDoc["formato"], typeof FileText> = {
   pdf: FileText,
   jpg: ImageIcon,
   png: ImageIcon,
@@ -69,44 +75,44 @@ function AnagraficaTab({ lead }: { lead: Lead }) {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="nome">Nome</FieldLabel>
-              <Input id="nome" defaultValue={lead.nome} />
+              <Input id="nome" defaultValue={lead.Nome} />
             </Field>
             <Field>
               <FieldLabel htmlFor="cognome">Cognome</FieldLabel>
-              <Input id="cognome" defaultValue={lead.cognome} />
+              <Input id="cognome" defaultValue={lead.Cognome} />
             </Field>
             <Field>
-              <FieldLabel htmlFor="email">Email</FieldLabel>
-              <Input id="email" type="email" defaultValue={lead.email} />
+              <FieldLabel htmlFor="email">E-mail</FieldLabel>
+              <Input id="email" type="email" defaultValue={lead["E-mail"]} />
             </Field>
             <Field>
               <FieldLabel htmlFor="telefono">Telefono</FieldLabel>
-              <Input id="telefono" defaultValue={lead.telefono} />
+              <Input id="telefono" defaultValue={lead.Telefono} />
             </Field>
             <Field>
               <FieldLabel htmlFor="citta">Città</FieldLabel>
-              <Input id="citta" defaultValue={lead.citta} />
+              <Input id="citta" defaultValue={lead["Città"]} />
             </Field>
             <Field>
               <FieldLabel htmlFor="provincia">Provincia</FieldLabel>
-              <Input id="provincia" defaultValue={lead.provincia} />
+              <Input id="provincia" defaultValue={lead.Provincia} />
             </Field>
             <Field>
-              <FieldLabel htmlFor="cap">CAP</FieldLabel>
-              <Input id="cap" defaultValue={lead.cap} />
+              <FieldLabel htmlFor="cap">Codice postale</FieldLabel>
+              <Input id="cap" defaultValue={lead["Codice postale"]} />
             </Field>
             <Field>
-              <FieldLabel htmlFor="indirizzo">Indirizzo</FieldLabel>
-              <Input id="indirizzo" defaultValue={lead.indirizzo} />
+              <FieldLabel htmlFor="paese">Paese</FieldLabel>
+              <Input id="paese" defaultValue={lead.Paese} />
             </Field>
           </div>
           <Field>
-            <FieldLabel htmlFor="note">Note</FieldLabel>
+            <FieldLabel htmlFor="descrizione">Descrizione</FieldLabel>
             <Textarea
-              id="note"
+              id="descrizione"
               rows={4}
-              defaultValue={lead.note}
-              placeholder="Aggiungi note sul lead…"
+              defaultValue={lead.Descrizione}
+              placeholder="Aggiungi una descrizione sul lead…"
             />
           </Field>
           <div className="flex justify-end">
@@ -132,30 +138,27 @@ function ConfigurazioneTab({ lead }: { lead: Lead }) {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="kwp">Potenza (kWp)</FieldLabel>
-              <Input id="kwp" defaultValue={lead.kwp} />
+              <Input id="kwp" defaultValue={lead.kWp} />
             </Field>
             <Field>
               <FieldLabel htmlFor="kwh">Accumulo (kWh)</FieldLabel>
-              <Input id="kwh" defaultValue={lead.kwh} />
+              <Input id="kwh" defaultValue={lead.kWh} />
             </Field>
             <Field>
               <FieldLabel htmlFor="modello">Modello pannello</FieldLabel>
-              <Input id="modello" defaultValue={lead.modelloPannello} />
+              <Input id="modello" defaultValue={lead["Modello pannello"]} />
             </Field>
             <Field>
-              <FieldLabel htmlFor="tipo">Tipo impianto</FieldLabel>
-              <Input
-                id="tipo"
-                defaultValue={lead.tipoImpianto === "trifase" ? "Trifase" : "Monofase"}
-              />
+              <FieldLabel htmlFor="sede">Sede</FieldLabel>
+              <Input id="sede" defaultValue={lead.Sede} />
             </Field>
             <Field>
-              <FieldLabel htmlFor="zona">Zona</FieldLabel>
-              <Input id="zona" defaultValue={lead.zona} />
+              <FieldLabel htmlFor="campaign">campaign name</FieldLabel>
+              <Input id="campaign" defaultValue={lead["campaign name"]} />
             </Field>
             <Field>
-              <FieldLabel htmlFor="campaign">Campaign name (origine)</FieldLabel>
-              <Input id="campaign" defaultValue={lead.campaignName} />
+              <FieldLabel htmlFor="connesso">Connesso a</FieldLabel>
+              <Input id="connesso" defaultValue={lead["Connesso a"] ?? ""} />
             </Field>
           </div>
 
@@ -166,7 +169,17 @@ function ConfigurazioneTab({ lead }: { lead: Lead }) {
                 Colonnina di ricarica per veicolo elettrico
               </FieldDescription>
             </FieldContent>
-            <Switch defaultChecked={lead.wallbox} />
+            <Switch defaultChecked={lead["Wallbox richiesto"]} />
+          </Field>
+
+          <Field orientation="horizontal">
+            <FieldContent>
+              <FieldTitle>Residente in Sicilia</FieldTitle>
+              <FieldDescription>
+                Idoneità a incentivi regionali siciliani
+              </FieldDescription>
+            </FieldContent>
+            <Switch defaultChecked={lead["Residente in Sicilia"]} />
           </Field>
 
           <div className="flex justify-end">
@@ -175,6 +188,49 @@ function ConfigurazioneTab({ lead }: { lead: Lead }) {
             </Button>
           </div>
         </FieldGroup>
+      </CardContent>
+    </Card>
+  )
+}
+
+// Campi mostrati nella tab "Dettagli Zoho" (tutti i campi colonna)
+const HIDDEN_IN_DETAILS: LeadColumnId[] = [
+  "Badge dell'attività",
+  "Badge di nota",
+  "Tag",
+]
+
+function DettagliTab({ lead }: { lead: Lead }) {
+  const fields = LEAD_COLUMNS.filter((c) => !HIDDEN_IN_DETAILS.includes(c.id))
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Dettagli Zoho</CardTitle>
+        <CardDescription>Tutti i campi del record lead</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+          {fields.map((col) => {
+            const raw = lead[col.id]
+            const value =
+              raw === null || raw === undefined || raw === ""
+                ? "—"
+                : typeof raw === "boolean"
+                  ? raw
+                    ? "Sì"
+                    : "No"
+                  : String(raw)
+            return (
+              <div
+                key={col.id}
+                className="flex flex-col gap-0.5 border-b border-border/60 pb-2"
+              >
+                <dt className="text-xs text-muted-foreground">{col.label}</dt>
+                <dd className="text-sm font-medium text-foreground">{value}</dd>
+              </div>
+            )
+          })}
+        </dl>
       </CardContent>
     </Card>
   )
@@ -264,9 +320,7 @@ function DocumentiTab({ lead }: { lead: Lead }) {
           <p className="text-sm font-medium text-foreground">
             Trascina un documento qui
           </p>
-          <p className="text-xs text-muted-foreground">
-            oppure
-          </p>
+          <p className="text-xs text-muted-foreground">oppure</p>
           <Button size="sm" variant="outline" className="bg-card">
             Carica documento
           </Button>
@@ -319,6 +373,7 @@ export function LeadTabs({ lead }: { lead: Lead }) {
       <TabsList>
         <TabsTrigger value="anagrafica">Anagrafica</TabsTrigger>
         <TabsTrigger value="configurazione">Configurazione</TabsTrigger>
+        <TabsTrigger value="dettagli">Dettagli Zoho</TabsTrigger>
         <TabsTrigger value="attivita">Attività</TabsTrigger>
         <TabsTrigger value="documenti">Documenti</TabsTrigger>
       </TabsList>
@@ -327,6 +382,9 @@ export function LeadTabs({ lead }: { lead: Lead }) {
       </TabsContent>
       <TabsContent value="configurazione" className="mt-4">
         <ConfigurazioneTab lead={lead} />
+      </TabsContent>
+      <TabsContent value="dettagli" className="mt-4">
+        <DettagliTab lead={lead} />
       </TabsContent>
       <TabsContent value="attivita" className="mt-4">
         <AttivitaTab lead={lead} />

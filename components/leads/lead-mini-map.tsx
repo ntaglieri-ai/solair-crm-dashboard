@@ -1,21 +1,21 @@
 "use client"
 
 import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps"
-import type { Lead } from "@/lib/mock-data"
+import type { Lead, SedeLabel } from "@/lib/mock-data"
 
 const ITALY_GEO = "/italy-regions.json"
 
-// coordinate approssimate delle sedi Solair
-const SEDE_COORDS: Record<string, [number, number]> = {
-  torino: [7.68, 45.07],
-  treviso: [12.24, 45.66],
-  "porto-sant-elpidio": [13.75, 43.25],
-  catania: [15.08, 37.5],
-  giarre: [15.18, 37.73],
+// coordinate approssimate delle sedi Solair (chiave = label Sede Zoho)
+const SEDE_COORDS: Record<SedeLabel, [number, number]> = {
+  Torino: [7.68, 45.07],
+  Treviso: [12.24, 45.66],
+  "Porto Sant'Elpidio": [13.75, 43.25],
+  Catania: [15.08, 37.5],
+  "Giarre (CT)": [15.18, 37.73],
 }
 
 export function LeadMiniMap({ lead }: { lead: Lead }) {
-  const point = SEDE_COORDS[lead.sede] ?? [12.5, 42]
+  const point = SEDE_COORDS[lead.Sede] ?? [12.5, 42]
   return (
     <div className="relative h-44 overflow-hidden rounded-lg border border-border bg-secondary/40">
       <ComposableMap
@@ -50,7 +50,7 @@ export function LeadMiniMap({ lead }: { lead: Lead }) {
             y={-11}
             className="fill-foreground text-[9px] font-semibold"
           >
-            {lead.citta}
+            {lead["Città"]}
           </text>
         </Marker>
       </ComposableMap>

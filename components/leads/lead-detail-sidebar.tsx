@@ -17,14 +17,9 @@ import {
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { type Lead, SEDI, nomeCompleto } from "@/lib/mock-data"
+import { type Lead } from "@/lib/mock-data"
 import { LeadAvatar } from "./lead-utils"
 import { LeadMiniMap } from "./lead-mini-map"
-
-const SEDE_LABEL = SEDI.reduce<Record<string, string>>((acc, s) => {
-  acc[s.id] = s.label
-  return acc
-}, {})
 
 function InfoRow({
   icon: Icon,
@@ -41,7 +36,7 @@ function InfoRow({
       <div className="flex min-w-0 flex-col">
         <span className="text-xs text-muted-foreground">{label}</span>
         <span className="truncate text-sm font-medium text-foreground">
-          {value ?? "—"}
+          {value && value !== "" ? value : "—"}
         </span>
       </div>
     </div>
@@ -49,10 +44,11 @@ function InfoRow({
 }
 
 export function LeadDetailSidebar({ lead }: { lead: Lead }) {
+  const nome = lead["Nome Lead"]
   const indirizzoCompleto = [
-    lead.indirizzo,
-    [lead.cap, lead.citta].filter(Boolean).join(" "),
-    lead.provincia,
+    [lead["Codice postale"], lead["Città"]].filter(Boolean).join(" "),
+    lead.Provincia,
+    lead.Paese,
   ]
     .filter(Boolean)
     .join(", ")
@@ -66,13 +62,13 @@ export function LeadDetailSidebar({ lead }: { lead: Lead }) {
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex items-center gap-3">
-            <LeadAvatar lead={lead} className="size-12 text-sm" />
+            <LeadAvatar nome={nome} className="size-12 text-sm" />
             <div className="flex min-w-0 flex-col">
               <span className="truncate text-base font-semibold text-foreground">
-                {nomeCompleto(lead)}
+                {nome}
               </span>
               <span className="truncate text-xs text-muted-foreground">
-                {lead.citta} ({lead.provincia})
+                {lead["Città"]} ({lead.Provincia})
               </span>
             </div>
           </div>
@@ -80,20 +76,20 @@ export function LeadDetailSidebar({ lead }: { lead: Lead }) {
           <Separator />
 
           <div className="flex flex-col gap-3">
-            <InfoRow icon={Mail} label="Email" value={lead.email} />
-            <InfoRow icon={Phone} label="Telefono" value={lead.telefono} />
+            <InfoRow icon={Mail} label="E-mail" value={lead["E-mail"]} />
+            <InfoRow icon={Phone} label="Telefono" value={lead.Telefono} />
             <InfoRow icon={MapPin} label="Indirizzo" value={indirizzoCompleto} />
-            <InfoRow icon={Building2} label="Sede" value={SEDE_LABEL[lead.sede]} />
+            <InfoRow icon={Building2} label="Sede" value={lead.Sede} />
             <InfoRow
               icon={UserCircle}
-              label="Commerciale assegnato"
-              value={lead.commerciale}
+              label="Lead Proprietario"
+              value={lead["Lead Proprietario"]}
             />
-            <InfoRow icon={Megaphone} label="Origine" value={String(lead.origine)} />
+            <InfoRow icon={Megaphone} label="Origine Lead" value={lead["Origine Lead"]} />
             <InfoRow
               icon={CalendarDays}
-              label="Data creazione"
-              value={lead.dataCreazione}
+              label="Ora creazione"
+              value={lead["Ora creazione"]}
             />
           </div>
         </CardContent>
@@ -109,15 +105,21 @@ export function LeadDetailSidebar({ lead }: { lead: Lead }) {
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Aperture email</span>
-            <span className="text-sm font-bold tabular-nums text-foreground">
-              {lead.emailAperture ?? 0}
+            <span className="text-sm text-muted-foreground">Stato email</span>
+            <span className="text-sm font-medium text-foreground">
+              {lead.Stato}
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Ultima apertura</span>
+            <span className="text-sm text-muted-foreground">Aperture email</span>
+            <span className="text-sm font-bold tabular-nums text-foreground">
+              {lead.emailAperture}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Ultima attività</span>
             <span className="text-sm font-medium text-foreground">
-              {lead.ultimaApertura ?? "Mai"}
+              {lead["Ora ultima attività"]}
             </span>
           </div>
           {lead.leadCaldo ? (

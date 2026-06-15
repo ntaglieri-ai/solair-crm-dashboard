@@ -1,3 +1,7 @@
+"use client"
+
+import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { SunMedium } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
@@ -9,15 +13,22 @@ import {
 } from "@/lib/mock-data"
 import { NAV_ICONS } from "./icons"
 
+function isActive(href: string, pathname: string) {
+  if (href === "/") return pathname === "/"
+  return pathname === href || pathname.startsWith(`${href}/`)
+}
+
 function NavLink({ item }: { item: NavItem }) {
   const Icon = NAV_ICONS[item.icon]
+  const pathname = usePathname()
+  const active = isActive(item.href, pathname)
   return (
-    <a
+    <Link
       href={item.href}
-      aria-current={item.active ? "page" : undefined}
+      aria-current={active ? "page" : undefined}
       className={cn(
         "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-        item.active
+        active
           ? "bg-sidebar-accent text-sidebar-accent-foreground"
           : "text-sidebar-foreground hover:bg-muted hover:text-foreground",
       )}
@@ -36,7 +47,7 @@ function NavLink({ item }: { item: NavItem }) {
           {item.badge.count}
         </Badge>
       ) : null}
-    </a>
+    </Link>
   )
 }
 

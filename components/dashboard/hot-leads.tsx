@@ -20,6 +20,8 @@ const STATUS_STYLES = {
   info: "bg-info/10 text-info",
   warning: "bg-warning/10 text-warning",
   muted: "bg-muted text-muted-foreground",
+  teal: "bg-teal/10 text-teal",
+  destructive: "bg-destructive/10 text-destructive",
 } as const
 
 const AVATAR_COLORS = [

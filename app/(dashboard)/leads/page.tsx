@@ -41,6 +41,12 @@ import {
 } from "@/components/leads/lead-filters"
 import { LeadTable, type SortDir } from "@/components/leads/lead-table"
 import { ColumnManager } from "@/components/leads/column-manager"
+import {
+  AdvancedFilters,
+  EMPTY_ADVANCED,
+  matchesAdvanced,
+  type AdvancedFilterState,
+} from "@/components/leads/advanced-filters"
 
 const ROWS_ITEMS: Record<string, string> = {
   "10": "10 righe",
@@ -62,6 +68,7 @@ const ALL_TAGS = Array.from(
 
 export default function LeadsPage() {
   const [filters, setFilters] = useState<LeadFilterState>(DEFAULT_FILTERS)
+  const [advanced, setAdvanced] = useState<AdvancedFilterState>(EMPTY_ADVANCED)
   const [onlyDuplicates, setOnlyDuplicates] = useState(false)
   const [bannerVisible, setBannerVisible] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -106,6 +113,7 @@ export default function LeadsPage() {
         return false
       if (filters.tag !== "all" && !lead.Tag.includes(filters.tag)) return false
       if (!matchesScore(lead.Valutazione, filters.score)) return false
+      if (!matchesAdvanced(lead, advanced)) return false
       return true
     })
 
@@ -123,7 +131,7 @@ export default function LeadsPage() {
       })
     }
     return rows
-  }, [filters, onlyDuplicates, sortBy, sortDir])
+  }, [filters, advanced, onlyDuplicates, sortBy, sortDir])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
   const currentPage = Math.min(page, totalPages)
@@ -139,7 +147,13 @@ export default function LeadsPage() {
 
   const handleReset = () => {
     setFilters(DEFAULT_FILTERS)
+    setAdvanced(EMPTY_ADVANCED)
     setOnlyDuplicates(false)
+    setPage(1)
+  }
+
+  const handleAdvancedApply = (next: AdvancedFilterState) => {
+    setAdvanced(next)
     setPage(1)
   }
 
@@ -238,13 +252,22 @@ export default function LeadsPage() {
         </div>
       ) : null}
 
-      {/* Barra filtri */}
-      <LeadFilters
-        filters={filters}
-        onChange={handleFilterChange}
-        onReset={handleReset}
-        tags={ALL_TAGS}
-      />
+      {/* Barra filtri + pannello filtri avanzati */}
+      <div className="flex items-start gap-2">
+        <AdvancedFilters
+          applied={advanced}
+          onApply={handleAdvancedApply}
+          tags={ALL_TAGS}
+        />
+        <div className="min-w-0 flex-1">
+          <LeadFilters
+            filters={filters}
+            onChange={handleFilterChange}
+            onReset={handleReset}
+            tags={ALL_TAGS}
+          />
+        </div>
+      </div>
 
       {/* Tabella */}
       <LeadTable

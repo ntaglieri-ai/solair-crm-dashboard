@@ -62,7 +62,7 @@ export function LeadTable({
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
-            <TableHead className="sticky left-0 z-10 w-10 bg-muted/50">
+            <TableHead className="sticky left-0 z-10 w-10 border-r border-border bg-muted/50">
               <Checkbox
                 checked={allSelected}
                 onCheckedChange={onToggleAll}
@@ -75,7 +75,10 @@ export function LeadTable({
               return (
                 <TableHead
                   key={col.id}
-                  className={cn("whitespace-nowrap", numeric && "text-right")}
+                  className={cn(
+                    "whitespace-nowrap border-r border-border",
+                    numeric && "text-right",
+                  )}
                 >
                   <button
                     type="button"
@@ -115,17 +118,27 @@ export function LeadTable({
                 />
               </TableCell>
 
-              {columns.map((col) => (
-                <TableCell
-                  key={col.id}
-                  className={cn(
-                    "whitespace-nowrap text-sm",
-                    NUMERIC_COLUMNS.includes(col.id) && "text-right",
-                  )}
-                >
-                  <LeadCell lead={lead} column={col.id} />
-                </TableCell>
-              ))}
+              {columns.map((col) => {
+                const leftAligned = col.id === "Nome Lead" || col.id === "E-mail"
+                return (
+                  <TableCell
+                    key={col.id}
+                    className={cn(
+                      "whitespace-nowrap text-sm",
+                      leftAligned ? "text-left" : "text-center",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "flex items-center",
+                        leftAligned ? "justify-start" : "justify-center",
+                      )}
+                    >
+                      <LeadCell lead={lead} column={col.id} />
+                    </div>
+                  </TableCell>
+                )
+              })}
 
               <TableCell onClick={(e) => e.stopPropagation()} className="text-right">
                 <DropdownMenu>

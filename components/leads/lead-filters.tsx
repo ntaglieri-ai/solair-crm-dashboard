@@ -12,11 +12,10 @@ import {
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {
-  SEDI,
-  LEAD_STATUS_ORDER,
-  LEAD_STATUS_LABELS,
-  LEAD_ORIGINI,
-  MOCK_COMMERCIALI,
+  STATO_LEAD_ORDER,
+  ORIGINE_LEAD_VALUES,
+  SEDE_LABELS,
+  mockCommerciali,
 } from "@/lib/mock-data"
 
 export type ScoreFilter = "all" | "caldo" | "medio" | "freddo"
@@ -27,6 +26,7 @@ export interface LeadFilterState {
   sede: string
   commerciale: string
   origine: string
+  tag: string
   score: ScoreFilter
 }
 
@@ -36,6 +36,7 @@ export const DEFAULT_FILTERS: LeadFilterState = {
   sede: "all",
   commerciale: "all",
   origine: "all",
+  tag: "all",
   score: "all",
 }
 
@@ -46,42 +47,50 @@ function toItems(entries: [string, string][]): Record<string, string> {
   }, {})
 }
 
-const STATO_ITEMS = toItems([
-  ["all", "Tutti gli stati"],
-  ...LEAD_STATUS_ORDER.map(
-    (s) => [s, LEAD_STATUS_LABELS[s]] as [string, string],
-  ),
-])
-
-const SEDE_ITEMS = toItems([
-  ...SEDI.map((s) => [s.id, s.label] as [string, string]),
-])
-
-const COMMERCIALE_ITEMS = toItems([
-  ["all", "Tutti i commerciali"],
-  ...MOCK_COMMERCIALI.map((c) => [c, c] as [string, string]),
-])
-
-const ORIGINE_ITEMS = toItems([
-  ["all", "Tutte le origini"],
-  ...LEAD_ORIGINI.map((o) => [o, o] as [string, string]),
-])
-
-const SCORE_ITEMS = toItems([
-  ["all", "Tutti gli score"],
-  ["caldo", "Caldo (>80)"],
-  ["medio", "Medio (50-80)"],
-  ["freddo", "Freddo (<50)"],
-])
+function FilterSelect({
+  value,
+  onValueChange,
+  placeholder,
+  options,
+  className,
+  ariaLabel,
+}: {
+  value: string
+  onValueChange: (v: string) => void
+  placeholder: string
+  options: [string, string][]
+  className?: string
+  ariaLabel: string
+}) {
+  const items = toItems(options)
+  return (
+    <Select items={items} value={value} onValueChange={onValueChange}>
+      <SelectTrigger className={className ?? "w-[160px] bg-card"} aria-label={ariaLabel}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          {options.map(([val, label]) => (
+            <SelectItem key={val} value={val}>
+              {label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
+  )
+}
 
 export function LeadFilters({
   filters,
   onChange,
   onReset,
+  tags,
 }: {
   filters: LeadFilterState
   onChange: (next: LeadFilterState) => void
   onReset: () => void
+  tags: string[]
 }) {
   const set = <K extends keyof LeadFilterState>(
     key: K,
@@ -94,6 +103,7 @@ export function LeadFilters({
     filters.sede !== "all" ||
     filters.commerciale !== "all" ||
     filters.origine !== "all" ||
+    filters.tag !== "all" ||
     filters.score !== "all"
 
   return (
@@ -105,103 +115,79 @@ export function LeadFilters({
           onChange={(e) => set("search", e.target.value)}
           placeholder="Cerca nome, email o telefono"
           className="bg-card pl-9"
+          aria-label="Cerca lead"
         />
       </div>
 
-      <Select
-        items={STATO_ITEMS}
+      <FilterSelect
+        ariaLabel="Filtra per Stato Lead"
+        className="w-[180px] bg-card"
         value={filters.stato}
         onValueChange={(v) => set("stato", v)}
-      >
-        <SelectTrigger className="w-[170px] bg-card">
-          <SelectValue placeholder="Stato" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            {Object.entries(STATO_ITEMS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
+        placeholder="Stato Lead"
+        options={[
+          ["all", "Tutti gli stati"],
+          ...STATO_LEAD_ORDER.map((s) => [s, s] as [string, string]),
+        ]}
+      />
 
-      <Select
-        items={SEDE_ITEMS}
+      <FilterSelect
+        ariaLabel="Filtra per Sede"
         value={filters.sede}
         onValueChange={(v) => set("sede", v)}
-      >
-        <SelectTrigger className="w-[160px] bg-card">
-          <SelectValue placeholder="Sede" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            {SEDI.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.label}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
+        placeholder="Sede"
+        options={[
+          ["all", "Tutte le sedi"],
+          ...SEDE_LABELS.map((s) => [s, s] as [string, string]),
+        ]}
+      />
 
-      <Select
-        items={COMMERCIALE_ITEMS}
+      <FilterSelect
+        ariaLabel="Filtra per Lead Proprietario"
+        className="w-[190px] bg-card"
         value={filters.commerciale}
         onValueChange={(v) => set("commerciale", v)}
-      >
-        <SelectTrigger className="w-[180px] bg-card">
-          <SelectValue placeholder="Commerciale" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            {Object.entries(COMMERCIALE_ITEMS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
+        placeholder="Lead Proprietario"
+        options={[
+          ["all", "Tutti i proprietari"],
+          ...mockCommerciali.map((c) => [c, c] as [string, string]),
+        ]}
+      />
 
-      <Select
-        items={ORIGINE_ITEMS}
+      <FilterSelect
+        ariaLabel="Filtra per Origine Lead"
         value={filters.origine}
         onValueChange={(v) => set("origine", v)}
-      >
-        <SelectTrigger className="w-[160px] bg-card">
-          <SelectValue placeholder="Origine" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            {Object.entries(ORIGINE_ITEMS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
+        placeholder="Origine"
+        options={[
+          ["all", "Tutte le origini"],
+          ...ORIGINE_LEAD_VALUES.map((o) => [o, o] as [string, string]),
+        ]}
+      />
 
-      <Select
-        items={SCORE_ITEMS}
+      <FilterSelect
+        ariaLabel="Filtra per Tag"
+        value={filters.tag}
+        onValueChange={(v) => set("tag", v)}
+        placeholder="Tag"
+        options={[
+          ["all", "Tutti i tag"],
+          ...tags.map((t) => [t, t] as [string, string]),
+        ]}
+      />
+
+      <FilterSelect
+        ariaLabel="Filtra per Valutazione"
         value={filters.score}
         onValueChange={(v) => set("score", v as ScoreFilter)}
-      >
-        <SelectTrigger className="w-[160px] bg-card">
-          <SelectValue placeholder="Score" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            {Object.entries(SCORE_ITEMS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
+        placeholder="Valutazione"
+        options={[
+          ["all", "Tutte le valutazioni"],
+          ["caldo", "Caldo (>80)"],
+          ["medio", "Medio (50-80)"],
+          ["freddo", "Freddo (<50)"],
+        ]}
+      />
 
       <Button
         variant="ghost"

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 import {
   getKpiData,
   getMiniStats,
-  getLeads,
+  getHotLeads,
   type SedeId,
 } from "@/lib/mock-data"
 import { SedeFilter } from "@/components/dashboard/sede-filter"
@@ -19,7 +19,7 @@ export default function DashboardPage() {
 
   const kpi = useMemo(() => getKpiData(sede), [sede])
   const mini = useMemo(() => getMiniStats(sede), [sede])
-  const leads = useMemo(() => getLeads(sede), [sede])
+  const leads = useMemo(() => getHotLeads(sede), [sede])
 
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6">

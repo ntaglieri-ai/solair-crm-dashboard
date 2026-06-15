@@ -9,7 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import {
-  type Lead,
+  type HotLead,
   LEAD_STATUS_LABELS,
   LEAD_STATUS_TONE,
 } from "@/lib/mock-data"
@@ -47,7 +47,7 @@ function scoreColor(score: number) {
   return "var(--chart-5)"
 }
 
-function LeadRow({ lead, index }: { lead: Lead; index: number }) {
+function LeadRow({ lead, index }: { lead: HotLead; index: number }) {
   const tone = LEAD_STATUS_TONE[lead.status]
   return (
     <div className="flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-secondary/50">
@@ -88,7 +88,7 @@ function LeadRow({ lead, index }: { lead: Lead; index: number }) {
   )
 }
 
-export function HotLeads({ leads }: { leads: Lead[] }) {
+export function HotLeads({ leads }: { leads: HotLead[] }) {
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
       {/* Lista */}

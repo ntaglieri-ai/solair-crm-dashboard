@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { toast } from "sonner"
 import {
   AlertTriangle,
   ChevronLeft,
@@ -8,7 +9,24 @@ import {
   Plus,
   X,
 } from "lucide-react"
+import {
+  IconLayoutList,
+  IconList,
+  IconListDetails,
+  IconDownload,
+  IconFileTypeCsv,
+} from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   Dialog,
   DialogContent,
@@ -39,8 +57,14 @@ import {
   DEFAULT_FILTERS,
   type LeadFilterState,
 } from "@/components/leads/lead-filters"
-import { LeadTable, type SortDir } from "@/components/leads/lead-table"
+import {
+  LeadTable,
+  type SortDir,
+  type Density,
+} from "@/components/leads/lead-table"
 import { ColumnManager } from "@/components/leads/column-manager"
+import { BulkToolbar } from "@/components/leads/bulk-toolbar"
+import { cn } from "@/lib/utils"
 import {
   AdvancedFilters,
   EMPTY_ADVANCED,
@@ -52,6 +76,38 @@ const ROWS_ITEMS: Record<string, string> = {
   "10": "10 righe",
   "30": "30 righe",
   "50": "50 righe",
+}
+
+const DENSITY_OPTIONS: { value: Density; label: string; icon: typeof IconList }[] = [
+  { value: "comoda", label: "Compatta", icon: IconLayoutList },
+  { value: "normale", label: "Normale", icon: IconList },
+  { value: "densa", label: "Densa", icon: IconListDetails },
+]
+
+// Simula il download di un file CSV a partire dai lead passati
+function downloadLeadsCsv(rows: Lead[], filename: string) {
+  const cols = LEAD_COLUMNS.map((c) => c.id)
+  const header = cols.join(";")
+  const body = rows
+    .map((r) =>
+      cols
+        .map((c) => {
+          const v = r[c]
+          const s = Array.isArray(v) ? v.join(", ") : String(v ?? "")
+          return `"${s.replace(/"/g, '""')}"`
+        })
+        .join(";"),
+    )
+    .join("\n")
+  const blob = new Blob([`${header}\n${body}`], {
+    type: "text/csv;charset=utf-8;",
+  })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 function matchesScore(score: number, filter: LeadFilterState["score"]) {
@@ -81,6 +137,8 @@ export default function LeadsPage() {
   )
   const [sortBy, setSortBy] = useState<LeadColumnId | null>("Valutazione")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
+  const [density, setDensity] = useState<Density>("normale")
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
 
   const columns = useMemo(
     () => LEAD_COLUMNS.filter((c) => visibleCols.includes(c.id)),
@@ -185,6 +243,40 @@ export default function LeadsPage() {
     })
   }
 
+  const selectedRows = useMemo(
+    () => filtered.filter((l) => selected.has(l.id)),
+    [filtered, selected],
+  )
+
+  const handleBulkOwner = (owner: string) => {
+    toast.success("Proprietario aggiornato", {
+      description: `${selected.size} lead assegnati a ${owner}.`,
+    })
+    setSelected(new Set())
+  }
+
+  const handleBulkStato = (stato: string) => {
+    toast.success("Stato aggiornato", {
+      description: `${selected.size} lead impostati su "${stato}".`,
+    })
+    setSelected(new Set())
+  }
+
+  const handleBulkExport = () => {
+    downloadLeadsCsv(selectedRows, `lead-selezione-${selectedRows.length}.csv`)
+    toast.success("Esportazione avviata", {
+      description: `${selectedRows.length} lead esportati in CSV.`,
+    })
+  }
+
+  const confirmBulkDelete = () => {
+    toast.success("Lead eliminati", {
+      description: `${selected.size} lead rimossi.`,
+    })
+    setBulkDeleteOpen(false)
+    setSelected(new Set())
+  }
+
   return (
     <div className="flex flex-col gap-5">
       {/* Header pagina */}
@@ -196,6 +288,91 @@ export default function LeadsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Densità vista */}
+          <div className="flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
+            {DENSITY_OPTIONS.map((opt) => {
+              const Icon = opt.icon
+              const active = density === opt.value
+              return (
+                <Tooltip key={opt.value}>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        aria-label={opt.label}
+                        aria-pressed={active}
+                        onClick={() => setDensity(opt.value)}
+                        className={cn(
+                          "flex size-8 items-center justify-center rounded-md transition-colors duration-150",
+                          active
+                            ? "border border-navy bg-[#EEF2FF] text-navy"
+                            : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+                        )}
+                      >
+                        <Icon size={18} stroke={1.8} />
+                      </button>
+                    }
+                  />
+                  <TooltipContent>{opt.label}</TooltipContent>
+                </Tooltip>
+              )
+            })}
+          </div>
+
+          {/* Esporta */}
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button variant="outline" className="bg-card">
+                  <IconDownload size={16} stroke={1.8} data-icon="inline-start" />
+                  Esporta
+                </Button>
+              }
+            />
+            <PopoverContent align="end" className="w-72 p-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  downloadLeadsCsv(filtered, `lead-filtrati-${filtered.length}.csv`)
+                  toast.success("Esportazione avviata", {
+                    description: `${LEAD_TOTAL.toLocaleString("it-IT")} lead filtrati esportati.`,
+                  })
+                }}
+                className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors duration-100 hover:bg-secondary"
+              >
+                <IconFileTypeCsv size={18} stroke={1.8} className="text-muted-foreground" />
+                Esporta tutti i lead filtrati ({LEAD_TOTAL.toLocaleString("it-IT")})
+              </button>
+              <button
+                type="button"
+                disabled={selected.size === 0}
+                onClick={() => {
+                  downloadLeadsCsv(selectedRows, `lead-selezione-${selectedRows.length}.csv`)
+                  toast.success("Esportazione avviata", {
+                    description: `${selectedRows.length} lead selezionati esportati.`,
+                  })
+                }}
+                className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors duration-100 hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <IconFileTypeCsv size={18} stroke={1.8} className="text-muted-foreground" />
+                Esporta selezione ({selected.size} lead)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  downloadLeadsCsv(pageRows, `lead-pagina-${pageRows.length}.csv`)
+                  toast.success("Esportazione avviata", {
+                    description: `${pageRows.length} lead di questa pagina esportati.`,
+                  })
+                }}
+                className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors duration-100 hover:bg-secondary"
+              >
+                <IconFileTypeCsv size={18} stroke={1.8} className="text-muted-foreground" />
+                Esporta questa pagina ({pageRows.length} lead)
+              </button>
+            </PopoverContent>
+          </Popover>
+
           <ColumnManager visible={visibleCols} onChange={setVisibleCols} />
           <Button className="bg-teal text-teal-foreground hover:bg-teal/90">
             <Plus data-icon="inline-start" />
@@ -281,6 +458,7 @@ export default function LeadsPage() {
         sortBy={sortBy}
         sortDir={sortDir}
         onSort={handleSort}
+        density={density}
       />
 
       {/* Footer paginazione */}
@@ -339,6 +517,40 @@ export default function LeadsPage() {
           </Button>
         </div>
       </div>
+
+      {/* Toolbar azioni bulk */}
+      <BulkToolbar
+        count={selected.size}
+        onChangeOwner={handleBulkOwner}
+        onChangeStato={handleBulkStato}
+        onExport={handleBulkExport}
+        onDelete={() => setBulkDeleteOpen(true)}
+        onClear={() => setSelected(new Set())}
+      />
+
+      {/* Dialog elimina bulk */}
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Elimina lead selezionati</DialogTitle>
+            <DialogDescription>
+              Sei sicuro di voler eliminare{" "}
+              <span className="font-semibold text-foreground">
+                {selected.size} lead
+              </span>
+              ? L&apos;azione non può essere annullata.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)}>
+              Annulla
+            </Button>
+            <Button variant="destructive" onClick={confirmBulkDelete}>
+              Elimina {selected.size} lead
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog elimina */}
       <Dialog

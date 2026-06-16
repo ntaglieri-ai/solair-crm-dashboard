@@ -12,6 +12,7 @@ import {
   ScoreBar,
   TagList,
   BoolDot,
+  LeadAvatar,
 } from "./lead-utils"
 
 // Colonne con allineamento a destra (valori numerici)
@@ -20,9 +21,11 @@ export const NUMERIC_COLUMNS: LeadColumnId[] = ["Valutazione", "kWp", "kWh"]
 export function LeadCell({
   lead,
   column,
+  density = "normale",
 }: {
   lead: Lead
   column: LeadColumnId
+  density?: "comoda" | "normale" | "densa"
 }) {
   const value = lead[column]
 
@@ -45,7 +48,12 @@ export function LeadCell({
       return <TagList tags={lead.Tag} />
 
     case "Nome Lead":
-      return (
+      return density === "comoda" ? (
+        <span className="flex items-center gap-2.5">
+          <LeadAvatar nome={lead["Nome Lead"]} className="size-9 text-xs" />
+          <span className="font-semibold text-foreground">{lead["Nome Lead"]}</span>
+        </span>
+      ) : (
         <span className="font-semibold text-foreground">{lead["Nome Lead"]}</span>
       )
 

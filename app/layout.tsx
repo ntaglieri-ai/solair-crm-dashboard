@@ -1,6 +1,8 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Inter, Geist_Mono } from 'next/font/google'
+import { Toaster } from 'sonner'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import './globals.css'
 
 const inter = Inter({ variable: '--font-inter', subsets: ['latin'] })
@@ -45,7 +47,8 @@ export default function RootLayout({
   return (
     <html lang="it" className={`light ${inter.variable} ${geistMono.variable}`}>
       <body className="font-sans antialiased bg-background">
-        {children}
+        <TooltipProvider delay={150}>{children}</TooltipProvider>
+        <Toaster position="bottom-right" richColors closeButton />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

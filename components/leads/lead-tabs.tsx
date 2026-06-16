@@ -12,6 +12,7 @@ import {
   Download,
   Plus,
 } from "lucide-react"
+import { IconHistory } from "@tabler/icons-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Card,
@@ -236,15 +237,61 @@ function DettagliTab({ lead }: { lead: Lead }) {
   )
 }
 
+// Eventi "storico modifiche campi" (mock), mostrati solo col toggle attivo
+interface FieldChange {
+  id: string
+  descrizione: string
+  timestamp: string
+  autore: string
+}
+
+function fieldChanges(lead: Lead): FieldChange[] {
+  return [
+    {
+      id: "fc1",
+      descrizione: `Stato Lead cambiato: Non contattato → ${lead["Stato Lead"]}`,
+      timestamp: "12 Giu 10:05",
+      autore: lead["Lead Proprietario"],
+    },
+    {
+      id: "fc2",
+      descrizione: `Lead Proprietario cambiato: Gaetano Grasso → ${lead["Lead Proprietario"]}`,
+      timestamp: "10 Giu 14:30",
+      autore: "Admin",
+    },
+    ...(lead.Tag.length > 0
+      ? [
+          {
+            id: "fc3",
+            descrizione: `Tag aggiunto: ${lead.Tag[0]}`,
+            timestamp: "11 Giu 09:00",
+            autore: "Mariarosa De Leo",
+          },
+        ]
+      : []),
+  ]
+}
+
 function AttivitaTab({ lead }: { lead: Lead }) {
   const [nota, setNota] = useState("")
+  const [showChanges, setShowChanges] = useState(false)
   const attivita = lead.attivita ?? []
+  const changes = fieldChanges(lead)
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Attività</CardTitle>
-        <CardDescription>Cronologia eventi del lead</CardDescription>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <CardTitle>Attività</CardTitle>
+            <CardDescription>Cronologia eventi del lead</CardDescription>
+          </div>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+            <IconHistory size={16} stroke={1.8} />
+            Mostra modifiche campi
+            <Switch checked={showChanges} onCheckedChange={setShowChanges} />
+          </label>
+        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         {/* Aggiungi nota */}
@@ -271,6 +318,31 @@ function AttivitaTab({ lead }: { lead: Lead }) {
 
         {/* Timeline */}
         <div className="flex flex-col">
+          {/* Storico modifiche campi */}
+          {showChanges
+            ? changes.map((fc) => (
+                <div
+                  key={fc.id}
+                  className="flex gap-3 animate-in fade-in duration-300"
+                >
+                  <div className="flex flex-col items-center">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground/70">
+                      <IconHistory size={15} stroke={1.8} />
+                    </span>
+                    <span className="w-px flex-1 bg-border" />
+                  </div>
+                  <div className="flex flex-col pb-5">
+                    <span className="text-sm text-muted-foreground">
+                      {fc.descrizione}
+                    </span>
+                    <span className="text-xs text-muted-foreground/70">
+                      {fc.timestamp} · {fc.autore}
+                    </span>
+                  </div>
+                </div>
+              ))
+            : null}
+
           {attivita.map((att, i) => {
             const Icon = ATTIVITA_ICONS[att.tipo]
             const isLast = i === attivita.length - 1

@@ -104,9 +104,9 @@ export function LeadTable({
         >
           <TableRow className="hover:bg-transparent">
             {/* Espansione */}
-            <TableHead className="w-8 border-r border-border" />
+            <TableHead className="w-8 border-r border-foreground/15" />
             {/* Selezione */}
-            <TableHead className="sticky left-0 z-10 w-10 border-r border-border bg-muted/95">
+            <TableHead className="sticky left-0 z-10 w-10 border-r border-foreground/15 bg-muted/95">
               <Checkbox
                 checked={allSelected}
                 onCheckedChange={onToggleAll}
@@ -115,22 +115,27 @@ export function LeadTable({
             </TableHead>
             {columns.map((col) => {
               const numeric = NUMERIC_COLUMNS.includes(col.id)
+              const isLeft = col.id === "Nome Lead" || col.id === "E-mail"
               const active = sortBy === col.id
               return (
                 <TableHead
                   key={col.id}
                   className={cn(
-                    "whitespace-nowrap border-r border-border",
-                    numeric && "text-right",
+                    "whitespace-nowrap border-r border-foreground/15",
+                    numeric ? "text-right" : isLeft ? "text-left" : "text-center",
                   )}
                 >
                   <button
                     type="button"
                     onClick={() => onSort(col.id)}
                     className={cn(
-                      "inline-flex items-center gap-1 text-xs font-semibold transition-colors hover:text-foreground",
+                      "inline-flex w-full items-center gap-1 text-xs font-semibold transition-colors hover:text-foreground",
                       active ? "text-navy" : "text-muted-foreground",
-                      numeric && "flex-row-reverse",
+                      numeric
+                        ? "flex-row-reverse justify-start"
+                        : isLeft
+                          ? "justify-start"
+                          : "justify-center",
                     )}
                   >
                     {col.label}
@@ -167,7 +172,7 @@ export function LeadTable({
                   {/* Chevron espansione */}
                   <TableCell
                     onClick={(e) => e.stopPropagation()}
-                    className={cn("w-8", cellPad)}
+                    className={cn("w-8 border-r border-border/70", cellPad)}
                   >
                     <button
                       type="button"
@@ -190,7 +195,10 @@ export function LeadTable({
                   {/* Selezione */}
                   <TableCell
                     onClick={(e) => e.stopPropagation()}
-                    className={cn("sticky left-0 z-10 bg-card", cellPad)}
+                    className={cn(
+                      "sticky left-0 z-10 border-r border-border/70 bg-card",
+                      cellPad,
+                    )}
                   >
                     <Checkbox
                       checked={selected.has(lead.id)}
@@ -205,7 +213,7 @@ export function LeadTable({
                       <TableCell
                         key={col.id}
                         className={cn(
-                          "whitespace-nowrap",
+                          "whitespace-nowrap border-r border-border/70",
                           cellPad,
                           isLeft ? "text-left" : "text-center",
                         )}

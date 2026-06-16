@@ -2,21 +2,25 @@
 
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
-import {
-  AlertTriangle,
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  X,
-} from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react"
 import {
   IconLayoutList,
   IconList,
   IconListDetails,
   IconDownload,
   IconFileTypeCsv,
+  IconDotsVertical,
+  IconCopyCheck,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Popover,
   PopoverContent,
@@ -45,7 +49,6 @@ import {
 } from "@/components/ui/select"
 import {
   mockLeads,
-  DUPLICATI_COUNT,
   LEAD_TOTAL,
   LEAD_COLUMNS,
   DEFAULT_VISIBLE_COLUMNS,
@@ -126,7 +129,6 @@ export default function LeadsPage() {
   const [filters, setFilters] = useState<LeadFilterState>(DEFAULT_FILTERS)
   const [advanced, setAdvanced] = useState<AdvancedFilterState>(EMPTY_ADVANCED)
   const [onlyDuplicates, setOnlyDuplicates] = useState(false)
-  const [bannerVisible, setBannerVisible] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [page, setPage] = useState(1)
@@ -213,6 +215,22 @@ export default function LeadsPage() {
   const handleAdvancedApply = (next: AdvancedFilterState) => {
     setAdvanced(next)
     setPage(1)
+  }
+
+  // Controllo duplicati manuale (avviato da menu): scansiona email/telefono
+  const handleCheckDuplicates = () => {
+    const found = mockLeads.filter((l) => l.possibileDuplicato).length
+    if (found === 0) {
+      toast.success("Nessun duplicato trovato", {
+        description: "Tutti i lead risultano univoci per email e telefono.",
+      })
+      return
+    }
+    setOnlyDuplicates(true)
+    setPage(1)
+    toast.warning(`${found} possibili duplicati`, {
+      description: "Filtro applicato: verifica e unisci i record sospetti.",
+    })
   }
 
   const handleSort = (col: LeadColumnId) => {
@@ -374,43 +392,38 @@ export default function LeadsPage() {
           </Popover>
 
           <ColumnManager visible={visibleCols} onChange={setVisibleCols} />
+
+          {/* Menu azioni pagina */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="Azioni pagina"
+                  className="bg-card"
+                >
+                  <IconDotsVertical size={18} stroke={1.8} />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Azioni</DropdownMenuLabel>
+                <DropdownMenuItem onClick={handleCheckDuplicates}>
+                  <IconCopyCheck size={16} stroke={1.8} data-icon="inline-start" />
+                  Controlla duplicati
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Button className="bg-teal text-teal-foreground hover:bg-teal/90">
             <Plus data-icon="inline-start" />
             Nuovo lead
           </Button>
         </div>
       </div>
-
-      {/* Banner duplicati */}
-      {bannerVisible ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3">
-          <AlertTriangle className="size-5 shrink-0 text-warning" />
-          <p className="flex-1 text-sm text-foreground">
-            Rilevati{" "}
-            <span className="font-semibold">{DUPLICATI_COUNT} possibili duplicati</span>{" "}
-            per email o telefono. Verifica e unisci i record sospetti.
-          </p>
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-warning/40 bg-card text-foreground"
-            onClick={() => {
-              setOnlyDuplicates(true)
-              setPage(1)
-            }}
-          >
-            Verifica duplicati
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label="Chiudi banner"
-            onClick={() => setBannerVisible(false)}
-          >
-            <X />
-          </Button>
-        </div>
-      ) : null}
 
       {/* Indicatore filtro duplicati attivo */}
       {onlyDuplicates ? (

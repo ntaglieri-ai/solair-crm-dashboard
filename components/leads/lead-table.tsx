@@ -104,9 +104,9 @@ export function LeadTable({
         >
           <TableRow className="hover:bg-transparent">
             {/* Espansione */}
-            <TableHead className="w-8 border-r border-foreground/15" />
+            <TableHead className="w-8 border-r border-foreground/30" />
             {/* Selezione */}
-            <TableHead className="sticky left-0 z-10 w-10 border-r border-foreground/15 bg-muted/95">
+            <TableHead className="sticky left-0 z-10 w-10 border-r border-foreground/30 bg-muted/95">
               <Checkbox
                 checked={allSelected}
                 onCheckedChange={onToggleAll}
@@ -121,7 +121,7 @@ export function LeadTable({
                 <TableHead
                   key={col.id}
                   className={cn(
-                    "whitespace-nowrap border-r border-foreground/15",
+                    "whitespace-nowrap border-r border-foreground/30",
                     numeric ? "text-right" : isLeft ? "text-left" : "text-center",
                   )}
                 >

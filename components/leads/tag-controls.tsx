@@ -58,22 +58,31 @@ export function TagBadge({
 export function LeadTagBadges({
   leadId,
   empty = "—",
+  max,
 }: {
   leadId: string
   empty?: string
+  max?: number
 }) {
   const { getLeadTags } = useTags()
   const tags = getLeadTags(leadId)
   if (!tags.length) {
     return <span className="text-xs text-muted-foreground">{empty}</span>
   }
+  const shown = max ? tags.slice(0, max) : tags
+  const extra = max ? tags.length - shown.length : 0
   return (
     <div className="flex flex-wrap items-center gap-1">
-      {tags.map((tag) => (
+      {shown.map((tag) => (
         <span key={tag.id} className="animate-in zoom-in-90 duration-150">
           <TagBadge tag={tag} />
         </span>
       ))}
+      {extra > 0 ? (
+        <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+          +{extra}
+        </span>
+      ) : null}
     </div>
   )
 }

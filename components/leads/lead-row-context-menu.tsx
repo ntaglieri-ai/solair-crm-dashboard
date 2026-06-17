@@ -88,6 +88,7 @@ export function LeadRowContextMenu({
             {/* Gestisci tag -> apre popover inline sulla riga */}
             <Popover open={tagOpen} onOpenChange={setTagOpen}>
               <PopoverTrigger
+                nativeButton={false}
                 render={
                   <ContextMenuItem
                     closeOnClick={false}

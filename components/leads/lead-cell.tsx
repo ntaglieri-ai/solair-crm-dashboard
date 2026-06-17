@@ -10,10 +10,10 @@ import {
   OrigineBadge,
   EmailStatoBadge,
   ScoreBar,
-  TagList,
   BoolDot,
   LeadAvatar,
 } from "./lead-utils"
+import { LeadTagBadges } from "./tag-controls"
 
 // Colonne con allineamento a destra (valori numerici)
 export const NUMERIC_COLUMNS: LeadColumnId[] = ["Valutazione", "kWp", "kWh"]
@@ -45,7 +45,7 @@ export function LeadCell({
       )
 
     case "Tag":
-      return <TagList tags={lead.Tag} />
+      return <LeadTagBadges leadId={lead.id} max={3} />
 
     case "Nome Lead":
       return density === "comoda" ? (

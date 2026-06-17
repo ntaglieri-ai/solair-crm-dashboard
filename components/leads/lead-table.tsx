@@ -37,6 +37,7 @@ import {
   type LeadColumnId,
 } from "@/lib/mock-data"
 import { LeadCell, NUMERIC_COLUMNS } from "./lead-cell"
+import { LeadRowContextMenu } from "./lead-row-context-menu"
 
 export type SortDir = "asc" | "desc"
 export type Density = "comoda" | "normale" | "densa"
@@ -164,11 +165,12 @@ export function LeadTable({
               id === "Nome Lead" || id === "E-mail"
             return (
               <Fragment key={lead.id}>
-                <TableRow
-                  onClick={() => router.push(`/leads/${lead.id}`)}
-                  className="cursor-pointer"
-                  data-state={selected.has(lead.id) ? "selected" : undefined}
-                >
+                <LeadRowContextMenu lead={lead} onDelete={onDelete}>
+                  <TableRow
+                    onClick={() => router.push(`/leads/${lead.id}`)}
+                    className="cursor-pointer"
+                    data-state={selected.has(lead.id) ? "selected" : undefined}
+                  >
                   {/* Chevron espansione */}
                   <TableCell
                     onClick={(e) => e.stopPropagation()}
@@ -261,7 +263,8 @@ export function LeadTable({
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
-                </TableRow>
+                  </TableRow>
+                </LeadRowContextMenu>
 
                 {/* Riga espansa */}
                 {isOpen ? (

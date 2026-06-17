@@ -10,6 +10,12 @@ import {
   MoreHorizontal,
   Trash2,
   XCircle,
+  Mail,
+  Building2,
+  UserCircle,
+  Megaphone,
+  CalendarDays,
+  Copy,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -52,9 +58,9 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
       {/* Titolo + azioni */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-4">
-          <LeadAvatar nome={nome} className="size-14 text-base" />
+          <LeadAvatar nome={nome} className="size-12 text-base" />
           <div className="flex flex-col gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            <h1 className="text-[22px] font-bold leading-tight tracking-tight text-foreground">
               {nome}
             </h1>
             <div className="flex flex-wrap items-center gap-3">
@@ -77,6 +83,10 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
             <Pencil data-icon="inline-start" />
             Modifica
           </Button>
+          <Button variant="outline" className="bg-card">
+            <Mail data-icon="inline-start" />
+            Invia e-mail
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -87,6 +97,10 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
             />
             <DropdownMenuContent align="end">
               <DropdownMenuGroup>
+                <DropdownMenuItem>
+                  <Copy data-icon="inline-start" />
+                  Duplica
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setShowLost(true)}>
                   <XCircle data-icon="inline-start" />
                   Segna come perso
@@ -100,6 +114,32 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+      </div>
+
+      {/* Riga info rapida */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <Building2 className="size-3.5" />
+          {lead.Sede}
+        </span>
+        <span className="text-border">|</span>
+        <span className="inline-flex items-center gap-1.5">
+          <UserCircle className="size-3.5" />
+          {lead["Lead Proprietario"]}
+        </span>
+        <span className="text-border">|</span>
+        <span className="inline-flex items-center gap-1.5">
+          <Megaphone className="size-3.5" />
+          {lead["Origine Lead"]}
+        </span>
+        <span className="text-border">|</span>
+        <span className="inline-flex items-center gap-1.5">
+          <CalendarDays className="size-3.5" />
+          {lead["Ora creazione"]}
+        </span>
+        <span className="ml-auto text-muted-foreground/70">
+          Ultimo aggiornamento: {lead["Ora ultima attività"]}
+        </span>
       </div>
 
       {/* Dialog elimina */}

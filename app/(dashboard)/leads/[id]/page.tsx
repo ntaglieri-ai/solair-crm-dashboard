@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation"
 import { getLeadById } from "@/lib/mock-data"
 import { LeadDetailHeader } from "@/components/leads/lead-detail-header"
-import { LeadDetailSidebar } from "@/components/leads/lead-detail-sidebar"
-import { LeadTabs } from "@/components/leads/lead-tabs"
+import { LeadDetailContent } from "@/components/leads/lead-detail-content"
+import { LeadIntelligencePanel } from "@/components/leads/lead-intelligence-panel"
 
 export default async function LeadDetailPage({
   params,
@@ -18,13 +18,9 @@ export default async function LeadDetailPage({
     <div className="flex flex-col gap-6">
       <LeadDetailHeader lead={lead} />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <LeadTabs lead={lead} />
-        </div>
-        <div className="lg:col-span-1">
-          <LeadDetailSidebar lead={lead} />
-        </div>
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+        <LeadDetailContent lead={lead} />
+        <LeadIntelligencePanel lead={lead} />
       </div>
     </div>
   )

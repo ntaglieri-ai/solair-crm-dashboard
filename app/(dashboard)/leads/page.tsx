@@ -67,6 +67,7 @@ import {
 } from "@/components/leads/lead-table"
 import { ColumnManager } from "@/components/leads/column-manager"
 import { BulkToolbar } from "@/components/leads/bulk-toolbar"
+import { NewLeadDialog } from "@/components/leads/new-lead-dialog"
 import { cn } from "@/lib/utils"
 import {
   AdvancedFilters,
@@ -126,6 +127,8 @@ const ALL_TAGS = Array.from(
 ).sort((a, b) => a.localeCompare(b))
 
 export default function LeadsPage() {
+  const [leads, setLeads] = useState<Lead[]>(mockLeads)
+  const [newLeadOpen, setNewLeadOpen] = useState(false)
   const [filters, setFilters] = useState<LeadFilterState>(DEFAULT_FILTERS)
   const [advanced, setAdvanced] = useState<AdvancedFilterState>(EMPTY_ADVANCED)
   const [onlyDuplicates, setOnlyDuplicates] = useState(false)
@@ -149,7 +152,7 @@ export default function LeadsPage() {
 
   const filtered = useMemo(() => {
     const q = filters.search.trim().toLowerCase()
-    const rows = mockLeads.filter((lead) => {
+    const rows = leads.filter((lead) => {
       if (onlyDuplicates && !lead.possibileDuplicato) return false
       if (q) {
         const haystack = [
@@ -191,7 +194,7 @@ export default function LeadsPage() {
       })
     }
     return rows
-  }, [filters, advanced, onlyDuplicates, sortBy, sortDir])
+  }, [filters, advanced, onlyDuplicates, sortBy, sortDir, leads])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
   const currentPage = Math.min(page, totalPages)
@@ -214,6 +217,16 @@ export default function LeadsPage() {
 
   const handleAdvancedApply = (next: AdvancedFilterState) => {
     setAdvanced(next)
+    setPage(1)
+  }
+
+  // Inserisce un nuovo lead in cima all'elenco e riporta alla prima pagina
+  const handleCreateLead = (lead: Lead) => {
+    setLeads((prev) => [lead, ...prev])
+    setFilters(DEFAULT_FILTERS)
+    setAdvanced(EMPTY_ADVANCED)
+    setOnlyDuplicates(false)
+    setSortBy(null)
     setPage(1)
   }
 
@@ -418,7 +431,10 @@ export default function LeadsPage() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button className="bg-teal text-teal-foreground hover:bg-teal/90">
+          <Button
+            className="bg-teal text-teal-foreground hover:bg-teal/90"
+            onClick={() => setNewLeadOpen(true)}
+          >
             <Plus data-icon="inline-start" />
             Nuovo lead
           </Button>
@@ -621,6 +637,12 @@ export default function LeadsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <NewLeadDialog
+        open={newLeadOpen}
+        onOpenChange={setNewLeadOpen}
+        onCreate={handleCreateLead}
+      />
     </div>
   )
 }

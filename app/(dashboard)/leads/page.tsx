@@ -68,6 +68,7 @@ import {
 import { ColumnManager } from "@/components/leads/column-manager"
 import { BulkToolbar } from "@/components/leads/bulk-toolbar"
 import { NewLeadDialog } from "@/components/leads/new-lead-dialog"
+import { TagSettingsSheet } from "@/components/leads/tag-settings-sheet"
 import { cn } from "@/lib/utils"
 import {
   AdvancedFilters,
@@ -405,6 +406,8 @@ export default function LeadsPage() {
           </Popover>
 
           <ColumnManager visible={visibleCols} onChange={setVisibleCols} />
+
+          <TagSettingsSheet />
 
           {/* Menu azioni pagina */}
           <DropdownMenu>

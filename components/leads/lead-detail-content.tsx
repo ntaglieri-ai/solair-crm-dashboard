@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
+import { useTags } from "@/lib/tag-store"
 import {
   IconChevronDown,
   IconInfoCircle,
@@ -932,8 +933,10 @@ const TL_TONE = {
 
 function SequenzaTemporale({ lead }: { lead: Lead }) {
   const [tab, setTab] = useState<"cronologia" | "interazioni">("cronologia")
+  const { tagEvents } = useTags()
+  const liveTagEvents = tagEvents[lead.id] ?? []
 
-  const giorni: { data: string; eventi: TimelineEvent[] }[] = [
+  const baseGiorni: { data: string; eventi: TimelineEvent[] }[] = [
     {
       data: "16/06/2026",
       eventi: [
@@ -988,6 +991,23 @@ function SequenzaTemporale({ lead }: { lead: Lead }) {
       ],
     },
   ]
+
+  const giorni: { data: string; eventi: TimelineEvent[] }[] =
+    liveTagEvents.length
+      ? [
+          {
+            data: "Oggi",
+            eventi: liveTagEvents.map((ev) => ({
+              id: ev.id,
+              tipo: "tag" as const,
+              testo: ev.testo,
+              autore: ev.autore,
+              ora: ev.ora,
+            })),
+          },
+          ...baseGiorni,
+        ]
+      : baseGiorni
 
   return (
     <div className="flex flex-col gap-4">

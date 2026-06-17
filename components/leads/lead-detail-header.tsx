@@ -18,6 +18,7 @@ import {
   Copy,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { IconPlus } from "@tabler/icons-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,7 +36,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { type Lead } from "@/lib/mock-data"
-import { LeadAvatar, StatoLeadBadge, ScoreBar, TagList } from "./lead-utils"
+import { LeadAvatar, StatoLeadBadge, ScoreBar } from "./lead-utils"
+import { LeadTagBadges, TagAssignPopover } from "./tag-controls"
 
 export function LeadDetailHeader({ lead }: { lead: Lead }) {
   const router = useRouter()
@@ -66,7 +68,21 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
             <div className="flex flex-wrap items-center gap-3">
               <StatoLeadBadge stato={lead["Stato Lead"]} />
               <ScoreBar score={lead.Valutazione} />
-              <TagList tags={lead.Tag} />
+              <div className="flex flex-wrap items-center gap-1.5">
+                <LeadTagBadges leadId={lead.id} />
+                <TagAssignPopover
+                  leadId={lead.id}
+                  trigger={
+                    <button
+                      type="button"
+                      aria-label="Aggiungi tag"
+                      className="flex size-5 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
+                    >
+                      <IconPlus size={14} stroke={2} />
+                    </button>
+                  }
+                />
+              </div>
             </div>
           </div>
         </div>

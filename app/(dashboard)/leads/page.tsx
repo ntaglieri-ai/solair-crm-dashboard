@@ -4,13 +4,12 @@ import { useMemo, useState } from "react"
 import { toast } from "sonner"
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react"
 import {
-  IconLayoutList,
-  IconList,
-  IconListDetails,
   IconDownload,
   IconFileTypeCsv,
   IconDotsVertical,
   IconCopyCheck,
+  IconSettings,
+  IconFileImport,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,18 +18,12 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
 import {
   Dialog,
   DialogContent,
@@ -65,11 +58,10 @@ import {
   type SortDir,
   type Density,
 } from "@/components/leads/lead-table"
-import { ColumnManager } from "@/components/leads/column-manager"
 import { BulkToolbar } from "@/components/leads/bulk-toolbar"
 import { NewLeadDialog } from "@/components/leads/new-lead-dialog"
-import { TagSettingsSheet } from "@/components/leads/tag-settings-sheet"
-import { cn } from "@/lib/utils"
+import { LeadSettingsSheet } from "@/components/leads/lead-settings-sheet"
+import { LeadImportDialog } from "@/components/leads/lead-import-dialog"
 import {
   AdvancedFilters,
   EMPTY_ADVANCED,
@@ -82,12 +74,6 @@ const ROWS_ITEMS: Record<string, string> = {
   "30": "30 righe",
   "50": "50 righe",
 }
-
-const DENSITY_OPTIONS: { value: Density; label: string; icon: typeof IconList }[] = [
-  { value: "comoda", label: "Compatta", icon: IconLayoutList },
-  { value: "normale", label: "Normale", icon: IconList },
-  { value: "densa", label: "Densa", icon: IconListDetails },
-]
 
 // Simula il download di un file CSV a partire dai lead passati
 function downloadLeadsCsv(rows: Lead[], filename: string) {
@@ -130,6 +116,7 @@ const ALL_TAGS = Array.from(
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>(mockLeads)
   const [newLeadOpen, setNewLeadOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [filters, setFilters] = useState<LeadFilterState>(DEFAULT_FILTERS)
   const [advanced, setAdvanced] = useState<AdvancedFilterState>(EMPTY_ADVANCED)
   const [onlyDuplicates, setOnlyDuplicates] = useState(false)
@@ -320,94 +307,28 @@ export default function LeadsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Densità vista */}
-          <div className="flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
-            {DENSITY_OPTIONS.map((opt) => {
-              const Icon = opt.icon
-              const active = density === opt.value
-              return (
-                <Tooltip key={opt.value}>
-                  <TooltipTrigger
-                    render={
-                      <button
-                        type="button"
-                        aria-label={opt.label}
-                        aria-pressed={active}
-                        onClick={() => setDensity(opt.value)}
-                        className={cn(
-                          "flex size-8 items-center justify-center rounded-md transition-colors duration-150",
-                          active
-                            ? "border border-navy bg-[#EEF2FF] text-navy"
-                            : "text-muted-foreground hover:bg-secondary hover:text-foreground",
-                        )}
-                      >
-                        <Icon size={18} stroke={1.8} />
-                      </button>
-                    }
-                  />
-                  <TooltipContent>{opt.label}</TooltipContent>
-                </Tooltip>
-              )
-            })}
-          </div>
-
-          {/* Esporta */}
-          <Popover>
-            <PopoverTrigger
-              render={
-                <Button variant="outline" className="bg-card">
-                  <IconDownload size={16} stroke={1.8} data-icon="inline-start" />
-                  Esporta
-                </Button>
-              }
-            />
-            <PopoverContent align="end" className="w-72 p-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  downloadLeadsCsv(filtered, `lead-filtrati-${filtered.length}.csv`)
-                  toast.success("Esportazione avviata", {
-                    description: `${LEAD_TOTAL.toLocaleString("it-IT")} lead filtrati esportati.`,
-                  })
-                }}
-                className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors duration-100 hover:bg-secondary"
+          {/* Impostazioni lead (tag, colonne, generali) */}
+          <LeadSettingsSheet
+            visibleCols={visibleCols}
+            onVisibleColsChange={setVisibleCols}
+            density={density}
+            onDensityChange={setDensity}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={(n) => {
+              setRowsPerPage(n)
+              setPage(1)
+            }}
+            trigger={
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Impostazioni lead"
+                className="bg-card"
               >
-                <IconFileTypeCsv size={18} stroke={1.8} className="text-muted-foreground" />
-                Esporta tutti i lead filtrati ({LEAD_TOTAL.toLocaleString("it-IT")})
-              </button>
-              <button
-                type="button"
-                disabled={selected.size === 0}
-                onClick={() => {
-                  downloadLeadsCsv(selectedRows, `lead-selezione-${selectedRows.length}.csv`)
-                  toast.success("Esportazione avviata", {
-                    description: `${selectedRows.length} lead selezionati esportati.`,
-                  })
-                }}
-                className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors duration-100 hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <IconFileTypeCsv size={18} stroke={1.8} className="text-muted-foreground" />
-                Esporta selezione ({selected.size} lead)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  downloadLeadsCsv(pageRows, `lead-pagina-${pageRows.length}.csv`)
-                  toast.success("Esportazione avviata", {
-                    description: `${pageRows.length} lead di questa pagina esportati.`,
-                  })
-                }}
-                className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors duration-100 hover:bg-secondary"
-              >
-                <IconFileTypeCsv size={18} stroke={1.8} className="text-muted-foreground" />
-                Esporta questa pagina ({pageRows.length} lead)
-              </button>
-            </PopoverContent>
-          </Popover>
-
-          <ColumnManager visible={visibleCols} onChange={setVisibleCols} />
-
-          <TagSettingsSheet />
+                <IconSettings size={18} stroke={1.8} />
+              </Button>
+            }
+          />
 
           {/* Menu azioni pagina */}
           <DropdownMenu>
@@ -423,12 +344,71 @@ export default function LeadsPage() {
                 </Button>
               }
             />
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="w-60">
               <DropdownMenuGroup>
                 <DropdownMenuLabel>Azioni</DropdownMenuLabel>
                 <DropdownMenuItem onClick={handleCheckDuplicates}>
                   <IconCopyCheck size={16} stroke={1.8} data-icon="inline-start" />
                   Controlla duplicati
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Dati</DropdownMenuLabel>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <IconDownload size={16} stroke={1.8} data-icon="inline-start" />
+                    Esporta CSV
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-60">
+                    <DropdownMenuItem
+                      onClick={() => {
+                        downloadLeadsCsv(
+                          filtered,
+                          `lead-filtrati-${filtered.length}.csv`,
+                        )
+                        toast.success("Esportazione avviata", {
+                          description: `${filtered.length} lead filtrati esportati.`,
+                        })
+                      }}
+                    >
+                      <IconFileTypeCsv size={16} stroke={1.8} data-icon="inline-start" />
+                      Lead filtrati ({filtered.length})
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={selected.size === 0}
+                      onClick={() => {
+                        downloadLeadsCsv(
+                          selectedRows,
+                          `lead-selezione-${selectedRows.length}.csv`,
+                        )
+                        toast.success("Esportazione avviata", {
+                          description: `${selectedRows.length} lead selezionati esportati.`,
+                        })
+                      }}
+                    >
+                      <IconFileTypeCsv size={16} stroke={1.8} data-icon="inline-start" />
+                      Selezione ({selected.size})
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        downloadLeadsCsv(
+                          pageRows,
+                          `lead-pagina-${pageRows.length}.csv`,
+                        )
+                        toast.success("Esportazione avviata", {
+                          description: `${pageRows.length} lead di questa pagina esportati.`,
+                        })
+                      }}
+                    >
+                      <IconFileTypeCsv size={16} stroke={1.8} data-icon="inline-start" />
+                      Pagina corrente ({pageRows.length})
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuItem onClick={() => setImportOpen(true)}>
+                  <IconFileImport size={16} stroke={1.8} data-icon="inline-start" />
+                  Importa…
                 </DropdownMenuItem>
               </DropdownMenuGroup>
             </DropdownMenuContent>
@@ -646,6 +626,8 @@ export default function LeadsPage() {
         onOpenChange={setNewLeadOpen}
         onCreate={handleCreateLead}
       />
+
+      <LeadImportDialog open={importOpen} onOpenChange={setImportOpen} />
     </div>
   )
 }

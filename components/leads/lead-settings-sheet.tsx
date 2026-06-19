@@ -10,6 +10,7 @@ import {
   IconLayoutList,
   IconList,
   IconListDetails,
+  IconRoute,
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -43,6 +44,7 @@ import {
   type LeadColumnId,
 } from "@/lib/mock-data"
 import type { Density } from "./lead-table"
+import { RulesSection } from "./assignment-rules"
 
 /* -------------------------------------------------------------------------- */
 /*                              Sezione: Tag                                  */
@@ -388,10 +390,10 @@ function GeneralSection({
 /*                          Sheet impostazioni Lead                           */
 /* -------------------------------------------------------------------------- */
 
-type SectionId = "tag" | "colonne" | "generali"
+export type SettingsSectionId = "tag" | "regole" | "colonne" | "generali"
 
 const SECTIONS: {
-  id: SectionId
+  id: SettingsSectionId
   label: string
   description: string
   icon: typeof IconTag
@@ -414,6 +416,13 @@ const SECTIONS: {
     description: "Gestisci i tag: rinomina, cambia colore o elimina.",
     icon: IconTag,
   },
+  {
+    id: "regole",
+    label: "Regole di assegnazione",
+    description:
+      "Assegna automaticamente i nuovi lead ai commerciali in base a criteri.",
+    icon: IconRoute,
+  },
 ]
 
 export function LeadSettingsSheet({
@@ -424,6 +433,10 @@ export function LeadSettingsSheet({
   rowsPerPage,
   onRowsPerPageChange,
   trigger,
+  open,
+  onOpenChange,
+  section,
+  onSectionChange,
 }: {
   visibleCols: LeadColumnId[]
   onVisibleColsChange: (cols: LeadColumnId[]) => void
@@ -431,14 +444,17 @@ export function LeadSettingsSheet({
   onDensityChange: (d: Density) => void
   rowsPerPage: number
   onRowsPerPageChange: (n: number) => void
-  trigger: React.ReactElement
+  trigger?: React.ReactElement
+  open?: boolean
+  onOpenChange?: (o: boolean) => void
+  section: SettingsSectionId
+  onSectionChange: (s: SettingsSectionId) => void
 }) {
-  const [section, setSection] = useState<SectionId>("generali")
   const active = SECTIONS.find((s) => s.id === section)!
 
   return (
-    <Sheet>
-      <SheetTrigger render={trigger} />
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      {trigger ? <SheetTrigger render={trigger} /> : null}
       <SheetContent
         side="right"
         className="w-full gap-0 p-0 data-[side=right]:sm:max-w-2xl"
@@ -461,7 +477,7 @@ export function LeadSettingsSheet({
                   <li key={s.id}>
                     <button
                       type="button"
-                      onClick={() => setSection(s.id)}
+                      onClick={() => onSectionChange(s.id)}
                       className={cn(
                         "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm font-medium transition-colors",
                         isActive
@@ -490,6 +506,7 @@ export function LeadSettingsSheet({
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               {section === "tag" && <TagSection />}
+              {section === "regole" && <RulesSection />}
               {section === "colonne" && (
                 <ColumnsSection
                   visible={visibleCols}

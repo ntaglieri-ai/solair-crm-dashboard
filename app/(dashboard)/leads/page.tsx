@@ -3,27 +3,8 @@
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react"
-import {
-  IconDownload,
-  IconFileTypeCsv,
-  IconDotsVertical,
-  IconCopyCheck,
-  IconSettings,
-  IconFileImport,
-} from "@tabler/icons-react"
+import { IconSettings } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import {
   Dialog,
   DialogContent,
@@ -60,7 +41,11 @@ import {
 } from "@/components/leads/lead-table"
 import { BulkToolbar } from "@/components/leads/bulk-toolbar"
 import { NewLeadDialog } from "@/components/leads/new-lead-dialog"
-import { LeadSettingsSheet } from "@/components/leads/lead-settings-sheet"
+import {
+  LeadSettingsSheet,
+  type SettingsSectionId,
+} from "@/components/leads/lead-settings-sheet"
+import { LeadActionsMenu } from "@/components/leads/lead-actions-menu"
 import { LeadImportDialog } from "@/components/leads/lead-import-dialog"
 import {
   AdvancedFilters,
@@ -132,6 +117,9 @@ export default function LeadsPage() {
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [density, setDensity] = useState<Density>("normale")
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsSection, setSettingsSection] =
+    useState<SettingsSectionId>("generali")
 
   const columns = useMemo(
     () => LEAD_COLUMNS.filter((c) => visibleCols.includes(c.id)),
@@ -268,15 +256,81 @@ export default function LeadsPage() {
   )
 
   const handleBulkOwner = (owner: string) => {
+    const n = selected.size
+    setLeads((prev) =>
+      prev.map((l) =>
+        selected.has(l.id) ? { ...l, "Lead Proprietario": owner } : l,
+      ),
+    )
     toast.success("Proprietario aggiornato", {
-      description: `${selected.size} lead assegnati a ${owner}.`,
+      description: `${n} lead assegnati a ${owner}.`,
     })
     setSelected(new Set())
   }
 
   const handleBulkStato = (stato: string) => {
+    const n = selected.size
+    setLeads((prev) =>
+      prev.map((l) =>
+        selected.has(l.id) ? { ...l, "Stato Lead": stato as Lead["Stato Lead"] } : l,
+      ),
+    )
     toast.success("Stato aggiornato", {
-      description: `${selected.size} lead impostati su "${stato}".`,
+      description: `${n} lead impostati su "${stato}".`,
+    })
+    setSelected(new Set())
+  }
+
+  // Aggiornamento di massa generico su Stato Lead / Sede / Tag
+  const handleBulkUpdate = (field: "Stato Lead" | "Sede" | "Tag", value: string) => {
+    const n = selected.size
+    setLeads((prev) =>
+      prev.map((l) => {
+        if (!selected.has(l.id)) return l
+        if (field === "Tag") {
+          const next = l.Tag.includes(value) ? l.Tag : [...l.Tag, value]
+          return { ...l, Tag: next }
+        }
+        return { ...l, [field]: value } as Lead
+      }),
+    )
+    toast.success("Lead aggiornati", {
+      description: `${field} impostato su "${value}" per ${n} lead.`,
+    })
+    setSelected(new Set())
+  }
+
+  const handleBulkConvert = () => {
+    const n = selected.size
+    setLeads((prev) =>
+      prev.map((l) =>
+        selected.has(l.id)
+          ? { ...l, "Stato Lead": "Convertito" as Lead["Stato Lead"] }
+          : l,
+      ),
+    )
+    toast.success("Lead convertiti", {
+      description: `${n} lead convertiti in clienti.`,
+    })
+    setSelected(new Set())
+  }
+
+  const handleBulkApprove = () => {
+    const n = selected.size
+    toast.success("Lead approvati", { description: `${n} lead approvati.` })
+    setSelected(new Set())
+  }
+
+  const handleBulkDedup = (idsToRemove: string[]) => {
+    if (idsToRemove.length === 0) {
+      toast.info("Nessun record rimosso")
+      setSelected(new Set())
+      return
+    }
+    const remove = new Set(idsToRemove)
+    setLeads((prev) => prev.filter((l) => !remove.has(l.id)))
+    toast.success("Duplicati uniti", {
+      description: `${idsToRemove.length} record duplicati rimossi.`,
     })
     setSelected(new Set())
   }
@@ -288,12 +342,27 @@ export default function LeadsPage() {
     })
   }
 
+  const handleExportFiltered = () => {
+    downloadLeadsCsv(filtered, `lead-filtrati-${filtered.length}.csv`)
+    toast.success("Esportazione avviata", {
+      description: `${filtered.length} lead filtrati esportati.`,
+    })
+  }
+
   const confirmBulkDelete = () => {
+    const n = selected.size
+    setLeads((prev) => prev.filter((l) => !selected.has(l.id)))
     toast.success("Lead eliminati", {
-      description: `${selected.size} lead rimossi.`,
+      description: `${n} lead rimossi.`,
     })
     setBulkDeleteOpen(false)
     setSelected(new Set())
+  }
+
+  // Apre lo sheet impostazioni su una specifica sezione (es. da menu Azioni)
+  const openSettings = (section: SettingsSectionId) => {
+    setSettingsSection(section)
+    setSettingsOpen(true)
   }
 
   return (
@@ -307,8 +376,12 @@ export default function LeadsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Impostazioni lead (tag, colonne, generali) */}
+          {/* Impostazioni lead (generali, colonne, tag, regole) */}
           <LeadSettingsSheet
+            open={settingsOpen}
+            onOpenChange={setSettingsOpen}
+            section={settingsSection}
+            onSectionChange={setSettingsSection}
             visibleCols={visibleCols}
             onVisibleColsChange={setVisibleCols}
             density={density}
@@ -330,89 +403,24 @@ export default function LeadsPage() {
             }
           />
 
-          {/* Menu azioni pagina */}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="icon"
-                  aria-label="Azioni pagina"
-                  className="bg-card"
-                >
-                  <IconDotsVertical size={18} stroke={1.8} />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-60">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>Azioni</DropdownMenuLabel>
-                <DropdownMenuItem onClick={handleCheckDuplicates}>
-                  <IconCopyCheck size={16} stroke={1.8} data-icon="inline-start" />
-                  Controlla duplicati
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>Dati</DropdownMenuLabel>
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <IconDownload size={16} stroke={1.8} data-icon="inline-start" />
-                    Esporta CSV
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-60">
-                    <DropdownMenuItem
-                      onClick={() => {
-                        downloadLeadsCsv(
-                          filtered,
-                          `lead-filtrati-${filtered.length}.csv`,
-                        )
-                        toast.success("Esportazione avviata", {
-                          description: `${filtered.length} lead filtrati esportati.`,
-                        })
-                      }}
-                    >
-                      <IconFileTypeCsv size={16} stroke={1.8} data-icon="inline-start" />
-                      Lead filtrati ({filtered.length})
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      disabled={selected.size === 0}
-                      onClick={() => {
-                        downloadLeadsCsv(
-                          selectedRows,
-                          `lead-selezione-${selectedRows.length}.csv`,
-                        )
-                        toast.success("Esportazione avviata", {
-                          description: `${selectedRows.length} lead selezionati esportati.`,
-                        })
-                      }}
-                    >
-                      <IconFileTypeCsv size={16} stroke={1.8} data-icon="inline-start" />
-                      Selezione ({selected.size})
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => {
-                        downloadLeadsCsv(
-                          pageRows,
-                          `lead-pagina-${pageRows.length}.csv`,
-                        )
-                        toast.success("Esportazione avviata", {
-                          description: `${pageRows.length} lead di questa pagina esportati.`,
-                        })
-                      }}
-                    >
-                      <IconFileTypeCsv size={16} stroke={1.8} data-icon="inline-start" />
-                      Pagina corrente ({pageRows.length})
-                    </DropdownMenuItem>
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                <DropdownMenuItem onClick={() => setImportOpen(true)}>
-                  <IconFileImport size={16} stroke={1.8} data-icon="inline-start" />
-                  Importa…
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Menu azioni (cambia in base alla selezione) */}
+          <LeadActionsMenu
+            selectedCount={selected.size}
+            filtered={filtered}
+            selectedRows={selectedRows}
+            tags={ALL_TAGS}
+            onOpenSettings={openSettings}
+            onCheckDuplicates={handleCheckDuplicates}
+            onImport={() => setImportOpen(true)}
+            onExportFiltered={handleExportFiltered}
+            onExportSelection={handleBulkExport}
+            onBulkTransfer={handleBulkOwner}
+            onBulkUpdate={handleBulkUpdate}
+            onBulkConvert={handleBulkConvert}
+            onBulkApprove={handleBulkApprove}
+            onBulkDedup={handleBulkDedup}
+            onBulkDelete={() => setBulkDeleteOpen(true)}
+          />
 
           <Button
             className="bg-teal text-teal-foreground hover:bg-teal/90"

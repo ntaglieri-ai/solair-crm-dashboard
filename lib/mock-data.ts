@@ -2366,3 +2366,551 @@ export const mockClienti: ClienteRecord[] = [
 export function getClienteById(id: string): ClienteRecord | undefined {
   return mockClienti.find((c) => c.id === id)
 }
+
+// ============================================================================
+// MODULO COMPITI (Tasks)
+// ============================================================================
+
+export type StatoCompito = "Da fare" | "In corso" | "In attesa" | "Completato"
+
+export type PrioritaCompito = "Alto" | "Medio" | "Basso"
+
+export interface CompitoNota {
+  id: string
+  testo: string
+  autore: string
+  data: string
+}
+
+export interface Compito {
+  id: string
+  Oggetto: string
+  Stato: StatoCompito
+  Priorità: PrioritaCompito
+  "Data di scadenza": string // DD/MM/YYYY
+  "Proprietario del compito": string
+  Sede: SedeLabel
+  "Correlato a": { tipo: "Lead" | "Cliente"; id: string; nome: string } | null
+  Descrizione: string
+  Promemoria: string | null
+  "Data di creazione": string
+  "Orario di chiusura": string | null
+  Note: CompitoNota[]
+}
+
+export const STATO_COMPITO_ORDER: StatoCompito[] = [
+  "Da fare",
+  "In corso",
+  "In attesa",
+  "Completato",
+]
+
+export const STATO_COMPITO_TONE: Record<StatoCompito, string> = {
+  "Da fare": "bg-secondary text-secondary-foreground",
+  "In corso": "bg-info/15 text-info",
+  "In attesa": "bg-warning/15 text-warning",
+  Completato: "bg-success/15 text-success",
+}
+
+export const PRIORITA_COMPITO_ORDER: PrioritaCompito[] = ["Alto", "Medio", "Basso"]
+
+export const PRIORITA_COMPITO_TONE: Record<PrioritaCompito, string> = {
+  Alto: "bg-destructive/12 text-destructive",
+  Medio: "bg-warning/15 text-warning",
+  Basso: "bg-secondary text-muted-foreground",
+}
+
+export const mockProprietariCompito: string[] = [
+  "Marco Rossi",
+  "Giulia Bianchi",
+  "Luca Ferrari",
+  "Sara Esposto",
+  "Andrea Greco",
+  "Elena Conti",
+]
+
+export const COMPITI_TOTAL = 1247
+
+export function compitoInitials(nome: string): string {
+  return nome
+    .split(" ")
+    .map((p) => p[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase()
+}
+
+/** Converte DD/MM/YYYY in Date (mezzanotte locale). */
+function parseDMY(d: string): Date | null {
+  const [day, m, y] = d.split("/")
+  if (!day || !m || !y) return null
+  return new Date(Number(y), Number(m) - 1, Number(day))
+}
+
+/** "Oggi" coerente con la data di sistema dell'app (20/06/2026). */
+const COMPITI_TODAY = new Date(2026, 5, 20)
+
+export function isCompitoScaduto(c: Compito): boolean {
+  if (c.Stato === "Completato") return false
+  const due = parseDMY(c["Data di scadenza"])
+  if (!due) return false
+  return due.getTime() < COMPITI_TODAY.getTime()
+}
+
+export const mockCompiti: Compito[] = [
+  {
+    id: "task-001",
+    Oggetto: "Richiamare per conferma sopralluogo",
+    Stato: "Da fare",
+    Priorità: "Alto",
+    "Data di scadenza": "18/06/2026",
+    "Proprietario del compito": "Marco Rossi",
+    Sede: "Catania",
+    "Correlato a": { tipo: "Lead", id: "lead-001", nome: "Andrea Cocita" },
+    Descrizione:
+      "Confermare la data del sopralluogo tecnico per l'impianto fotovoltaico da 6 kW.",
+    Promemoria: "18/06/2026 09:00",
+    "Data di creazione": "12/06/2026 14:20",
+    "Orario di chiusura": null,
+    Note: [
+      {
+        id: "n1",
+        testo: "Cliente preferisce essere contattato dopo le 17.",
+        autore: "Marco Rossi",
+        data: "13/06/2026 10:05",
+      },
+    ],
+  },
+  {
+    id: "task-002",
+    Oggetto: "Inviare preventivo aggiornato impianto 4.5 kW",
+    Stato: "In corso",
+    Priorità: "Alto",
+    "Data di scadenza": "21/06/2026",
+    "Proprietario del compito": "Giulia Bianchi",
+    Sede: "Palermo",
+    "Correlato a": { tipo: "Cliente", id: "cli-001", nome: "Famiglia Russo" },
+    Descrizione:
+      "Aggiornare il preventivo con il nuovo listino moduli e inviarlo via email.",
+    Promemoria: null,
+    "Data di creazione": "15/06/2026 09:00",
+    "Orario di chiusura": null,
+    Note: [],
+  },
+  {
+    id: "task-003",
+    Oggetto: "Sollecitare firma contratto digitale",
+    Stato: "In attesa",
+    Priorità: "Medio",
+    "Data di scadenza": "23/06/2026",
+    "Proprietario del compito": "Luca Ferrari",
+    Sede: "Messina",
+    "Correlato a": { tipo: "Cliente", id: "cli-002", nome: "Salvatore Greco" },
+    Descrizione: "Il cliente ha ricevuto il link per la firma ma non ha ancora firmato.",
+    Promemoria: "23/06/2026 11:00",
+    "Data di creazione": "16/06/2026 16:40",
+    "Orario di chiusura": null,
+    Note: [
+      {
+        id: "n1",
+        testo: "In attesa che il cliente recuperi lo SPID.",
+        autore: "Luca Ferrari",
+        data: "17/06/2026 12:00",
+      },
+    ],
+  },
+  {
+    id: "task-004",
+    Oggetto: "Verificare documentazione GSE",
+    Stato: "Completato",
+    Priorità: "Medio",
+    "Data di scadenza": "14/06/2026",
+    "Proprietario del compito": "Sara Esposto",
+    Sede: "Catania",
+    "Correlato a": { tipo: "Cliente", id: "cli-003", nome: "Maria Lombardo" },
+    Descrizione: "Controllare che la pratica GSE sia completa prima dell'invio.",
+    Promemoria: null,
+    "Data di creazione": "10/06/2026 08:30",
+    "Orario di chiusura": "13/06/2026 17:15",
+    Note: [],
+  },
+  {
+    id: "task-005",
+    Oggetto: "Programmare installazione inverter",
+    Stato: "Da fare",
+    Priorità: "Alto",
+    "Data di scadenza": "25/06/2026",
+    "Proprietario del compito": "Andrea Greco",
+    Sede: "Siracusa",
+    "Correlato a": { tipo: "Cliente", id: "cli-004", nome: "Giuseppe Marino" },
+    Descrizione: "Coordinare con l'installatore la data di posa dell'inverter ibrido.",
+    Promemoria: "24/06/2026 08:00",
+    "Data di creazione": "17/06/2026 11:10",
+    "Orario di chiusura": null,
+    Note: [],
+  },
+  {
+    id: "task-006",
+    Oggetto: "Follow-up post-installazione",
+    Stato: "Da fare",
+    Priorità: "Basso",
+    "Data di scadenza": "30/06/2026",
+    "Proprietario del compito": "Elena Conti",
+    Sede: "Ragusa",
+    "Correlato a": { tipo: "Cliente", id: "cli-005", nome: "Antonio Caruso" },
+    Descrizione: "Verificare la soddisfazione del cliente e proporre il monitoraggio.",
+    Promemoria: null,
+    "Data di creazione": "18/06/2026 15:00",
+    "Orario di chiusura": null,
+    Note: [],
+  },
+  {
+    id: "task-007",
+    Oggetto: "Raccogliere bolletta per dimensionamento",
+    Stato: "In corso",
+    Priorità: "Medio",
+    "Data di scadenza": "19/06/2026",
+    "Proprietario del compito": "Marco Rossi",
+    Sede: "Catania",
+    "Correlato a": { tipo: "Lead", id: "lead-002", nome: "Concetta Privitera" },
+    Descrizione: "Richiedere l'ultima bolletta per calcolare il fabbisogno annuo.",
+    Promemoria: null,
+    "Data di creazione": "14/06/2026 10:00",
+    "Orario di chiusura": null,
+    Note: [],
+  },
+  {
+    id: "task-008",
+    Oggetto: "Preparare contratto per appuntamento",
+    Stato: "In attesa",
+    Priorità: "Alto",
+    "Data di scadenza": "22/06/2026",
+    "Proprietario del compito": "Giulia Bianchi",
+    Sede: "Palermo",
+    "Correlato a": { tipo: "Lead", id: "lead-003", nome: "Vincenzo Lo Bianco" },
+    Descrizione: "Predisporre il contratto digitale per l'incontro in sede.",
+    Promemoria: "22/06/2026 15:30",
+    "Data di creazione": "16/06/2026 09:45",
+    "Orario di chiusura": null,
+    Note: [],
+  },
+  {
+    id: "task-009",
+    Oggetto: "Chiamata di benvenuto nuovo cliente",
+    Stato: "Completato",
+    Priorità: "Basso",
+    "Data di scadenza": "12/06/2026",
+    "Proprietario del compito": "Luca Ferrari",
+    Sede: "Messina",
+    "Correlato a": { tipo: "Cliente", id: "cli-006", nome: "Rosa Calabrese" },
+    Descrizione: "Presentare i prossimi step e i riferimenti del referente tecnico.",
+    Promemoria: null,
+    "Data di creazione": "08/06/2026 14:00",
+    "Orario di chiusura": "11/06/2026 16:20",
+    Note: [],
+  },
+  {
+    id: "task-010",
+    Oggetto: "Sollecito saldo finale impianto",
+    Stato: "Da fare",
+    Priorità: "Alto",
+    "Data di scadenza": "17/06/2026",
+    "Proprietario del compito": "Sara Esposto",
+    Sede: "Catania",
+    "Correlato a": { tipo: "Cliente", id: "cli-007", nome: "Domenico Rizzo" },
+    Descrizione: "Inviare promemoria per il pagamento del saldo a installazione conclusa.",
+    Promemoria: "17/06/2026 10:00",
+    "Data di creazione": "11/06/2026 11:30",
+    "Orario di chiusura": null,
+    Note: [
+      {
+        id: "n1",
+        testo: "Promesso pagamento entro fine settimana.",
+        autore: "Sara Esposto",
+        data: "16/06/2026 09:00",
+      },
+    ],
+  },
+  {
+    id: "task-011",
+    Oggetto: "Sopralluogo tecnico tetto a falde",
+    Stato: "In corso",
+    Priorità: "Medio",
+    "Data di scadenza": "24/06/2026",
+    "Proprietario del compito": "Andrea Greco",
+    Sede: "Siracusa",
+    "Correlato a": { tipo: "Lead", id: "lead-004", nome: "Carmela Santoro" },
+    Descrizione: "Valutare esposizione e ombreggiamenti per il dimensionamento.",
+    Promemoria: null,
+    "Data di creazione": "17/06/2026 08:15",
+    "Orario di chiusura": null,
+    Note: [],
+  },
+  {
+    id: "task-012",
+    Oggetto: "Inviare scheda tecnica batteria di accumulo",
+    Stato: "Da fare",
+    Priorità: "Basso",
+    "Data di scadenza": "27/06/2026",
+    "Proprietario del compito": "Elena Conti",
+    Sede: "Ragusa",
+    "Correlato a": { tipo: "Cliente", id: "cli-008", nome: "Francesco Parisi" },
+    Descrizione: "Condividere le specifiche del sistema di accumulo da 10 kWh.",
+    Promemoria: null,
+    "Data di creazione": "18/06/2026 13:20",
+    "Orario di chiusura": null,
+    Note: [],
+  },
+  {
+    id: "task-013",
+    Oggetto: "Aggiornare stato pratica Enel",
+    Stato: "In attesa",
+    Priorità: "Medio",
+    "Data di scadenza": "26/06/2026",
+    "Proprietario del compito": "Marco Rossi",
+    Sede: "Catania",
+    "Correlato a": { tipo: "Cliente", id: "cli-009", nome: "Agata Fichera" },
+    Descrizione: "Verificare l'avanzamento della pratica di connessione con il distributore.",
+    Promemoria: "26/06/2026 09:30",
+    "Data di creazione": "15/06/2026 17:00",
+    "Orario di chiusura": null,
+    Note: [],
+  },
+  {
+    id: "task-014",
+    Oggetto: "Richiamare lead non risposto",
+    Stato: "Da fare",
+    Priorità: "Medio",
+    "Data di scadenza": "16/06/2026",
+    "Proprietario del compito": "Giulia Bianchi",
+    Sede: "Palermo",
+    "Correlato a": { tipo: "Lead", id: "lead-005", nome: "Giovanni Messina" },
+    Descrizione: "Secondo tentativo di contatto dopo mancata risposta.",
+    Promemoria: null,
+    "Data di creazione": "13/06/2026 10:40",
+    "Orario di chiusura": null,
+    Note: [],
+  },
+  {
+    id: "task-015",
+    Oggetto: "Programmare collaudo impianto",
+    Stato: "Completato",
+    Priorità: "Alto",
+    "Data di scadenza": "10/06/2026",
+    "Proprietario del compito": "Luca Ferrari",
+    Sede: "Messina",
+    "Correlato a": { tipo: "Cliente", id: "cli-010", nome: "Pietro Gulino" },
+    Descrizione: "Fissare la data del collaudo con il tecnico abilitato.",
+    Promemoria: null,
+    "Data di creazione": "05/06/2026 09:00",
+    "Orario di chiusura": "09/06/2026 12:00",
+    Note: [],
+  },
+  {
+    id: "task-016",
+    Oggetto: "Inviare contratto di manutenzione",
+    Stato: "Da fare",
+    Priorità: "Basso",
+    "Data di scadenza": "29/06/2026",
+    "Proprietario del compito": "Sara Esposto",
+    Sede: "Catania",
+    "Correlato a": { tipo: "Cliente", id: "cli-011", nome: "Lucia Amato" },
+    Descrizione: "Proporre il piano di manutenzione annuale.",
+    Promemoria: null,
+    "Data di creazione": "18/06/2026 16:10",
+    "Orario di chiusura": null,
+    Note: [],
+  },
+  {
+    id: "task-017",
+    Oggetto: "Verifica pratica detrazione fiscale",
+    Stato: "In corso",
+    Priorità: "Medio",
+    "Data di scadenza": "28/06/2026",
+    "Proprietario del compito": "Andrea Greco",
+    Sede: "Siracusa",
+    "Correlato a": { tipo: "Cliente", id: "cli-012", nome: "Sebastiano Lo Giudice" },
+    Descrizione: "Controllare i documenti per la detrazione del 50%.",
+    Promemoria: null,
+    "Data di creazione": "17/06/2026 14:30",
+    "Orario di chiusura": null,
+    Note: [],
+  },
+  {
+    id: "task-018",
+    Oggetto: "Appuntamento commerciale in sede",
+    Stato: "In attesa",
+    Priorità: "Alto",
+    "Data di scadenza": "20/06/2026",
+    "Proprietario del compito": "Elena Conti",
+    Sede: "Ragusa",
+    "Correlato a": { tipo: "Lead", id: "lead-006", nome: "Rosario Tumino" },
+    Descrizione: "Incontro per illustrare l'offerta e firmare la proposta.",
+    Promemoria: "20/06/2026 16:00",
+    "Data di creazione": "16/06/2026 11:00",
+    "Orario di chiusura": null,
+    Note: [],
+  },
+  {
+    id: "task-019",
+    Oggetto: "Caricare foto impianto su gestionale",
+    Stato: "Completato",
+    Priorità: "Basso",
+    "Data di scadenza": "13/06/2026",
+    "Proprietario del compito": "Marco Rossi",
+    Sede: "Catania",
+    "Correlato a": { tipo: "Cliente", id: "cli-013", nome: "Nunzio Spadaro" },
+    Descrizione: "Allegare le foto del cantiere alla scheda cliente.",
+    Promemoria: null,
+    "Data di creazione": "12/06/2026 09:20",
+    "Orario di chiusura": "12/06/2026 18:00",
+    Note: [],
+  },
+  {
+    id: "task-020",
+    Oggetto: "Chiamare per recensione Google",
+    Stato: "Da fare",
+    Priorità: "Basso",
+    "Data di scadenza": "02/07/2026",
+    "Proprietario del compito": "Giulia Bianchi",
+    Sede: "Palermo",
+    "Correlato a": { tipo: "Cliente", id: "cli-014", nome: "Daniela Vitale" },
+    Descrizione: "Chiedere al cliente soddisfatto una recensione online.",
+    Promemoria: null,
+    "Data di creazione": "18/06/2026 17:30",
+    "Orario di chiusura": null,
+    Note: [],
+  },
+  {
+    id: "task-021",
+    Oggetto: "Sollecito documenti per finanziamento",
+    Stato: "In corso",
+    Priorità: "Alto",
+    "Data di scadenza": "19/06/2026",
+    "Proprietario del compito": "Luca Ferrari",
+    Sede: "Messina",
+    "Correlato a": { tipo: "Cliente", id: "cli-015", nome: "Alfio Costa" },
+    Descrizione: "Mancano busta paga e documento d'identità per la pratica.",
+    Promemoria: "19/06/2026 09:00",
+    "Data di creazione": "15/06/2026 10:15",
+    "Orario di chiusura": null,
+    Note: [],
+  },
+  {
+    id: "task-022",
+    Oggetto: "Pianificare consegna materiale",
+    Stato: "Da fare",
+    Priorità: "Medio",
+    "Data di scadenza": "01/07/2026",
+    "Proprietario del compito": "Sara Esposto",
+    Sede: "Catania",
+    "Correlato a": { tipo: "Cliente", id: "cli-016", nome: "Grazia Pellegrino" },
+    Descrizione: "Coordinare con il magazzino la consegna dei moduli.",
+    Promemoria: null,
+    "Data di creazione": "18/06/2026 12:00",
+    "Orario di chiusura": null,
+    Note: [],
+  },
+  {
+    id: "task-023",
+    Oggetto: "Risolvere segnalazione monitoraggio",
+    Stato: "In attesa",
+    Priorità: "Alto",
+    "Data di scadenza": "20/06/2026",
+    "Proprietario del compito": "Andrea Greco",
+    Sede: "Siracusa",
+    "Correlato a": { tipo: "Cliente", id: "cli-017", nome: "Mario Floridia" },
+    Descrizione: "Anomalia di produzione segnalata dal portale di monitoraggio.",
+    Promemoria: "20/06/2026 11:00",
+    "Data di creazione": "17/06/2026 18:40",
+    "Orario di chiusura": null,
+    Note: [
+      {
+        id: "n1",
+        testo: "In attesa di feedback dall'assistenza inverter.",
+        autore: "Andrea Greco",
+        data: "18/06/2026 10:00",
+      },
+    ],
+  },
+  {
+    id: "task-024",
+    Oggetto: "Invio questionario soddisfazione",
+    Stato: "Completato",
+    Priorità: "Basso",
+    "Data di scadenza": "11/06/2026",
+    "Proprietario del compito": "Elena Conti",
+    Sede: "Ragusa",
+    "Correlato a": null,
+    Descrizione: "Inviare il modulo di customer satisfaction ai clienti del mese.",
+    Promemoria: null,
+    "Data di creazione": "09/06/2026 09:00",
+    "Orario di chiusura": "10/06/2026 15:30",
+    Note: [],
+  },
+  {
+    id: "task-025",
+    Oggetto: "Preparare offerta colonnina di ricarica",
+    Stato: "Da fare",
+    Priorità: "Medio",
+    "Data di scadenza": "03/07/2026",
+    "Proprietario del compito": "Marco Rossi",
+    Sede: "Catania",
+    "Correlato a": { tipo: "Lead", id: "lead-007", nome: "Salvo Indelicato" },
+    Descrizione: "Quotazione per wallbox da 7.4 kW abbinata all'impianto.",
+    Promemoria: null,
+    "Data di creazione": "18/06/2026 11:45",
+    "Orario di chiusura": null,
+    Note: [],
+  },
+  {
+    id: "task-026",
+    Oggetto: "Ricontattare lead freddo",
+    Stato: "Da fare",
+    Priorità: "Basso",
+    "Data di scadenza": "15/06/2026",
+    "Proprietario del compito": "Giulia Bianchi",
+    Sede: "Palermo",
+    "Correlato a": { tipo: "Lead", id: "lead-008", nome: "Teresa Catalano" },
+    Descrizione: "Tentativo di riattivazione dopo due mesi di silenzio.",
+    Promemoria: null,
+    "Data di creazione": "12/06/2026 16:00",
+    "Orario di chiusura": null,
+    Note: [],
+  },
+  {
+    id: "task-027",
+    Oggetto: "Confermare data allaccio",
+    Stato: "In corso",
+    Priorità: "Alto",
+    "Data di scadenza": "23/06/2026",
+    "Proprietario del compito": "Luca Ferrari",
+    Sede: "Messina",
+    "Correlato a": { tipo: "Cliente", id: "cli-018", nome: "Orazio Pappalardo" },
+    Descrizione: "Definire con il distributore la data di allaccio alla rete.",
+    Promemoria: "23/06/2026 08:30",
+    "Data di creazione": "16/06/2026 14:00",
+    "Orario di chiusura": null,
+    Note: [],
+  },
+  {
+    id: "task-028",
+    Oggetto: "Aggiornare CRM con esito visita",
+    Stato: "Completato",
+    Priorità: "Basso",
+    "Data di scadenza": "09/06/2026",
+    "Proprietario del compito": "Sara Esposto",
+    Sede: "Catania",
+    "Correlato a": { tipo: "Lead", id: "lead-009", nome: "Carmelo Distefano" },
+    Descrizione: "Registrare le note del sopralluogo nel gestionale.",
+    Promemoria: null,
+    "Data di creazione": "07/06/2026 09:00",
+    "Orario di chiusura": "08/06/2026 17:45",
+    Note: [],
+  },
+]
+
+export function getCompitoById(id: string): Compito | undefined {
+  return mockCompiti.find((c) => c.id === id)
+}

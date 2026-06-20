@@ -273,7 +273,7 @@ export default function CompitiPage() {
               <Select
                 items={SAVED_VIEWS}
                 value={savedView}
-                onValueChange={setSavedView}
+                onValueChange={(v) => setSavedView(v ?? "")}
               >
                 <SelectTrigger
                   className="h-9 w-[180px] bg-card"

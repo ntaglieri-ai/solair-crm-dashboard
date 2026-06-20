@@ -43,14 +43,16 @@ export function CompitoDetailHeader({ compito }: { compito: Compito }) {
             Modifica
           </button>
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                aria-label="Altre azioni"
-                className="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-secondary"
-              >
-                <IconDots size={16} stroke={1.8} />
-              </button>
-            </DropdownMenuTrigger>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  aria-label="Altre azioni"
+                  className="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-secondary"
+                >
+                  <IconDots size={16} stroke={1.8} />
+                </button>
+              }
+            />
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuItem>Duplica compito</DropdownMenuItem>
               <DropdownMenuItem>Crea follow-up</DropdownMenuItem>
@@ -99,12 +101,18 @@ export function CompitoDetailHeader({ compito }: { compito: Compito }) {
         <div className="flex flex-wrap items-center gap-2">
           <PrioritaBadge priorita={compito.Priorità} />
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="inline-flex items-center gap-1.5 rounded-full">
-                <StatoBadge stato={stato} />
-                <IconChevronDown size={14} stroke={2} className="text-muted-foreground" />
-              </button>
-            </DropdownMenuTrigger>
+            <DropdownMenuTrigger
+              render={
+                <button className="inline-flex items-center gap-1.5 rounded-full">
+                  <StatoBadge stato={stato} />
+                  <IconChevronDown
+                    size={14}
+                    stroke={2}
+                    className="text-muted-foreground"
+                  />
+                </button>
+              }
+            />
             <DropdownMenuContent align="end" className="w-48">
               {STATO_COMPITO_ORDER.map((s) => (
                 <DropdownMenuItem key={s} onClick={() => setStato(s)}>

@@ -16,9 +16,11 @@ import {
 export function LeadImportDialog({
   open,
   onOpenChange,
+  entityLabel = "lead",
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  entityLabel?: string
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [fileName, setFileName] = useState<string | null>(null)
@@ -38,10 +40,10 @@ export function LeadImportDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Importa lead</DialogTitle>
+          <DialogTitle>Importa {entityLabel}</DialogTitle>
           <DialogDescription>
-            Carica un file CSV o collega una sorgente esterna per importare i
-            lead nel CRM.
+            Carica un file CSV o collega una sorgente esterna per importare i{" "}
+            {entityLabel} nel CRM.
           </DialogDescription>
         </DialogHeader>
 

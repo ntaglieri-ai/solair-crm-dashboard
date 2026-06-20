@@ -212,7 +212,7 @@ function AddTagRow() {
   )
 }
 
-function TagSection() {
+export function TagSection() {
   const { tags } = useTags()
   return (
     <div className="flex flex-col gap-1">
@@ -314,22 +314,24 @@ function SettingRow({
   )
 }
 
-function GeneralSection({
+export function GeneralSection({
   density,
   onDensityChange,
   rowsPerPage,
   onRowsPerPageChange,
+  entityLabel = "lead",
 }: {
   density: Density
   onDensityChange: (d: Density) => void
   rowsPerPage: number
   onRowsPerPageChange: (n: number) => void
+  entityLabel?: string
 }) {
   return (
     <div className="flex flex-col gap-3">
       <SettingRow
         title="Densità tabella"
-        description="Spaziatura delle righe nell'elenco lead."
+        description={`Spaziatura delle righe nell'elenco ${entityLabel}.`}
       >
         <div className="flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5">
           {DENSITY_OPTIONS.map((opt) => {
@@ -358,7 +360,7 @@ function GeneralSection({
 
       <SettingRow
         title="Righe per pagina"
-        description="Numero di lead mostrati per pagina."
+        description={`Numero di ${entityLabel} mostrati per pagina.`}
       >
         <div className="flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5">
           {ROWS_OPTIONS.map((n) => {

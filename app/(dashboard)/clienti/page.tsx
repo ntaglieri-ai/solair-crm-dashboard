@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
-import { ChevronLeft, ChevronRight, Plus, MoreHorizontal } from "lucide-react"
-import { IconSettings, IconColumns3 } from "@tabler/icons-react"
+import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react"
+import { IconSettings } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -13,12 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import {
   Select,
   SelectContent,
@@ -43,8 +37,14 @@ import {
 import {
   ClienteTable,
   type SortDir,
+  type Density,
 } from "@/components/clienti/cliente-table"
-import { ClienteColumnSheet } from "@/components/clienti/cliente-column-sheet"
+import {
+  ClienteSettingsSheet,
+  type ClienteSettingsSectionId,
+} from "@/components/clienti/cliente-settings-sheet"
+import { ClienteActionsMenu } from "@/components/clienti/cliente-actions-menu"
+import { LeadImportDialog } from "@/components/leads/lead-import-dialog"
 import { NewClienteDialog } from "@/components/clienti/new-cliente-dialog"
 
 const ROWS_ITEMS: Record<string, string> = {
@@ -53,22 +53,63 @@ const ROWS_ITEMS: Record<string, string> = {
   "50": "50 righe",
 }
 
+function norm(v: string | undefined): string {
+  return (v ?? "").trim().toLowerCase()
+}
+
+// Simula il download di un file CSV a partire dai clienti passati
+function downloadClientiCsv(rows: ClienteRecord[], filename: string) {
+  const cols = CLIENTE_COLUMNS.map((c) => c.id)
+  const header = cols.join(";")
+  const body = rows
+    .map((r) =>
+      cols
+        .map((c) => {
+          const v = r[c]
+          const s = Array.isArray(v) ? v.join(", ") : String(v ?? "")
+          return `"${s.replace(/"/g, '""')}"`
+        })
+        .join(";"),
+    )
+    .join("\n")
+  const blob = new Blob([`${header}\n${body}`], {
+    type: "text/csv;charset=utf-8;",
+  })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// Estrae l'elenco tag unico dal dataset clienti
+const ALL_TAGS = Array.from(
+  new Set(mockClienti.flatMap((c) => c.Tag)),
+).sort((a, b) => a.localeCompare(b))
+
 export default function ClientiPage() {
   const [clienti, setClienti] = useState<ClienteRecord[]>(mockClienti)
   const [filters, setFilters] = useState<ClienteFilterState>(
     DEFAULT_CLIENTE_FILTERS,
   )
   const [newClienteOpen, setNewClienteOpen] = useState(false)
-  const [columnsOpen, setColumnsOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [onlyDuplicates, setOnlyDuplicates] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [page, setPage] = useState(1)
   const [deleteTarget, setDeleteTarget] = useState<ClienteRecord | null>(null)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [visibleCols, setVisibleCols] = useState<ClienteColumnId[]>(
     DEFAULT_CLIENTE_COLUMNS,
   )
   const [sortBy, setSortBy] = useState<ClienteColumnId | null>("Ora modifica")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
+  const [density, setDensity] = useState<Density>("normale")
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsSection, setSettingsSection] =
+    useState<ClienteSettingsSectionId>("generali")
 
   // Le colonne visibili sono renderizzate nell'ordine di `visibleCols`.
   const columns = useMemo(
@@ -79,15 +120,29 @@ export default function ClientiPage() {
     [visibleCols],
   )
 
+  // Set di id che condividono email/cellulare con un altro cliente
+  const duplicateIds = useMemo(() => {
+    const byKey = new Map<string, string[]>()
+    for (const c of clienti) {
+      for (const k of [norm(c["E-mail"]), norm(c.Cellulare)].filter(Boolean)) {
+        const arr = byKey.get(k) ?? []
+        arr.push(c.id)
+        byKey.set(k, arr)
+      }
+    }
+    const ids = new Set<string>()
+    for (const arr of byKey.values()) {
+      if (arr.length > 1) arr.forEach((id) => ids.add(id))
+    }
+    return ids
+  }, [clienti])
+
   const filtered = useMemo(() => {
     const q = filters.search.trim().toLowerCase()
     const rows = clienti.filter((c) => {
+      if (onlyDuplicates && !duplicateIds.has(c.id)) return false
       if (q) {
-        const haystack = [
-          c["Nome Clienti"],
-          c["E-mail"],
-          c.Cellulare ?? "",
-        ]
+        const haystack = [c["Nome Clienti"], c["E-mail"], c.Cellulare ?? ""]
           .join(" ")
           .toLowerCase()
         if (!haystack.includes(q)) return false
@@ -121,7 +176,7 @@ export default function ClientiPage() {
       })
     }
     return rows
-  }, [filters, sortBy, sortDir, clienti])
+  }, [filters, sortBy, sortDir, clienti, onlyDuplicates, duplicateIds])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
   const currentPage = Math.min(page, totalPages)
@@ -130,6 +185,11 @@ export default function ClientiPage() {
   const rangeStart = filtered.length === 0 ? 0 : start + 1
   const rangeEnd = Math.min(start + rowsPerPage, filtered.length)
 
+  const selectedRows = useMemo(
+    () => filtered.filter((c) => selected.has(c.id)),
+    [filtered, selected],
+  )
+
   const handleFilterChange = (next: ClienteFilterState) => {
     setFilters(next)
     setPage(1)
@@ -137,14 +197,31 @@ export default function ClientiPage() {
 
   const handleReset = () => {
     setFilters(DEFAULT_CLIENTE_FILTERS)
+    setOnlyDuplicates(false)
     setPage(1)
   }
 
   const handleCreate = (cliente: ClienteRecord) => {
     setClienti((prev) => [cliente, ...prev])
     setFilters(DEFAULT_CLIENTE_FILTERS)
+    setOnlyDuplicates(false)
     setSortBy(null)
     setPage(1)
+  }
+
+  // Controllo duplicati manuale (avviato da menu): scansiona email/cellulare
+  const handleCheckDuplicates = () => {
+    if (duplicateIds.size === 0) {
+      toast.success("Nessun duplicato trovato", {
+        description: "Tutti i clienti risultano univoci per email e cellulare.",
+      })
+      return
+    }
+    setOnlyDuplicates(true)
+    setPage(1)
+    toast.warning(`${duplicateIds.size} possibili duplicati`, {
+      description: "Filtro applicato: verifica e unisci i record sospetti.",
+    })
   }
 
   const handleSort = (col: ClienteColumnId) => {
@@ -175,6 +252,77 @@ export default function ClientiPage() {
     })
   }
 
+  const handleBulkOwner = (owner: string) => {
+    const n = selected.size
+    setClienti((prev) =>
+      prev.map((c) =>
+        selected.has(c.id) ? { ...c, "Clienti Proprietario": owner } : c,
+      ),
+    )
+    toast.success("Proprietario aggiornato", {
+      description: `${n} clienti assegnati a ${owner}.`,
+    })
+    setSelected(new Set())
+  }
+
+  // Aggiornamento di massa generico su Stato / Sede / Tag
+  const handleBulkUpdate = (field: "Stato" | "Sede" | "Tag", value: string) => {
+    const n = selected.size
+    setClienti((prev) =>
+      prev.map((c) => {
+        if (!selected.has(c.id)) return c
+        if (field === "Tag") {
+          const next = c.Tag.includes(value) ? c.Tag : [...c.Tag, value]
+          return { ...c, Tag: next }
+        }
+        return { ...c, [field]: value } as ClienteRecord
+      }),
+    )
+    toast.success("Clienti aggiornati", {
+      description: `${field} impostato su "${value}" per ${n} clienti.`,
+    })
+    setSelected(new Set())
+  }
+
+  const handleBulkDedup = (idsToRemove: string[]) => {
+    if (idsToRemove.length === 0) {
+      toast.info("Nessun record rimosso")
+      setSelected(new Set())
+      return
+    }
+    const remove = new Set(idsToRemove)
+    setClienti((prev) => prev.filter((c) => !remove.has(c.id)))
+    toast.success("Duplicati uniti", {
+      description: `${idsToRemove.length} record duplicati rimossi.`,
+    })
+    setSelected(new Set())
+  }
+
+  const handleBulkExport = () => {
+    downloadClientiCsv(
+      selectedRows,
+      `clienti-selezione-${selectedRows.length}.csv`,
+    )
+    toast.success("Esportazione avviata", {
+      description: `${selectedRows.length} clienti esportati in CSV.`,
+    })
+  }
+
+  const handleExportFiltered = () => {
+    downloadClientiCsv(filtered, `clienti-filtrati-${filtered.length}.csv`)
+    toast.success("Esportazione avviata", {
+      description: `${filtered.length} clienti filtrati esportati.`,
+    })
+  }
+
+  const confirmBulkDelete = () => {
+    const n = selected.size
+    setClienti((prev) => prev.filter((c) => !selected.has(c.id)))
+    toast.success("Clienti eliminati", { description: `${n} clienti rimossi.` })
+    setBulkDeleteOpen(false)
+    setSelected(new Set())
+  }
+
   const confirmDelete = () => {
     if (!deleteTarget) return
     setClienti((prev) => prev.filter((c) => c.id !== deleteTarget.id))
@@ -182,6 +330,12 @@ export default function ClientiPage() {
       description: `${deleteTarget["Nome Clienti"]} è stato rimosso.`,
     })
     setDeleteTarget(null)
+  }
+
+  // Apre lo sheet impostazioni su una specifica sezione (es. da menu Azioni)
+  const openSettings = (section: ClienteSettingsSectionId) => {
+    setSettingsSection(section)
+    setSettingsOpen(true)
   }
 
   return (
@@ -197,46 +351,49 @@ export default function ClientiPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Gestisci colonne */}
-          <ClienteColumnSheet
-            open={columnsOpen}
-            onOpenChange={setColumnsOpen}
+          {/* Impostazioni clienti (generali, colonne, tag, regole) */}
+          <ClienteSettingsSheet
+            open={settingsOpen}
+            onOpenChange={setSettingsOpen}
+            section={settingsSection}
+            onSectionChange={setSettingsSection}
             visibleCols={visibleCols}
             onVisibleColsChange={setVisibleCols}
+            density={density}
+            onDensityChange={setDensity}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={(n) => {
+              setRowsPerPage(n)
+              setPage(1)
+            }}
             trigger={
-              <Button variant="outline" className="bg-card">
-                <IconColumns3 size={18} stroke={1.8} data-icon="inline-start" />
-                Gestisci colonne
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Impostazioni clienti"
+                className="bg-card"
+              >
+                <IconSettings size={18} stroke={1.8} />
               </Button>
             }
           />
 
-          {/* Impostazioni (placeholder, attivato nel prompt Tag) */}
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="Impostazioni clienti (presto)"
-            className="bg-card"
-            disabled
-          >
-            <IconSettings size={18} stroke={1.8} />
-          </Button>
-
-          {/* Menu azioni (placeholder vuoto in questo step) */}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button variant="outline" size="icon" aria-label="Altre azioni" className="bg-card">
-                  <MoreHorizontal />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem disabled>
-                Nessuna azione disponibile
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Menu azioni (cambia in base alla selezione) */}
+          <ClienteActionsMenu
+            selectedCount={selected.size}
+            filtered={filtered}
+            selectedRows={selectedRows}
+            tags={ALL_TAGS}
+            onOpenSettings={openSettings}
+            onCheckDuplicates={handleCheckDuplicates}
+            onImport={() => setImportOpen(true)}
+            onExportFiltered={handleExportFiltered}
+            onExportSelection={handleBulkExport}
+            onBulkTransfer={handleBulkOwner}
+            onBulkUpdate={handleBulkUpdate}
+            onBulkDedup={handleBulkDedup}
+            onBulkDelete={() => setBulkDeleteOpen(true)}
+          />
 
           <Button
             className="bg-teal text-teal-foreground hover:bg-teal/90"
@@ -247,6 +404,23 @@ export default function ClientiPage() {
           </Button>
         </div>
       </div>
+
+      {/* Indicatore filtro duplicati attivo */}
+      {onlyDuplicates ? (
+        <div className="flex items-center justify-between rounded-lg bg-secondary px-3 py-2">
+          <span className="text-sm font-medium text-secondary-foreground">
+            Filtro attivo: solo possibili duplicati
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setOnlyDuplicates(false)}
+          >
+            <X data-icon="inline-start" />
+            Rimuovi
+          </Button>
+        </div>
+      ) : null}
 
       {/* Barra filtri */}
       <ClienteFilters
@@ -266,6 +440,7 @@ export default function ClientiPage() {
         sortBy={sortBy}
         sortDir={sortDir}
         onSort={handleSort}
+        density={density}
       />
 
       {/* Footer paginazione */}
@@ -325,7 +500,31 @@ export default function ClientiPage() {
         </div>
       </div>
 
-      {/* Dialog elimina */}
+      {/* Dialog elimina bulk */}
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Elimina clienti selezionati</DialogTitle>
+            <DialogDescription>
+              Sei sicuro di voler eliminare{" "}
+              <span className="font-semibold text-foreground">
+                {selected.size} clienti
+              </span>
+              ? L&apos;azione non può essere annullata.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)}>
+              Annulla
+            </Button>
+            <Button variant="destructive" onClick={confirmBulkDelete}>
+              Elimina {selected.size} clienti
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog elimina singolo */}
       <Dialog
         open={deleteTarget !== null}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
@@ -351,6 +550,12 @@ export default function ClientiPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <LeadImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        entityLabel="clienti"
+      />
 
       <NewClienteDialog
         open={newClienteOpen}

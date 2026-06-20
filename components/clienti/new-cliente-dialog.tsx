@@ -217,7 +217,7 @@ export function NewClienteDialog({
             <Select
               items={COMM_ITEMS}
               value={form.proprietario}
-              onValueChange={(v) => set("proprietario", v)}
+              onValueChange={(v) => set("proprietario", v ?? "")}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -238,7 +238,7 @@ export function NewClienteDialog({
             <Select
               items={INST_ITEMS}
               value={form.installatore}
-              onValueChange={(v) => set("installatore", v)}
+              onValueChange={(v) => set("installatore", v ?? "")}
             >
               <SelectTrigger>
                 <SelectValue />

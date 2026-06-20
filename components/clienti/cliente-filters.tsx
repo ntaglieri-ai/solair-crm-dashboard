@@ -65,7 +65,7 @@ function FilterSelect({
     <Select
       items={items}
       value={value}
-      onValueChange={onValueChange}
+      onValueChange={(v) => onValueChange(v ?? "")}
       disabled={disabled}
     >
       <SelectTrigger

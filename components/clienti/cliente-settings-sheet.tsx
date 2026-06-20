@@ -27,11 +27,9 @@ import {
   type ClienteColumnId,
 } from "@/lib/mock-data"
 import type { Density } from "./cliente-table"
-import {
-  TagSection,
-  GeneralSection,
-} from "@/components/leads/lead-settings-sheet"
+import { GeneralSection } from "@/components/leads/lead-settings-sheet"
 import { RulesSection } from "@/components/leads/assignment-rules"
+import { ClienteTagSection } from "./cliente-tag-section"
 
 /* -------------------------------------------------------------------------- */
 /*                  Sezione: Vista colonne (raggruppata)                      */
@@ -251,7 +249,7 @@ export function ClienteSettingsSheet({
               </p>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              {section === "tag" && <TagSection />}
+              {section === "tag" && <ClienteTagSection />}
               {section === "regole" && <RulesSection />}
               {section === "colonne" && (
                 <ColumnsSection

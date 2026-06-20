@@ -1,7 +1,7 @@
 "use client"
 
 import { Bell, StickyNote } from "lucide-react"
-import { type Cliente, type ClienteColumnId } from "@/lib/mock-data"
+import { type ClienteRecord, type ClienteColumnId } from "@/lib/mock-data"
 import { BoolDot } from "@/components/leads/lead-utils"
 import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
 
@@ -10,7 +10,7 @@ export function ClienteCell({
   column,
   density = "normale",
 }: {
-  cliente: Cliente
+  cliente: ClienteRecord
   column: ClienteColumnId
   density?: "comoda" | "normale" | "densa"
 }) {

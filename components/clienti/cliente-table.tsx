@@ -24,7 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
-  type Cliente,
+  type ClienteRecord,
   type ClienteColumn,
   type ClienteColumnId,
 } from "@/lib/mock-data"
@@ -56,12 +56,12 @@ export function ClienteTable({
   onSort,
   density = "normale",
 }: {
-  clienti: Cliente[]
+  clienti: ClienteRecord[]
   columns: ClienteColumn[]
   selected: Set<string>
   onToggle: (id: string) => void
   onToggleAll: () => void
-  onDelete: (cliente: Cliente) => void
+  onDelete: (cliente: ClienteRecord) => void
   sortBy: ClienteColumnId | null
   sortDir: SortDir
   onSort: (col: ClienteColumnId) => void

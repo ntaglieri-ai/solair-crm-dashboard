@@ -1618,7 +1618,7 @@ export type StatoCliente =
   | "Emessa fattura"
   | "Chiuso"
 
-export interface Cliente {
+export interface ClienteRecord {
   id: string
 
   // --- Base ---
@@ -1789,7 +1789,7 @@ export interface Cliente {
   "Stato Provvigione"?: string
 }
 
-export type ClienteColumnId = Exclude<keyof Cliente, "id">
+export type ClienteColumnId = Exclude<keyof ClienteRecord, "id">
 
 export type ClienteColumnGroup =
   | "Base"
@@ -2026,7 +2026,7 @@ export const STATO_CLIENTE_TONE: Record<
 
 export const CLIENTI_TOTAL = 1842
 
-export const mockClienti: Cliente[] = [
+export const mockClienti: ClienteRecord[] = [
   {
     id: "cli-1",
     "Badge dell'attività": true,
@@ -2363,6 +2363,6 @@ export const mockClienti: Cliente[] = [
   },
 ]
 
-export function getClienteById(id: string): Cliente | undefined {
+export function getClienteById(id: string): ClienteRecord | undefined {
   return mockClienti.find((c) => c.id === id)
 }

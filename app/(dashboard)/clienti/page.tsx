@@ -32,7 +32,7 @@ import {
   CLIENTI_TOTAL,
   CLIENTE_COLUMNS,
   DEFAULT_CLIENTE_COLUMNS,
-  type Cliente,
+  type ClienteRecord,
   type ClienteColumnId,
 } from "@/lib/mock-data"
 import {
@@ -54,7 +54,7 @@ const ROWS_ITEMS: Record<string, string> = {
 }
 
 export default function ClientiPage() {
-  const [clienti, setClienti] = useState<Cliente[]>(mockClienti)
+  const [clienti, setClienti] = useState<ClienteRecord[]>(mockClienti)
   const [filters, setFilters] = useState<ClienteFilterState>(
     DEFAULT_CLIENTE_FILTERS,
   )
@@ -63,7 +63,7 @@ export default function ClientiPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [page, setPage] = useState(1)
-  const [deleteTarget, setDeleteTarget] = useState<Cliente | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ClienteRecord | null>(null)
   const [visibleCols, setVisibleCols] = useState<ClienteColumnId[]>(
     DEFAULT_CLIENTE_COLUMNS,
   )
@@ -140,7 +140,7 @@ export default function ClientiPage() {
     setPage(1)
   }
 
-  const handleCreate = (cliente: Cliente) => {
+  const handleCreate = (cliente: ClienteRecord) => {
     setClienti((prev) => [cliente, ...prev])
     setFilters(DEFAULT_CLIENTE_FILTERS)
     setSortBy(null)

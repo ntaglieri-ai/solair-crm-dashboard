@@ -26,7 +26,7 @@ import {
   SEDE_LABELS,
   mockCommerciali,
   mockInstallatori,
-  type Cliente,
+  type ClienteRecord,
   type StatoCliente,
   type SedeLabel,
 } from "@/lib/mock-data"
@@ -34,7 +34,7 @@ import {
 interface NewClienteDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onCreate: (cliente: Cliente) => void
+  onCreate: (cliente: ClienteRecord) => void
 }
 
 const STATO_ITEMS = Object.fromEntries(STATO_CLIENTE_VALUES.map((s) => [s, s]))
@@ -94,7 +94,7 @@ export function NewClienteDialog({
     if (!canSubmit) return
     const stamp = nowStamp()
     const nomeCompleto = `${form.nome.trim()} ${form.cognome.trim()}`.trim()
-    const cliente: Cliente = {
+    const cliente: ClienteRecord = {
       id: `cli-${Date.now()}`,
       "Badge dell'attività": false,
       "Badge di nota": false,

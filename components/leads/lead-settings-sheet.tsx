@@ -38,6 +38,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { useTags, TAG_PALETTE, type Tag } from "@/lib/tag-store"
 import { TagDot } from "./tag-controls"
+import { LeadTagSection } from "./lead-tag-section"
 import {
   LEAD_COLUMNS,
   DEFAULT_VISIBLE_COLUMNS,
@@ -507,7 +508,7 @@ export function LeadSettingsSheet({
               </p>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              {section === "tag" && <TagSection />}
+              {section === "tag" && <LeadTagSection />}
               {section === "regole" && <RulesSection />}
               {section === "colonne" && (
                 <ColumnsSection

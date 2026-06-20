@@ -42,7 +42,7 @@ function ClienteTagPill({ tag }: { tag: ClienteTag }) {
   const light = isLightColor(tag.color)
   return (
     <span
-      className="inline-flex max-w-[220px] items-center truncate py-1 pl-2.5 pr-4 text-[13px] font-medium leading-none"
+      className="inline-flex max-w-full min-w-0 items-center py-1 pl-2.5 pr-4 text-[13px] font-medium leading-none"
       style={{
         backgroundColor: tag.color,
         color: light ? "#1f2937" : "#ffffff",
@@ -126,7 +126,7 @@ function TagRow({ tag }: { tag: ClienteTag }) {
 
   return (
     <>
-      <div className="group grid grid-cols-[150px_1fr_220px] items-center gap-2 border-b border-border px-3 py-2.5 transition-colors hover:bg-secondary/40">
+      <div className="group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-border px-3 py-2.5 transition-colors hover:bg-secondary/40">
         {/* Colore del tag */}
         <div>
           <ColorDropdown
@@ -185,11 +185,11 @@ function TagRow({ tag }: { tag: ClienteTag }) {
         </div>
 
         {/* Ultima modifica */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
           <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground">
             <IconUser size={14} stroke={1.8} />
           </span>
-          <span className="truncate">{tag.modificato}</span>
+          <span>{tag.modificato}</span>
         </div>
       </div>
 
@@ -369,7 +369,7 @@ function TagManager() {
 
       {/* Tabella tag */}
       <div className="overflow-hidden rounded-lg border border-border">
-        <div className="grid grid-cols-[150px_1fr_220px] gap-2 border-b border-border bg-secondary/50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-3 border-b border-border bg-secondary/50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           <span>Colore del tag</span>
           <span>Nome tag</span>
           <span>Ultima modifica</span>

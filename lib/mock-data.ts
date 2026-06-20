@@ -703,6 +703,7 @@ export const mockInstallatori: string[] = [
   "DG Impianti",
   "Bmax",
   "Ca.Gi Srl",
+  "Solair Group srl",
 ]
 
 // Numero di possibili duplicati rilevati (banner lista)
@@ -1599,4 +1600,769 @@ export function leadInitials(nomeLead: string): string {
     .slice(0, 2)
     .join("")
     .toUpperCase()
+}
+
+// ============================================================================
+// MODULO CLIENTI
+// Le chiavi corrispondono ai nomi colonna Zoho per agevolare la migrazione.
+// Molti campi sono opzionali: nella realtà la gran parte è vuota.
+// ============================================================================
+
+export type StatoCliente =
+  | "Nuovo contratto digitale"
+  | "Fin da firmare"
+  | "Attesa cliente"
+  | "Iter in corso"
+  | "In esecuzione"
+  | "Installazione completata"
+  | "Emessa fattura"
+  | "Chiuso"
+
+export interface Cliente {
+  id: string
+
+  // --- Base ---
+  "Badge dell'attività": boolean
+  "Badge di nota": boolean
+  "Nome Clienti": string
+  "E-mail": string
+  "Ora modifica": string
+  Tag: string[]
+  Sede: SedeLabel
+
+  // --- Anagrafica ---
+  "Clienti Proprietario"?: string
+  "Origine Lead"?: string
+  Nome?: string
+  Cognome: string
+  "Altro telefono"?: string
+  Cellulare?: string
+  "Creato da"?: string
+  "Modificato da"?: string
+  "Ora creazione"?: string
+  Saluti?: string
+  "E-mail secondaria"?: string
+  "Ora ultima attività"?: string
+  "Codice fiscale"?: string
+
+  // --- Indirizzo postale ---
+  "Via indirizzo postale"?: string
+  "Città indirizzo postale"?: string
+  "Provincia indirizzo postale"?: string
+  "Codice postale indirizzo"?: string
+
+  // --- Note e stato ---
+  Descrizione?: string
+  "Modalità iscrizione annullata"?: string | null
+  "Ora iscrizione annullata"?: string | null
+  Stato: StatoCliente
+  Note?: string
+  "Note ufficio"?: string
+  "Note pagamenti"?: string
+  "Note Provvigioni"?: string
+
+  // --- Tracking visite sito ---
+  "Visita più recente"?: string
+  "Prima pagina visitata"?: string
+  "Tempo medio impiegato minuti"?: number
+  "Numero di chat"?: number
+  Relatore?: string
+  "Punteggio visitatore"?: number
+  "Prima visita"?: string
+  "Giorni visitati"?: number
+  "Social Lead ID"?: string
+
+  // --- Configurazione impianto ---
+  "COD. INVERTER"?: string
+  "COD- MODULI"?: string
+  "COD. STORAGE"?: string
+  "DISPONIBILITA' MAGAZZINO"?: string
+  Installatore?: string
+  "Nr. Inverter"?: number
+  "Nr. Moduli"?: number
+  "Potenza Moduli Wp"?: number
+  "Nr. Batterie"?: number
+  "Capacità Batterie"?: string
+  "Totale Storage"?: string
+  "Tot Potenza DC"?: string
+  "Potenza Inverter"?: string
+  "Tot Potenza AC KW"?: number
+  Tipologia?: string
+  Retrofit?: boolean
+  EPS?: boolean
+  "Impianto in edilizia libera"?: boolean
+  "Area vincolata"?: boolean
+  ">20kW Pot. Nom."?: boolean
+  "Impianto Attivo"?: boolean
+  ST300?: string
+  "Scaldacqua PDC"?: string
+  "PDC idronica"?: string
+  "P D C idronica"?: string
+  STF?: string
+  Accessori?: string
+  "Litri Accumulo"?: number
+  "N. Collettori"?: number
+
+  // --- Pagamenti e finanziario ---
+  "Modalità di Pagamento"?: string
+  "1° Tranche"?: string
+  "Importo Contrattuale"?: number
+  "Bonifico Parziale"?: string
+  "Importo Finanziamento"?: number
+  "2°Tranche"?: string
+  Saldo?: number
+  IBAN?: string
+  "Finanziamento approvato"?: boolean
+  "N. rate e importo rata"?: string
+  "Tot Contratto"?: number
+  "di cui CT3"?: number
+  "di cui FTV"?: number
+  "Sconto COMBO"?: number
+  Bonifico1?: string
+  Bonifico2?: string
+  BonificoPDC?: string
+  FatturaPDC?: string
+  IncentivoAtteso?: number
+  "Iva Reverse charge"?: boolean
+  IVA?: number
+  "Importo da Listino"?: number
+  "Importo TICA"?: number
+  "MOD. PAGAMENTO CT3.0"?: string
+
+  // --- Logistica e cantiere ---
+  "Stratigrafia superficie di installazione"?: string
+  "C/o magazzino installatore"?: string
+  "Indirizzo di ritiro merce"?: string
+  "Merce ordinata e da ritirare"?: string
+  "C/o cantiere del cliente"?: string
+  "Altri materiali"?: string
+  "Data installazione ultimata"?: string
+  "Data appuntamento allaccio"?: string
+  "Intervento 1"?: string
+  "Intervento 2"?: string
+
+  // --- Documenti e pratiche ---
+  Allegati?: string[]
+  "Mappa catastale"?: string
+  "Regolamento di esecizio"?: string
+  "Attestato Terna"?: string
+  "Codice contratto PNRR"?: string
+  "Scheda ENEA"?: string
+  "Verifica documentale"?: boolean
+  "Layout verificato"?: boolean
+  Fattura1?: string
+  Fattura2?: string
+
+  // --- Iter burocratico ---
+  "Inserimento pratica GSE"?: string
+  "Inserimento pratica E-Distribuzione"?: string
+  POD?: string
+  Zona?: string
+  "Data ammissibilità"?: string
+  "Data sopralluogo"?: string
+  "Data affidamento sopralluogo"?: string
+  "Stato sopralluogo"?: string
+  "Data conferma Iter E-distribuzione"?: string
+  "Notifica pred. reg. esercizio"?: boolean
+  "Disponibilità Fine lavori"?: boolean
+  Tica?: string
+  "Stato TICA"?: string
+  "Data scadenza TICA"?: string
+  "Data iter Enel Concluso"?: string
+  "TIPO CTR"?: string
+  "Stato Sollecito"?: string
+  "Data interlocutorio"?: string
+
+  // --- Comunicazioni automatiche (stato invio Make) ---
+  "Messaggio di benvenuto"?: boolean
+  "Messaggio prog. preliminare"?: boolean
+  "Messaggio ordine merce"?: boolean
+  "Messaggio in esecuzione"?: boolean
+  "Telefonata post installazione"?: boolean
+  "Messaggio Fattura"?: boolean
+  "Corrispettivo pagato"?: boolean
+  "Data Click"?: string
+  Assistenza?: string
+
+  // --- Provvigioni ---
+  "Codice rintracciabilità"?: string
+  "Stato Provvigione"?: string
+}
+
+export type ClienteColumnId = Exclude<keyof Cliente, "id">
+
+export type ClienteColumnGroup =
+  | "Base"
+  | "Anagrafica"
+  | "Indirizzo postale"
+  | "Note e stato"
+  | "Tracking visite sito"
+  | "Configurazione impianto"
+  | "Pagamenti e finanziario"
+  | "Logistica e cantiere"
+  | "Documenti e pratiche"
+  | "Iter burocratico"
+  | "Comunicazioni automatiche"
+  | "Provvigioni"
+
+export const CLIENTE_COLUMN_GROUPS: ClienteColumnGroup[] = [
+  "Base",
+  "Anagrafica",
+  "Indirizzo postale",
+  "Note e stato",
+  "Tracking visite sito",
+  "Configurazione impianto",
+  "Pagamenti e finanziario",
+  "Logistica e cantiere",
+  "Documenti e pratiche",
+  "Iter burocratico",
+  "Comunicazioni automatiche",
+  "Provvigioni",
+]
+
+export interface ClienteColumn {
+  id: ClienteColumnId
+  label: string
+  group: ClienteColumnGroup
+  defaultVisible?: boolean
+}
+
+export const CLIENTE_COLUMNS: ClienteColumn[] = [
+  // Base
+  { id: "Badge dell'attività", label: "Badge dell'attività", group: "Base", defaultVisible: true },
+  { id: "Badge di nota", label: "Badge di nota", group: "Base", defaultVisible: true },
+  { id: "Nome Clienti", label: "Nome Clienti", group: "Base", defaultVisible: true },
+  { id: "E-mail", label: "E-mail", group: "Base", defaultVisible: true },
+  { id: "Ora modifica", label: "Ora modifica", group: "Base", defaultVisible: true },
+  { id: "Tag", label: "Tag", group: "Base", defaultVisible: true },
+  { id: "Sede", label: "Sede", group: "Base", defaultVisible: true },
+  // Anagrafica
+  { id: "Clienti Proprietario", label: "Clienti Proprietario", group: "Anagrafica", defaultVisible: true },
+  { id: "Origine Lead", label: "Origine Lead", group: "Anagrafica" },
+  { id: "Nome", label: "Nome", group: "Anagrafica" },
+  { id: "Cognome", label: "Cognome", group: "Anagrafica" },
+  { id: "Altro telefono", label: "Altro telefono", group: "Anagrafica" },
+  { id: "Cellulare", label: "Cellulare", group: "Anagrafica", defaultVisible: true },
+  { id: "Creato da", label: "Creato da", group: "Anagrafica" },
+  { id: "Modificato da", label: "Modificato da", group: "Anagrafica" },
+  { id: "Ora creazione", label: "Ora creazione", group: "Anagrafica" },
+  { id: "Saluti", label: "Saluti", group: "Anagrafica" },
+  { id: "E-mail secondaria", label: "E-mail secondaria", group: "Anagrafica" },
+  { id: "Ora ultima attività", label: "Ora ultima attività", group: "Anagrafica" },
+  { id: "Codice fiscale", label: "Codice fiscale", group: "Anagrafica" },
+  // Indirizzo postale
+  { id: "Via indirizzo postale", label: "Via indirizzo postale", group: "Indirizzo postale" },
+  { id: "Città indirizzo postale", label: "Città indirizzo postale", group: "Indirizzo postale" },
+  { id: "Provincia indirizzo postale", label: "Provincia indirizzo postale", group: "Indirizzo postale" },
+  { id: "Codice postale indirizzo", label: "Codice postale indirizzo", group: "Indirizzo postale" },
+  // Note e stato
+  { id: "Descrizione", label: "Descrizione", group: "Note e stato" },
+  { id: "Modalità iscrizione annullata", label: "Modalità iscrizione annullata", group: "Note e stato" },
+  { id: "Ora iscrizione annullata", label: "Ora iscrizione annullata", group: "Note e stato" },
+  { id: "Stato", label: "Stato", group: "Note e stato", defaultVisible: true },
+  { id: "Note", label: "Note", group: "Note e stato" },
+  { id: "Note ufficio", label: "Note ufficio", group: "Note e stato" },
+  { id: "Note pagamenti", label: "Note pagamenti", group: "Note e stato" },
+  { id: "Note Provvigioni", label: "Note Provvigioni", group: "Note e stato" },
+  // Tracking visite sito
+  { id: "Visita più recente", label: "Visita più recente", group: "Tracking visite sito" },
+  { id: "Prima pagina visitata", label: "Prima pagina visitata", group: "Tracking visite sito" },
+  { id: "Tempo medio impiegato minuti", label: "Tempo medio impiegato minuti", group: "Tracking visite sito" },
+  { id: "Numero di chat", label: "Numero di chat", group: "Tracking visite sito" },
+  { id: "Relatore", label: "Relatore", group: "Tracking visite sito" },
+  { id: "Punteggio visitatore", label: "Punteggio visitatore", group: "Tracking visite sito" },
+  { id: "Prima visita", label: "Prima visita", group: "Tracking visite sito" },
+  { id: "Giorni visitati", label: "Giorni visitati", group: "Tracking visite sito" },
+  { id: "Social Lead ID", label: "Social Lead ID", group: "Tracking visite sito" },
+  // Configurazione impianto
+  { id: "COD. INVERTER", label: "COD. INVERTER", group: "Configurazione impianto" },
+  { id: "COD- MODULI", label: "COD- MODULI", group: "Configurazione impianto" },
+  { id: "COD. STORAGE", label: "COD. STORAGE", group: "Configurazione impianto" },
+  { id: "DISPONIBILITA' MAGAZZINO", label: "DISPONIBILITA' MAGAZZINO", group: "Configurazione impianto" },
+  { id: "Installatore", label: "Installatore", group: "Configurazione impianto" },
+  { id: "Nr. Inverter", label: "Nr. Inverter", group: "Configurazione impianto" },
+  { id: "Nr. Moduli", label: "Nr. Moduli", group: "Configurazione impianto" },
+  { id: "Potenza Moduli Wp", label: "Potenza Moduli Wp", group: "Configurazione impianto" },
+  { id: "Nr. Batterie", label: "Nr. Batterie", group: "Configurazione impianto" },
+  { id: "Capacità Batterie", label: "Capacità Batterie", group: "Configurazione impianto" },
+  { id: "Totale Storage", label: "Totale Storage", group: "Configurazione impianto" },
+  { id: "Tot Potenza DC", label: "Tot Potenza DC", group: "Configurazione impianto" },
+  { id: "Potenza Inverter", label: "Potenza Inverter", group: "Configurazione impianto" },
+  { id: "Tot Potenza AC KW", label: "Tot Potenza AC KW", group: "Configurazione impianto" },
+  { id: "Tipologia", label: "Tipologia", group: "Configurazione impianto" },
+  { id: "Retrofit", label: "Retrofit", group: "Configurazione impianto" },
+  { id: "EPS", label: "EPS", group: "Configurazione impianto" },
+  { id: "Impianto in edilizia libera", label: "Impianto in edilizia libera", group: "Configurazione impianto" },
+  { id: "Area vincolata", label: "Area vincolata", group: "Configurazione impianto" },
+  { id: ">20kW Pot. Nom.", label: ">20kW Pot. Nom.", group: "Configurazione impianto" },
+  { id: "Impianto Attivo", label: "Impianto Attivo", group: "Configurazione impianto" },
+  { id: "ST300", label: "ST300", group: "Configurazione impianto" },
+  { id: "Scaldacqua PDC", label: "Scaldacqua PDC", group: "Configurazione impianto" },
+  { id: "PDC idronica", label: "PDC idronica", group: "Configurazione impianto" },
+  { id: "P D C idronica", label: "P D C idronica", group: "Configurazione impianto" },
+  { id: "STF", label: "STF", group: "Configurazione impianto" },
+  { id: "Accessori", label: "Accessori", group: "Configurazione impianto" },
+  { id: "Litri Accumulo", label: "Litri Accumulo", group: "Configurazione impianto" },
+  { id: "N. Collettori", label: "N. Collettori", group: "Configurazione impianto" },
+  // Pagamenti e finanziario
+  { id: "Modalità di Pagamento", label: "Modalità di Pagamento", group: "Pagamenti e finanziario" },
+  { id: "1° Tranche", label: "1° Tranche", group: "Pagamenti e finanziario" },
+  { id: "Importo Contrattuale", label: "Importo Contrattuale", group: "Pagamenti e finanziario" },
+  { id: "Bonifico Parziale", label: "Bonifico Parziale", group: "Pagamenti e finanziario" },
+  { id: "Importo Finanziamento", label: "Importo Finanziamento", group: "Pagamenti e finanziario" },
+  { id: "2°Tranche", label: "2°Tranche", group: "Pagamenti e finanziario" },
+  { id: "Saldo", label: "Saldo", group: "Pagamenti e finanziario" },
+  { id: "IBAN", label: "IBAN", group: "Pagamenti e finanziario" },
+  { id: "Finanziamento approvato", label: "Finanziamento approvato", group: "Pagamenti e finanziario" },
+  { id: "N. rate e importo rata", label: "N. rate e importo rata", group: "Pagamenti e finanziario" },
+  { id: "Tot Contratto", label: "Tot Contratto", group: "Pagamenti e finanziario" },
+  { id: "di cui CT3", label: "di cui CT3", group: "Pagamenti e finanziario" },
+  { id: "di cui FTV", label: "di cui FTV", group: "Pagamenti e finanziario" },
+  { id: "Sconto COMBO", label: "Sconto COMBO", group: "Pagamenti e finanziario" },
+  { id: "Bonifico1", label: "Bonifico1", group: "Pagamenti e finanziario" },
+  { id: "Bonifico2", label: "Bonifico2", group: "Pagamenti e finanziario" },
+  { id: "BonificoPDC", label: "BonificoPDC", group: "Pagamenti e finanziario" },
+  { id: "FatturaPDC", label: "FatturaPDC", group: "Pagamenti e finanziario" },
+  { id: "IncentivoAtteso", label: "IncentivoAtteso", group: "Pagamenti e finanziario" },
+  { id: "Iva Reverse charge", label: "Iva Reverse charge", group: "Pagamenti e finanziario" },
+  { id: "IVA", label: "IVA", group: "Pagamenti e finanziario" },
+  { id: "Importo da Listino", label: "Importo da Listino", group: "Pagamenti e finanziario" },
+  { id: "Importo TICA", label: "Importo TICA", group: "Pagamenti e finanziario" },
+  { id: "MOD. PAGAMENTO CT3.0", label: "MOD. PAGAMENTO CT3.0", group: "Pagamenti e finanziario" },
+  // Logistica e cantiere
+  { id: "Stratigrafia superficie di installazione", label: "Stratigrafia superficie di installazione", group: "Logistica e cantiere" },
+  { id: "C/o magazzino installatore", label: "C/o magazzino installatore", group: "Logistica e cantiere" },
+  { id: "Indirizzo di ritiro merce", label: "Indirizzo di ritiro merce", group: "Logistica e cantiere" },
+  { id: "Merce ordinata e da ritirare", label: "Merce ordinata e da ritirare", group: "Logistica e cantiere" },
+  { id: "C/o cantiere del cliente", label: "C/o cantiere del cliente", group: "Logistica e cantiere" },
+  { id: "Altri materiali", label: "Altri materiali", group: "Logistica e cantiere" },
+  { id: "Data installazione ultimata", label: "Data installazione ultimata", group: "Logistica e cantiere" },
+  { id: "Data appuntamento allaccio", label: "Data appuntamento allaccio", group: "Logistica e cantiere" },
+  { id: "Intervento 1", label: "Intervento 1", group: "Logistica e cantiere" },
+  { id: "Intervento 2", label: "Intervento 2", group: "Logistica e cantiere" },
+  // Documenti e pratiche
+  { id: "Allegati", label: "Allegati", group: "Documenti e pratiche" },
+  { id: "Mappa catastale", label: "Mappa catastale", group: "Documenti e pratiche" },
+  { id: "Regolamento di esecizio", label: "Regolamento di esecizio", group: "Documenti e pratiche" },
+  { id: "Attestato Terna", label: "Attestato Terna", group: "Documenti e pratiche" },
+  { id: "Codice contratto PNRR", label: "Codice contratto PNRR", group: "Documenti e pratiche" },
+  { id: "Scheda ENEA", label: "Scheda ENEA", group: "Documenti e pratiche" },
+  { id: "Verifica documentale", label: "Verifica documentale", group: "Documenti e pratiche" },
+  { id: "Layout verificato", label: "Layout verificato", group: "Documenti e pratiche" },
+  { id: "Fattura1", label: "Fattura1", group: "Documenti e pratiche" },
+  { id: "Fattura2", label: "Fattura2", group: "Documenti e pratiche" },
+  // Iter burocratico
+  { id: "Inserimento pratica GSE", label: "Inserimento pratica GSE", group: "Iter burocratico" },
+  { id: "Inserimento pratica E-Distribuzione", label: "Inserimento pratica E-Distribuzione", group: "Iter burocratico" },
+  { id: "POD", label: "POD", group: "Iter burocratico" },
+  { id: "Zona", label: "Zona", group: "Iter burocratico" },
+  { id: "Data ammissibilità", label: "Data ammissibilità", group: "Iter burocratico" },
+  { id: "Data sopralluogo", label: "Data sopralluogo", group: "Iter burocratico" },
+  { id: "Data affidamento sopralluogo", label: "Data affidamento sopralluogo", group: "Iter burocratico" },
+  { id: "Stato sopralluogo", label: "Stato sopralluogo", group: "Iter burocratico" },
+  { id: "Data conferma Iter E-distribuzione", label: "Data conferma Iter E-distribuzione", group: "Iter burocratico" },
+  { id: "Notifica pred. reg. esercizio", label: "Notifica pred. reg. esercizio", group: "Iter burocratico" },
+  { id: "Disponibilità Fine lavori", label: "Disponibilità Fine lavori", group: "Iter burocratico" },
+  { id: "Tica", label: "Tica", group: "Iter burocratico" },
+  { id: "Stato TICA", label: "Stato TICA", group: "Iter burocratico" },
+  { id: "Data scadenza TICA", label: "Data scadenza TICA", group: "Iter burocratico" },
+  { id: "Data iter Enel Concluso", label: "Data iter Enel Concluso", group: "Iter burocratico" },
+  { id: "TIPO CTR", label: "TIPO CTR", group: "Iter burocratico" },
+  { id: "Stato Sollecito", label: "Stato Sollecito", group: "Iter burocratico" },
+  { id: "Data interlocutorio", label: "Data interlocutorio", group: "Iter burocratico" },
+  // Comunicazioni automatiche
+  { id: "Messaggio di benvenuto", label: "Messaggio di benvenuto", group: "Comunicazioni automatiche" },
+  { id: "Messaggio prog. preliminare", label: "Messaggio prog. preliminare", group: "Comunicazioni automatiche" },
+  { id: "Messaggio ordine merce", label: "Messaggio ordine merce", group: "Comunicazioni automatiche" },
+  { id: "Messaggio in esecuzione", label: "Messaggio in esecuzione", group: "Comunicazioni automatiche" },
+  { id: "Telefonata post installazione", label: "Telefonata post installazione", group: "Comunicazioni automatiche" },
+  { id: "Messaggio Fattura", label: "Messaggio Fattura", group: "Comunicazioni automatiche" },
+  { id: "Corrispettivo pagato", label: "Corrispettivo pagato", group: "Comunicazioni automatiche" },
+  { id: "Data Click", label: "Data Click", group: "Comunicazioni automatiche" },
+  { id: "Assistenza", label: "Assistenza", group: "Comunicazioni automatiche" },
+  // Provvigioni
+  { id: "Codice rintracciabilità", label: "Codice rintracciabilità", group: "Provvigioni" },
+  { id: "Stato Provvigione", label: "Stato Provvigione", group: "Provvigioni" },
+]
+
+// Ordine colonne di default in tabella (segue il prompt Step 4)
+export const DEFAULT_CLIENTE_COLUMNS: ClienteColumnId[] = [
+  "Badge dell'attività",
+  "Badge di nota",
+  "Tag",
+  "Nome Clienti",
+  "Clienti Proprietario",
+  "Sede",
+  "Stato",
+  "Cellulare",
+  "E-mail",
+  "Ora modifica",
+]
+
+export const STATO_CLIENTE_VALUES: StatoCliente[] = [
+  "Nuovo contratto digitale",
+  "Fin da firmare",
+  "Attesa cliente",
+  "Iter in corso",
+  "In esecuzione",
+  "Installazione completata",
+  "Emessa fattura",
+  "Chiuso",
+]
+
+export const STATO_CLIENTE_TONE: Record<
+  StatoCliente,
+  "muted" | "success" | "warning" | "info" | "teal" | "destructive"
+> = {
+  "Nuovo contratto digitale": "info",
+  "Fin da firmare": "warning",
+  "Attesa cliente": "muted",
+  "Iter in corso": "warning",
+  "In esecuzione": "teal",
+  "Installazione completata": "success",
+  "Emessa fattura": "success",
+  Chiuso: "muted",
+}
+
+export const CLIENTI_TOTAL = 1842
+
+export const mockClienti: Cliente[] = [
+  {
+    id: "cli-1",
+    "Badge dell'attività": true,
+    "Badge di nota": false,
+    "Nome Clienti": "Quinto Pietro",
+    "E-mail": "cosmetikline@libero.it",
+    "Ora modifica": "18/06/2025 09:14",
+    Tag: [],
+    Sede: "Catania",
+    "Clienti Proprietario": "Gaetano Grasso",
+    "Origine Lead": "Facebook",
+    Nome: "Pietro",
+    Cognome: "Quinto",
+    Cellulare: "+39 348 1122334",
+    "Creato da": "Gaetano Grasso",
+    "Ora creazione": "02/04/2025 11:20",
+    Saluti: "Sig.",
+    Stato: "Nuovo contratto digitale",
+    Installatore: "PM-Technology",
+  },
+  {
+    id: "cli-2",
+    "Badge dell'attività": false,
+    "Badge di nota": true,
+    "Nome Clienti": "Andrea Mazzotti",
+    "E-mail": "kilwa76@gmail.com",
+    "Ora modifica": "17/06/2025 16:48",
+    Tag: [],
+    Sede: "Treviso",
+    "Clienti Proprietario": "Mariarosa De Leo",
+    "Origine Lead": "Sito web",
+    Nome: "Andrea",
+    Cognome: "Mazzotti",
+    Cellulare: "+39 333 9988776",
+    "Creato da": "Mariarosa De Leo",
+    "Ora creazione": "28/03/2025 09:05",
+    Saluti: "Sig.",
+    Stato: "Nuovo contratto digitale",
+    Installatore: "DIESSE IMPIANTI",
+    Note: "Cliente interessato a storage aggiuntivo.",
+  },
+  {
+    id: "cli-3",
+    "Badge dell'attività": false,
+    "Badge di nota": false,
+    "Nome Clienti": "Michela Baronti",
+    "E-mail": "michelabaronti@gmail.com",
+    "Ora modifica": "17/06/2025 10:32",
+    Tag: [],
+    Sede: "Porto Sant'Elpidio",
+    "Clienti Proprietario": "Ivan Lo Faro",
+    "Origine Lead": "Pubblicità",
+    Nome: "Michela",
+    Cognome: "Baronti",
+    Cellulare: "+39 340 5566778",
+    "Creato da": "Ivan Lo Faro",
+    "Ora creazione": "15/03/2025 14:50",
+    Saluti: "Sig.ra",
+    Stato: "Nuovo contratto digitale",
+    Installatore: "DG Impianti",
+  },
+  {
+    id: "cli-4",
+    "Badge dell'attività": true,
+    "Badge di nota": true,
+    "Nome Clienti": "Luca Mantovani",
+    "E-mail": "mantovaniluca@hotmail.com",
+    "Ora modifica": "16/06/2025 12:05",
+    Tag: [],
+    Sede: "Torino",
+    "Clienti Proprietario": "Fabio Tizi",
+    "Origine Lead": "Facebook",
+    Nome: "Luca",
+    Cognome: "Mantovani",
+    Cellulare: "+39 347 2233445",
+    "Creato da": "Fabio Tizi",
+    "Ora creazione": "10/03/2025 08:30",
+    Saluti: "Sig.",
+    Stato: "Nuovo contratto digitale",
+    Installatore: "Bmax",
+  },
+  {
+    id: "cli-5",
+    "Badge dell'attività": false,
+    "Badge di nota": false,
+    "Nome Clienti": "Gianluca Piccioni",
+    "E-mail": "gianlucapiccioni72@gmail.com",
+    "Ora modifica": "16/06/2025 08:51",
+    Tag: [],
+    Sede: "Catania",
+    "Clienti Proprietario": "Cristian Virzì",
+    "Origine Lead": "Sito web",
+    Nome: "Gianluca",
+    Cognome: "Piccioni",
+    Cellulare: "+39 349 6677889",
+    "Creato da": "Cristian Virzì",
+    "Ora creazione": "05/03/2025 17:10",
+    Saluti: "Sig.",
+    Stato: "Nuovo contratto digitale",
+    Installatore: "Ca.Gi Srl",
+    Accessori: "Wallbox 7,4 kW",
+    Note: "Richiesta installazione wallbox in garage.",
+  },
+  {
+    id: "cli-6",
+    "Badge dell'attività": true,
+    "Badge di nota": false,
+    "Nome Clienti": "Giuseppe Patanè",
+    "E-mail": "venerapatan@gmail.com",
+    "Ora modifica": "15/06/2025 19:22",
+    Tag: [],
+    Sede: "Giarre (CT)",
+    "Clienti Proprietario": "Filippo Ferrara",
+    "Origine Lead": "Manuale",
+    Nome: "Giuseppe",
+    Cognome: "Patanè",
+    Cellulare: "+39 346 1212343",
+    "Creato da": "Filippo Ferrara",
+    "Ora creazione": "20/02/2025 10:00",
+    Saluti: "Sig.",
+    Stato: "Fin da firmare",
+    Installatore: "Solair Group srl",
+    "Modalità di Pagamento": "Finanziamento",
+    "Finanziamento approvato": false,
+  },
+  {
+    id: "cli-7",
+    "Badge dell'attività": false,
+    "Badge di nota": true,
+    "Nome Clienti": "Giangi Parigini",
+    "E-mail": "giangiacomo.parigini@gmail.com",
+    "Ora modifica": "14/06/2025 11:47",
+    Tag: [],
+    Sede: "Treviso",
+    "Clienti Proprietario": "Gianluca Silvestro",
+    "Origine Lead": "Facebook",
+    Nome: "Giangiacomo",
+    Cognome: "Parigini",
+    Cellulare: "+39 333 4545656",
+    "Creato da": "Gianluca Silvestro",
+    "Ora creazione": "18/02/2025 13:25",
+    Saluti: "Sig.",
+    Stato: "Attesa cliente",
+    Installatore: "DIESSE IMPIANTI",
+    Note: "In attesa documentazione catastale dal cliente.",
+  },
+  {
+    id: "cli-8",
+    "Badge dell'attività": true,
+    "Badge di nota": false,
+    "Nome Clienti": "Francesca Lo Gioco",
+    "E-mail": "fabiogirolimetto98@gmail.com",
+    "Ora modifica": "13/06/2025 15:38",
+    Tag: [],
+    Sede: "Porto Sant'Elpidio",
+    "Clienti Proprietario": "Mariarosa De Leo",
+    "Origine Lead": "Pubblicità",
+    Nome: "Francesca",
+    Cognome: "Lo Gioco",
+    Cellulare: "+39 340 7878989",
+    "Creato da": "Mariarosa De Leo",
+    "Ora creazione": "12/02/2025 09:40",
+    Saluti: "Sig.ra",
+    Stato: "Nuovo contratto digitale",
+    Installatore: "DG Impianti",
+    "C/o cantiere del cliente": "Due cantieri: abitazione + capannone",
+    Note: "Cantiere multiplo, coordinare sopralluoghi.",
+  },
+  {
+    id: "cli-9",
+    "Badge dell'attività": false,
+    "Badge di nota": true,
+    "Nome Clienti": "Giovanni Torrisi",
+    "E-mail": "giovanni.torrisi@uniurb.it",
+    "Ora modifica": "12/06/2025 18:02",
+    Tag: [],
+    Sede: "Catania",
+    "Clienti Proprietario": "Gaetano Grasso",
+    "Origine Lead": "Sito web",
+    Nome: "Giovanni",
+    Cognome: "Torrisi",
+    Cellulare: "+39 348 3434545",
+    "Creato da": "Gaetano Grasso",
+    "Ora creazione": "30/01/2025 11:15",
+    Saluti: "Dott.",
+    Stato: "Emessa fattura",
+    Installatore: "PM-Technology",
+    "Corrispettivo pagato": true,
+    "Messaggio Fattura": true,
+    Fattura1: "FT-2025-0142.pdf",
+    "Importo Contrattuale": 18500,
+    Saldo: 0,
+  },
+  {
+    id: "cli-10",
+    "Badge dell'attività": true,
+    "Badge di nota": true,
+    "Nome Clienti": "Maria Cristina Greco",
+    "E-mail": "mc.greco@solairgroup.it",
+    "Ora modifica": "19/06/2025 14:55",
+    Tag: [],
+    Sede: "Catania",
+    "Clienti Proprietario": "Cristian Virzì",
+    "Origine Lead": "Facebook",
+    Nome: "Maria Cristina",
+    Cognome: "Greco",
+    "Altro telefono": "+39 095 7654321",
+    Cellulare: "+39 349 1029384",
+    "Creato da": "Cristian Virzì",
+    "Modificato da": "Gaetano Grasso",
+    "Ora creazione": "08/01/2025 09:00",
+    "Ora ultima attività": "19/06/2025 14:55",
+    Saluti: "Sig.ra",
+    "E-mail secondaria": "cristina.greco.privata@gmail.com",
+    "Codice fiscale": "GRCMCR80A41C351K",
+    "Via indirizzo postale": "Via Etnea 245",
+    "Città indirizzo postale": "Catania",
+    "Provincia indirizzo postale": "CT",
+    "Codice postale indirizzo": "95128",
+    Descrizione: "Impianto residenziale con storage e wallbox, pratica PNRR.",
+    Stato: "In esecuzione",
+    Note: "Cliente molto collaborativa, documentazione completa.",
+    "Note ufficio": "Verificare conformità layout prima dell'ordine.",
+    "Note pagamenti": "Acconto ricevuto, saldo a fine lavori.",
+    "Visita più recente": "17/06/2025 21:30",
+    "Prima pagina visitata": "/fotovoltaico-residenziale",
+    "Tempo medio impiegato minuti": 7,
+    "Numero di chat": 2,
+    "Punteggio visitatore": 88,
+    "Prima visita": "20/12/2024 18:10",
+    "Giorni visitati": 5,
+    "COD. INVERTER": "INV-HUAWEI-SUN2000-6KTL",
+    "COD- MODULI": "MOD-JINKO-440N",
+    "COD. STORAGE": "STG-HUAWEI-LUNA2000-10",
+    "DISPONIBILITA' MAGAZZINO": "Disponibile",
+    Installatore: "Solair Group srl",
+    "Nr. Inverter": 1,
+    "Nr. Moduli": 16,
+    "Potenza Moduli Wp": 440,
+    "Nr. Batterie": 2,
+    "Capacità Batterie": "10 kWh",
+    "Totale Storage": "10 kWh",
+    "Tot Potenza DC": "7,04 kWp",
+    "Potenza Inverter": "6 kW",
+    "Tot Potenza AC KW": 6,
+    Tipologia: "Monofase",
+    Retrofit: false,
+    EPS: true,
+    "Impianto in edilizia libera": true,
+    "Area vincolata": false,
+    ">20kW Pot. Nom.": false,
+    "Impianto Attivo": false,
+    Accessori: "Wallbox 7,4 kW, ottimizzatori",
+    "Modalità di Pagamento": "Bonifico + Finanziamento",
+    "1° Tranche": "5.000 €",
+    "Importo Contrattuale": 22400,
+    "Importo Finanziamento": 15000,
+    "2°Tranche": "7.400 €",
+    Saldo: 10000,
+    IBAN: "IT60X0542811101000000123456",
+    "Finanziamento approvato": true,
+    "N. rate e importo rata": "120 x 145 €",
+    "Tot Contratto": 22400,
+    "di cui CT3": 4200,
+    "di cui FTV": 18200,
+    "Sconto COMBO": 1500,
+    IncentivoAtteso: 3360,
+    "Iva Reverse charge": false,
+    IVA: 10,
+    "Importo da Listino": 23900,
+    "MOD. PAGAMENTO CT3.0": "Cessione del credito",
+    "C/o cantiere del cliente": "Abitazione principale",
+    "Data installazione ultimata": "10/06/2025",
+    "Data appuntamento allaccio": "25/06/2025 09:00",
+    "Intervento 1": "Posa moduli e inverter",
+    "Intervento 2": "Installazione storage",
+    Allegati: ["contratto.pdf", "visura-catastale.pdf", "layout.pdf"],
+    "Mappa catastale": "mappa-catastale-greco.pdf",
+    "Regolamento di esecizio": "reg-esercizio.pdf",
+    "Attestato Terna": "attestato-terna.pdf",
+    "Codice contratto PNRR": "PNRR-2025-00874",
+    "Scheda ENEA": "scheda-enea.pdf",
+    "Verifica documentale": true,
+    "Layout verificato": true,
+    "Inserimento pratica GSE": "12/06/2025",
+    "Inserimento pratica E-Distribuzione": "11/06/2025",
+    POD: "IT001E12345678",
+    Zona: "Sud",
+    "Data ammissibilità": "14/06/2025",
+    "Data sopralluogo": "15/05/2025",
+    "Stato sopralluogo": "Completato",
+    "Data conferma Iter E-distribuzione": "16/06/2025",
+    "Notifica pred. reg. esercizio": true,
+    "Disponibilità Fine lavori": true,
+    Tica: "TICA-2025-552",
+    "Stato TICA": "Accettata",
+    "Data scadenza TICA": "30/09/2025",
+    "TIPO CTR": "Residenziale",
+    "Stato Sollecito": "Nessuno",
+    "Messaggio di benvenuto": true,
+    "Messaggio prog. preliminare": true,
+    "Messaggio ordine merce": true,
+    "Messaggio in esecuzione": true,
+    "Telefonata post installazione": false,
+    "Messaggio Fattura": false,
+    "Corrispettivo pagato": false,
+    "Data Click": "08/01/2025 09:02",
+    Assistenza: "Nessuna richiesta aperta",
+    "Codice rintracciabilità": "RTR-GR-0010",
+    "Stato Provvigione": "Da liquidare",
+  },
+  {
+    id: "cli-11",
+    "Badge dell'attività": false,
+    "Badge di nota": false,
+    "Nome Clienti": "Salvatore Rizzo",
+    "E-mail": "salvo.rizzo@gmail.com",
+    "Ora modifica": "11/06/2025 10:18",
+    Tag: [],
+    Sede: "Giarre (CT)",
+    "Clienti Proprietario": "Filippo Ferrara",
+    "Origine Lead": "Manuale",
+    Nome: "Salvatore",
+    Cognome: "Rizzo",
+    Cellulare: "+39 347 5050606",
+    "Creato da": "Filippo Ferrara",
+    "Ora creazione": "22/01/2025 15:30",
+    Saluti: "Sig.",
+    Stato: "Installazione completata",
+    Installatore: "DG Impianti",
+    "Impianto Attivo": true,
+    "Tot Potenza AC KW": 4.5,
+    "Importo Contrattuale": 12900,
+  },
+]
+
+export function getClienteById(id: string): Cliente | undefined {
+  return mockClienti.find((c) => c.id === id)
 }

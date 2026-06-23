@@ -2914,3 +2914,213 @@ export const mockCompiti: Compito[] = [
 export function getCompitoById(id: string): Compito | undefined {
   return mockCompiti.find((c) => c.id === id)
 }
+
+// ============================================================================
+// MODULO SCADENZE (Deadlines)
+// ============================================================================
+
+export interface ScadenzaNota {
+  id: string
+  testo: string
+  autore: string
+  data: string
+}
+
+export interface Scadenza {
+  id: string
+  "Nome Scadenze": string
+  /** datetime "DD/MM/YYYY HH:MM" */
+  "Data scadenza": string
+  "Proprietario di Scadenze": string
+  "Ora modifica": string
+  "Ora creazione": string
+  "Ora ultima attività": string
+  /** collegamento a lead/cliente (etichetta), nullable */
+  "Connesso a": string | null
+  Descrizione: string | null
+  /** nome file allegato, nullable */
+  "Caricamento file 1": string | null
+  Tag: string[]
+  "Modalità iscrizione annullata": string | null
+  "Ora iscrizione annullata": string | null
+  Note: ScadenzaNota[]
+}
+
+export const SCADENZE_TOTAL = 8
+
+export const mockProprietariScadenza: string[] = [
+  "Paola Polimeni",
+  "Utenza di servizio",
+]
+
+/** "Oggi" coerente con la data di sistema dell'app. */
+const SCADENZE_TODAY = new Date(2026, 5, 20)
+
+/** parse "DD/MM/YYYY HH:MM" → Date (o solo data). */
+function parseScadenzaDate(value: string): Date | null {
+  const [datePart] = value.split(" ")
+  const [d, m, y] = datePart.split("/")
+  if (!d || !m || !y) return null
+  return new Date(Number(y), Number(m) - 1, Number(d))
+}
+
+/** Scaduta = data nel passato e iscrizione non annullata (non chiusa). */
+export function isScadenzaScaduta(s: Scadenza): boolean {
+  if (s["Modalità iscrizione annullata"]) return false
+  const due = parseScadenzaDate(s["Data scadenza"])
+  if (!due) return false
+  return due.getTime() < SCADENZE_TODAY.getTime()
+}
+
+export function scadenzaInitials(nome: string): string {
+  return nome
+    .split(" ")
+    .map((p) => p[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase()
+}
+
+export const mockScadenze: Scadenza[] = [
+  {
+    id: "scad-001",
+    "Nome Scadenze": "inserimento pratica safina",
+    "Data scadenza": "03/06/2025 10:00",
+    "Proprietario di Scadenze": "Paola Polimeni",
+    "Ora modifica": "02/06/2025 16:40",
+    "Ora creazione": "28/05/2025 09:15",
+    "Ora ultima attività": "02/06/2025 16:40",
+    "Connesso a": "Safina Costruzioni",
+    Descrizione:
+      "Completare l'inserimento della pratica per il cliente Safina entro la scadenza.",
+    "Caricamento file 1": "pratica_safina.pdf",
+    Tag: ["PRATICHE ENEL"],
+    "Modalità iscrizione annullata": null,
+    "Ora iscrizione annullata": null,
+    Note: [
+      {
+        id: "n1",
+        testo: "Documenti ricevuti, manca solo la firma del titolare.",
+        autore: "Paola Polimeni",
+        data: "30/05/2025 11:20",
+      },
+    ],
+  },
+  {
+    id: "scad-002",
+    "Nome Scadenze": "Letizia Cono",
+    "Data scadenza": "21/03/2025 09:30",
+    "Proprietario di Scadenze": "Utenza di servizio",
+    "Ora modifica": "20/03/2025 18:00",
+    "Ora creazione": "15/03/2025 10:00",
+    "Ora ultima attività": "20/03/2025 18:00",
+    "Connesso a": "Letizia Cono",
+    Descrizione: null,
+    "Caricamento file 1": null,
+    Tag: [],
+    "Modalità iscrizione annullata": null,
+    "Ora iscrizione annullata": null,
+    Note: [],
+  },
+  {
+    id: "scad-003",
+    "Nome Scadenze": "Andrea Polimeni",
+    "Data scadenza": "20/03/2025 16:00",
+    "Proprietario di Scadenze": "Utenza di servizio",
+    "Ora modifica": "19/03/2025 14:30",
+    "Ora creazione": "12/03/2025 09:45",
+    "Ora ultima attività": "19/03/2025 14:30",
+    "Connesso a": "Andrea Polimeni",
+    Descrizione: "Verifica documentazione per attivazione pratica.",
+    "Caricamento file 1": null,
+    Tag: [],
+    "Modalità iscrizione annullata": null,
+    "Ora iscrizione annullata": null,
+    Note: [],
+  },
+  {
+    id: "scad-004",
+    "Nome Scadenze": "Antonino Luca PNRR40%",
+    "Data scadenza": "21/03/2025 09:00",
+    "Proprietario di Scadenze": "Utenza di servizio",
+    "Ora modifica": "20/03/2025 12:10",
+    "Ora creazione": "10/03/2025 11:00",
+    "Ora ultima attività": "20/03/2025 12:10",
+    "Connesso a": "Antonino Luca",
+    Descrizione: "Invio domanda di accesso al contributo PNRR 40%.",
+    "Caricamento file 1": "domanda_pnrr_luca.pdf",
+    Tag: ["Codice contratto PNRR"],
+    "Modalità iscrizione annullata": null,
+    "Ora iscrizione annullata": null,
+    Note: [],
+  },
+  {
+    id: "scad-005",
+    "Nome Scadenze": "Tica lachetta",
+    "Data scadenza": "08/04/2025 12:00",
+    "Proprietario di Scadenze": "Utenza di servizio",
+    "Ora modifica": "07/04/2025 17:20",
+    "Ora creazione": "01/04/2025 08:30",
+    "Ora ultima attività": "07/04/2025 17:20",
+    "Connesso a": "Lachetta Srl",
+    Descrizione: "Scadenza pagamento TICA per la connessione.",
+    "Caricamento file 1": null,
+    Tag: ["Importo TICA"],
+    "Modalità iscrizione annullata": null,
+    "Ora iscrizione annullata": null,
+    Note: [],
+  },
+  {
+    id: "scad-006",
+    "Nome Scadenze": "Tica Regali D'Anna",
+    "Data scadenza": "11/04/2025 12:00",
+    "Proprietario di Scadenze": "Utenza di servizio",
+    "Ora modifica": "10/04/2025 15:00",
+    "Ora creazione": "03/04/2025 09:00",
+    "Ora ultima attività": "10/04/2025 15:00",
+    "Connesso a": "Regali D'Anna",
+    Descrizione: null,
+    "Caricamento file 1": null,
+    Tag: ["Importo TICA"],
+    "Modalità iscrizione annullata": null,
+    "Ora iscrizione annullata": null,
+    Note: [],
+  },
+  {
+    id: "scad-007",
+    "Nome Scadenze": "Inviare pratica PNRR40% Sarra Minichello",
+    "Data scadenza": "28/03/2025 09:00",
+    "Proprietario di Scadenze": "Utenza di servizio",
+    "Ora modifica": "27/03/2025 16:45",
+    "Ora creazione": "20/03/2025 10:30",
+    "Ora ultima attività": "27/03/2025 16:45",
+    "Connesso a": "Sarra Minichello",
+    Descrizione: "Inviare la pratica PNRR 40% per il cliente Sarra Minichello.",
+    "Caricamento file 1": "pratica_pnrr_minichello.pdf",
+    Tag: ["Codice contratto PNRR"],
+    "Modalità iscrizione annullata": null,
+    "Ora iscrizione annullata": null,
+    Note: [],
+  },
+  {
+    id: "scad-008",
+    "Nome Scadenze": "Tica FT Elettra",
+    "Data scadenza": "31/03/2025 09:30",
+    "Proprietario di Scadenze": "Utenza di servizio",
+    "Ora modifica": "30/03/2025 11:15",
+    "Ora creazione": "24/03/2025 09:00",
+    "Ora ultima attività": "30/03/2025 11:15",
+    "Connesso a": "FT Elettra",
+    Descrizione: "Pagamento TICA in scadenza per pratica FT Elettra.",
+    "Caricamento file 1": null,
+    Tag: ["Importo TICA"],
+    "Modalità iscrizione annullata": null,
+    "Ora iscrizione annullata": null,
+    Note: [],
+  },
+]
+
+export function getScadenzaById(id: string): Scadenza | undefined {
+  return mockScadenze.find((s) => s.id === id)
+}

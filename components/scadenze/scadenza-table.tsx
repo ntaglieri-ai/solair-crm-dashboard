@@ -26,21 +26,40 @@ import { type Scadenza, isScadenzaScaduta } from "@/lib/mock-data"
 import { ScadutaBadge, ScadenzaAvatar } from "./scadenza-utils"
 
 export type SortDir = "asc" | "desc"
+export type Density = "comoda" | "normale" | "densa"
 export type ScadenzaSortKey =
   | "Nome Scadenze"
   | "Data scadenza"
   | "Proprietario di Scadenze"
   | "Ora modifica"
 
-const COLUMNS: { key: ScadenzaSortKey; label: string }[] = [
-  { key: "Nome Scadenze", label: "Nome Scadenze" },
-  { key: "Data scadenza", label: "Data scadenza" },
-  { key: "Proprietario di Scadenze", label: "Proprietario di Scadenze" },
-  { key: "Ora modifica", label: "Ora modifica" },
+export type ScadenzaColumnId = ScadenzaSortKey
+
+/** Registro colonne configurabili dell'elenco scadenze. */
+export const SCADENZA_COLUMNS: {
+  id: ScadenzaColumnId
+  label: string
+  mandatory?: boolean
+}[] = [
+  { id: "Nome Scadenze", label: "Nome Scadenze", mandatory: true },
+  { id: "Data scadenza", label: "Data scadenza" },
+  { id: "Proprietario di Scadenze", label: "Proprietario di Scadenze" },
+  { id: "Ora modifica", label: "Ora modifica" },
 ]
+
+export const DEFAULT_SCADENZA_COLUMNS: ScadenzaColumnId[] =
+  SCADENZA_COLUMNS.map((c) => c.id)
+
+const DENSITY_CELL: Record<Density, string> = {
+  comoda: "py-4 text-sm",
+  normale: "py-2.5 text-sm",
+  densa: "py-1 text-xs",
+}
 
 export function ScadenzaTable({
   scadenze,
+  visibleCols = DEFAULT_SCADENZA_COLUMNS,
+  density = "normale",
   selected,
   onToggle,
   onToggleAll,
@@ -51,6 +70,8 @@ export function ScadenzaTable({
   onSort,
 }: {
   scadenze: Scadenza[]
+  visibleCols?: ScadenzaColumnId[]
+  density?: Density
   selected: Set<string>
   onToggle: (id: string) => void
   onToggleAll: () => void
@@ -65,6 +86,11 @@ export function ScadenzaTable({
   const scrollRef = useRef<HTMLDivElement>(null)
   const allSelected =
     scadenze.length > 0 && scadenze.every((s) => selected.has(s.id))
+
+  // Colonne effettivamente visibili, nell'ordine del registro.
+  const columns = SCADENZA_COLUMNS.filter((c) => visibleCols.includes(c.id))
+  const cellPad = DENSITY_CELL[density]
+  const show = (id: ScadenzaColumnId) => visibleCols.includes(id)
 
   return (
     <div
@@ -87,15 +113,15 @@ export function ScadenzaTable({
                 aria-label="Seleziona tutte"
               />
             </TableHead>
-            {COLUMNS.map((col) => (
+            {columns.map((col) => (
               <TableHead
-                key={col.key}
+                key={col.id}
                 className="cursor-pointer select-none whitespace-nowrap font-semibold text-muted-foreground"
-                onClick={() => onSort(col.key)}
+                onClick={() => onSort(col.id)}
               >
                 <span className="inline-flex items-center gap-1">
                   {col.label}
-                  {sortBy === col.key && (
+                  {sortBy === col.id && (
                     <IconArrowUp
                       size={14}
                       stroke={2}
@@ -116,7 +142,7 @@ export function ScadenzaTable({
           {scadenze.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={COLUMNS.length + 2}
+                colSpan={columns.length + 2}
                 className="py-16 text-center text-sm text-muted-foreground"
               >
                 Nessuna scadenza trovata con i filtri correnti.
@@ -141,7 +167,7 @@ export function ScadenzaTable({
                   </TableCell>
 
                   {/* Nome Scadenze */}
-                  <TableCell className="max-w-[360px]">
+                  <TableCell className={cn("max-w-[360px]", cellPad)}>
                     <div className="flex items-center gap-2">
                       <span className="truncate font-medium text-info hover:underline">
                         {s["Nome Scadenze"]}
@@ -169,41 +195,47 @@ export function ScadenzaTable({
                   </TableCell>
 
                   {/* Data scadenza */}
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          "whitespace-nowrap text-sm tabular-nums",
-                          scaduta
-                            ? "font-medium text-destructive"
-                            : "text-muted-foreground",
-                        )}
-                      >
-                        {s["Data scadenza"]}
-                      </span>
-                      {scaduta && <ScadutaBadge />}
-                    </div>
-                  </TableCell>
+                  {show("Data scadenza") && (
+                    <TableCell className={cellPad}>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "whitespace-nowrap tabular-nums",
+                            scaduta
+                              ? "font-medium text-destructive"
+                              : "text-muted-foreground",
+                          )}
+                        >
+                          {s["Data scadenza"]}
+                        </span>
+                        {scaduta && <ScadutaBadge />}
+                      </div>
+                    </TableCell>
+                  )}
 
                   {/* Proprietario */}
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <ScadenzaAvatar
-                        nome={s["Proprietario di Scadenze"]}
-                        size={26}
-                      />
-                      <span className="whitespace-nowrap text-sm text-foreground">
-                        {s["Proprietario di Scadenze"]}
-                      </span>
-                    </div>
-                  </TableCell>
+                  {show("Proprietario di Scadenze") && (
+                    <TableCell className={cellPad}>
+                      <div className="flex items-center gap-2">
+                        <ScadenzaAvatar
+                          nome={s["Proprietario di Scadenze"]}
+                          size={26}
+                        />
+                        <span className="whitespace-nowrap text-foreground">
+                          {s["Proprietario di Scadenze"]}
+                        </span>
+                      </div>
+                    </TableCell>
+                  )}
 
                   {/* Ora modifica */}
-                  <TableCell>
-                    <span className="whitespace-nowrap text-sm tabular-nums text-muted-foreground">
-                      {s["Ora modifica"]}
-                    </span>
-                  </TableCell>
+                  {show("Ora modifica") && (
+                    <TableCell className={cellPad}>
+                      <span className="whitespace-nowrap tabular-nums text-muted-foreground">
+                        {s["Ora modifica"]}
+                      </span>
+                    </TableCell>
+                  )}
 
                   {/* Azioni */}
                   <TableCell

@@ -184,7 +184,7 @@ export function RegoleSection() {
                   <div className="flex items-center gap-2">
                     <IconLock className="size-4 text-muted-foreground" />
                     <span className="font-medium">{rule.nome}</span>
-                    <Badge tone="muted">Fallback</Badge>
+                    <Badge variant="outline">Fallback</Badge>
                   </div>
                 ) : (
                   <Input
@@ -201,7 +201,7 @@ export function RegoleSection() {
                   <IconUserCheck className="size-4 text-muted-foreground" />
                   <Select
                     value={rule.assegnaA}
-                    onValueChange={(v) => updateRule(rule.id, { assegnaA: v })}
+                    onValueChange={(v) => updateRule(rule.id, { assegnaA: v ?? "" })}
                   >
                     <SelectTrigger className="h-9 w-44">
                       <SelectValue placeholder="Assegna a" />
@@ -283,7 +283,7 @@ export function RegoleSection() {
                     <Select
                       value={cond.value}
                       onValueChange={(v) =>
-                        updateCondition(rule.id, ci, { value: v })
+                        updateCondition(rule.id, ci, { value: v ?? "" })
                       }
                     >
                       <SelectTrigger className="h-8 w-44">

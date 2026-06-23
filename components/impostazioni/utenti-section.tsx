@@ -153,7 +153,7 @@ function AddUserDialog({
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Sede</Label>
-              <Select value={sede} onValueChange={setSede}>
+              <Select value={sede} onValueChange={(v) => setSede(v ?? "")}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -360,7 +360,7 @@ export function UtentiSection() {
 
               <div className="flex flex-col gap-1.5">
                 <Label>Sede</Label>
-                <Select value={sede} onValueChange={setSede}>
+                <Select value={sede} onValueChange={(v) => setSede(v ?? "")}>
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>

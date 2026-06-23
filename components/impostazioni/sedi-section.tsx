@@ -95,7 +95,7 @@ function SedeCard({
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Responsabile</Label>
-            <Select value={responsabile} onValueChange={setResponsabile}>
+            <Select value={responsabile} onValueChange={(v) => setResponsabile(v ?? "")}>
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>

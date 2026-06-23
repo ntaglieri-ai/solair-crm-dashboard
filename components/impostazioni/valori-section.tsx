@@ -141,9 +141,9 @@ export function ValoriSection() {
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>Campo</Label>
-          <Select value={field?.id} onValueChange={setFieldId}>
+          <Select value={field?.id} onValueChange={(v) => setFieldId(v ?? "")}>
             <SelectTrigger className="w-full sm:w-56">
-              <SelectValue />
+              <SelectValue>{field?.campo}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>

@@ -141,7 +141,7 @@ function NewFieldDialog({
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Sezione</Label>
-              <Select value={sezione} onValueChange={setSezione}>
+              <Select value={sezione} onValueChange={(v) => setSezione(v ?? "")}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>

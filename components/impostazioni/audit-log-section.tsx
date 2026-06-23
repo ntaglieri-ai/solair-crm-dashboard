@@ -78,7 +78,7 @@ export function AuditLogSection() {
         <Select
           value={utente}
           onValueChange={(v) => {
-            setUtente(v)
+            setUtente(v ?? "all")
             resetPage()
           }}
         >
@@ -100,7 +100,7 @@ export function AuditLogSection() {
         <Select
           value={modulo}
           onValueChange={(v) => {
-            setModulo(v)
+            setModulo(v ?? "all")
             resetPage()
           }}
         >
@@ -122,7 +122,7 @@ export function AuditLogSection() {
         <Select
           value={azione}
           onValueChange={(v) => {
-            setAzione(v)
+            setAzione(v ?? "all")
             resetPage()
           }}
         >

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import {
   NAV_PRINCIPALE,
   NAV_GESTIONE,
+  NAV_ADMIN,
   CURRENT_USER,
   type NavItem,
 } from "@/lib/mock-data"
@@ -82,6 +83,13 @@ export function Sidebar() {
       <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-5">
         <NavSection title="Principale" items={NAV_PRINCIPALE} />
         <NavSection title="Gestione" items={NAV_GESTIONE} />
+
+        {/* CRM Settings: solo admin, separata dalle voci operative */}
+        {CURRENT_USER.ruoloKey === "admin" ? (
+          <div className="mt-auto border-t border-sidebar-border pt-4">
+            <NavLink item={NAV_ADMIN} />
+          </div>
+        ) : null}
       </nav>
 
       {/* Footer utente */}

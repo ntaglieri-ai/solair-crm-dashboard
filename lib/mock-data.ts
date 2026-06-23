@@ -445,13 +445,21 @@ export const NAV_GESTIONE: NavItem[] = [
   { label: "Scadenze", href: "/scadenze", icon: "scadenze" },
   { label: "Documenti", href: "/documenti", icon: "documenti" },
   { label: "Installatori", href: "/installatori", icon: "installatori" },
-  { label: "Impostazioni", href: "/impostazioni", icon: "impostazioni" },
 ]
+
+// Voce amministrativa, mostrata solo agli admin con un separatore discreto.
+export const NAV_ADMIN: NavItem = {
+  label: "CRM Settings",
+  href: "/impostazioni",
+  icon: "impostazioni",
+}
 
 export const CURRENT_USER = {
   iniziali: "NT",
   nome: "Nando Taglieri",
   ruolo: "Admin · Mostag Studio",
+  // Chiave ruolo usata per i controlli di accesso (es. CRM Settings).
+  ruoloKey: "admin" as UserRole,
 }
 
 // ----------------------------------------------------------------------------
@@ -3499,3 +3507,335 @@ export function getInstallatoreById(
 ): InstallatoreRecord | undefined {
   return mockInstallatoriRecords.find((i) => i.id === id)
 }
+
+// ============================================================================
+// CRM SETTINGS — area amministrativa (solo admin)
+// ----------------------------------------------------------------------------
+// Modelli e dati mock per la pagina CRM Settings: utenti & ruoli, file manager,
+// integrazione Make, audit log, sedi, attributi record, valori configurabili e
+// regole di assegnazione. Stato gestito lato client (nessuna persistenza).
+// ============================================================================
+
+export type UserRole = "admin" | "commerciale" | "tecnico"
+
+export const ROLE_LABEL: Record<UserRole, string> = {
+  admin: "Admin",
+  commerciale: "Commerciale",
+  tecnico: "Tecnico",
+}
+
+// Tono badge per ruolo: admin=navy, commerciale=teal, tecnico=ambra
+export const ROLE_TONE: Record<UserRole, "navy" | "teal" | "warning"> = {
+  admin: "navy",
+  commerciale: "teal",
+  tecnico: "warning",
+}
+
+export interface SettingsUser {
+  id: string
+  nome: string
+  iniziali: string
+  email: string
+  ruolo: UserRole
+  sede: SedeLabel | "Mostag Studio"
+  attivo: boolean
+}
+
+export const mockUtenti: SettingsUser[] = [
+  { id: "u-001", nome: "Nando Taglieri", iniziali: "NT", email: "nando@mostagstudio.it", ruolo: "admin", sede: "Mostag Studio", attivo: true },
+  { id: "u-002", nome: "Gaetano Grasso", iniziali: "GG", email: "g.grasso@solairgroup.it", ruolo: "commerciale", sede: "Catania", attivo: true },
+  { id: "u-003", nome: "Mariarosa De Leo", iniziali: "MD", email: "m.deleo@solairgroup.it", ruolo: "commerciale", sede: "Treviso", attivo: true },
+  { id: "u-004", nome: "Ivan Lo Faro", iniziali: "IL", email: "i.lofaro@solairgroup.it", ruolo: "commerciale", sede: "Catania", attivo: true },
+  { id: "u-005", nome: "Fabio Tizi", iniziali: "FT", email: "f.tizi@solairgroup.it", ruolo: "commerciale", sede: "Treviso", attivo: true },
+  { id: "u-006", nome: "Cristian Virzì", iniziali: "CV", email: "c.virzi@solairgroup.it", ruolo: "commerciale", sede: "Catania", attivo: false },
+  { id: "u-007", nome: "Filippo Ferrara", iniziali: "FF", email: "f.ferrara@solairgroup.it", ruolo: "commerciale", sede: "Treviso", attivo: true },
+  { id: "u-008", nome: "Gianluca Silvestro", iniziali: "GS", email: "g.silvestro@solairgroup.it", ruolo: "commerciale", sede: "Torino", attivo: true },
+  { id: "u-009", nome: "Vito Ragaglia", iniziali: "VR", email: "v.ragaglia@solairgroup.it", ruolo: "admin", sede: "Treviso", attivo: true },
+]
+
+// --- Sedi configurabili -----------------------------------------------------
+
+export interface SediConfig {
+  id: string
+  nome: string
+  indirizzo: string
+  responsabile: string
+  attiva: boolean
+}
+
+export const mockSediConfig: SediConfig[] = [
+  { id: "sede-ct", nome: "Catania", indirizzo: "Via Etnea 120, 95131 Catania (CT)", responsabile: "Gaetano Grasso", attiva: true },
+  { id: "sede-giarre", nome: "Giarre (CT)", indirizzo: "Corso Italia 45, 95014 Giarre (CT)", responsabile: "Ivan Lo Faro", attiva: true },
+  { id: "sede-tv", nome: "Treviso", indirizzo: "Viale della Repubblica 18, 31100 Treviso (TV)", responsabile: "Mariarosa De Leo", attiva: true },
+  { id: "sede-to", nome: "Torino", indirizzo: "Corso Vittorio Emanuele II 30, 10123 Torino (TO)", responsabile: "Gianluca Silvestro", attiva: true },
+  { id: "sede-pse", nome: "Porto Sant'Elpidio", indirizzo: "Via Cesare Battisti 7, 63821 Porto Sant'Elpidio (FM)", responsabile: "Filippo Ferrara", attiva: false },
+]
+
+// --- Integrazione Make ------------------------------------------------------
+
+export type WebhookEsito = "Successo" | "Errore"
+
+export interface WebhookEvent {
+  id: string
+  tipo: string
+  data: string
+  esito: WebhookEsito
+  payload: string
+}
+
+export const mockWebhookEvents: WebhookEvent[] = [
+  { id: "wh-1", tipo: "Nuovo lead da configuratore", data: "23/06/2026 08:37", esito: "Successo", payload: '{"nome":"M. Rossi","kWp":6.4,"sede":"Catania"}' },
+  { id: "wh-2", tipo: "Aggiornamento stato lead", data: "23/06/2026 07:52", esito: "Successo", payload: '{"id":"lead-204","stato":"Contattato"}' },
+  { id: "wh-3", tipo: "Nuovo lead da Facebook", data: "22/06/2026 19:04", esito: "Errore", payload: '{"error":"campo email mancante"}' },
+  { id: "wh-4", tipo: "Sincronizzazione cliente", data: "22/06/2026 16:18", esito: "Successo", payload: '{"id":"cli-088","azione":"upsert"}' },
+  { id: "wh-5", tipo: "Nuovo lead da sito web", data: "22/06/2026 11:41", esito: "Successo", payload: '{"nome":"L. Bianchi","origine":"Sito web"}' },
+]
+
+export const MAKE_TOKEN_MASKED = "sk_••••••••••••••••"
+export const MAKE_TOKEN_FULL = "sk_live_8f3a9c2d7e1b4f6a0c5d8e2b9a4f7c1d"
+
+// --- Audit log --------------------------------------------------------------
+
+export type AuditAzione = "insert" | "update" | "delete"
+
+export const AUDIT_AZIONE_LABEL: Record<AuditAzione, string> = {
+  insert: "Creazione",
+  update: "Modifica",
+  delete: "Eliminazione",
+}
+
+export const AUDIT_AZIONE_TONE: Record<AuditAzione, "success" | "info" | "destructive"> = {
+  insert: "success",
+  update: "info",
+  delete: "destructive",
+}
+
+export type AuditModulo =
+  | "Lead"
+  | "Clienti"
+  | "Compiti"
+  | "Scadenze"
+  | "Installatori"
+  | "Utenti"
+  | "Sistema"
+
+export interface AuditEvent {
+  id: string
+  timestamp: string
+  utente: string
+  azione: AuditAzione
+  modulo: AuditModulo
+  record: string
+  dettaglio: string
+}
+
+export const AUDIT_MODULI: AuditModulo[] = [
+  "Lead",
+  "Clienti",
+  "Compiti",
+  "Scadenze",
+  "Installatori",
+  "Utenti",
+  "Sistema",
+]
+
+export const mockAuditLog: AuditEvent[] = [
+  { id: "a-01", timestamp: "23/06/2026 09:14", utente: "Gaetano Grasso", azione: "update", modulo: "Lead", record: "Marco Rossi", dettaglio: "Stato: Non contattato → Contattato" },
+  { id: "a-02", timestamp: "23/06/2026 08:58", utente: "Nando Taglieri", azione: "update", modulo: "Utenti", record: "Cristian Virzì", dettaglio: "Stato account: Attivo → Inattivo" },
+  { id: "a-03", timestamp: "23/06/2026 08:37", utente: "Sistema (Make)", azione: "insert", modulo: "Lead", record: "Lead #L-2041", dettaglio: "Nuovo lead da configuratore" },
+  { id: "a-04", timestamp: "22/06/2026 18:22", utente: "Mariarosa De Leo", azione: "insert", modulo: "Clienti", record: "Edil Veneto Srl", dettaglio: "Cliente convertito da lead #L-1987" },
+  { id: "a-05", timestamp: "22/06/2026 17:05", utente: "Ivan Lo Faro", azione: "update", modulo: "Compiti", record: "Sopralluogo Catania Sud", dettaglio: "Priorità: Medio → Alto" },
+  { id: "a-06", timestamp: "22/06/2026 15:48", utente: "Gianluca Silvestro", azione: "delete", modulo: "Scadenze", record: "Rinnovo polizza #SC-330", dettaglio: "Scadenza duplicata rimossa" },
+  { id: "a-07", timestamp: "22/06/2026 14:11", utente: "Nando Taglieri", azione: "update", modulo: "Sistema", record: "Valori · Stato Lead", dettaglio: 'Aggiunto valore "Inviato Preventivo"' },
+  { id: "a-08", timestamp: "22/06/2026 12:30", utente: "Filippo Ferrara", azione: "insert", modulo: "Installatori", record: "DG Impianti", dettaglio: "Nuovo installatore associato" },
+  { id: "a-09", timestamp: "22/06/2026 10:07", utente: "Fabio Tizi", azione: "update", modulo: "Lead", record: "Anna Verdi", dettaglio: "Proprietario: — → Fabio Tizi" },
+  { id: "a-10", timestamp: "21/06/2026 16:52", utente: "Vito Ragaglia", azione: "update", modulo: "Sistema", record: "Regole di assegnazione", dettaglio: 'Creata regola "Lead Torino"' },
+  { id: "a-11", timestamp: "21/06/2026 14:33", utente: "Gaetano Grasso", azione: "delete", modulo: "Lead", record: "Lead #L-1902", dettaglio: "Lead duplicato eliminato" },
+  { id: "a-12", timestamp: "21/06/2026 09:20", utente: "Sistema (Make)", azione: "insert", modulo: "Lead", record: "Lead #L-2018", dettaglio: "Nuovo lead da Facebook" },
+]
+
+// --- Valori configurabili ---------------------------------------------------
+
+export interface ConfigurableValue {
+  id: string
+  nome: string
+  color: string
+}
+
+export interface ConfigurableField {
+  id: string
+  /** Modulo a cui appartiene il campo. */
+  modulo: AuditModulo
+  /** Nome del campo a valori fissi (es. "Stato Lead"). */
+  campo: string
+  valori: ConfigurableValue[]
+}
+
+export const mockValoriConfigurabili: ConfigurableField[] = [
+  {
+    id: "vf-stato-lead",
+    modulo: "Lead",
+    campo: "Stato Lead",
+    valori: [
+      { id: "v-1", nome: "Non contattato", color: "#94a3b8" },
+      { id: "v-2", nome: "Contattato", color: "#16a34a" },
+      { id: "v-3", nome: "Tentato di contattare", color: "#3b82f6" },
+      { id: "v-4", nome: "Inviato Preventivo", color: "#f59e0b" },
+      { id: "v-5", nome: "Convertito", color: "#2e8b72" },
+      { id: "v-6", nome: "Perso", color: "#dc2626" },
+    ],
+  },
+  {
+    id: "vf-origine-lead",
+    modulo: "Lead",
+    campo: "Origine Lead",
+    valori: [
+      { id: "o-1", nome: "Facebook", color: "#3b82f6" },
+      { id: "o-2", nome: "Pubblicità", color: "#8b5cf6" },
+      { id: "o-3", nome: "Sito web", color: "#2e8b72" },
+      { id: "o-4", nome: "Manuale", color: "#94a3b8" },
+      { id: "o-5", nome: "Utenza di servizio", color: "#cbd5e1" },
+    ],
+  },
+  {
+    id: "vf-priorita-compiti",
+    modulo: "Compiti",
+    campo: "Priorità Compiti",
+    valori: [
+      { id: "p-1", nome: "Alto", color: "#dc2626" },
+      { id: "p-2", nome: "Medio", color: "#f59e0b" },
+      { id: "p-3", nome: "Basso", color: "#94a3b8" },
+    ],
+  },
+]
+
+// --- Attributi record (campi di sistema + personalizzati per modulo) --------
+
+export type CampoTipo = "Testo" | "Numero" | "Data" | "Lista a tendina" | "Booleano"
+
+export const CAMPO_TIPI: CampoTipo[] = [
+  "Testo",
+  "Numero",
+  "Data",
+  "Lista a tendina",
+  "Booleano",
+]
+
+export interface RecordField {
+  id: string
+  nome: string
+  tipo: CampoTipo
+  sezione: string
+  attivo: boolean
+  /** Campo standard di sistema: non eliminabile. */
+  sistema?: boolean
+  visibile?: boolean
+  /** Opzioni per i campi "Lista a tendina". */
+  opzioni?: string[]
+}
+
+export const ATTRIBUTI_MODULI: AuditModulo[] = [
+  "Lead",
+  "Clienti",
+  "Compiti",
+  "Scadenze",
+  "Installatori",
+]
+
+export const MODULO_SEZIONI: Record<string, string[]> = {
+  Lead: ["Informazioni di base", "Dettagli impianto", "Indirizzo", "Altro"],
+  Clienti: ["Anagrafica", "Contatti", "Indirizzo postale", "Altro"],
+  Compiti: ["Dettagli", "Pianificazione", "Altro"],
+  Scadenze: ["Dettagli", "Pianificazione", "Altro"],
+  Installatori: ["Anagrafica", "Contatti", "Indirizzo postale", "Altro"],
+}
+
+export const mockAttributiRecord: Record<string, RecordField[]> = {
+  Lead: [
+    { id: "f-l1", nome: "Nome Lead", tipo: "Testo", sezione: "Informazioni di base", attivo: true, sistema: true, visibile: true },
+    { id: "f-l2", nome: "E-mail", tipo: "Testo", sezione: "Informazioni di base", attivo: true, sistema: true, visibile: true },
+    { id: "f-l3", nome: "Stato Lead", tipo: "Lista a tendina", sezione: "Informazioni di base", attivo: true, sistema: true, visibile: true },
+    { id: "f-l4", nome: "Origine Lead", tipo: "Lista a tendina", sezione: "Informazioni di base", attivo: true, sistema: true, visibile: true },
+    { id: "f-l5", nome: "kWp", tipo: "Numero", sezione: "Dettagli impianto", attivo: true, sistema: false },
+    { id: "f-l6", nome: "Modello pannello", tipo: "Testo", sezione: "Dettagli impianto", attivo: true, sistema: false },
+    { id: "f-l7", nome: "Residente in Sicilia", tipo: "Booleano", sezione: "Altro", attivo: false, sistema: false },
+  ],
+  Clienti: [
+    { id: "f-c1", nome: "Nome Cliente", tipo: "Testo", sezione: "Anagrafica", attivo: true, sistema: true, visibile: true },
+    { id: "f-c2", nome: "Partita IVA", tipo: "Testo", sezione: "Anagrafica", attivo: true, sistema: true, visibile: true },
+    { id: "f-c3", nome: "E-mail", tipo: "Testo", sezione: "Contatti", attivo: true, sistema: true, visibile: true },
+    { id: "f-c4", nome: "Referente tecnico", tipo: "Testo", sezione: "Contatti", attivo: true, sistema: false },
+  ],
+  Compiti: [
+    { id: "f-t1", nome: "Titolo", tipo: "Testo", sezione: "Dettagli", attivo: true, sistema: true, visibile: true },
+    { id: "f-t2", nome: "Priorità", tipo: "Lista a tendina", sezione: "Dettagli", attivo: true, sistema: true, visibile: true },
+    { id: "f-t3", nome: "Scadenza", tipo: "Data", sezione: "Pianificazione", attivo: true, sistema: true, visibile: true },
+  ],
+  Scadenze: [
+    { id: "f-s1", nome: "Nome Scadenza", tipo: "Testo", sezione: "Dettagli", attivo: true, sistema: true, visibile: true },
+    { id: "f-s2", nome: "Data scadenza", tipo: "Data", sezione: "Pianificazione", attivo: true, sistema: true, visibile: true },
+  ],
+  Installatori: [
+    { id: "f-i1", nome: "Nome Installatore", tipo: "Testo", sezione: "Anagrafica", attivo: true, sistema: true, visibile: true },
+    { id: "f-i2", nome: "Partita IVA", tipo: "Testo", sezione: "Anagrafica", attivo: true, sistema: true, visibile: true },
+    { id: "f-i3", nome: "Zona operativa", tipo: "Testo", sezione: "Altro", attivo: true, sistema: false },
+  ],
+}
+
+// --- Regole di assegnazione (versione CRM Settings) -------------------------
+
+export interface SettingsRuleCondition {
+  field: "Origine Lead" | "Sede"
+  op: "è" | "contiene" | "inizia con"
+  value: string
+}
+
+export interface SettingsAssignmentRule {
+  id: string
+  priorita: number
+  nome: string
+  conditions: SettingsRuleCondition[]
+  assegnaA: string
+  attiva: boolean
+  /** La regola di fallback resta ultima e non è eliminabile. */
+  locked?: boolean
+}
+
+export const mockRegoleAssegnazione: SettingsAssignmentRule[] = [
+  {
+    id: "sr-1",
+    priorita: 1,
+    nome: "Lead Facebook Sicilia",
+    conditions: [
+      { field: "Origine Lead", op: "è", value: "Facebook" },
+      { field: "Sede", op: "è", value: "Catania" },
+    ],
+    assegnaA: "Gaetano Grasso",
+    attiva: true,
+  },
+  {
+    id: "sr-2",
+    priorita: 2,
+    nome: "Lead Veneto",
+    conditions: [{ field: "Sede", op: "è", value: "Treviso" }],
+    assegnaA: "Mariarosa De Leo",
+    attiva: true,
+  },
+  {
+    id: "sr-3",
+    priorita: 3,
+    nome: "Lead Torino",
+    conditions: [{ field: "Sede", op: "è", value: "Torino" }],
+    assegnaA: "Gianluca Silvestro",
+    attiva: true,
+  },
+  {
+    id: "sr-fallback",
+    priorita: 4,
+    nome: "Fallback generale",
+    conditions: [],
+    assegnaA: "Ivan Lo Faro",
+    attiva: true,
+    locked: true,
+  },
+]

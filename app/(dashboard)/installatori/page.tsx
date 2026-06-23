@@ -379,72 +379,66 @@ function InstallatoriPageInner() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 lg:flex-row">
-        {/* Sidebar filtri */}
-        <aside className="lg:w-64 lg:shrink-0">
-          <InstallatoreFilters
-            filters={filters}
-            tags={tagNames}
-            onChange={handleFilterChange}
-            onReset={() => {
-              setFilters(DEFAULT_INSTALLATORE_FILTERS)
-              setPage(1)
-            }}
-          />
-        </aside>
+      {/* Barra filtri orizzontale (come nella pagina Lead) */}
+      <InstallatoreFilters
+        filters={filters}
+        tags={tagNames}
+        onChange={handleFilterChange}
+        onReset={() => {
+          setFilters(DEFAULT_INSTALLATORE_FILTERS)
+          setPage(1)
+        }}
+      />
 
-        {/* Tabella */}
-        <div className="min-w-0 flex-1">
-          <InstallatoreTable
-            installatori={pageRows}
-            columns={columns}
-            selected={selected}
-            onToggle={toggle}
-            onToggleAll={toggleAll}
-            onDelete={(i) => setDeleteTarget(i)}
-            sortBy={sortBy}
-            sortDir={sortDir}
-            onSort={handleSort}
-            density={density}
-          />
+      {/* Tabella */}
+      <InstallatoreTable
+        installatori={pageRows}
+        columns={columns}
+        selected={selected}
+        onToggle={toggle}
+        onToggleAll={toggleAll}
+        onDelete={(i) => setDeleteTarget(i)}
+        sortBy={sortBy}
+        sortDir={sortDir}
+        onSort={handleSort}
+        density={density}
+      />
 
-          {/* Footer / paginazione */}
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-            <span>
-              {selected.size > 0
-                ? `${selected.size} selezionati`
-                : `Dati Totali ${sorted.length}`}
+      {/* Footer / paginazione */}
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+        <span>
+          {selected.size > 0
+            ? `${selected.size} selezionati`
+            : `Dati Totali ${sorted.length}`}
+        </span>
+        <div className="flex items-center gap-3">
+          <span className="tabular-nums">
+            {start} a {end}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-8 bg-card"
+              aria-label="Pagina precedente"
+              disabled={safePage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <span className="px-1 tabular-nums">
+              {safePage} / {totalPages}
             </span>
-            <div className="flex items-center gap-3">
-              <span className="tabular-nums">
-                {start} a {end}
-              </span>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="size-8 bg-card"
-                  aria-label="Pagina precedente"
-                  disabled={safePage <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  <ChevronLeft className="size-4" />
-                </Button>
-                <span className="px-1 tabular-nums">
-                  {safePage} / {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="size-8 bg-card"
-                  aria-label="Pagina successiva"
-                  disabled={safePage >= totalPages}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  <ChevronRight className="size-4" />
-                </Button>
-              </div>
-            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-8 bg-card"
+              aria-label="Pagina successiva"
+              disabled={safePage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              <ChevronRight className="size-4" />
+            </Button>
           </div>
         </div>
       </div>

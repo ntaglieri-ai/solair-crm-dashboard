@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter, Geist_Mono } from 'next/font/google'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { QueryProvider } from '@/components/providers/query-provider'
 import './globals.css'
 
 const inter = Inter({ variable: '--font-inter', subsets: ['latin'] })
@@ -47,7 +48,9 @@ export default function RootLayout({
   return (
     <html lang="it" className={`light ${inter.variable} ${geistMono.variable}`}>
       <body className="font-sans antialiased bg-background">
-        <TooltipProvider delay={150}>{children}</TooltipProvider>
+        <QueryProvider>
+          <TooltipProvider delay={150}>{children}</TooltipProvider>
+        </QueryProvider>
         <Toaster position="bottom-right" richColors closeButton />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

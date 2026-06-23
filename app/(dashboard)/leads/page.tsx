@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
-import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, X, Loader2 } from "lucide-react"
 import { IconSettings } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -50,9 +50,18 @@ import { LeadImportDialog } from "@/components/leads/lead-import-dialog"
 import {
   AdvancedFilters,
   EMPTY_ADVANCED,
-  matchesAdvanced,
   type AdvancedFilterState,
 } from "@/components/leads/advanced-filters"
+import { type LeadListParams, type LeadListItem } from "@/lib/leads/api-types"
+import {
+  useLeadsQuery,
+  useLeadStats,
+  useCreateLead,
+  useDeleteLead,
+  useUpdateLead,
+  useBulkLeads,
+  fetchLeadsForExport,
+} from "@/lib/leads/hooks"
 
 const ROWS_ITEMS: Record<string, string> = {
   "10": "10 righe",
@@ -60,15 +69,15 @@ const ROWS_ITEMS: Record<string, string> = {
   "50": "50 righe",
 }
 
-// Simula il download di un file CSV a partire dai lead passati
-function downloadLeadsCsv(rows: Lead[], filename: string) {
+// Simula il download di un file CSV a partire dalle righe passate
+function downloadLeadsCsv(rows: LeadListItem[], filename: string) {
   const cols = LEAD_COLUMNS.map((c) => c.id)
   const header = cols.join(";")
   const body = rows
     .map((r) =>
       cols
         .map((c) => {
-          const v = r[c]
+          const v = (r as Record<string, unknown>)[c]
           const s = Array.isArray(v) ? v.join(", ") : String(v ?? "")
           return `"${s.replace(/"/g, '""')}"`
         })
@@ -86,20 +95,12 @@ function downloadLeadsCsv(rows: Lead[], filename: string) {
   URL.revokeObjectURL(url)
 }
 
-function matchesScore(score: number, filter: LeadFilterState["score"]) {
-  if (filter === "caldo") return score > 80
-  if (filter === "medio") return score >= 50 && score <= 80
-  if (filter === "freddo") return score < 50
-  return true
-}
-
-// Estrae l'elenco tag unico dal dataset
-const ALL_TAGS = Array.from(
-  new Set(mockLeads.flatMap((l) => l.Tag)),
-).sort((a, b) => a.localeCompare(b))
+// Elenco tag per i menu a tendina dei filtri (metadati, non i dati di lista)
+const ALL_TAGS = Array.from(new Set(mockLeads.flatMap((l) => l.Tag))).sort(
+  (a, b) => a.localeCompare(b),
+)
 
 export default function LeadsPage() {
-  const [leads, setLeads] = useState<Lead[]>(mockLeads)
   const [newLeadOpen, setNewLeadOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [filters, setFilters] = useState<LeadFilterState>(DEFAULT_FILTERS)
@@ -126,58 +127,41 @@ export default function LeadsPage() {
     [visibleCols],
   )
 
-  const filtered = useMemo(() => {
-    const q = filters.search.trim().toLowerCase()
-    const rows = leads.filter((lead) => {
-      if (onlyDuplicates && !lead.possibileDuplicato) return false
-      if (q) {
-        const haystack = [
-          lead["Nome Lead"],
-          lead["E-mail"],
-          lead.Telefono,
-        ]
-          .join(" ")
-          .toLowerCase()
-        if (!haystack.includes(q)) return false
-      }
-      if (filters.stato !== "all" && lead["Stato Lead"] !== filters.stato)
-        return false
-      if (filters.sede !== "all" && lead.Sede !== filters.sede) return false
-      if (
-        filters.commerciale !== "all" &&
-        lead["Lead Proprietario"] !== filters.commerciale
-      )
-        return false
-      if (filters.origine !== "all" && lead["Origine Lead"] !== filters.origine)
-        return false
-      if (filters.tag !== "all" && !lead.Tag.includes(filters.tag)) return false
-      if (!matchesScore(lead.Valutazione, filters.score)) return false
-      if (!matchesAdvanced(lead, advanced)) return false
-      return true
-    })
+  // Parametri di query inviati al server (paginazione/filtri/ordinamento/proiezione)
+  const params: LeadListParams = {
+    page,
+    pageSize: rowsPerPage,
+    sortBy,
+    sortDir,
+    search: filters.search,
+    stato: filters.stato,
+    sede: filters.sede,
+    commerciale: filters.commerciale,
+    origine: filters.origine,
+    tag: filters.tag,
+    score: filters.score,
+    onlyDuplicates,
+    advanced,
+    fields: visibleCols as unknown as string[],
+  }
 
-    if (sortBy) {
-      rows.sort((a, b) => {
-        const av = a[sortBy]
-        const bv = b[sortBy]
-        let cmp = 0
-        if (typeof av === "number" && typeof bv === "number") {
-          cmp = av - bv
-        } else {
-          cmp = String(av ?? "").localeCompare(String(bv ?? ""), "it")
-        }
-        return sortDir === "asc" ? cmp : -cmp
-      })
-    }
-    return rows
-  }, [filters, advanced, onlyDuplicates, sortBy, sortDir, leads])
+  const { data, isFetching, isError } = useLeadsQuery(params)
+  const { data: stats } = useLeadStats()
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
-  const currentPage = Math.min(page, totalPages)
-  const start = (currentPage - 1) * rowsPerPage
-  const pageRows = filtered.slice(start, start + rowsPerPage)
-  const rangeStart = filtered.length === 0 ? 0 : start + 1
-  const rangeEnd = Math.min(start + rowsPerPage, filtered.length)
+  const createLead = useCreateLead()
+  const deleteLead = useDeleteLead()
+  const updateLead = useUpdateLead()
+  const bulk = useBulkLeads()
+
+  // Le righe sono proiezioni selettive; la tabella usa solo i campi inclusi.
+  const pageRows = (data?.rows ?? []) as Lead[]
+  const total = data?.total ?? 0
+  const headerTotal = stats?.total ?? LEAD_TOTAL
+
+  const totalPages = Math.max(1, Math.ceil(total / rowsPerPage))
+  const start = (page - 1) * rowsPerPage
+  const rangeStart = total === 0 ? 0 : start + 1
+  const rangeEnd = Math.min(start + rowsPerPage, total)
 
   const handleFilterChange = (next: LeadFilterState) => {
     setFilters(next)
@@ -196,9 +180,15 @@ export default function LeadsPage() {
     setPage(1)
   }
 
-  // Inserisce un nuovo lead in cima all'elenco e riporta alla prima pagina
+  // Crea un nuovo lead via API e torna alla prima pagina
   const handleCreateLead = (lead: Lead) => {
-    setLeads((prev) => [lead, ...prev])
+    createLead.mutate(lead, {
+      onSuccess: () =>
+        toast.success("Lead creato", {
+          description: `${lead["Nome Lead"]} aggiunto al CRM.`,
+        }),
+      onError: () => toast.error("Creazione non riuscita"),
+    })
     setFilters(DEFAULT_FILTERS)
     setAdvanced(EMPTY_ADVANCED)
     setOnlyDuplicates(false)
@@ -206,9 +196,9 @@ export default function LeadsPage() {
     setPage(1)
   }
 
-  // Controllo duplicati manuale (avviato da menu): scansiona email/telefono
+  // Controllo duplicati: usa il conteggio aggregato dalle statistiche
   const handleCheckDuplicates = () => {
-    const found = mockLeads.filter((l) => l.possibileDuplicato).length
+    const found = stats?.duplicati ?? 0
     if (found === 0) {
       toast.success("Nessun duplicato trovato", {
         description: "Tutti i lead risultano univoci per email e telefono.",
@@ -229,6 +219,7 @@ export default function LeadsPage() {
       setSortBy(col)
       setSortDir("asc")
     }
+    setPage(1)
   }
 
   const toggle = (id: string) => {
@@ -250,18 +241,16 @@ export default function LeadsPage() {
     })
   }
 
+  // Righe selezionate disponibili nella pagina corrente (per la toolbar)
   const selectedRows = useMemo(
-    () => filtered.filter((l) => selected.has(l.id)),
-    [filtered, selected],
+    () => pageRows.filter((l) => selected.has(l.id)),
+    [pageRows, selected],
   )
+  const selectedIds = useMemo(() => Array.from(selected), [selected])
 
   const handleBulkOwner = (owner: string) => {
     const n = selected.size
-    setLeads((prev) =>
-      prev.map((l) =>
-        selected.has(l.id) ? { ...l, "Lead Proprietario": owner } : l,
-      ),
-    )
+    bulk.mutate({ action: "transfer", ids: selectedIds, value: owner })
     toast.success("Proprietario aggiornato", {
       description: `${n} lead assegnati a ${owner}.`,
     })
@@ -270,11 +259,12 @@ export default function LeadsPage() {
 
   const handleBulkStato = (stato: string) => {
     const n = selected.size
-    setLeads((prev) =>
-      prev.map((l) =>
-        selected.has(l.id) ? { ...l, "Stato Lead": stato as Lead["Stato Lead"] } : l,
-      ),
-    )
+    bulk.mutate({
+      action: "update",
+      ids: selectedIds,
+      field: "Stato Lead",
+      value: stato,
+    })
     toast.success("Stato aggiornato", {
       description: `${n} lead impostati su "${stato}".`,
     })
@@ -282,18 +272,12 @@ export default function LeadsPage() {
   }
 
   // Aggiornamento di massa generico su Stato Lead / Sede / Tag
-  const handleBulkUpdate = (field: "Stato Lead" | "Sede" | "Tag", value: string) => {
+  const handleBulkUpdate = (
+    field: "Stato Lead" | "Sede" | "Tag",
+    value: string,
+  ) => {
     const n = selected.size
-    setLeads((prev) =>
-      prev.map((l) => {
-        if (!selected.has(l.id)) return l
-        if (field === "Tag") {
-          const next = l.Tag.includes(value) ? l.Tag : [...l.Tag, value]
-          return { ...l, Tag: next }
-        }
-        return { ...l, [field]: value } as Lead
-      }),
-    )
+    bulk.mutate({ action: "update", ids: selectedIds, field, value })
     toast.success("Lead aggiornati", {
       description: `${field} impostato su "${value}" per ${n} lead.`,
     })
@@ -302,13 +286,7 @@ export default function LeadsPage() {
 
   const handleBulkConvert = () => {
     const n = selected.size
-    setLeads((prev) =>
-      prev.map((l) =>
-        selected.has(l.id)
-          ? { ...l, "Stato Lead": "Convertito" as Lead["Stato Lead"] }
-          : l,
-      ),
-    )
+    bulk.mutate({ action: "convert", ids: selectedIds })
     toast.success("Lead convertiti", {
       description: `${n} lead convertiti in clienti.`,
     })
@@ -327,36 +305,72 @@ export default function LeadsPage() {
       setSelected(new Set())
       return
     }
-    const remove = new Set(idsToRemove)
-    setLeads((prev) => prev.filter((l) => !remove.has(l.id)))
+    bulk.mutate({ action: "delete", ids: idsToRemove })
     toast.success("Duplicati uniti", {
       description: `${idsToRemove.length} record duplicati rimossi.`,
     })
     setSelected(new Set())
   }
 
-  const handleBulkExport = () => {
-    downloadLeadsCsv(selectedRows, `lead-selezione-${selectedRows.length}.csv`)
-    toast.success("Esportazione avviata", {
-      description: `${selectedRows.length} lead esportati in CSV.`,
-    })
+  const handleBulkExport = async () => {
+    try {
+      const all = await fetchLeadsForExport(params)
+      const sel = new Set(selectedIds)
+      const rows = all.filter((r) => sel.has(r.id))
+      downloadLeadsCsv(rows, `lead-selezione-${rows.length}.csv`)
+      toast.success("Esportazione avviata", {
+        description: `${rows.length} lead esportati in CSV.`,
+      })
+    } catch {
+      toast.error("Esportazione non riuscita")
+    }
   }
 
-  const handleExportFiltered = () => {
-    downloadLeadsCsv(filtered, `lead-filtrati-${filtered.length}.csv`)
-    toast.success("Esportazione avviata", {
-      description: `${filtered.length} lead filtrati esportati.`,
-    })
+  const handleExportFiltered = async () => {
+    try {
+      const rows = await fetchLeadsForExport(params)
+      downloadLeadsCsv(rows, `lead-filtrati-${rows.length}.csv`)
+      toast.success("Esportazione avviata", {
+        description: `${rows.length} lead filtrati esportati.`,
+      })
+    } catch {
+      toast.error("Esportazione non riuscita")
+    }
   }
 
   const confirmBulkDelete = () => {
     const n = selected.size
-    setLeads((prev) => prev.filter((l) => !selected.has(l.id)))
-    toast.success("Lead eliminati", {
-      description: `${n} lead rimossi.`,
-    })
+    bulk.mutate({ action: "delete", ids: selectedIds })
+    toast.success("Lead eliminati", { description: `${n} lead rimossi.` })
     setBulkDeleteOpen(false)
     setSelected(new Set())
+  }
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return
+    const name = deleteTarget["Nome Lead"]
+    deleteLead.mutate(deleteTarget.id, {
+      onSuccess: () =>
+        toast.success("Lead eliminato", { description: `${name} rimosso.` }),
+      onError: () => toast.error("Eliminazione non riuscita"),
+    })
+    setDeleteTarget(null)
+  }
+
+  const confirmConvert = () => {
+    if (!convertTarget) return
+    const name = convertTarget["Nome Lead"]
+    updateLead.mutate(
+      { id: convertTarget.id, patch: { "Stato Lead": "Convertito" } },
+      {
+        onSuccess: () =>
+          toast.success("Lead convertito", {
+            description: `${name} convertito in cliente.`,
+          }),
+        onError: () => toast.error("Conversione non riuscita"),
+      },
+    )
+    setConvertTarget(null)
   }
 
   // Apre lo sheet impostazioni su una specifica sezione (es. da menu Azioni)
@@ -370,9 +384,17 @@ export default function LeadsPage() {
       {/* Header pagina */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-0.5">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Lead</h1>
-          <p className="text-sm text-muted-foreground">
-            {LEAD_TOTAL.toLocaleString("it-IT")} lead totali nel CRM
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Lead
+          </h1>
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            {headerTotal.toLocaleString("it-IT")} lead totali nel CRM
+            {isFetching ? (
+              <Loader2
+                className="size-3.5 animate-spin text-muted-foreground"
+                aria-label="Aggiornamento in corso"
+              />
+            ) : null}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -406,7 +428,7 @@ export default function LeadsPage() {
           {/* Menu azioni (cambia in base alla selezione) */}
           <LeadActionsMenu
             selectedCount={selected.size}
-            filtered={filtered}
+            filtered={pageRows}
             selectedRows={selectedRows}
             tags={ALL_TAGS}
             onOpenSettings={openSettings}
@@ -466,6 +488,13 @@ export default function LeadsPage() {
         </div>
       </div>
 
+      {/* Stato errore */}
+      {isError ? (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          Errore nel caricamento dei lead. Riprova.
+        </div>
+      ) : null}
+
       {/* Tabella */}
       <LeadTable
         leads={pageRows}
@@ -485,7 +514,7 @@ export default function LeadsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground">
-            {rangeStart}-{rangeEnd} di {filtered.length}
+            {rangeStart}-{rangeEnd} di {total.toLocaleString("it-IT")}
             {selected.size > 0 ? ` · ${selected.size} selezionati` : ""}
           </span>
           <Select
@@ -516,20 +545,20 @@ export default function LeadsPage() {
             size="sm"
             variant="outline"
             className="bg-card"
-            disabled={currentPage <= 1}
+            disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
           >
             <ChevronLeft data-icon="inline-start" />
             Precedente
           </Button>
           <span className="text-sm tabular-nums text-muted-foreground">
-            {currentPage} / {totalPages}
+            {page} / {totalPages}
           </span>
           <Button
             size="sm"
             variant="outline"
             className="bg-card"
-            disabled={currentPage >= totalPages}
+            disabled={page >= totalPages}
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
           >
             Successivo
@@ -592,7 +621,7 @@ export default function LeadsPage() {
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>
               Annulla
             </Button>
-            <Button variant="destructive" onClick={() => setDeleteTarget(null)}>
+            <Button variant="destructive" onClick={confirmDelete}>
               Elimina
             </Button>
           </DialogFooter>
@@ -612,7 +641,8 @@ export default function LeadsPage() {
               <span className="font-semibold text-foreground">
                 {convertTarget?.["Nome Lead"] ?? ""}
               </span>{" "}
-              in cliente? Verrà creata una nuova scheda cliente con i dati del lead.
+              in cliente? Verrà creata una nuova scheda cliente con i dati del
+              lead.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -621,7 +651,7 @@ export default function LeadsPage() {
             </Button>
             <Button
               className="bg-teal text-teal-foreground hover:bg-teal/90"
-              onClick={() => setConvertTarget(null)}
+              onClick={confirmConvert}
             >
               Converti
             </Button>

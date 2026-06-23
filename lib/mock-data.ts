@@ -3124,3 +3124,378 @@ export const mockScadenze: Scadenza[] = [
 export function getScadenzaById(id: string): Scadenza | undefined {
   return mockScadenze.find((s) => s.id === id)
 }
+
+// ============================================================================
+// Installatori
+// ----------------------------------------------------------------------------
+// Modulo Installatori: anagrafica delle aziende installatrici partner.
+// Stessa impostazione di Clienti (tabella, filtri, impostazioni, tag).
+// ============================================================================
+
+export type InstallatoreStato = "Attivo" | "Inattivo"
+
+export const INSTALLATORE_STATO_VALUES: InstallatoreStato[] = [
+  "Attivo",
+  "Inattivo",
+]
+
+export const INSTALLATORE_STATO_TONE: Record<
+  InstallatoreStato,
+  "success" | "destructive"
+> = {
+  Attivo: "success",
+  Inattivo: "destructive",
+}
+
+// Proprietari (account manager) degli installatori
+export const mockInstallatoreProprietari: string[] = [
+  "Paola Polimeni",
+  "Donato D'Urso",
+  "Gaetano Grasso",
+  "Mariarosa De Leo",
+]
+
+export interface InstallatoreRecord {
+  id: string
+
+  // --- Base ---
+  "Badge dell'attività": boolean
+  "Badge di nota": boolean
+  Tag: string[]
+  "Nome Installatore": string
+  "E-mail": string
+  "Proprietario di Installatore"?: string
+  "Ora modifica": string
+  Stato: InstallatoreStato
+
+  // --- Anagrafica ---
+  "Persona di riferimento"?: string
+  "E-mail secondaria"?: string
+  Cellulare?: string
+  "Altro telefono"?: string
+  "Partita IVA"?: string
+  "Connesso a"?: string
+  "Creato da"?: string
+  "Modificato da"?: string
+  "Ora creazione"?: string
+  "Ora ultima attività"?: string
+
+  // --- Indirizzo postale ---
+  "Via indirizzo postale"?: string
+  "Città indirizzo postale"?: string
+  "Provincia indirizzo postale"?: string
+  "Codice postale indirizzo"?: string
+
+  // --- Note e stato ---
+  "Opt-out e-mail"?: boolean
+  Bloccato?: boolean
+  "Modalità iscrizione annullata"?: string | null
+  "Ora iscrizione annullata"?: string | null
+  Note?: string
+}
+
+export type InstallatoreColumnId = Exclude<keyof InstallatoreRecord, "id">
+
+export type InstallatoreColumnGroup =
+  | "Base"
+  | "Anagrafica"
+  | "Indirizzo postale"
+  | "Note e stato"
+
+export const INSTALLATORE_COLUMN_GROUPS: InstallatoreColumnGroup[] = [
+  "Base",
+  "Anagrafica",
+  "Indirizzo postale",
+  "Note e stato",
+]
+
+export interface InstallatoreColumn {
+  id: InstallatoreColumnId
+  label: string
+  group: InstallatoreColumnGroup
+  defaultVisible?: boolean
+}
+
+export const INSTALLATORE_COLUMNS: InstallatoreColumn[] = [
+  // Base
+  { id: "Badge dell'attività", label: "Badge dell'attività", group: "Base", defaultVisible: true },
+  { id: "Badge di nota", label: "Badge di nota", group: "Base", defaultVisible: true },
+  { id: "Tag", label: "Tag", group: "Base", defaultVisible: true },
+  { id: "Nome Installatore", label: "Nome Installatore", group: "Base", defaultVisible: true },
+  { id: "E-mail", label: "E-mail", group: "Base", defaultVisible: true },
+  { id: "Proprietario di Installatore", label: "Proprietario di Installatore", group: "Base", defaultVisible: true },
+  { id: "Ora modifica", label: "Ora modifica", group: "Base", defaultVisible: true },
+  { id: "Stato", label: "Stato", group: "Base", defaultVisible: true },
+  // Anagrafica
+  { id: "Persona di riferimento", label: "Persona di riferimento", group: "Anagrafica" },
+  { id: "E-mail secondaria", label: "E-mail secondaria", group: "Anagrafica" },
+  { id: "Cellulare", label: "Cellulare", group: "Anagrafica" },
+  { id: "Altro telefono", label: "Altro telefono", group: "Anagrafica" },
+  { id: "Partita IVA", label: "Partita IVA", group: "Anagrafica" },
+  { id: "Connesso a", label: "Connesso a", group: "Anagrafica" },
+  { id: "Creato da", label: "Creato da", group: "Anagrafica" },
+  { id: "Modificato da", label: "Modificato da", group: "Anagrafica" },
+  { id: "Ora creazione", label: "Ora creazione", group: "Anagrafica" },
+  { id: "Ora ultima attività", label: "Ora ultima attività", group: "Anagrafica" },
+  // Indirizzo postale
+  { id: "Via indirizzo postale", label: "Via indirizzo postale", group: "Indirizzo postale" },
+  { id: "Città indirizzo postale", label: "Città indirizzo postale", group: "Indirizzo postale" },
+  { id: "Provincia indirizzo postale", label: "Provincia indirizzo postale", group: "Indirizzo postale" },
+  { id: "Codice postale indirizzo", label: "Codice postale indirizzo", group: "Indirizzo postale" },
+  // Note e stato
+  { id: "Opt-out e-mail", label: "Opt-out e-mail", group: "Note e stato" },
+  { id: "Bloccato", label: "Bloccato", group: "Note e stato" },
+  { id: "Modalità iscrizione annullata", label: "Modalità iscrizione annullata", group: "Note e stato" },
+  { id: "Ora iscrizione annullata", label: "Ora iscrizione annullata", group: "Note e stato" },
+  { id: "Note", label: "Note", group: "Note e stato" },
+]
+
+export const DEFAULT_INSTALLATORE_COLUMNS: InstallatoreColumnId[] = [
+  "Badge dell'attività",
+  "Badge di nota",
+  "Tag",
+  "Nome Installatore",
+  "E-mail",
+  "Proprietario di Installatore",
+  "Ora modifica",
+]
+
+export const INSTALLATORI_TOTAL = 9
+
+export const mockInstallatoriRecords: InstallatoreRecord[] = [
+  {
+    id: "inst-001",
+    "Badge dell'attività": false,
+    "Badge di nota": false,
+    Tag: ["Convenzionato"],
+    "Nome Installatore": "Ettroimpianti srl",
+    "E-mail": "elettroimpiantimurgano@gmail.com",
+    "Proprietario di Installatore": "Paola Polimeni",
+    "Ora modifica": "15/06/2026 10:07 AM",
+    Stato: "Attivo",
+    "Persona di riferimento": "Salvatore Murgano",
+    Cellulare: "+39 333 1122334",
+    "Partita IVA": "IT01234560871",
+    "Connesso a": "Ettroimpianti srl",
+    "Creato da": "Paola Polimeni",
+    "Modificato da": "Paola Polimeni",
+    "Ora creazione": "02/02/2024 09:00 AM",
+    "Ora ultima attività": "15/06/2026 10:07 AM",
+    "Città indirizzo postale": "Catania",
+    "Provincia indirizzo postale": "CT",
+    "Opt-out e-mail": false,
+    Bloccato: false,
+    "Modalità iscrizione annullata": null,
+    "Ora iscrizione annullata": null,
+  },
+  {
+    id: "inst-002",
+    "Badge dell'attività": false,
+    "Badge di nota": false,
+    Tag: ["Partner", "Certificato"],
+    "Nome Installatore": "Pm-technology _Massimo Popano",
+    "E-mail": "tecnico@pm-technology.eu",
+    "Proprietario di Installatore": "Paola Polimeni",
+    "Ora modifica": "09/06/2026 03:08 PM",
+    Stato: "Attivo",
+    "Persona di riferimento": "Massimo Popano",
+    Cellulare: "+39 347 9988776",
+    "Partita IVA": "IT04567890873",
+    "Connesso a": "PM-Technology",
+    "Creato da": "Paola Polimeni",
+    "Modificato da": "Paola Polimeni",
+    "Ora creazione": "11/03/2024 14:20 PM",
+    "Ora ultima attività": "09/06/2026 03:08 PM",
+    "Città indirizzo postale": "Treviso",
+    "Provincia indirizzo postale": "TV",
+    "Opt-out e-mail": false,
+    Bloccato: false,
+    "Modalità iscrizione annullata": null,
+    "Ora iscrizione annullata": null,
+  },
+  {
+    id: "inst-003",
+    "Badge dell'attività": false,
+    "Badge di nota": false,
+    Tag: ["Certificato"],
+    "Nome Installatore": "DIESSE IMPIANTI",
+    "E-mail": "matteo@impretek.it",
+    "Proprietario di Installatore": "Paola Polimeni",
+    "Ora modifica": "01/12/2025 12:37 PM",
+    Stato: "Attivo",
+    "Persona di riferimento": "Matteo Diesse",
+    Cellulare: "+39 320 4455667",
+    "Partita IVA": "IT07654320874",
+    "Connesso a": "DIESSE IMPIANTI",
+    "Creato da": "Paola Polimeni",
+    "Modificato da": "Paola Polimeni",
+    "Ora creazione": "18/05/2024 10:05 AM",
+    "Ora ultima attività": "01/12/2025 12:37 PM",
+    "Città indirizzo postale": "Torino",
+    "Provincia indirizzo postale": "TO",
+    "Opt-out e-mail": false,
+    Bloccato: false,
+    "Modalità iscrizione annullata": null,
+    "Ora iscrizione annullata": null,
+  },
+  {
+    id: "inst-004",
+    "Badge dell'attività": false,
+    "Badge di nota": false,
+    Tag: [],
+    "Nome Installatore": "DG Impianti",
+    "E-mail": "info@dgimpiantitalia.com",
+    "Proprietario di Installatore": "Paola Polimeni",
+    "Ora modifica": "22/10/2025 10:21 AM",
+    Stato: "Attivo",
+    "Persona di riferimento": "Daniele Greco",
+    Cellulare: "+39 366 5566778",
+    "Partita IVA": "IT09876540875",
+    "Connesso a": "DG Impianti",
+    "Creato da": "Paola Polimeni",
+    "Modificato da": "Paola Polimeni",
+    "Ora creazione": "07/09/2024 16:40 PM",
+    "Ora ultima attività": "22/10/2025 10:21 AM",
+    "Città indirizzo postale": "Giarre",
+    "Provincia indirizzo postale": "CT",
+    "Opt-out e-mail": false,
+    Bloccato: false,
+    "Modalità iscrizione annullata": null,
+    "Ora iscrizione annullata": null,
+  },
+  {
+    id: "inst-005",
+    "Badge dell'attività": false,
+    "Badge di nota": true,
+    Tag: ["Sospeso"],
+    "Nome Installatore": "Tarna Group",
+    "E-mail": "ufficio.tecnico@tarnagroup.it",
+    "Proprietario di Installatore": "Paola Polimeni",
+    "Ora modifica": "27/11/2025 07:34 AM",
+    Stato: "Inattivo",
+    "Persona di riferimento": "Luca Tarna",
+    Cellulare: "+39 351 1239876",
+    "Partita IVA": "IT02233440876",
+    "Connesso a": "Tarna Group",
+    "Creato da": "Paola Polimeni",
+    "Modificato da": "Paola Polimeni",
+    "Ora creazione": "14/01/2024 11:00 AM",
+    "Ora ultima attività": "27/11/2025 07:34 AM",
+    "Città indirizzo postale": "Porto Sant'Elpidio",
+    "Provincia indirizzo postale": "FM",
+    "Opt-out e-mail": true,
+    Bloccato: true,
+    "Modalità iscrizione annullata": "Manuale",
+    "Ora iscrizione annullata": "27/11/2025 07:34 AM",
+    Note: "Collaborazione sospesa in attesa di rinnovo certificazioni.",
+  },
+  {
+    id: "inst-006",
+    "Badge dell'attività": false,
+    "Badge di nota": true,
+    Tag: ["Preferito", "Zona Sicilia"],
+    "Nome Installatore": "Bmax di Beatrice Piepoli",
+    "E-mail": "Bmaxservice777@gmail.com",
+    "Proprietario di Installatore": "Paola Polimeni",
+    "Ora modifica": "12/06/2025 09:41 AM",
+    Stato: "Attivo",
+    "Persona di riferimento": "Beatrice Piepoli",
+    Cellulare: "+39 333 7778899",
+    "Partita IVA": "IT05566770877",
+    "Connesso a": "Bmax",
+    "Creato da": "Paola Polimeni",
+    "Modificato da": "Paola Polimeni",
+    "Ora creazione": "22/02/2024 09:30 AM",
+    "Ora ultima attività": "12/06/2025 09:41 AM",
+    "Città indirizzo postale": "Catania",
+    "Provincia indirizzo postale": "CT",
+    "Opt-out e-mail": false,
+    Bloccato: false,
+    "Modalità iscrizione annullata": null,
+    "Ora iscrizione annullata": null,
+    Note: "Installatore di fiducia per la zona di Catania.",
+  },
+  {
+    id: "inst-007",
+    "Badge dell'attività": false,
+    "Badge di nota": true,
+    Tag: ["Manutenzione"],
+    "Nome Installatore": "Ca.Gi Srl",
+    "E-mail": "peppebellanca@live.it",
+    "Proprietario di Installatore": "Paola Polimeni",
+    "Ora modifica": "04/06/2026 11:25 AM",
+    Stato: "Attivo",
+    "Persona di riferimento": "Giuseppe Bellanca",
+    Cellulare: "+39 340 1112233",
+    "Partita IVA": "IT06677880878",
+    "Connesso a": "Ca.Gi Srl",
+    "Creato da": "Paola Polimeni",
+    "Modificato da": "Paola Polimeni",
+    "Ora creazione": "30/04/2024 15:10 PM",
+    "Ora ultima attività": "04/06/2026 11:25 AM",
+    "Città indirizzo postale": "Catania",
+    "Provincia indirizzo postale": "CT",
+    "Opt-out e-mail": false,
+    Bloccato: false,
+    "Modalità iscrizione annullata": null,
+    "Ora iscrizione annullata": null,
+    Note: "Gestisce le manutenzioni programmate degli impianti.",
+  },
+  {
+    id: "inst-008",
+    "Badge dell'attività": false,
+    "Badge di nota": true,
+    Tag: ["Partner", "Preferito"],
+    "Nome Installatore": "Solair Group srl",
+    "E-mail": "",
+    "Proprietario di Installatore": "Paola Polimeni",
+    "Ora modifica": "09/07/2025 09:20 AM",
+    Stato: "Attivo",
+    "Persona di riferimento": "Ufficio tecnico",
+    Cellulare: "+39 095 7654321",
+    "Partita IVA": "IT07788990879",
+    "Connesso a": "Solair Group srl",
+    "Creato da": "Paola Polimeni",
+    "Modificato da": "Paola Polimeni",
+    "Ora creazione": "09/07/2024 09:20 AM",
+    "Ora ultima attività": "09/07/2025 09:20 AM",
+    "Città indirizzo postale": "Catania",
+    "Provincia indirizzo postale": "CT",
+    "Opt-out e-mail": false,
+    Bloccato: false,
+    "Modalità iscrizione annullata": null,
+    "Ora iscrizione annullata": null,
+    Note: "Installatore interno del gruppo Solair.",
+  },
+  {
+    id: "inst-009",
+    "Badge dell'attività": false,
+    "Badge di nota": false,
+    Tag: ["Sospeso"],
+    "Nome Installatore": "Ecofinite di Salonia Stefania Maria",
+    "E-mail": "o.patania@ecofinite.it",
+    "Proprietario di Installatore": "Donato D'Urso",
+    "Ora modifica": "27/11/2025 07:34 AM",
+    Stato: "Inattivo",
+    "Persona di riferimento": "Orazio Patania",
+    Cellulare: "+39 328 9090909",
+    "Partita IVA": "IT08899000880",
+    "Connesso a": "Ecofinite",
+    "Creato da": "Donato D'Urso",
+    "Modificato da": "Donato D'Urso",
+    "Ora creazione": "03/06/2024 12:00 PM",
+    "Ora ultima attività": "27/11/2025 07:34 AM",
+    "Città indirizzo postale": "Treviso",
+    "Provincia indirizzo postale": "TV",
+    "Opt-out e-mail": true,
+    Bloccato: false,
+    "Modalità iscrizione annullata": "Automatica",
+    "Ora iscrizione annullata": "27/11/2025 07:34 AM",
+  },
+]
+
+export function getInstallatoreById(
+  id: string,
+): InstallatoreRecord | undefined {
+  return mockInstallatoriRecords.find((i) => i.id === id)
+}

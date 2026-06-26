@@ -12,6 +12,7 @@ import {
   CURRENT_USER,
   type NavItem,
 } from "@/lib/mock-data"
+import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
 import { NAV_ICONS } from "./icons"
 
 function isActive(href: string, pathname: string) {
@@ -52,6 +53,24 @@ function NavLink({ item }: { item: NavItem }) {
   )
 }
 
+function NavLauncherButton({ item }: { item: NavItem }) {
+  const Icon = NAV_ICONS[item.icon]
+  const { openLauncher } = useCrmSettingsLauncher()
+  return (
+    <button
+      type="button"
+      onClick={openLauncher}
+      className={cn(
+        "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+        "text-sidebar-foreground hover:bg-muted hover:text-foreground",
+      )}
+    >
+      <Icon className="size-[18px] shrink-0" />
+      <span className="flex-1 truncate text-left">{item.label}</span>
+    </button>
+  )
+}
+
 function NavSection({ title, items }: { title: string; items: NavItem[] }) {
   return (
     <div className="flex flex-col gap-1">
@@ -87,7 +106,7 @@ export function Sidebar() {
         {/* CRM Settings: solo admin, separata dalle voci operative */}
         {CURRENT_USER.ruoloKey === "admin" ? (
           <div className="mt-auto border-t border-sidebar-border pt-4">
-            <NavLink item={NAV_ADMIN} />
+            <NavLauncherButton item={NAV_ADMIN} />
           </div>
         ) : null}
       </nav>

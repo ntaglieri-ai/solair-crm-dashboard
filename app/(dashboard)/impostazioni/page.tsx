@@ -105,6 +105,25 @@ export default function CrmSettingsPage() {
     if (!isAdmin) router.replace("/")
   }, [isAdmin, router])
 
+  // Deep-link da CRM Settings launcher: ?section=<id> seleziona la sezione.
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get("section")
+    const valid: SectionId[] = [
+      "utenti",
+      "ruoli",
+      "file-manager",
+      "make",
+      "audit",
+      "sedi",
+      "attributi",
+      "valori",
+      "regole",
+    ]
+    if (param && valid.includes(param as SectionId)) {
+      setActive(param as SectionId)
+    }
+  }, [])
+
   if (!isAdmin) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">

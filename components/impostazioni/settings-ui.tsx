@@ -69,6 +69,33 @@ export function SectionHeader({
   )
 }
 
+/** Card metrica per le stat row (etichetta + valore grande + icona opzionale). */
+export function StatCard({
+  label,
+  value,
+  icon,
+}: {
+  label: string
+  value: ReactNode
+  icon?: ReactNode
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3.5">
+      <div className="flex flex-col gap-0.5">
+        <span className="text-xs font-medium text-muted-foreground">{label}</span>
+        <span className="text-2xl font-semibold tabular-nums text-foreground">
+          {value}
+        </span>
+      </div>
+      {icon ? (
+        <div className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+          {icon}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 /** Pallino colorato (usato per i valori configurabili). */
 export function ColorDot({ color }: { color: string }) {
   return (

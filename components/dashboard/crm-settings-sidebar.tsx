@@ -67,7 +67,7 @@ const ACCOUNT_SECURITY_BLOCKS: SubBlock[] = [
     icon: Users,
     title: "Account Management",
     description: "Utenti, ruoli e sedi assegnate",
-    href: "/impostazioni?section=utenti",
+    href: "/crm-settings/account/utenti",
     image:
       "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&q=80",
   },
@@ -75,7 +75,7 @@ const ACCOUNT_SECURITY_BLOCKS: SubBlock[] = [
     icon: Shield,
     title: "Permission Management",
     description: "Permessi per ruolo su pagine, record e cartelle",
-    href: "/impostazioni?section=ruoli",
+    href: "/crm-settings/account/permessi",
     image:
       "https://images.unsplash.com/photo-1563986768494-4dee2763ff3f?w=800&q=80",
   },
@@ -83,7 +83,7 @@ const ACCOUNT_SECURITY_BLOCKS: SubBlock[] = [
     icon: ClipboardList,
     title: "Audit & Log",
     description: "Storico accessi, modifiche e login falliti",
-    href: "/impostazioni?section=audit",
+    href: "/crm-settings/account/audit",
     image:
       "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80",
   },
@@ -91,7 +91,7 @@ const ACCOUNT_SECURITY_BLOCKS: SubBlock[] = [
     icon: Lock,
     title: "Session & Access",
     description: "Timeout, 2FA e dispositivi autorizzati",
-    href: "/impostazioni?section=utenti",
+    href: "/crm-settings/account/session",
     image:
       "https://images.unsplash.com/photo-1510511459019-5dda7724fd87?w=800&q=80",
   },

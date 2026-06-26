@@ -3,30 +3,26 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
-  IconUsers,
-  IconFolders,
-  IconPlugConnected,
-  IconHistory,
-  IconBuildingStore,
-  IconForms,
-  IconAdjustments,
-  IconRouteAltLeft,
-  IconChevronRight,
-  type Icon,
-} from "@tabler/icons-react"
+  Users,
+  Shield,
+  FolderOpen,
+  Zap,
+  ClipboardList,
+  Building2,
+  Settings2,
+  ListFilter,
+  ChevronRight,
+  type LucideIcon,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CURRENT_USER } from "@/lib/mock-data"
 import { UtentiSection } from "@/components/impostazioni/utenti-section"
-import { FileManagerSection } from "@/components/impostazioni/file-manager-section"
-import { MakeSection } from "@/components/impostazioni/make-section"
-import { AuditLogSection } from "@/components/impostazioni/audit-log-section"
-import { SediSection } from "@/components/impostazioni/sedi-section"
-import { AttributiSection } from "@/components/impostazioni/attributi-section"
-import { ValoriSection } from "@/components/impostazioni/valori-section"
-import { RegoleSection } from "@/components/impostazioni/regole-section"
+import { RuoliSection } from "@/components/impostazioni/ruoli-section"
+import { PlaceholderSection } from "@/components/impostazioni/placeholder-section"
 
 type SectionId =
   | "utenti"
+  | "ruoli"
   | "file-manager"
   | "make"
   | "audit"
@@ -38,21 +34,22 @@ type SectionId =
 interface SectionDef {
   id: SectionId
   label: string
-  icon: Icon
+  icon: LucideIcon
 }
 
 const ADMIN_SECTIONS: SectionDef[] = [
-  { id: "utenti", label: "Utenti e ruoli", icon: IconUsers },
-  { id: "file-manager", label: "File manager", icon: IconFolders },
-  { id: "make", label: "Integrazione Make", icon: IconPlugConnected },
-  { id: "audit", label: "Audit log", icon: IconHistory },
+  { id: "utenti", label: "Utenti", icon: Users },
+  { id: "ruoli", label: "Ruoli e permessi", icon: Shield },
+  { id: "file-manager", label: "File manager", icon: FolderOpen },
+  { id: "make", label: "Integrazione Make", icon: Zap },
+  { id: "audit", label: "Audit log", icon: ClipboardList },
 ]
 
 const GENERAL_SECTIONS: SectionDef[] = [
-  { id: "sedi", label: "Sedi", icon: IconBuildingStore },
-  { id: "attributi", label: "Attributi record", icon: IconForms },
-  { id: "valori", label: "Valori configurabili", icon: IconAdjustments },
-  { id: "regole", label: "Regole di assegnazione", icon: IconRouteAltLeft },
+  { id: "sedi", label: "Sedi", icon: Building2 },
+  { id: "attributi", label: "Attributi record", icon: Settings2 },
+  { id: "valori", label: "Valori configurabili", icon: Settings2 },
+  { id: "regole", label: "Regole di assegnazione", icon: ListFilter },
 ]
 
 function NavGroup({
@@ -81,13 +78,15 @@ function NavGroup({
             onClick={() => onSelect(s.id)}
             aria-current={isActive ? "true" : undefined}
             className={cn(
-              "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium transition-colors",
+              "flex items-center gap-2.5 rounded-r-lg border-l-2 px-2.5 py-2 text-left text-sm font-medium transition-colors",
               isActive
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                ? "border-teal bg-teal/8 text-foreground"
+                : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
           >
-            <Icon size={18} stroke={1.8} className="shrink-0" />
+            <Icon
+              className={cn("size-[18px] shrink-0", isActive && "text-teal")}
+            />
             <span className="flex-1 truncate">{s.label}</span>
           </button>
         )
@@ -125,7 +124,7 @@ export default function CrmSettingsPage() {
           className="flex items-center gap-1.5 text-sm text-muted-foreground"
         >
           <span>Solair CRM</span>
-          <IconChevronRight size={14} stroke={2} />
+          <ChevronRight className="size-3.5" />
           <span className="font-medium text-foreground">CRM Settings</span>
         </nav>
         <div className="flex flex-wrap items-center gap-3">
@@ -140,7 +139,7 @@ export default function CrmSettingsPage() {
 
       <div className="flex flex-col gap-6 lg:flex-row">
         {/* Navigazione sezioni */}
-        <aside className="lg:w-[220px] lg:shrink-0">
+        <aside className="lg:w-[240px] lg:shrink-0">
           <div className="flex flex-col gap-5 lg:sticky lg:top-6">
             <NavGroup
               title="Administrative & Security"
@@ -160,13 +159,56 @@ export default function CrmSettingsPage() {
         {/* Contenuto sezione */}
         <section className="min-w-0 flex-1">
           {active === "utenti" && <UtentiSection />}
-          {active === "file-manager" && <FileManagerSection />}
-          {active === "make" && <MakeSection />}
-          {active === "audit" && <AuditLogSection />}
-          {active === "sedi" && <SediSection />}
-          {active === "attributi" && <AttributiSection />}
-          {active === "valori" && <ValoriSection />}
-          {active === "regole" && <RegoleSection />}
+          {active === "ruoli" && <RuoliSection />}
+          {active === "file-manager" && (
+            <PlaceholderSection
+              title="File manager"
+              description="Collega un provider di archiviazione per sincronizzare i documenti del CRM."
+              icon={FolderOpen}
+            />
+          )}
+          {active === "make" && (
+            <PlaceholderSection
+              title="Integrazione Make"
+              description="Automatizza i flussi di lavoro collegando il CRM a Make."
+              icon={Zap}
+            />
+          )}
+          {active === "audit" && (
+            <PlaceholderSection
+              title="Audit log"
+              description="Traccia le azioni e le modifiche effettuate nel CRM."
+              icon={ClipboardList}
+            />
+          )}
+          {active === "sedi" && (
+            <PlaceholderSection
+              title="Sedi"
+              description="Gestisci le sedi operative dell'azienda."
+              icon={Building2}
+            />
+          )}
+          {active === "attributi" && (
+            <PlaceholderSection
+              title="Attributi record"
+              description="Configura i campi personalizzati per lead, clienti e attività."
+              icon={Settings2}
+            />
+          )}
+          {active === "valori" && (
+            <PlaceholderSection
+              title="Valori configurabili"
+              description="Gestisci gli elenchi di valori usati nei menu a tendina del CRM."
+              icon={Settings2}
+            />
+          )}
+          {active === "regole" && (
+            <PlaceholderSection
+              title="Regole di assegnazione"
+              description="Definisci come i nuovi lead vengono assegnati al team."
+              icon={ListFilter}
+            />
+          )}
         </section>
       </div>
     </div>

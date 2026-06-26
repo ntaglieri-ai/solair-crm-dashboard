@@ -1,21 +1,24 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { toast } from "sonner"
-import { IconPlus, IconKey } from "@tabler/icons-react"
+import {
+  Plus,
+  MapPin,
+  MoreHorizontal,
+  Search,
+  Pencil,
+  Shield,
+  Building2,
+  Power,
+  Trash2,
+} from "lucide-react"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Card } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import {
   Dialog,
   DialogContent,
@@ -25,392 +28,478 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
-import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { SectionHeader } from "@/components/impostazioni/settings-ui"
+import {
   mockUtenti,
   ROLE_LABEL,
-  SEDE_LABELS,
   type SettingsUser,
   type UserRole,
 } from "@/lib/mock-data"
 import {
-  RoleBadge,
-  InitialsAvatar,
-  SectionHeader,
-} from "@/components/impostazioni/settings-ui"
+  RUOLO_COLOR_CLASS,
+  USER_ROLE_COLORE,
+  SEDI_DISPONIBILI,
+} from "@/lib/ruoli-data"
 
-const ROLES: UserRole[] = ["admin", "commerciale", "tecnico"]
-const SEDI_OPTIONS = ["Mostag Studio", ...SEDE_LABELS] as const
+const ROLE_OPTIONS: UserRole[] = ["admin", "commerciale", "tecnico"]
 
-function initialsOf(nome: string): string {
-  return nome
-    .split(" ")
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase()
+function roleColorClass(ruolo: UserRole) {
+  return RUOLO_COLOR_CLASS[USER_ROLE_COLORE[ruolo]]
 }
 
-function AddUserDialog({
-  open,
-  onOpenChange,
-  onCreate,
-}: {
-  open: boolean
-  onOpenChange: (o: boolean) => void
-  onCreate: (u: SettingsUser) => void
-}) {
-  const [nome, setNome] = useState("")
-  const [email, setEmail] = useState("")
-  const [ruolo, setRuolo] = useState<UserRole>("commerciale")
-  const [sede, setSede] = useState<string>(SEDE_LABELS[0])
-
-  const valid = nome.trim() && email.trim()
-
-  const reset = () => {
-    setNome("")
-    setEmail("")
-    setRuolo("commerciale")
-    setSede(SEDE_LABELS[0])
-  }
-
-  const submit = () => {
-    if (!valid) return
-    onCreate({
-      id: `u-${Date.now()}`,
-      nome: nome.trim(),
-      iniziali: initialsOf(nome.trim()),
-      email: email.trim(),
-      ruolo,
-      sede: sede as SettingsUser["sede"],
-      attivo: true,
-    })
-    reset()
-    onOpenChange(false)
-  }
-
+/** Avatar circolare grande con iniziali e colore del ruolo. */
+function UserAvatar({ user }: { user: SettingsUser }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Aggiungi utente</DialogTitle>
-          <DialogDescription>
-            Invia un invito a un nuovo membro del team. Riceverà un&apos;email
-            per impostare la password.
-          </DialogDescription>
-        </DialogHeader>
+    <div
+      className={cn(
+        "flex size-12 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
+        roleColorClass(user.ruolo),
+      )}
+      aria-hidden
+    >
+      {user.iniziali}
+    </div>
+  )
+}
 
-        <div className="flex flex-col gap-4 py-1">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="u-nome">Nome</Label>
-            <Input
-              id="u-nome"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              placeholder="Es. Mario Rossi"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="u-email">E-mail</Label>
-            <Input
-              id="u-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="mario.rossi@solairgroup.it"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label>Ruolo</Label>
-              <Select value={ruolo} onValueChange={(v) => setRuolo(v as UserRole)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {ROLES.map((r) => (
-                      <SelectItem key={r} value={r}>
-                        {ROLE_LABEL[r]}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Sede</Label>
-              <Select value={sede} onValueChange={(v) => setSede(v ?? "")}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {SEDI_OPTIONS.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+function RolePill({ ruolo }: { ruolo: UserRole }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex h-5 items-center rounded-full px-2 text-xs font-medium",
+        roleColorClass(ruolo),
+      )}
+    >
+      {ROLE_LABEL[ruolo]}
+    </span>
+  )
+}
+
+function UserCard({
+  user,
+  onToggleAttivo,
+  onEdit,
+  onChangeRole,
+  onChangeSede,
+  onDelete,
+}: {
+  user: SettingsUser
+  onToggleAttivo: (id: string) => void
+  onEdit: (user: SettingsUser) => void
+  onChangeRole: (user: SettingsUser) => void
+  onChangeSede: (user: SettingsUser) => void
+  onDelete: (id: string) => void
+}) {
+  return (
+    <Card
+      className={cn(
+        "flex flex-col gap-4 p-4 transition-opacity",
+        !user.attivo && "opacity-60",
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <UserAvatar user={user} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-semibold leading-tight text-foreground">
+            {user.nome}
+          </p>
+          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
         </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Azioni per ${user.nome}`}
+              />
+            }
+          >
+            <MoreHorizontal className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem onClick={() => onEdit(user)}>
+              <Pencil className="size-4" />
+              Modifica
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onChangeRole(user)}>
+              <Shield className="size-4" />
+              Cambia ruolo
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onChangeSede(user)}>
+              <Building2 className="size-4" />
+              Cambia sede
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onToggleAttivo(user.id)}>
+              <Power className="size-4" />
+              {user.attivo ? "Disattiva" : "Attiva"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => onDelete(user.id)}
+            >
+              <Trash2 className="size-4" />
+              Elimina
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Annulla
-          </Button>
-          <Button onClick={submit} disabled={!valid}>
-            Invita
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <div className="flex flex-wrap items-center gap-2">
+        {user.attivo ? (
+          <RolePill ruolo={user.ruolo} />
+        ) : (
+          <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-xs font-medium text-muted-foreground">
+            Inattivo
+          </span>
+        )}
+        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+          <MapPin className="size-3.5" />
+          {user.sede}
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between border-t border-border pt-3">
+        <span className="text-xs font-medium text-muted-foreground">
+          {user.attivo ? "Attivo" : "Inattivo"}
+        </span>
+        <Switch
+          checked={user.attivo}
+          onCheckedChange={() => onToggleAttivo(user.id)}
+          aria-label={`Stato account di ${user.nome}`}
+        />
+      </div>
+    </Card>
   )
 }
 
 export function UtentiSection() {
   const [users, setUsers] = useState<SettingsUser[]>(mockUtenti)
-  const [addOpen, setAddOpen] = useState(false)
+  const [ruoloFilter, setRuoloFilter] = useState<string>("all")
+  const [sedeFilter, setSedeFilter] = useState<string>("all")
+  const [query, setQuery] = useState("")
+
+  // Stato del dialog di modifica/creazione utente.
   const [editing, setEditing] = useState<SettingsUser | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [form, setForm] = useState({
+    nome: "",
+    email: "",
+    ruolo: "commerciale" as UserRole,
+    sede: SEDI_DISPONIBILI[0],
+  })
 
-  // Stato del pannello di modifica.
-  const [ruolo, setRuolo] = useState<UserRole>("commerciale")
-  const [sede, setSede] = useState<string>(SEDE_LABELS[0])
-  const [attivo, setAttivo] = useState(true)
+  const sediOptions = useMemo(
+    () => Array.from(new Set(users.map((u) => u.sede))),
+    [users],
+  )
 
-  const openEdit = (u: SettingsUser) => {
-    setEditing(u)
-    setRuolo(u.ruolo)
-    setSede(u.sede)
-    setAttivo(u.attivo)
-  }
+  const filtered = users.filter((u) => {
+    if (ruoloFilter !== "all" && u.ruolo !== ruoloFilter) return false
+    if (sedeFilter !== "all" && u.sede !== sedeFilter) return false
+    if (query.trim()) {
+      const q = query.toLowerCase()
+      if (
+        !u.nome.toLowerCase().includes(q) &&
+        !u.email.toLowerCase().includes(q)
+      )
+        return false
+    }
+    return true
+  })
 
-  const toggleActive = (id: string) =>
+  function toggleAttivo(id: string) {
     setUsers((prev) =>
       prev.map((u) => (u.id === id ? { ...u, attivo: !u.attivo } : u)),
     )
+  }
 
-  const saveEdit = () => {
-    if (!editing) return
+  function changeRole(user: SettingsUser) {
+    const idx = ROLE_OPTIONS.indexOf(user.ruolo)
+    const next = ROLE_OPTIONS[(idx + 1) % ROLE_OPTIONS.length]
+    setUsers((prev) =>
+      prev.map((u) => (u.id === user.id ? { ...u, ruolo: next } : u)),
+    )
+    toast.success(`Ruolo di ${user.nome} aggiornato a ${ROLE_LABEL[next]}`)
+  }
+
+  function changeSede(user: SettingsUser) {
+    const idx = SEDI_DISPONIBILI.indexOf(user.sede)
+    const next = SEDI_DISPONIBILI[(idx + 1) % SEDI_DISPONIBILI.length]
     setUsers((prev) =>
       prev.map((u) =>
-        u.id === editing.id
-          ? { ...u, ruolo, sede: sede as SettingsUser["sede"], attivo }
-          : u,
+        u.id === user.id ? { ...u, sede: next as SettingsUser["sede"] } : u,
       ),
     )
-    toast.success("Utente aggiornato", { description: editing.nome })
+    toast.success(`Sede di ${user.nome} aggiornata a ${next}`)
+  }
+
+  function deleteUser(id: string) {
+    const u = users.find((x) => x.id === id)
+    setUsers((prev) => prev.filter((x) => x.id !== id))
+    if (u) toast.success(`${u.nome} eliminato`)
+  }
+
+  function openCreate() {
     setEditing(null)
+    setForm({
+      nome: "",
+      email: "",
+      ruolo: "commerciale",
+      sede: SEDI_DISPONIBILI[0],
+    })
+    setDialogOpen(true)
+  }
+
+  function openEdit(user: SettingsUser) {
+    setEditing(user)
+    setForm({
+      nome: user.nome,
+      email: user.email,
+      ruolo: user.ruolo,
+      sede: user.sede,
+    })
+    setDialogOpen(true)
+  }
+
+  function saveUser() {
+    if (!form.nome.trim()) {
+      toast.error("Inserisci il nome dell'utente")
+      return
+    }
+    if (editing) {
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === editing.id
+            ? {
+                ...u,
+                nome: form.nome,
+                email: form.email,
+                ruolo: form.ruolo,
+                sede: form.sede as SettingsUser["sede"],
+              }
+            : u,
+        ),
+      )
+      toast.success("Utente aggiornato")
+    } else {
+      const iniziali = form.nome
+        .split(" ")
+        .map((p) => p[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase()
+      setUsers((prev) => [
+        ...prev,
+        {
+          id: `u-${Date.now()}`,
+          nome: form.nome,
+          iniziali: iniziali || "??",
+          email: form.email,
+          ruolo: form.ruolo,
+          sede: form.sede as SettingsUser["sede"],
+          attivo: true,
+        },
+      ])
+      toast.success("Utente creato")
+    }
+    setDialogOpen(false)
   }
 
   return (
     <div className="flex flex-col gap-5">
       <SectionHeader
-        title="Utenti e ruoli"
-        description="Gestisci i membri del team, i ruoli e le sedi assegnate."
+        title="Utenti"
+        description="Gestisci gli account del team: ruolo, sede assegnata e stato di accesso al CRM."
         action={
-          <Button onClick={() => setAddOpen(true)}>
-            <IconPlus size={16} stroke={2} data-icon="inline-start" />
+          <Button
+            onClick={openCreate}
+            className="bg-teal text-teal-foreground hover:bg-teal/90"
+          >
+            <Plus className="size-4" />
             Aggiungi utente
           </Button>
         }
       />
 
-      <Card className="overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/40">
-                <TableHead className="font-semibold text-muted-foreground">
-                  Utente
-                </TableHead>
-                <TableHead className="font-semibold text-muted-foreground">
-                  Ruolo
-                </TableHead>
-                <TableHead className="font-semibold text-muted-foreground">
-                  Sede
-                </TableHead>
-                <TableHead className="text-right font-semibold text-muted-foreground">
-                  Stato
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.map((u) => (
-                <TableRow
-                  key={u.id}
-                  className="cursor-pointer"
-                  onClick={() => openEdit(u)}
-                >
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <InitialsAvatar iniziali={u.iniziali} />
-                      <div className="flex min-w-0 flex-col leading-tight">
-                        <span className="truncate text-sm font-medium text-foreground">
-                          {u.nome}
-                        </span>
-                        <span className="truncate text-xs text-muted-foreground">
-                          {u.email}
-                        </span>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <RoleBadge ruolo={u.ruolo} />
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-sm text-foreground">{u.sede}</span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div
-                      className="flex items-center justify-end gap-2"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <span className="text-xs text-muted-foreground">
-                        {u.attivo ? "Attivo" : "Inattivo"}
-                      </span>
-                      <Switch
-                        checked={u.attivo}
-                        onCheckedChange={() => toggleActive(u.id)}
-                        aria-label={`Utente ${u.nome} attivo`}
-                      />
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+      {/* Filtri */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <Select
+          value={ruoloFilter}
+          onValueChange={(v) => setRuoloFilter(v ?? "all")}
+        >
+          <SelectTrigger className="w-full sm:w-44">
+            <SelectValue>
+              {(v) => (v === "all" ? "Tutti i ruoli" : ROLE_LABEL[v as UserRole])}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tutti i ruoli</SelectItem>
+            {ROLE_OPTIONS.map((r) => (
+              <SelectItem key={r} value={r}>
+                {ROLE_LABEL[r]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={sedeFilter}
+          onValueChange={(v) => setSedeFilter(v ?? "all")}
+        >
+          <SelectTrigger className="w-full sm:w-44">
+            <SelectValue>
+              {(v) => (v === "all" ? "Tutte le sedi" : (v as string))}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tutte le sedi</SelectItem>
+            {sediOptions.map((s) => (
+              <SelectItem key={s} value={s}>
+                {s}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Cerca per nome o email"
+            className="pl-8"
+          />
         </div>
-      </Card>
+      </div>
 
-      <AddUserDialog
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        onCreate={(u) => {
-          setUsers((prev) => [...prev, u])
-          toast.success("Invito inviato", { description: u.email })
-        }}
-      />
+      {/* Griglia card utenti */}
+      {filtered.length === 0 ? (
+        <Card className="flex items-center justify-center p-10 text-sm text-muted-foreground">
+          Nessun utente corrisponde ai filtri selezionati.
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((u) => (
+            <UserCard
+              key={u.id}
+              user={u}
+              onToggleAttivo={toggleAttivo}
+              onEdit={openEdit}
+              onChangeRole={changeRole}
+              onChangeSede={changeSede}
+              onDelete={deleteUser}
+            />
+          ))}
+        </div>
+      )}
 
-      {/* Pannello laterale modifica utente */}
-      <Sheet
-        open={editing !== null}
-        onOpenChange={(o) => {
-          if (!o) setEditing(null)
-        }}
-      >
-        <SheetContent className="flex w-full flex-col gap-0 sm:max-w-md">
-          <SheetHeader className="border-b border-border">
-            <SheetTitle>Modifica utente</SheetTitle>
-            <SheetDescription>
-              {editing?.nome} · {editing?.email}
-            </SheetDescription>
-          </SheetHeader>
-
-          {editing ? (
-            <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-4">
-              <div className="flex items-center gap-3">
-                <InitialsAvatar iniziali={editing.iniziali} />
-                <div className="flex flex-col leading-tight">
-                  <span className="text-sm font-semibold text-foreground">
-                    {editing.nome}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {editing.email}
-                  </span>
-                </div>
-              </div>
-
+      {/* Dialog crea/modifica */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editing ? "Modifica utente" : "Aggiungi utente"}
+            </DialogTitle>
+            <DialogDescription>
+              {editing
+                ? "Aggiorna i dati dell'account."
+                : "Crea un nuovo account per il team."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="user-nome">Nome</Label>
+              <Input
+                id="user-nome"
+                value={form.nome}
+                onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))}
+                placeholder="Nome e cognome"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="user-email">E-mail</Label>
+              <Input
+                id="user-email"
+                type="email"
+                value={form.email}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, email: e.target.value }))
+                }
+                placeholder="nome@solairgroup.it"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label>Ruolo</Label>
                 <Select
-                  value={ruolo}
-                  onValueChange={(v) => setRuolo(v as UserRole)}
+                  value={form.ruolo}
+                  onValueChange={(v) =>
+                    setForm((f) => ({
+                      ...f,
+                      ruolo: (v ?? "commerciale") as UserRole,
+                    }))
+                  }
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectGroup>
-                      {ROLES.map((r) => (
-                        <SelectItem key={r} value={r}>
-                          {ROLE_LABEL[r]}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
+                    {ROLE_OPTIONS.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {ROLE_LABEL[r]}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="flex flex-col gap-1.5">
                 <Label>Sede</Label>
-                <Select value={sede} onValueChange={(v) => setSede(v ?? "")}>
+                <Select
+                  value={form.sede}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, sede: v ?? SEDI_DISPONIBILI[0] }))
+                  }
+                >
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectGroup>
-                      {SEDI_OPTIONS.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
+                    {SEDI_DISPONIBILI.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-medium text-foreground">
-                    Account attivo
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    Disattiva per sospendere l&apos;accesso.
-                  </span>
-                </div>
-                <Switch checked={attivo} onCheckedChange={setAttivo} />
-              </div>
-
-              <Button
-                variant="outline"
-                className="justify-start"
-                onClick={() =>
-                  toast.success("E-mail di reset inviata", {
-                    description: editing.email,
-                  })
-                }
-              >
-                <IconKey size={16} stroke={1.8} data-icon="inline-start" />
-                Reimposta password
-              </Button>
             </div>
-          ) : null}
-
-          <div className="flex items-center justify-end gap-2 border-t border-border p-4">
-            <Button variant="outline" onClick={() => setEditing(null)}>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Annulla
             </Button>
-            <Button onClick={saveEdit}>Salva modifiche</Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+            <Button
+              onClick={saveUser}
+              className="bg-teal text-teal-foreground hover:bg-teal/90"
+            >
+              {editing ? "Salva modifiche" : "Crea utente"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

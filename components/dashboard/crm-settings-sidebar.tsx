@@ -9,11 +9,26 @@ import {
   Settings2,
   X,
   ChevronRight,
+  ChevronLeft,
+  Users,
+  ClipboardList,
+  Lock,
+  Wrench,
   type LucideIcon,
 } from "lucide-react"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
 
-interface LauncherBlock {
+type Layer = "root" | "account-security" | "file-manager" | "system"
+
+interface RootBlock {
+  icon: LucideIcon
+  title: string
+  description: string
+  image: string
+  layer: Exclude<Layer, "root">
+}
+
+interface SubBlock {
   icon: LucideIcon
   title: string
   description: string
@@ -21,29 +36,97 @@ interface LauncherBlock {
   image: string
 }
 
-const BLOCKS: LauncherBlock[] = [
+const ROOT_BLOCKS: RootBlock[] = [
   {
     icon: Shield,
     title: "Account & Sicurezza",
     description: "Utenti, ruoli, permessi e audit log",
-    href: "/impostazioni?section=utenti",
     image: "/crm-settings/account-security.png",
+    layer: "account-security",
   },
   {
     icon: FolderOpen,
     title: "File Manager",
     description: "Storage Nextcloud, cartelle e accessi",
-    href: "/impostazioni?section=file-manager",
     image: "/crm-settings/file-manager.png",
+    layer: "file-manager",
   },
   {
     icon: Settings2,
     title: "Impostazioni di sistema",
     description: "Sedi, attributi, valori e regole",
-    href: "/impostazioni?section=sedi",
     image: "/crm-settings/system-settings.png",
+    layer: "system",
   },
 ]
+
+// Layer 2 — Account & Security: i sotto-blocchi puntano alle sezioni reali
+// della pagina /impostazioni tramite deep-link ?section=<id>.
+const ACCOUNT_SECURITY_BLOCKS: SubBlock[] = [
+  {
+    icon: Users,
+    title: "Account Management",
+    description: "Utenti, ruoli e sedi assegnate",
+    href: "/impostazioni?section=utenti",
+    image:
+      "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&q=80",
+  },
+  {
+    icon: Shield,
+    title: "Permission Management",
+    description: "Permessi per ruolo su pagine, record e cartelle",
+    href: "/impostazioni?section=ruoli",
+    image:
+      "https://images.unsplash.com/photo-1563986768494-4dee2763ff3f?w=800&q=80",
+  },
+  {
+    icon: ClipboardList,
+    title: "Audit & Log",
+    description: "Storico accessi, modifiche e login falliti",
+    href: "/impostazioni?section=audit",
+    image:
+      "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80",
+  },
+  {
+    icon: Lock,
+    title: "Session & Access",
+    description: "Timeout, 2FA e dispositivi autorizzati",
+    href: "/impostazioni?section=utenti",
+    image:
+      "https://images.unsplash.com/photo-1510511459019-5dda7724fd87?w=800&q=80",
+  },
+]
+
+// Testata dinamica per ciascun layer.
+const LAYER_HEADER: Record<
+  Layer,
+  { eyebrow: string; title: string; subtitle: string; breadcrumb: string | null }
+> = {
+  root: {
+    eyebrow: "Solair CRM",
+    title: "Impostazioni",
+    subtitle: "Gestisci il tuo CRM",
+    breadcrumb: null,
+  },
+  "account-security": {
+    eyebrow: "Account & Security",
+    title: "Gestione accessi",
+    subtitle: "Configura utenti, permessi e sicurezza",
+    breadcrumb: "Impostazioni › Account & Sicurezza",
+  },
+  "file-manager": {
+    eyebrow: "File Manager",
+    title: "Archiviazione",
+    subtitle: "Storage Nextcloud, cartelle e accessi",
+    breadcrumb: "Impostazioni › File Manager",
+  },
+  system: {
+    eyebrow: "System Settings",
+    title: "Configurazione sistema",
+    subtitle: "Sedi, attributi, valori e regole",
+    breadcrumb: "Impostazioni › Impostazioni di sistema",
+  },
+}
 
 /** Rileva il breakpoint mobile per scegliere la direzione dello slide. */
 function useIsMobile() {
@@ -58,12 +141,58 @@ function useIsMobile() {
   return isMobile
 }
 
+/** Card visiva condivisa tra Layer 1 e Layer 2. */
+function SettingsCard({
+  icon: Icon,
+  title,
+  description,
+  image,
+  onClick,
+}: {
+  icon: LucideIcon
+  title: string
+  description: string
+  image: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group relative h-40 w-full overflow-hidden rounded-xl border border-white/10 text-left transition-all duration-200 hover:scale-[1.01] hover:border-[#2E8B72] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2E8B72]"
+    >
+      <img
+        src={image || "/placeholder.svg"}
+        alt=""
+        className="absolute inset-0 size-full object-cover transition-transform duration-300 group-hover:brightness-110"
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4">
+        <div className="flex flex-col gap-1">
+          <Icon className="mb-1 size-6 text-[#2E8B72]" />
+          <h3 className="text-lg font-semibold leading-tight text-white">
+            {title}
+          </h3>
+          <p className="text-sm text-gray-300">{description}</p>
+        </div>
+        <ChevronRight className="size-5 shrink-0 text-white/70 transition-transform group-hover:translate-x-0.5 group-hover:text-white" />
+      </div>
+    </button>
+  )
+}
+
 export function CrmSettingsSidebar() {
   const { open, closeLauncher } = useCrmSettingsLauncher()
   const router = useRouter()
   const isMobile = useIsMobile()
   const panelRef = useRef<HTMLDivElement>(null)
   const closeBtnRef = useRef<HTMLButtonElement>(null)
+  const [layer, setLayer] = useState<Layer>("root")
+
+  // Ogni volta che il pannello si chiude, riparte dal Layer 1.
+  useEffect(() => {
+    if (!open) setLayer("root")
+  }, [open])
 
   // ESC per chiudere + blocco dello scroll della pagina sottostante.
   useEffect(() => {
@@ -93,7 +222,6 @@ export function CrmSettingsSidebar() {
     document.addEventListener("keydown", onKeyDown)
     const prevOverflow = document.body.style.overflow
     document.body.style.overflow = "hidden"
-    // Sposta il focus sul bottone di chiusura all'apertura.
     const t = window.setTimeout(() => closeBtnRef.current?.focus(), 50)
     return () => {
       document.removeEventListener("keydown", onKeyDown)
@@ -107,9 +235,10 @@ export function CrmSettingsSidebar() {
     router.push(href)
   }
 
-  // Varianti di animazione: da destra su desktop, dal basso su mobile.
   const panelInitial = isMobile ? { y: "100%" } : { x: "100%" }
   const panelAnimate = isMobile ? { y: 0 } : { x: 0 }
+  const header = LAYER_HEADER[layer]
+  const isRoot = layer === "root"
 
   return (
     <AnimatePresence>
@@ -132,22 +261,34 @@ export function CrmSettingsSidebar() {
             role="dialog"
             aria-modal="true"
             aria-label="Impostazioni CRM"
-            className="absolute flex flex-col bg-[#0F1923] shadow-[-20px_0_60px_rgba(0,0,0,0.5)] border-t-2 border-t-[#2E8B72] inset-x-0 bottom-0 h-[90vh] rounded-t-2xl md:inset-y-0 md:right-0 md:left-auto md:h-full md:w-[480px] md:rounded-none"
+            className="absolute flex flex-col overflow-hidden bg-[#0F1923] shadow-[-20px_0_60px_rgba(0,0,0,0.5)] border-t-2 border-t-[#2E8B72] inset-x-0 bottom-0 h-[90vh] rounded-t-2xl md:inset-y-0 md:right-0 md:left-auto md:h-full md:w-[480px] md:rounded-none"
             initial={panelInitial}
             animate={panelAnimate}
             exit={panelInitial}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
           >
             {/* Header */}
-            <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-5">
-              <div className="flex flex-col gap-1">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#2E8B72]">
-                  Solair CRM
-                </span>
-                <h2 className="text-2xl font-bold leading-tight text-white">
-                  Impostazioni
-                </h2>
-                <p className="text-sm text-gray-400">Gestisci il tuo CRM</p>
+            <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-3">
+              <div className="flex min-w-0 items-start gap-2">
+                {!isRoot ? (
+                  <button
+                    type="button"
+                    onClick={() => setLayer("root")}
+                    aria-label="Torna alle impostazioni"
+                    className="-ml-1 mt-1 flex size-8 shrink-0 items-center justify-center rounded-lg text-gray-300 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2E8B72]"
+                  >
+                    <ChevronLeft className="size-5" />
+                  </button>
+                ) : null}
+                <div className="flex min-w-0 flex-col gap-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#2E8B72]">
+                    {header.eyebrow}
+                  </span>
+                  <h2 className="text-2xl font-bold leading-tight text-white">
+                    {header.title}
+                  </h2>
+                  <p className="text-sm text-gray-400">{header.subtitle}</p>
+                </div>
               </div>
               <button
                 ref={closeBtnRef}
@@ -160,45 +301,80 @@ export function CrmSettingsSidebar() {
               </button>
             </div>
 
-            {/* Blocchi */}
-            <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-6 pb-4">
-              {BLOCKS.map((block) => {
-                const Icon = block.icon
-                return (
-                  <button
-                    key={block.title}
-                    type="button"
-                    onClick={() => handleNavigate(block.href)}
-                    className="group relative h-40 w-full overflow-hidden rounded-xl border border-white/10 text-left transition-all duration-200 hover:scale-[1.01] hover:border-[#2E8B72] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2E8B72]"
-                  >
-                    {/* Immagine di sfondo */}
-                    <img
-                      src={block.image || "/placeholder.svg"}
-                      alt=""
-                      className="absolute inset-0 size-full object-cover transition-transform duration-300 group-hover:brightness-110"
-                    />
-                    {/* Overlay gradiente */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
+            {/* Breadcrumb (solo Layer 2) */}
+            {header.breadcrumb ? (
+              <div className="px-6 pb-3">
+                <span className="text-xs text-gray-500">
+                  {header.breadcrumb}
+                </span>
+              </div>
+            ) : null}
 
-                    {/* Contenuto */}
-                    <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4">
+            {/* Contenuto animato per layer */}
+            <div className="relative flex-1 overflow-hidden">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={layer}
+                  className="flex h-full flex-col gap-4 overflow-y-auto px-6 pb-4"
+                  initial={{ x: isRoot ? "-100%" : "100%" }}
+                  animate={{ x: 0 }}
+                  exit={{ x: isRoot ? "100%" : "-100%" }}
+                  transition={{ type: "spring", damping: 25, stiffness: 260 }}
+                >
+                  {layer === "root"
+                    ? ROOT_BLOCKS.map((block) => (
+                        <SettingsCard
+                          key={block.title}
+                          icon={block.icon}
+                          title={block.title}
+                          description={block.description}
+                          image={block.image}
+                          onClick={() => setLayer(block.layer)}
+                        />
+                      ))
+                    : null}
+
+                  {layer === "account-security"
+                    ? ACCOUNT_SECURITY_BLOCKS.map((block) => (
+                        <SettingsCard
+                          key={block.title}
+                          icon={block.icon}
+                          title={block.title}
+                          description={block.description}
+                          image={block.image}
+                          onClick={() => handleNavigate(block.href)}
+                        />
+                      ))
+                    : null}
+
+                  {layer === "file-manager" || layer === "system" ? (
+                    <div className="flex flex-1 flex-col items-center justify-center gap-4 py-16 text-center">
+                      <div className="flex size-16 items-center justify-center rounded-2xl bg-white/5 text-[#2E8B72]">
+                        <Wrench className="size-8" />
+                      </div>
                       <div className="flex flex-col gap-1">
-                        <Icon className="mb-1 size-6 text-[#2E8B72]" />
-                        <h3 className="text-lg font-semibold leading-tight text-white">
-                          {block.title}
+                        <h3 className="text-lg font-semibold text-white">
+                          In configurazione
                         </h3>
-                        <p className="text-sm text-gray-300">
-                          {block.description}
+                        <p className="max-w-xs text-sm text-gray-400">
+                          Questa sezione sarà disponibile a breve.
                         </p>
                       </div>
-                      <ChevronRight className="size-5 shrink-0 text-white/70 transition-transform group-hover:translate-x-0.5 group-hover:text-white" />
+                      <button
+                        type="button"
+                        onClick={() => setLayer("root")}
+                        className="mt-2 inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:border-[#2E8B72] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2E8B72]"
+                      >
+                        <ChevronLeft className="size-4" />
+                        Torna indietro
+                      </button>
                     </div>
-                  </button>
-                )
-              })}
+                  ) : null}
+                </motion.div>
+              </AnimatePresence>
             </div>
 
-            {/* Footer */}
+            {/* Footer fisso in tutti i layer */}
             <div className="border-t border-white/10 px-6 py-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-300">

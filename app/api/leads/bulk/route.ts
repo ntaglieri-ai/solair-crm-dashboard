@@ -11,8 +11,6 @@ type BulkPayload =
   | { action: "transfer"; ids: string[]; value: string }
   | { action: "update"; ids: string[]; field: BulkField; value: string }
 
-// POST /api/leads/bulk — operazioni di massa (elimina, converti, trasferisci,
-// aggiorna campo). Esegue tutto server-side in una sola richiesta.
 export async function POST(request: Request) {
   const body = (await request.json()) as BulkPayload
   if (!body || !Array.isArray(body.ids) || body.ids.length === 0) {
@@ -21,26 +19,21 @@ export async function POST(request: Request) {
       { status: 400 },
     )
   }
-
   switch (body.action) {
     case "delete": {
-      const affected = deleteLeadRecords(body.ids)
+      const affected = await deleteLeadRecords(body.ids)
       return NextResponse.json({ affected })
     }
     case "convert": {
-      const affected = bulkUpdateRecords(body.ids, "Stato Lead", "Convertito")
+      const affected = await bulkUpdateRecords(body.ids, "Stato Lead", "Convertito")
       return NextResponse.json({ affected })
     }
     case "transfer": {
-      const affected = bulkUpdateRecords(
-        body.ids,
-        "Lead Proprietario",
-        body.value,
-      )
+      const affected = await bulkUpdateRecords(body.ids, "Lead Proprietario", body.value)
       return NextResponse.json({ affected })
     }
     case "update": {
-      const affected = bulkUpdateRecords(body.ids, body.field, body.value)
+      const affected = await bulkUpdateRecords(body.ids, body.field, body.value)
       return NextResponse.json({ affected })
     }
     default:

@@ -7,7 +7,13 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const params = parseLeadsSearchParams(searchParams)
   const result = await queryLeads(params)
-  return NextResponse.json(result)
+
+  return NextResponse.json(result, {
+    headers: {
+      // Cache Vercel Edge: 30 secondi fresh, 60 secondi stale-while-revalidate
+      "Cache-Control": "s-maxage=30, stale-while-revalidate=60",
+    },
+  })
 }
 
 export async function POST(request: Request) {

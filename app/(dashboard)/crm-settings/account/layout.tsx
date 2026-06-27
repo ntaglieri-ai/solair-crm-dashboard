@@ -6,6 +6,11 @@ import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
 import { Users, Shield, ClipboardList, Lock, type LucideIcon } from "lucide-react"
 import { CURRENT_USER } from "@/lib/mock-data"
+import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
+import {
+  CrmBreadcrumb,
+  CrmSectionBackLink,
+} from "@/components/dashboard/crm-settings-nav"
 import { cn } from "@/lib/utils"
 
 interface SectionLink {
@@ -35,6 +40,7 @@ export default function AccountSecurityLayout({
 }) {
   const pathname = usePathname()
   const router = useRouter()
+  const { openCrmSettings, openCrmSettingsLayer } = useCrmSettingsLauncher()
   const isAdmin = CURRENT_USER.ruoloKey === "admin"
 
   // Accesso riservato agli Admin.
@@ -48,23 +54,25 @@ export default function AccountSecurityLayout({
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Breadcrumb */}
-      <nav
-        aria-label="Breadcrumb"
-        className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground"
-      >
-        <span>Solair CRM</span>
-        <span aria-hidden>›</span>
-        <span>CRM Settings</span>
-        <span aria-hidden>›</span>
-        <span>Account &amp; Security</span>
-        <span aria-hidden>›</span>
-        <span className="font-medium text-foreground">{currentTitle}</span>
-      </nav>
+      <CrmBreadcrumb
+        items={[
+          { label: "Solair CRM", action: () => router.push("/") },
+          { label: "CRM Settings", action: openCrmSettings },
+          {
+            label: "Account & Security",
+            action: () => openCrmSettingsLayer("account-security"),
+          },
+          { label: currentTitle },
+        ]}
+      />
 
       <div className="flex flex-col gap-6 lg:flex-row">
         {/* Sidebar di sezione */}
         <aside className="lg:w-60 lg:shrink-0">
+          <CrmSectionBackLink
+            label="Account & Security"
+            onClick={() => openCrmSettingsLayer("account-security")}
+          />
           <nav className="flex flex-col gap-1" aria-label="Sezioni Account & Security">
             {SECTION_LINKS.map((link) => {
               const active = pathname === link.href

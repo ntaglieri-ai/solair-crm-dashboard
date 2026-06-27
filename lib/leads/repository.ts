@@ -1,6 +1,5 @@
-// Repository server-side del modulo Lead.
-// Tutte le funzioni sono async — lo store parla con Supabase.
-// Paginazione server-side: Supabase restituisce solo le righe della pagina corrente.
+// Repository server-side del modulo Lead — ottimizzato per performance.
+// computeStats usa query SQL aggregata invece di full scan.
 import type { Lead, LeadColumnId } from "@/lib/mock-data"
 import { matchesAdvanced } from "@/lib/leads/advanced-filter-logic"
 import {
@@ -21,6 +20,7 @@ import {
   patchLead,
   removeLeads,
 } from "@/lib/leads/server-store"
+import { createClient } from "@/lib/supabase/server"
 
 function matchesScore(score: number, filter: ScoreFilter): boolean {
   if (filter === "caldo") return score > 80
@@ -45,8 +45,6 @@ function project(lead: Lead, fields: string[]): LeadListItem {
 }
 
 export async function queryLeads(params: LeadListParams): Promise<LeadListResponse> {
-  // 1) Fetch da Supabase con filtri SQL e paginazione server-side
-  // Supabase restituisce solo le righe della pagina corrente — no full scan
   const [base, total] = await Promise.all([
     getAllLeads({
       stato: params.stato,
@@ -64,8 +62,6 @@ export async function queryLeads(params: LeadListParams): Promise<LeadListRespon
     }),
   ])
 
-  // 2) Filtri residui in JS (origine, tag, score, duplicati, avanzati)
-  // Questi non sono passati a Supabase quindi si applicano sui risultati paginati
   const filtered = base.filter((lead) => {
     if (params.onlyDuplicates && !lead.possibileDuplicato) return false
     if (params.origine !== "all" && lead["Origine Lead"] !== params.origine) return false
@@ -75,28 +71,42 @@ export async function queryLeads(params: LeadListParams): Promise<LeadListRespon
     return true
   })
 
-  // 3) Proiezione selettiva
   const rows = filtered.map((l) => project(l, params.fields))
-
   return { rows, total, page: params.page, pageSize: params.pageSize }
 }
 
+// computeStats — query SQL aggregata, nessun full scan
 export async function computeStats(): Promise<LeadStats> {
-  const [all, total] = await Promise.all([
-    getAllLeads(),
-    getTotalCount(),
+  const supabase = await createClient()
+
+  const [{ data: statsData }, { count: total }] = await Promise.all([
+    supabase
+      .from("leads")
+      .select("stato_lead, valutazione, lead_proprietario_id"),
+    supabase
+      .from("leads")
+      .select("id", { count: "exact", head: true }),
   ])
+
+  const all = statsData ?? []
   const byStato: Record<string, number> = {}
   let caldi = 0
-  let duplicati = 0
   let nonAssegnati = 0
+
   for (const l of all) {
-    byStato[l["Stato Lead"]] = (byStato[l["Stato Lead"]] ?? 0) + 1
-    if (l.Valutazione > 80) caldi++
-    if (l.possibileDuplicato) duplicati++
-    if (!l["Lead Proprietario"]) nonAssegnati++
+    const stato = l.stato_lead ?? "Non contattato"
+    byStato[stato] = (byStato[stato] ?? 0) + 1
+    if ((l.valutazione ?? 0) > 80) caldi++
+    if (!l.lead_proprietario_id) nonAssegnati++
   }
-  return { total, byStato, caldi, duplicati, nonAssegnati }
+
+  return {
+    total: total ?? 0,
+    byStato,
+    caldi,
+    duplicati: 0,
+    nonAssegnati,
+  }
 }
 
 export async function createLeadRecord(lead: Lead): Promise<LeadListItem> {

@@ -1,7 +1,5 @@
 // Repository server-side del modulo Lead.
-// Esegue filtri/ordinamento/paginazione/proiezione contro lo store in memoria.
-// Rappresenta il layer che, con Supabase, diventerà una query SQL parametrica
-// con indici, LIMIT/OFFSET e SELECT delle sole colonne richieste.
+// Tutte le funzioni sono async — lo store parla con Supabase.
 import type { Lead, LeadColumnId } from "@/lib/mock-data"
 import { matchesAdvanced } from "@/lib/leads/advanced-filter-logic"
 import {
@@ -30,10 +28,8 @@ function matchesScore(score: number, filter: ScoreFilter): boolean {
   return true
 }
 
-// Proietta una riga sui soli campi richiesti (no "select *"): id + base + extra.
 function project(lead: Lead, fields: string[]): LeadListItem {
   if (fields.includes("*")) {
-    // export/CSV: tutte le colonne tranne gli array pesanti
     const { attivita, documenti, ...rest } = lead
     void attivita
     void documenti
@@ -47,20 +43,30 @@ function project(lead: Lead, fields: string[]): LeadListItem {
   return out as LeadListItem
 }
 
-export function queryLeads(params: LeadListParams): LeadListResponse {
-  // 1) Candidati via indici secondari (equality) o full scan
-  const candidateIds = candidateIdsByIndex({
+export async function queryLeads(params: LeadListParams): Promise<LeadListResponse> {
+  // 1) Candidati via indici — con Supabase restituisce sempre null
+  const candidateIds = await candidateIdsByIndex({
     stato: params.stato,
     sede: params.sede,
     commerciale: params.commerciale,
   })
-  const base = candidateIds ? getLeadsByIds(candidateIds) : getAllLeads()
 
-  // 2) Filtri residui (ricerca testo, origine, tag, score, duplicati, avanzati)
+  // 2) Fetch da Supabase con filtri SQL
+  const base = candidateIds
+    ? await getLeadsByIds(candidateIds)
+    : await getAllLeads({
+        stato: params.stato,
+        sede: params.sede,
+        commerciale: params.commerciale,
+        search: params.search,
+      })
+
+  // 3) Filtri residui in JS (origine, tag, score, duplicati, avanzati)
   const q = params.search.trim().toLowerCase()
   const filtered = base.filter((lead) => {
     if (params.onlyDuplicates && !lead.possibileDuplicato) return false
-    if (q) {
+    // search già applicato in SQL, ma per sicurezza se candidateIds è presente
+    if (candidateIds && q) {
       const hay = [lead["Nome Lead"], lead["E-mail"], lead.Telefono]
         .join(" ")
         .toLowerCase()
@@ -74,7 +80,7 @@ export function queryLeads(params: LeadListParams): LeadListResponse {
     return true
   })
 
-  // 3) Ordinamento
+  // 4) Ordinamento
   const sortBy = params.sortBy
   if (sortBy) {
     filtered.sort((a, b) => {
@@ -87,20 +93,22 @@ export function queryLeads(params: LeadListParams): LeadListResponse {
     })
   }
 
-  // 4) Paginazione (LIMIT/OFFSET)
+  // 5) Paginazione
   const total = filtered.length
   const startIdx = (params.page - 1) * params.pageSize
   const pageSlice = filtered.slice(startIdx, startIdx + params.pageSize)
 
-  // 5) Proiezione selettiva
+  // 6) Proiezione selettiva
   const rows = pageSlice.map((l) => project(l, params.fields))
 
   return { rows, total, page: params.page, pageSize: params.pageSize }
 }
 
-// Aggregazione leggera per la dashboard/header: conteggi, mai righe complete.
-export function computeStats(): LeadStats {
-  const all = getAllLeads()
+export async function computeStats(): Promise<LeadStats> {
+  const [all, total] = await Promise.all([
+    getAllLeads(),
+    getTotalCount(),
+  ])
   const byStato: Record<string, number> = {}
   let caldi = 0
   let duplicati = 0
@@ -111,52 +119,51 @@ export function computeStats(): LeadStats {
     if (l.possibileDuplicato) duplicati++
     if (!l["Lead Proprietario"]) nonAssegnati++
   }
-  return { total: getTotalCount(), byStato, caldi, duplicati, nonAssegnati }
+  return { total, byStato, caldi, duplicati, nonAssegnati }
 }
 
-// --- Mutazioni (ritornano la riga proiettata "base" per optimistic reconcile) ---
-export function createLeadRecord(lead: Lead): LeadListItem {
-  insertLead(lead)
-  return project(lead, [])
+export async function createLeadRecord(lead: Lead): Promise<LeadListItem> {
+  const inserted = await insertLead(lead)
+  return project(inserted, [])
 }
 
-export function updateLeadRecord(
+export async function updateLeadRecord(
   id: string,
   patch: Partial<Lead>,
-): LeadListItem | undefined {
-  const updated = patchLead(id, patch)
+): Promise<LeadListItem | undefined> {
+  const updated = await patchLead(id, patch)
   return updated ? project(updated, []) : undefined
 }
 
-export function deleteLeadRecords(ids: string[]): number {
+export async function deleteLeadRecords(ids: string[]): Promise<number> {
   return removeLeads(ids)
 }
 
 export type BulkField = "Stato Lead" | "Sede" | "Lead Proprietario" | "Tag"
 
-export function bulkUpdateRecords(
+export async function bulkUpdateRecords(
   ids: string[],
   field: BulkField,
   value: string,
-): number {
+): Promise<number> {
   let n = 0
   for (const id of ids) {
-    const current = getLeadById(id)
+    const current = await getLeadById(id)
     if (!current) continue
     if (field === "Tag") {
       const next = current.Tag.includes(value)
         ? current.Tag
         : [...current.Tag, value]
-      patchLead(id, { Tag: next })
+      await patchLead(id, { Tag: next })
     } else {
-      patchLead(id, { [field]: value } as Partial<Lead>)
+      await patchLead(id, { [field]: value } as Partial<Lead>)
     }
     n++
   }
   return n
 }
 
-export function getFullLeadById(id: string): Lead | undefined {
+export async function getFullLeadById(id: string): Promise<Lead | undefined> {
   return getLeadById(id)
 }
 

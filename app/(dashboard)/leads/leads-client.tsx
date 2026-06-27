@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import {
   ChevronLeft,
@@ -224,6 +224,44 @@ export function LeadsClient({
   const start = (page - 1) * rowsPerPage
   const rangeStart = total === 0 ? 0 : start + 1
   const rangeEnd = Math.min(start + rowsPerPage, total)
+
+  // --- Scrollbar orizzontale sempre visibile (ancorata col footer) ---
+  // Il contenitore della tabella nasconde la scrollbar nativa orizzontale; qui
+  // gestiamo una scrollbar sincronizzata e fissa in basso, visibile solo quando
+  // le colonne eccedono la larghezza disponibile (dinamica su resize/colonne).
+  const tableScrollRef = useRef<HTMLDivElement>(null)
+  const hBarRef = useRef<HTMLDivElement>(null)
+  const [hOverflow, setHOverflow] = useState(false)
+  const [hScrollWidth, setHScrollWidth] = useState(0)
+
+  // Sincronizza la barra esterna quando la tabella scrolla orizzontalmente.
+  const syncBarFromTable = useCallback((el: HTMLDivElement) => {
+    const bar = hBarRef.current
+    if (bar && bar.scrollLeft !== el.scrollLeft) bar.scrollLeft = el.scrollLeft
+  }, [])
+
+  // Sincronizza la tabella quando l'utente trascina la barra esterna.
+  const syncTableFromBar = useCallback(() => {
+    const bar = hBarRef.current
+    const el = tableScrollRef.current
+    if (bar && el && el.scrollLeft !== bar.scrollLeft) el.scrollLeft = bar.scrollLeft
+  }, [])
+
+  // Ricalcola overflow/larghezza su mount, cambio colonne/righe/densità e resize.
+  useEffect(() => {
+    const el = tableScrollRef.current
+    if (!el) return
+    const measure = () => {
+      const overflow = el.scrollWidth - el.clientWidth > 1
+      setHOverflow(overflow)
+      setHScrollWidth(el.scrollWidth)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    if (el.firstElementChild) ro.observe(el.firstElementChild)
+    return () => ro.disconnect()
+  }, [columns, pageRows, density])
 
   const handleFilterChange = useCallback((next: LeadFilterState) => {
     setFilters(next)
@@ -594,10 +632,25 @@ export function LeadsClient({
         sortDir={sortDir}
         onSort={handleSort}
         density={density}
+        scrollRef={tableScrollRef}
+        onScrollerScroll={syncBarFromTable}
       />
 
       {/* Footer paginazione — sempre visibile e in primo piano */}
-      <div className="sticky bottom-0 z-30 -mx-5 -mb-6 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background/95 px-5 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <div className="sticky bottom-0 z-30 -mx-5 -mb-6 flex flex-col gap-2 border-t border-border bg-background/95 px-5 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        {/* Scrollbar orizzontale sincronizzata: visibile solo quando le colonne eccedono */}
+        {hOverflow ? (
+          <div
+            ref={hBarRef}
+            onScroll={syncTableFromBar}
+            className="w-full overflow-x-auto overflow-y-hidden [scrollbar-color:var(--color-muted-foreground)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5"
+            aria-hidden
+          >
+            <div style={{ width: hScrollWidth }} className="h-px" />
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground">
             {rangeStart}-{rangeEnd} di {total.toLocaleString("it-IT")}
@@ -650,6 +703,7 @@ export function LeadsClient({
             Successivo
             <ChevronRight data-icon="inline-end" />
           </Button>
+        </div>
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useRef, useState } from "react"
+import { Fragment, useRef, useState, type RefObject } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { MoreHorizontal, ExternalLink, UserCheck, Trash2 } from "lucide-react"
@@ -60,6 +60,8 @@ export function LeadTable({
   sortDir,
   onSort,
   density = "normale",
+  scrollRef: externalScrollRef,
+  onScrollerScroll,
 }: {
   leads: Lead[]
   columns: LeadColumn[]
@@ -72,11 +74,16 @@ export function LeadTable({
   sortDir: SortDir
   onSort: (col: LeadColumnId) => void
   density?: Density
+  /** Ref del contenitore scrollabile (per sincronizzare la scrollbar orizzontale esterna). */
+  scrollRef?: RefObject<HTMLDivElement | null>
+  /** Callback ad ogni scroll del contenitore, riceve l'elemento scrollabile. */
+  onScrollerScroll?: (el: HTMLDivElement) => void
 }) {
   const router = useRouter()
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [stuck, setStuck] = useState(false)
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const internalScrollRef = useRef<HTMLDivElement>(null)
+  const scrollRef = externalScrollRef ?? internalScrollRef
   const allSelected = leads.length > 0 && leads.every((l) => selected.has(l.id))
   const colSpan = columns.length + 3
   const cellPad = DENSITY_CELL[density]
@@ -93,8 +100,21 @@ export function LeadTable({
   return (
     <div
       ref={scrollRef}
-      onScroll={(e) => setStuck(e.currentTarget.scrollTop > 0)}
-      className="max-h-[calc(100vh-15rem)] overflow-auto rounded-xl border border-border bg-card"
+      onScroll={(e) => {
+        setStuck(e.currentTarget.scrollTop > 0)
+        onScrollerScroll?.(e.currentTarget)
+      }}
+      onWheel={(e) => {
+        // Scroll orizzontale via trackpad/Shift+rotella: la scrollbar nativa
+        // orizzontale è nascosta, ma il contenuto resta scorribile.
+        const el = e.currentTarget
+        if (el.scrollWidth <= el.clientWidth) return
+        const horizontal = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)
+        if (!horizontal) return
+        el.scrollLeft += e.deltaX !== 0 ? e.deltaX : e.deltaY
+        onScrollerScroll?.(el)
+      }}
+      className="max-h-[calc(100vh-15rem)] overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-card"
     >
       <Table>
         <TableHeader

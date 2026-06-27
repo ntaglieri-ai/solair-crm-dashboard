@@ -60,6 +60,8 @@ export interface LeadStats {
   caldi: number
   duplicati: number
   nonAssegnati: number
+  /** Lead creati dalla mezzanotte di oggi (KPI "Nuovi oggi"). */
+  nuoviOggi: number
 }
 
 export const DEFAULT_LIST_PARAMS: LeadListParams = {

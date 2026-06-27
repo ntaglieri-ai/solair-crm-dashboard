@@ -61,6 +61,37 @@ const LIST_COLUMNS = [
   "data_click", "data_ora", "ora_ultima_attivita", "created_at",
 ].join(",")
 
+// Whitelist sicura: id colonna UI -> colonna DB ordinabile. Qualsiasi valore
+// non presente qui ricade su "created_at" (fallback sicuro, nessun crash).
+const SORT_COLUMN: Record<string, string> = {
+  "Nome Lead": "nome_lead",
+  Nome: "nome",
+  Cognome: "cognome",
+  "Stato Lead": "stato_lead",
+  "Lead Proprietario": "lead_proprietario_id",
+  Valutazione: "valutazione",
+  leadCaldo: "valutazione",
+  "Data Click": "data_click",
+  "Ora creazione": "created_at",
+  "Ora ultima attività": "ora_ultima_attivita",
+  "Data/Ora": "data_ora",
+  Città: "citta",
+  Provincia: "provincia",
+  "E-mail": "email",
+  Telefono: "telefono",
+  "Origine Lead": "origine_lead",
+  Sede: "sede",
+  "campaign name": "campaign_name",
+}
+
+// Risolve la colonna DB di ordinamento e la direzione, con fallback su
+// created_at desc quando la colonna non è ordinabile lato DB.
+function resolveSort(sortBy?: string | null, sortDir?: "asc" | "desc") {
+  const column = (sortBy && SORT_COLUMN[sortBy]) || "created_at"
+  const ascending = sortDir === "asc"
+  return { column, ascending }
+}
+
 export async function candidateIdsByIndex(_filters: {
   stato?: string
   sede?: string
@@ -76,16 +107,24 @@ export async function getAllLeads(filters?: {
   origine?: string
   score?: string
   search?: string
+  sortBy?: string | null
+  sortDir?: "asc" | "desc"
   limit?: number
   offset?: number
 }): Promise<Lead[]> {
   const supabase = await createClient()
 
+  // Ordinamento reale lato query, applicato PRIMA di range/paginazione.
+  const { column, ascending } = resolveSort(filters?.sortBy, filters?.sortDir)
+
   let query = supabase
     .from("leads")
     .select(LIST_COLUMNS)
-    // Ordine cronologico discendente — sfrutta l'indice su created_at.
-    .order("created_at", { ascending: false })
+    .order(column, { ascending, nullsFirst: false })
+
+  // Tiebreaker deterministico: garantisce paginazione stabile a parità di valore.
+  if (column !== "created_at")
+    query = query.order("created_at", { ascending: false })
 
   if (filters?.stato && filters.stato !== "all")
     query = query.eq("stato_lead", filters.stato)

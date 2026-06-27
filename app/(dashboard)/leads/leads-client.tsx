@@ -1,8 +1,16 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { ChevronLeft, ChevronRight, Plus, X, Loader2 } from "lucide-react"
+import {
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  X,
+  Loader2,
+  Upload,
+  Download,
+} from "lucide-react"
 import { IconSettings } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -40,6 +48,7 @@ import {
   type Density,
 } from "@/components/leads/lead-table"
 import { BulkToolbar } from "@/components/leads/bulk-toolbar"
+import { LeadKpis } from "@/components/leads/lead-kpis"
 import { NewLeadDialog } from "@/components/leads/new-lead-dialog"
 import {
   LeadSettingsSheet,
@@ -146,23 +155,54 @@ export function LeadsClient({
     [visibleCols],
   )
 
-  // Parametri di query inviati al server (paginazione/filtri/ordinamento/proiezione)
-  const params: LeadListParams = {
-    page,
-    pageSize: rowsPerPage,
-    sortBy,
-    sortDir,
-    search: filters.search,
-    stato: filters.stato,
-    sede: filters.sede,
-    commerciale: filters.commerciale,
-    origine: filters.origine,
-    tag: filters.tag,
-    score: filters.score,
-    onlyDuplicates,
-    advanced,
-    fields: visibleCols as unknown as string[],
-  }
+  // Ricerca con debounce: l'input resta reattivo (filters.search), ma la query
+  // parte solo ~350ms dopo l'ultimo tasto, evitando un fetch a ogni carattere.
+  const [debouncedSearch, setDebouncedSearch] = useState(filters.search)
+  useEffect(() => {
+    if (debouncedSearch === filters.search) return
+    const t = setTimeout(() => {
+      setDebouncedSearch(filters.search)
+      setPage(1)
+    }, 350)
+    return () => clearTimeout(t)
+  }, [filters.search, debouncedSearch])
+
+  // Parametri di query inviati al server (paginazione/filtri/ordinamento/proiezione).
+  // Memoizzati: evitano di ricreare l'oggetto (e nuove fetch) a ogni render.
+  const params: LeadListParams = useMemo(
+    () => ({
+      page,
+      pageSize: rowsPerPage,
+      sortBy,
+      sortDir,
+      search: debouncedSearch,
+      stato: filters.stato,
+      sede: filters.sede,
+      commerciale: filters.commerciale,
+      origine: filters.origine,
+      tag: filters.tag,
+      score: filters.score,
+      onlyDuplicates,
+      advanced,
+      fields: visibleCols as unknown as string[],
+    }),
+    [
+      page,
+      rowsPerPage,
+      sortBy,
+      sortDir,
+      debouncedSearch,
+      filters.stato,
+      filters.sede,
+      filters.commerciale,
+      filters.origine,
+      filters.tag,
+      filters.score,
+      onlyDuplicates,
+      advanced,
+      visibleCols,
+    ],
+  )
 
   const { data, isFetching, isError } = useLeadsQuery(params, {
     sp: initialSp,
@@ -185,22 +225,22 @@ export function LeadsClient({
   const rangeStart = total === 0 ? 0 : start + 1
   const rangeEnd = Math.min(start + rowsPerPage, total)
 
-  const handleFilterChange = (next: LeadFilterState) => {
+  const handleFilterChange = useCallback((next: LeadFilterState) => {
     setFilters(next)
     setPage(1)
-  }
+  }, [])
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     setFilters(DEFAULT_FILTERS)
     setAdvanced(EMPTY_ADVANCED)
     setOnlyDuplicates(false)
     setPage(1)
-  }
+  }, [])
 
-  const handleAdvancedApply = (next: AdvancedFilterState) => {
+  const handleAdvancedApply = useCallback((next: AdvancedFilterState) => {
     setAdvanced(next)
     setPage(1)
-  }
+  }, [])
 
   // Crea un nuovo lead via API e torna alla prima pagina
   const handleCreateLead = (lead: Lead) => {
@@ -234,26 +274,28 @@ export function LeadsClient({
     })
   }
 
-  const handleSort = (col: LeadColumnId) => {
-    if (sortBy === col) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"))
-    } else {
-      setSortBy(col)
+  const handleSort = useCallback((col: LeadColumnId) => {
+    setSortBy((prevCol) => {
+      if (prevCol === col) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+        return prevCol
+      }
       setSortDir("asc")
-    }
+      return col
+    })
     setPage(1)
-  }
+  }, [])
 
-  const toggle = (id: string) => {
+  const toggle = useCallback((id: string) => {
     setSelected((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
       return next
     })
-  }
+  }, [])
 
-  const toggleAll = () => {
+  const toggleAll = useCallback(() => {
     setSelected((prev) => {
       const allOnPage = pageRows.every((l) => prev.has(l.id))
       const next = new Set(prev)
@@ -261,7 +303,7 @@ export function LeadsClient({
       else pageRows.forEach((l) => next.add(l.id))
       return next
     })
-  }
+  }, [pageRows])
 
   // Righe selezionate disponibili nella pagina corrente (per la toolbar)
   const selectedRows = useMemo(
@@ -410,7 +452,8 @@ export function LeadsClient({
             Lead
           </h1>
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            {headerTotal.toLocaleString("it-IT")} lead totali nel CRM
+            Gestisci, filtra e assegna i lead del CRM ·{" "}
+            {headerTotal.toLocaleString("it-IT")} totali
             {isFetching ? (
               <Loader2
                 className="size-3.5 animate-spin text-muted-foreground"
@@ -467,6 +510,24 @@ export function LeadsClient({
           />
 
           <Button
+            variant="outline"
+            className="bg-card"
+            onClick={() => setImportOpen(true)}
+          >
+            <Upload data-icon="inline-start" />
+            Importa
+          </Button>
+
+          <Button
+            variant="outline"
+            className="bg-card"
+            onClick={handleExportFiltered}
+          >
+            <Download data-icon="inline-start" />
+            Esporta
+          </Button>
+
+          <Button
             className="bg-teal text-teal-foreground hover:bg-teal/90"
             onClick={() => setNewLeadOpen(true)}
           >
@@ -475,6 +536,9 @@ export function LeadsClient({
           </Button>
         </div>
       </div>
+
+      {/* KPI operativi sopra la tabella */}
+      <LeadKpis stats={stats} />
 
       {/* Indicatore filtro duplicati attivo */}
       {onlyDuplicates ? (

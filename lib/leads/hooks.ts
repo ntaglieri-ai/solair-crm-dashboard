@@ -34,6 +34,9 @@ export function useLeadsQuery(
   initial?: { sp: string; data: LeadListResponse },
 ) {
   const sp = buildLeadsSearchParams(params).toString()
+  // initialData solo quando la chiave coincide con il prefetch server-side,
+  // così non "perde" sulle altre pagine/filtri.
+  const hasInitial = !!initial && initial.sp === sp
   return useQuery({
     queryKey: leadsKeys.list(sp),
     queryFn: async ({ signal }) => {
@@ -41,10 +44,18 @@ export function useLeadsQuery(
       if (!res.ok) throw new Error("Errore nel caricamento dei lead")
       return (await res.json()) as LeadListResponse
     },
+    // Mantiene la pagina precedente visibile durante filtri/paginazione
+    // (nessuno svuotamento della tabella tra una query e l'altra).
     placeholderData: keepPreviousData,
-    // initialData solo quando la chiave coincide con il prefetch server-side,
-    // così non "perde" sulle altre pagine/filtri.
-    initialData: initial && initial.sp === sp ? initial.data : undefined,
+    // I dati restano "freschi" 60s: niente refetch ridondanti col viavai
+    // di decine di operatori sulla stessa lista.
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    initialData: hasInitial ? initial!.data : undefined,
+    // Quando usiamo il prefetch server-side, lo marchiamo come appena
+    // aggiornato così React Query NON rilancia un fetch subito dopo il mount.
+    initialDataUpdatedAt: hasInitial ? Date.now() : undefined,
+    refetchOnMount: hasInitial ? false : undefined,
   })
 }
 

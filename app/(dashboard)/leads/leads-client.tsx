@@ -2,7 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { ChevronLeft, ChevronRight, Plus, X, Loader2 } from "lucide-react"
+import {
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  X,
+  Loader2,
+  Upload,
+  Download,
+} from "lucide-react"
 import { IconSettings } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -40,6 +48,7 @@ import {
   type Density,
 } from "@/components/leads/lead-table"
 import { BulkToolbar } from "@/components/leads/bulk-toolbar"
+import { LeadKpis } from "@/components/leads/lead-kpis"
 import { NewLeadDialog } from "@/components/leads/new-lead-dialog"
 import {
   LeadSettingsSheet,
@@ -443,7 +452,8 @@ export function LeadsClient({
             Lead
           </h1>
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            {headerTotal.toLocaleString("it-IT")} lead totali nel CRM
+            Gestisci, filtra e assegna i lead del CRM ·{" "}
+            {headerTotal.toLocaleString("it-IT")} totali
             {isFetching ? (
               <Loader2
                 className="size-3.5 animate-spin text-muted-foreground"
@@ -500,6 +510,24 @@ export function LeadsClient({
           />
 
           <Button
+            variant="outline"
+            className="bg-card"
+            onClick={() => setImportOpen(true)}
+          >
+            <Upload data-icon="inline-start" />
+            Importa
+          </Button>
+
+          <Button
+            variant="outline"
+            className="bg-card"
+            onClick={handleExportFiltered}
+          >
+            <Download data-icon="inline-start" />
+            Esporta
+          </Button>
+
+          <Button
             className="bg-teal text-teal-foreground hover:bg-teal/90"
             onClick={() => setNewLeadOpen(true)}
           >
@@ -508,6 +536,9 @@ export function LeadsClient({
           </Button>
         </div>
       </div>
+
+      {/* KPI operativi sopra la tabella */}
+      <LeadKpis stats={stats} />
 
       {/* Indicatore filtro duplicati attivo */}
       {onlyDuplicates ? (

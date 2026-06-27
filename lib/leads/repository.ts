@@ -50,6 +50,8 @@ export async function queryLeads(params: LeadListParams): Promise<LeadListRespon
   const [base, total] = await Promise.all([
     getAllLeads({
       ...filters,
+      sortBy: params.sortBy,
+      sortDir: params.sortDir,
       limit: params.pageSize,
       offset: (params.page - 1) * params.pageSize,
     }),
@@ -64,14 +66,21 @@ export async function queryLeads(params: LeadListParams): Promise<LeadListRespon
 export async function computeStats(): Promise<LeadStats> {
   const supabase = await createClient()
 
-  const [{ data: statsData }, { count: total }] = await Promise.all([
-    supabase
-      .from("leads")
-      .select("stato_lead, valutazione, lead_proprietario_id"),
-    supabase
-      .from("leads")
-      .select("id", { count: "exact", head: true }),
-  ])
+  // Mezzanotte locale di oggi -> ISO, per il conteggio "Nuovi oggi".
+  const startOfToday = new Date()
+  startOfToday.setHours(0, 0, 0, 0)
+
+  const [{ data: statsData }, { count: total }, { count: nuoviOggi }] =
+    await Promise.all([
+      supabase
+        .from("leads")
+        .select("stato_lead, valutazione, lead_proprietario_id"),
+      supabase.from("leads").select("id", { count: "exact", head: true }),
+      supabase
+        .from("leads")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", startOfToday.toISOString()),
+    ])
 
   const all = statsData ?? []
   const byStato: Record<string, number> = {}
@@ -91,6 +100,7 @@ export async function computeStats(): Promise<LeadStats> {
     caldi,
     duplicati: 0,
     nonAssegnati,
+    nuoviOggi: nuoviOggi ?? 0,
   }
 }
 

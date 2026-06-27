@@ -45,7 +45,7 @@ export async function middleware(request: NextRequest) {
   // Se autenticato e su /login → redirect a /dashboard
   if (user && request.nextUrl.pathname === "/login") {
     const url = request.nextUrl.clone()
-    url.pathname = "/dashboard"
+    url.pathname = "/"
     return NextResponse.redirect(url)
   }
 

@@ -1,5 +1,6 @@
 // Repository server-side del modulo Lead.
 // Tutte le funzioni sono async — lo store parla con Supabase.
+// Paginazione server-side: Supabase restituisce solo le righe della pagina corrente.
 import type { Lead, LeadColumnId } from "@/lib/mock-data"
 import { matchesAdvanced } from "@/lib/leads/advanced-filter-logic"
 import {
@@ -44,62 +45,38 @@ function project(lead: Lead, fields: string[]): LeadListItem {
 }
 
 export async function queryLeads(params: LeadListParams): Promise<LeadListResponse> {
-  // 1) Candidati via indici — con Supabase restituisce sempre null
-  const candidateIds = await candidateIdsByIndex({
-    stato: params.stato,
-    sede: params.sede,
-    commerciale: params.commerciale,
-  })
+  // 1) Fetch da Supabase con filtri SQL e paginazione server-side
+  // Supabase restituisce solo le righe della pagina corrente — no full scan
+  const [base, total] = await Promise.all([
+    getAllLeads({
+      stato: params.stato,
+      sede: params.sede,
+      commerciale: params.commerciale,
+      search: params.search,
+      limit: params.pageSize,
+      offset: (params.page - 1) * params.pageSize,
+    }),
+    getTotalCount({
+      stato: params.stato,
+      sede: params.sede,
+      commerciale: params.commerciale,
+      search: params.search,
+    }),
+  ])
 
-  // 2) Fetch da Supabase con filtri SQL
-  const base = candidateIds
-    ? await getLeadsByIds(candidateIds)
-    : await getAllLeads({
-        stato: params.stato,
-        sede: params.sede,
-        commerciale: params.commerciale,
-        search: params.search,
-      })
-
-  // 3) Filtri residui in JS (origine, tag, score, duplicati, avanzati)
-  const q = params.search.trim().toLowerCase()
+  // 2) Filtri residui in JS (origine, tag, score, duplicati, avanzati)
+  // Questi non sono passati a Supabase quindi si applicano sui risultati paginati
   const filtered = base.filter((lead) => {
     if (params.onlyDuplicates && !lead.possibileDuplicato) return false
-    // search già applicato in SQL, ma per sicurezza se candidateIds è presente
-    if (candidateIds && q) {
-      const hay = [lead["Nome Lead"], lead["E-mail"], lead.Telefono]
-        .join(" ")
-        .toLowerCase()
-      if (!hay.includes(q)) return false
-    }
-    if (params.origine !== "all" && lead["Origine Lead"] !== params.origine)
-      return false
+    if (params.origine !== "all" && lead["Origine Lead"] !== params.origine) return false
     if (params.tag !== "all" && !lead.Tag.includes(params.tag)) return false
     if (!matchesScore(lead.Valutazione, params.score)) return false
     if (!matchesAdvanced(lead, params.advanced)) return false
     return true
   })
 
-  // 4) Ordinamento
-  const sortBy = params.sortBy
-  if (sortBy) {
-    filtered.sort((a, b) => {
-      const av = a[sortBy as keyof Lead]
-      const bv = b[sortBy as keyof Lead]
-      let cmp = 0
-      if (typeof av === "number" && typeof bv === "number") cmp = av - bv
-      else cmp = String(av ?? "").localeCompare(String(bv ?? ""), "it")
-      return params.sortDir === "asc" ? cmp : -cmp
-    })
-  }
-
-  // 5) Paginazione
-  const total = filtered.length
-  const startIdx = (params.page - 1) * params.pageSize
-  const pageSlice = filtered.slice(startIdx, startIdx + params.pageSize)
-
-  // 6) Proiezione selettiva
-  const rows = pageSlice.map((l) => project(l, params.fields))
+  // 3) Proiezione selettiva
+  const rows = filtered.map((l) => project(l, params.fields))
 
   return { rows, total, page: params.page, pageSize: params.pageSize }
 }

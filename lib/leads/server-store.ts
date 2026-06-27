@@ -112,7 +112,7 @@ export async function getAllLeads(filters?: {
   limit?: number
   offset?: number
 }): Promise<Lead[]> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   let query = supabase
     .from("leads")
@@ -155,7 +155,7 @@ export async function getTotalCount(filters?: {
   commerciale?: string
   search?: string
 }): Promise<number> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   let query = supabase
     .from("leads")
@@ -183,7 +183,7 @@ export async function getTotalCount(filters?: {
 // ─── getLeadById — dettaglio completo ────────────────────────────────────
 
 export async function getLeadById(id: string): Promise<Lead | undefined> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data, error } = await supabase
     .from("leads")
     .select("*")
@@ -200,7 +200,7 @@ export async function getLeadsByIds(ids: Iterable<string>): Promise<Lead[]> {
   const idArray = Array.from(ids)
   if (idArray.length === 0) return []
 
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data, error } = await supabase
     .from("leads")
     .select(LIST_COLUMNS)
@@ -217,7 +217,7 @@ export async function getLeadsByIds(ids: Iterable<string>): Promise<Lead[]> {
 // ─── insertLead ───────────────────────────────────────────────────────────
 
 export async function insertLead(lead: Lead): Promise<Lead> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   const { data, error } = await supabase
     .from("leads")
@@ -262,7 +262,7 @@ export async function patchLead(
   id: string,
   patch: Partial<Lead>
 ): Promise<Lead | undefined> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (patch["Nome Lead"] !== undefined) row.nome_lead = patch["Nome Lead"]
@@ -301,7 +301,7 @@ export async function patchLead(
 
 export async function removeLeads(ids: string[]): Promise<number> {
   if (ids.length === 0) return 0
-  const supabase = createClient()
+  const supabase = await createClient()
 
   const { error, count } = await supabase
     .from("leads")

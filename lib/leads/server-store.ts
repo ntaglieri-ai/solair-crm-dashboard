@@ -73,6 +73,8 @@ export async function getAllLeads(filters?: {
   stato?: string
   sede?: string
   commerciale?: string
+  origine?: string
+  score?: string
   search?: string
   limit?: number
   offset?: number
@@ -91,6 +93,15 @@ export async function getAllLeads(filters?: {
     query = query.eq("sede", filters.sede)
   if (filters?.commerciale && filters.commerciale !== "all")
     query = query.eq("lead_proprietario_id", filters.commerciale)
+  if (filters?.origine && filters.origine !== "all")
+    query = query.eq("origine_lead", filters.origine)
+  if (filters?.score && filters.score !== "all") {
+    // Fasce di valutazione: caldo > 80, medio 50–80, freddo < 50.
+    if (filters.score === "caldo") query = query.gt("valutazione", 80)
+    else if (filters.score === "medio")
+      query = query.gte("valutazione", 50).lte("valutazione", 80)
+    else if (filters.score === "freddo") query = query.lt("valutazione", 50)
+  }
   if (filters?.search?.trim()) {
     // Fulltext search con indice GIN
     query = query.textSearch(
@@ -117,6 +128,8 @@ export async function getTotalCount(filters?: {
   stato?: string
   sede?: string
   commerciale?: string
+  origine?: string
+  score?: string
   search?: string
 }): Promise<number> {
   const supabase = await createClient()
@@ -131,6 +144,15 @@ export async function getTotalCount(filters?: {
     query = query.eq("sede", filters.sede)
   if (filters?.commerciale && filters.commerciale !== "all")
     query = query.eq("lead_proprietario_id", filters.commerciale)
+  if (filters?.origine && filters.origine !== "all")
+    query = query.eq("origine_lead", filters.origine)
+  if (filters?.score && filters.score !== "all") {
+    // Fasce di valutazione: caldo > 80, medio 50–80, freddo < 50.
+    if (filters.score === "caldo") query = query.gt("valutazione", 80)
+    else if (filters.score === "medio")
+      query = query.gte("valutazione", 50).lte("valutazione", 80)
+    else if (filters.score === "freddo") query = query.lt("valutazione", 50)
+  }
   if (filters?.search?.trim()) {
     query = query.textSearch(
       "idx_leads_search",

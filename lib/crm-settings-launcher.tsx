@@ -9,9 +9,24 @@ import {
   type ReactNode,
 } from "react"
 
+export type CrmSettingsLayer =
+  | "root"
+  | "account-security"
+  | "file-manager"
+  | "system"
+
 interface CrmSettingsLauncherValue {
   open: boolean
+  layer: CrmSettingsLayer
   setOpen: (open: boolean) => void
+  setLayer: (layer: CrmSettingsLayer) => void
+  /** Apre il pannello sul Layer 1 (root). */
+  openCrmSettings: () => void
+  /** Apre il pannello direttamente su un Layer 2. */
+  openCrmSettingsLayer: (layer: CrmSettingsLayer) => void
+  /** Chiude il pannello. */
+  closeCrmSettings: () => void
+  /** Alias retro-compatibili. */
   openLauncher: () => void
   closeLauncher: () => void
 }
@@ -25,13 +40,34 @@ export function CrmSettingsLauncherProvider({
   children: ReactNode
 }) {
   const [open, setOpen] = useState(false)
+  const [layer, setLayer] = useState<CrmSettingsLayer>("root")
 
-  const openLauncher = useCallback(() => setOpen(true), [])
-  const closeLauncher = useCallback(() => setOpen(false), [])
+  const openCrmSettings = useCallback(() => {
+    setLayer("root")
+    setOpen(true)
+  }, [])
+
+  const openCrmSettingsLayer = useCallback((next: CrmSettingsLayer) => {
+    setLayer(next)
+    setOpen(true)
+  }, [])
+
+  const closeCrmSettings = useCallback(() => setOpen(false), [])
 
   const value = useMemo(
-    () => ({ open, setOpen, openLauncher, closeLauncher }),
-    [open, openLauncher, closeLauncher],
+    () => ({
+      open,
+      layer,
+      setOpen,
+      setLayer,
+      openCrmSettings,
+      openCrmSettingsLayer,
+      closeCrmSettings,
+      // Alias retro-compatibili usati dai componenti esistenti.
+      openLauncher: openCrmSettings,
+      closeLauncher: closeCrmSettings,
+    }),
+    [open, layer, openCrmSettings, openCrmSettingsLayer, closeCrmSettings],
   )
 
   return (

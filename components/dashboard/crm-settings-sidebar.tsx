@@ -295,17 +295,11 @@ function SettingsCard({
 }
 
 export function CrmSettingsSidebar() {
-  const { open, closeLauncher } = useCrmSettingsLauncher()
+  const { open, closeLauncher, layer, setLayer } = useCrmSettingsLauncher()
   const router = useRouter()
   const isMobile = useIsMobile()
   const panelRef = useRef<HTMLDivElement>(null)
   const closeBtnRef = useRef<HTMLButtonElement>(null)
-  const [layer, setLayer] = useState<Layer>("root")
-
-  // Ogni volta che il pannello si chiude, riparte dal Layer 1.
-  useEffect(() => {
-    if (!open) setLayer("root")
-  }, [open])
 
   // ESC per chiudere + blocco dello scroll della pagina sottostante.
   useEffect(() => {

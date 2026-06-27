@@ -55,14 +55,17 @@ function NavLink({ item }: { item: NavItem }) {
 
 function NavLauncherButton({ item }: { item: NavItem }) {
   const Icon = NAV_ICONS[item.icon]
-  const { openLauncher } = useCrmSettingsLauncher()
+  const { openCrmSettings, open } = useCrmSettingsLauncher()
   return (
     <button
       type="button"
-      onClick={openLauncher}
+      onClick={openCrmSettings}
+      aria-current={open ? "true" : undefined}
       className={cn(
-        "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-        "text-sidebar-foreground hover:bg-muted hover:text-foreground",
+        "flex w-full items-center gap-3 rounded-lg border-l-2 px-3 py-2 text-sm font-medium transition-colors",
+        open
+          ? "border-teal bg-navy/5 text-foreground"
+          : "border-transparent text-sidebar-foreground hover:bg-muted hover:text-foreground",
       )}
     >
       <Icon className="size-[18px] shrink-0" />

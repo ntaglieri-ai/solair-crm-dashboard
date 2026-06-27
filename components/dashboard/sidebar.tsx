@@ -1,10 +1,17 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { SunMedium } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import { SunMedium, User, Settings, LogOut, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   NAV_PRINCIPALE,
   NAV_GESTIONE,
@@ -74,6 +81,62 @@ function NavLauncherButton({ item }: { item: NavItem }) {
   )
 }
 
+function ProfileMenu() {
+  const router = useRouter()
+
+  async function handleLogout() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" })
+    } catch {
+      // ignora errori di rete: procediamo comunque al redirect
+    }
+    router.push("/login")
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        className={cn(
+          "flex w-full items-center gap-3 border-t border-sidebar-border px-4 py-4 text-left outline-none transition-colors",
+          "hover:bg-muted focus-visible:bg-muted",
+        )}
+      >
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-semibold text-navy-foreground">
+          {CURRENT_USER.iniziali}
+        </div>
+        <div className="flex min-w-0 flex-col leading-tight">
+          <span className="truncate text-sm font-semibold text-foreground">
+            {CURRENT_USER.nome}
+          </span>
+          <span className="truncate text-xs text-muted-foreground">
+            {CURRENT_USER.ruolo}
+          </span>
+        </div>
+        <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted-foreground" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        side="top"
+        align="start"
+        className="w-(--anchor-width) min-w-56"
+      >
+        <DropdownMenuItem render={<Link href="/profilo" />}>
+          <User className="size-4" />
+          Profilo
+        </DropdownMenuItem>
+        <DropdownMenuItem render={<Link href="/impostazioni" />}>
+          <Settings className="size-4" />
+          Impostazioni
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onClick={handleLogout}>
+          <LogOut className="size-4" />
+          Logout
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 function NavSection({ title, items }: { title: string; items: NavItem[] }) {
   return (
     <div className="flex flex-col gap-1">
@@ -115,19 +178,7 @@ export function Sidebar() {
       </nav>
 
       {/* Footer utente */}
-      <div className="flex items-center gap-3 border-t border-sidebar-border px-4 py-4">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-semibold text-navy-foreground">
-          {CURRENT_USER.iniziali}
-        </div>
-        <div className="flex min-w-0 flex-col leading-tight">
-          <span className="truncate text-sm font-semibold text-foreground">
-            {CURRENT_USER.nome}
-          </span>
-          <span className="truncate text-xs text-muted-foreground">
-            {CURRENT_USER.ruolo}
-          </span>
-        </div>
-      </div>
+      <ProfileMenu />
     </aside>
   )
 }

@@ -14,6 +14,9 @@ import {
   ClipboardList,
   Lock,
   Wrench,
+  Cloud,
+  FolderTree,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
@@ -94,6 +97,42 @@ const ACCOUNT_SECURITY_BLOCKS: SubBlock[] = [
     href: "/crm-settings/account/session",
     image:
       "https://images.unsplash.com/photo-1510511459019-5dda7724fd87?w=800&q=80",
+  },
+]
+
+// Layer 2 — File Manager: sotto-blocchi che puntano alle route reali.
+const FILE_MANAGER_BLOCKS: SubBlock[] = [
+  {
+    icon: Cloud,
+    title: "Configurazione Nextcloud",
+    description: "Connessione istanza e account di servizio",
+    href: "/crm-settings/file-manager/nextcloud",
+    image:
+      "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=800&q=80",
+  },
+  {
+    icon: FolderTree,
+    title: "Struttura cartelle",
+    description: "Template di percorso per i moduli CRM",
+    href: "/crm-settings/file-manager/struttura",
+    image:
+      "https://images.unsplash.com/photo-1507925921958-8a62f3d1a50d?w=800&q=80",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Permessi storage",
+    description: "Cosa può fare ogni ruolo sullo storage",
+    href: "/crm-settings/file-manager/permessi",
+    image:
+      "https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=800&q=80",
+  },
+  {
+    icon: FolderOpen,
+    title: "Cartelle condivise",
+    description: "Cartelle accessibili a più utenti per ruolo",
+    href: "/crm-settings/file-manager/condivise",
+    image:
+      "https://images.unsplash.com/photo-1568667256549-094345857637?w=800&q=80",
   },
 ]
 
@@ -347,7 +386,20 @@ export function CrmSettingsSidebar() {
                       ))
                     : null}
 
-                  {layer === "file-manager" || layer === "system" ? (
+                  {layer === "file-manager"
+                    ? FILE_MANAGER_BLOCKS.map((block) => (
+                        <SettingsCard
+                          key={block.title}
+                          icon={block.icon}
+                          title={block.title}
+                          description={block.description}
+                          image={block.image}
+                          onClick={() => handleNavigate(block.href)}
+                        />
+                      ))
+                    : null}
+
+                  {layer === "system" ? (
                     <div className="flex flex-1 flex-col items-center justify-center gap-4 py-16 text-center">
                       <div className="flex size-16 items-center justify-center rounded-2xl bg-white/5 text-[#2E8B72]">
                         <Wrench className="size-8" />

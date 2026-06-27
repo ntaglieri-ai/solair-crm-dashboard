@@ -29,7 +29,10 @@ export const leadsKeys = {
 // ----------------------------------------------------------------------------
 // Lista paginata (server-side) — keepPreviousData per transizioni fluide
 // ----------------------------------------------------------------------------
-export function useLeadsQuery(params: LeadListParams) {
+export function useLeadsQuery(
+  params: LeadListParams,
+  initial?: { sp: string; data: LeadListResponse },
+) {
   const sp = buildLeadsSearchParams(params).toString()
   return useQuery({
     queryKey: leadsKeys.list(sp),
@@ -39,6 +42,9 @@ export function useLeadsQuery(params: LeadListParams) {
       return (await res.json()) as LeadListResponse
     },
     placeholderData: keepPreviousData,
+    // initialData solo quando la chiave coincide con il prefetch server-side,
+    // così non "perde" sulle altre pagine/filtri.
+    initialData: initial && initial.sp === sp ? initial.data : undefined,
   })
 }
 
@@ -46,7 +52,7 @@ export function useLeadsQuery(params: LeadListParams) {
 // Statistiche header/dashboard — polling leggero (sostituto del realtime DB
 // per conteggi critici). 20s di intervallo, solo conteggi aggregati.
 // ----------------------------------------------------------------------------
-export function useLeadStats() {
+export function useLeadStats(initialData?: LeadStats) {
   return useQuery({
     queryKey: leadsKeys.stats(),
     queryFn: async ({ signal }) => {
@@ -56,6 +62,7 @@ export function useLeadStats() {
     },
     refetchInterval: 20_000,
     refetchIntervalInBackground: false,
+    initialData,
   })
 }
 

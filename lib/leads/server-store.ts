@@ -117,7 +117,8 @@ export async function getAllLeads(filters?: {
   let query = supabase
     .from("leads")
     .select(LIST_COLUMNS)
-    .order("ora_ultima_attivita", { ascending: false })
+    // Ordine cronologico discendente — sfrutta l'indice su created_at.
+    .order("created_at", { ascending: false })
 
   // Filtri SQL — sfruttano gli indici su stato_lead, sede, lead_proprietario_id
   if (filters?.stato && filters.stato !== "all")

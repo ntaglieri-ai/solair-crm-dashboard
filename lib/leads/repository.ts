@@ -1,13 +1,11 @@
 // Repository server-side del modulo Lead — ottimizzato per performance.
 // computeStats usa query SQL aggregata invece di full scan.
 import type { Lead, LeadColumnId } from "@/lib/mock-data"
-import { matchesAdvanced } from "@/lib/leads/advanced-filter-logic"
 import {
   type LeadListParams,
   type LeadListResponse,
   type LeadListItem,
   type LeadStats,
-  type ScoreFilter,
   LIST_BASE_FIELDS,
 } from "@/lib/leads/api-types"
 import {
@@ -21,13 +19,6 @@ import {
   removeLeads,
 } from "@/lib/leads/server-store"
 import { createClient } from "@/lib/supabase/server"
-
-function matchesScore(score: number, filter: ScoreFilter): boolean {
-  if (filter === "caldo") return score > 80
-  if (filter === "medio") return score >= 50 && score <= 80
-  if (filter === "freddo") return score < 50
-  return true
-}
 
 function project(lead: Lead, fields: string[]): LeadListItem {
   if (fields.includes("*")) {
@@ -45,33 +36,27 @@ function project(lead: Lead, fields: string[]): LeadListItem {
 }
 
 export async function queryLeads(params: LeadListParams): Promise<LeadListResponse> {
+  // Tutti i filtri sono applicati nella query Supabase PRIMA di range/paginazione,
+  // così total e righe restano coerenti con la pagina richiesta.
+  const filters = {
+    stato: params.stato,
+    sede: params.sede,
+    commerciale: params.commerciale,
+    origine: params.origine,
+    score: params.score,
+    search: params.search,
+  }
+
   const [base, total] = await Promise.all([
     getAllLeads({
-      stato: params.stato,
-      sede: params.sede,
-      commerciale: params.commerciale,
-      search: params.search,
+      ...filters,
       limit: params.pageSize,
       offset: (params.page - 1) * params.pageSize,
     }),
-    getTotalCount({
-      stato: params.stato,
-      sede: params.sede,
-      commerciale: params.commerciale,
-      search: params.search,
-    }),
+    getTotalCount(filters),
   ])
 
-  const filtered = base.filter((lead) => {
-    if (params.onlyDuplicates && !lead.possibileDuplicato) return false
-    if (params.origine !== "all" && lead["Origine Lead"] !== params.origine) return false
-    if (params.tag !== "all" && !lead.Tag.includes(params.tag)) return false
-    if (!matchesScore(lead.Valutazione, params.score)) return false
-    if (!matchesAdvanced(lead, params.advanced)) return false
-    return true
-  })
-
-  const rows = filtered.map((l) => project(l, params.fields))
+  const rows = base.map((l) => project(l, params.fields))
   return { rows, total, page: params.page, pageSize: params.pageSize }
 }
 
@@ -128,26 +113,47 @@ export async function deleteLeadRecords(ids: string[]): Promise<number> {
 
 export type BulkField = "Stato Lead" | "Sede" | "Lead Proprietario" | "Tag"
 
+// Mappa i campi bulk con valore identico per tutti i lead sulla colonna DB.
+const BULK_COLUMN: Record<Exclude<BulkField, "Tag">, string> = {
+  "Stato Lead": "stato_lead",
+  Sede: "sede",
+  "Lead Proprietario": "lead_proprietario_id",
+}
+
 export async function bulkUpdateRecords(
   ids: string[],
   field: BulkField,
   value: string,
 ): Promise<number> {
-  let n = 0
-  for (const id of ids) {
-    const current = await getLeadById(id)
-    if (!current) continue
-    if (field === "Tag") {
+  if (ids.length === 0) return 0
+
+  // Tag: il nuovo valore dipende dai tag esistenti di ciascun lead (merge senza
+  // duplicati), quindi l'aggiornamento NON è uguale per tutti → resta per-riga.
+  if (field === "Tag") {
+    let n = 0
+    for (const id of ids) {
+      const current = await getLeadById(id)
+      if (!current) continue
       const next = current.Tag.includes(value)
         ? current.Tag
         : [...current.Tag, value]
       await patchLead(id, { Tag: next })
-    } else {
-      await patchLead(id, { [field]: value } as Partial<Lead>)
+      n++
     }
-    n++
+    return n
   }
-  return n
+
+  // Stesso valore per tutti i lead → singola query update().in("id", ids).
+  const supabase = await createClient()
+  const { count, error } = await supabase
+    .from("leads")
+    .update(
+      { [BULK_COLUMN[field]]: value, updated_at: new Date().toISOString() },
+      { count: "exact" },
+    )
+    .in("id", ids)
+  if (error) throw new Error(`bulkUpdateRecords: ${error.message}`)
+  return count ?? 0
 }
 
 export async function getFullLeadById(id: string): Promise<Lead | undefined> {

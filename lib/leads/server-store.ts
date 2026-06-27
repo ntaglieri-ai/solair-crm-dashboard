@@ -82,7 +82,8 @@ export async function getAllLeads(filters?: {
   let query = supabase
     .from("leads")
     .select(LIST_COLUMNS)
-    .order("ora_ultima_attivita", { ascending: false })
+    // Ordine cronologico discendente — sfrutta l'indice su created_at.
+    .order("created_at", { ascending: false })
 
   if (filters?.stato && filters.stato !== "all")
     query = query.eq("stato_lead", filters.stato)

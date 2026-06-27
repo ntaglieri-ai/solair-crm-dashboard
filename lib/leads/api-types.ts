@@ -1,6 +1,7 @@
 // Contratto API condiviso del modulo Lead (client <-> route handlers).
 // Identico a quello che soddisferà una query SQL reale (Supabase) in futuro.
 import type { Lead, LeadColumnId } from "@/lib/mock-data"
+import { DEFAULT_VISIBLE_COLUMNS } from "@/lib/mock-data"
 import {
   type AdvancedFilterState,
   EMPTY_ADVANCED,
@@ -76,6 +77,21 @@ export const DEFAULT_LIST_PARAMS: LeadListParams = {
   onlyDuplicates: false,
   advanced: EMPTY_ADVANCED,
   fields: [],
+}
+
+// Numero di lead pre-caricati lato server al primo render della pagina.
+export const INITIAL_PAGE_SIZE = 50
+
+// Parametri usati per il prefetch server-side iniziale. DEVONO coincidere con
+// lo stato iniziale di LeadsClient così che la chiave React Query corrisponda
+// e i dati vengano usati come initialData (nessun loading dopo il mount).
+export function getInitialLeadsParams(): LeadListParams {
+  return {
+    ...DEFAULT_LIST_PARAMS,
+    page: 1,
+    pageSize: INITIAL_PAGE_SIZE,
+    fields: DEFAULT_VISIBLE_COLUMNS as unknown as string[],
+  }
 }
 
 // --- Encode: params -> URLSearchParams (per fetch lato client) ---

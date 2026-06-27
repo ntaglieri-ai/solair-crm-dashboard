@@ -482,7 +482,7 @@ export function LeadsClient({
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex h-[calc(100svh-9rem)] flex-col gap-5 lg:h-[calc(100svh-6rem)]">
       {/* Header pagina */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-0.5">
@@ -619,25 +619,27 @@ export function LeadsClient({
         </div>
       ) : null}
 
-      {/* Tabella */}
-      <LeadTable
-        leads={pageRows}
-        columns={columns}
-        selected={selected}
-        onToggle={toggle}
-        onToggleAll={toggleAll}
-        onConvert={(lead) => setConvertTarget(lead)}
-        onDelete={(lead) => setDeleteTarget(lead)}
-        sortBy={sortBy}
-        sortDir={sortDir}
-        onSort={handleSort}
-        density={density}
-        scrollRef={tableScrollRef}
-        onScrollerScroll={syncBarFromTable}
-      />
+      {/* Tabella — occupa lo spazio rimanente e scrolla internamente */}
+      <div className="min-h-0 flex-1">
+        <LeadTable
+          leads={pageRows}
+          columns={columns}
+          selected={selected}
+          onToggle={toggle}
+          onToggleAll={toggleAll}
+          onConvert={(lead) => setConvertTarget(lead)}
+          onDelete={(lead) => setDeleteTarget(lead)}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          onSort={handleSort}
+          density={density}
+          scrollRef={tableScrollRef}
+          onScrollerScroll={syncBarFromTable}
+        />
+      </div>
 
       {/* Footer paginazione — sempre visibile e in primo piano */}
-      <div className="sticky bottom-0 z-30 -mx-5 -mb-6 flex flex-col gap-2 border-t border-border bg-background/95 px-5 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <div className="sticky bottom-0 z-30 -mx-5 flex shrink-0 flex-col gap-2 border-t border-border bg-background/95 px-5 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         {/* Scrollbar orizzontale sincronizzata: visibile solo quando le colonne eccedono */}
         {hOverflow ? (
           <div

@@ -434,7 +434,7 @@ export function LeadTable({
         el.scrollLeft += e.deltaX !== 0 ? e.deltaX : e.deltaY
         onScrollerScroll?.(el)
       }}
-      className="max-h-[calc(100vh-15rem)] overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-card outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+      className="h-full max-h-full overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-card outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
     >
       <Table>
         <TableHeader

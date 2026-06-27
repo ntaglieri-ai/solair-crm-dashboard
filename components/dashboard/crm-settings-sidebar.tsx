@@ -13,10 +13,16 @@ import {
   Users,
   ClipboardList,
   Lock,
-  Wrench,
   Cloud,
   FolderTree,
   ShieldCheck,
+  Building2,
+  ListFilter,
+  GitBranch,
+  Webhook,
+  Zap,
+  ArrowLeftRight,
+  DatabaseBackup,
   type LucideIcon,
 } from "lucide-react"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
@@ -133,6 +139,74 @@ const FILE_MANAGER_BLOCKS: SubBlock[] = [
     href: "/crm-settings/file-manager/condivise",
     image:
       "https://images.unsplash.com/photo-1568667256549-094345857637?w=800&q=80",
+  },
+]
+
+// Layer 2 — System Settings: sotto-blocchi verso le route reali.
+const SYSTEM_BLOCKS: SubBlock[] = [
+  {
+    icon: Building2,
+    title: "Sedi",
+    description: "Sedi operative assegnabili agli utenti",
+    href: "/crm-settings/system/sedi",
+    image:
+      "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&q=80",
+  },
+  {
+    icon: Settings2,
+    title: "Attributi record",
+    description: "Campi personalizzati per ogni modulo",
+    href: "/crm-settings/system/attributi",
+    image:
+      "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=800&q=80",
+  },
+  {
+    icon: ListFilter,
+    title: "Valori configurabili",
+    description: "Valori delle select per modulo e campo",
+    href: "/crm-settings/system/valori",
+    image:
+      "https://images.unsplash.com/photo-1531403009284-440f080d1e12?w=800&q=80",
+  },
+  {
+    icon: GitBranch,
+    title: "Regole di assegnazione",
+    description: "Assegnazione automatica dei lead",
+    href: "/crm-settings/system/regole",
+    image:
+      "https://images.unsplash.com/photo-1606857521015-7f9fcf423740?w=800&q=80",
+  },
+  {
+    icon: Zap,
+    title: "Flussi di lavoro",
+    description: "Trigger automatici sugli eventi del CRM",
+    href: "/crm-settings/system/flussi",
+    image:
+      "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?w=800&q=80",
+  },
+  {
+    icon: ArrowLeftRight,
+    title: "Import / Export",
+    description: "Importa ed esporta dati in CSV",
+    href: "/crm-settings/system/import-export",
+    image:
+      "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&q=80",
+  },
+  {
+    icon: Webhook,
+    title: "Integrazione Make",
+    description: "Webhook Make.com collegati al CRM",
+    href: "/crm-settings/system/make",
+    image:
+      "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80",
+  },
+  {
+    icon: DatabaseBackup,
+    title: "Backup",
+    description: "Backup manuali del database CRM",
+    href: "/crm-settings/system/backup",
+    image:
+      "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&q=80",
   },
 ]
 
@@ -399,29 +473,18 @@ export function CrmSettingsSidebar() {
                       ))
                     : null}
 
-                  {layer === "system" ? (
-                    <div className="flex flex-1 flex-col items-center justify-center gap-4 py-16 text-center">
-                      <div className="flex size-16 items-center justify-center rounded-2xl bg-white/5 text-[#2E8B72]">
-                        <Wrench className="size-8" />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <h3 className="text-lg font-semibold text-white">
-                          In configurazione
-                        </h3>
-                        <p className="max-w-xs text-sm text-gray-400">
-                          Questa sezione sarà disponibile a breve.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setLayer("root")}
-                        className="mt-2 inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:border-[#2E8B72] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2E8B72]"
-                      >
-                        <ChevronLeft className="size-4" />
-                        Torna indietro
-                      </button>
-                    </div>
-                  ) : null}
+                  {layer === "system"
+                    ? SYSTEM_BLOCKS.map((block) => (
+                        <SettingsCard
+                          key={block.title}
+                          icon={block.icon}
+                          title={block.title}
+                          description={block.description}
+                          image={block.image}
+                          onClick={() => handleNavigate(block.href)}
+                        />
+                      ))
+                    : null}
                 </motion.div>
               </AnimatePresence>
             </div>

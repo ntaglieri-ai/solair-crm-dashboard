@@ -12,6 +12,9 @@ import {
   IconDownload,
   IconTrash,
   IconCheck,
+  IconPencil,
+  IconPhone,
+  IconMail,
 } from "@tabler/icons-react"
 import {
   ContextMenu,
@@ -85,6 +88,38 @@ export function LeadRowContextMenu({
           <ContextMenuGroup>
             <ContextMenuGroupLabel>Azioni rapide</ContextMenuGroupLabel>
 
+            <ContextMenuItem onClick={() => router.push(`/leads/${lead.id}`)}>
+              <IconExternalLink size={15} stroke={1.8} />
+              Apri scheda lead
+            </ContextMenuItem>
+            <ContextMenuItem
+              onClick={() => router.push(`/leads/${lead.id}?edit=1`)}
+            >
+              <IconPencil size={15} stroke={1.8} />
+              Modifica lead
+            </ContextMenuItem>
+            <ContextMenuItem
+              disabled={!lead.Telefono}
+              onClick={() => {
+                if (lead.Telefono) window.location.href = `tel:${lead.Telefono}`
+              }}
+            >
+              <IconPhone size={15} stroke={1.8} />
+              Chiama
+            </ContextMenuItem>
+            <ContextMenuItem
+              disabled={!lead["E-mail"]}
+              onClick={() => {
+                if (lead["E-mail"])
+                  window.location.href = `mailto:${lead["E-mail"]}`
+              }}
+            >
+              <IconMail size={15} stroke={1.8} />
+              Invia email
+            </ContextMenuItem>
+
+            <ContextMenuSeparator />
+
             {/* Gestisci tag -> apre popover inline sulla riga */}
             <Popover open={tagOpen} onOpenChange={setTagOpen}>
               <PopoverTrigger
@@ -111,7 +146,7 @@ export function LeadRowContextMenu({
             <ContextMenuSub>
               <ContextMenuSubTrigger>
                 <IconUserEdit size={15} stroke={1.8} />
-                Cambia proprietario
+                Assegna commerciale
               </ContextMenuSubTrigger>
               <ContextMenuSubContent>
                 {mockCommerciali.map((c) => (
@@ -168,10 +203,6 @@ export function LeadRowContextMenu({
 
           <ContextMenuGroup>
             <ContextMenuGroupLabel>Navigazione</ContextMenuGroupLabel>
-            <ContextMenuItem onClick={() => router.push(`/leads/${lead.id}`)}>
-              <IconExternalLink size={15} stroke={1.8} />
-              Apri scheda
-            </ContextMenuItem>
             <ContextMenuItem onClick={() => setConfirmDup(true)}>
               <IconCopy size={15} stroke={1.8} />
               Duplica lead

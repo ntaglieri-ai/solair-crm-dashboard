@@ -263,6 +263,34 @@ export function LeadsClient({
     return () => ro.disconnect()
   }, [columns, pageRows, density])
 
+  // --- Altezza dinamica della pagina (footer sempre visibile) ---
+  // La topbar ha altezza variabile (responsive/breakpoint), quindi un calc fisso
+  // non basta. Misuriamo l'offset reale del contenitore dalla cima del viewport e
+  // blocchiamo l'altezza fino al fondo schermo: il footer resta sempre in vista e
+  // la tabella scrolla internamente, su qualsiasi dimensione di schermo.
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [availH, setAvailH] = useState<number | null>(null)
+  useEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+    // Padding inferiore del <main> (py-6 = 24px), costante a ogni breakpoint.
+    const BOTTOM_GAP = 24
+    const measure = () => {
+      const top = el.getBoundingClientRect().top + window.scrollY
+      const next = Math.max(360, window.innerHeight - top - BOTTOM_GAP)
+      setAvailH(next)
+    }
+    measure()
+    window.addEventListener("resize", measure)
+    // La topbar può cambiare altezza (stacking responsive): osserva il body.
+    const ro = new ResizeObserver(measure)
+    ro.observe(document.body)
+    return () => {
+      window.removeEventListener("resize", measure)
+      ro.disconnect()
+    }
+  }, [])
+
   const handleFilterChange = useCallback((next: LeadFilterState) => {
     setFilters(next)
     setPage(1)
@@ -482,7 +510,11 @@ export function LeadsClient({
   }
 
   return (
-    <div className="flex h-[calc(100svh-9rem)] flex-col gap-5 lg:h-[calc(100svh-6rem)]">
+    <div
+      ref={rootRef}
+      style={availH ? { height: availH } : undefined}
+      className="flex h-[calc(100svh-9rem)] flex-col gap-5 lg:h-[calc(100svh-6rem)]"
+    >
       {/* Header pagina */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-0.5">

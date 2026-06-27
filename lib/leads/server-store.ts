@@ -1,12 +1,7 @@
-// Store server-side — Supabase async puro.
-// Nessuna cache in memoria: ogni chiamata è una query SQL parametrica.
-// Architettura pronta per SaaS multi-tenant (aggiungere tenant_id + RLS).
-// Le firme sono async — repository.ts deve usare await su ogni chiamata.
-
+// Store server-side — Supabase async puro ottimizzato.
+// Search fulltext con indice GIN, paginazione server-side, query aggregate.
 import { createClient } from "@/lib/supabase/server"
 import type { Lead } from "@/lib/mock-data"
-
-// ─── Mapping Supabase row → Lead (nomi Zoho) ─────────────────────────────
 
 function mapRow(row: Record<string, unknown>): Lead {
   return {
@@ -47,7 +42,6 @@ function mapRow(row: Record<string, unknown>): Lead {
     "Data Click": (row.data_click as string) ?? "",
     "Data/Ora": (row.data_ora as string) ?? "",
     "Ora ultima attività": (row.ora_ultima_attivita as string) ?? "",
-    // Campi UI calcolati
     "Badge dell'attività": false,
     "Badge di nota": false,
     Tag: [],
@@ -59,50 +53,21 @@ function mapRow(row: Record<string, unknown>): Lead {
   }
 }
 
-// ─── Proiezione lista (no SELECT *) ──────────────────────────────────────
-
 const LIST_COLUMNS = [
-  "id",
-  "nome_lead",
-  "nome",
-  "cognome",
-  "email",
-  "telefono",
-  "mobile_fisso",
-  "stato_lead",
-  "stato_email",
-  "valutazione",
-  "lead_proprietario_id",
-  "origine_lead",
-  "sede",
-  "campaign_name",
-  "citta",
-  "provincia",
-  "codice_postale",
-  "residente_in_sicilia",
-  "wallbox_richiesto",
-  "data_click",
-  "data_ora",
-  "ora_ultima_attivita",
-  "created_at",
+  "id", "nome_lead", "nome", "cognome", "email", "telefono", "mobile_fisso",
+  "stato_lead", "stato_email", "valutazione", "lead_proprietario_id",
+  "origine_lead", "sede", "campaign_name", "citta", "provincia",
+  "codice_postale", "residente_in_sicilia", "wallbox_richiesto",
+  "data_click", "data_ora", "ora_ultima_attivita", "created_at",
 ].join(",")
-
-// ─── candidateIdsByIndex ──────────────────────────────────────────────────
-// Con Supabase non servono indici in memoria: PostgreSQL usa i suoi indici.
-// Restituiamo null → repository.ts farà getAllLeads() con i filtri SQL.
 
 export async function candidateIdsByIndex(_filters: {
   stato?: string
   sede?: string
   commerciale?: string
 }): Promise<Set<string> | null> {
-  // PostgreSQL gestisce i filtri con indici nativi — no pre-filtering in JS.
   return null
 }
-
-// ─── getAllLeads — query con filtri opzionali ────────────────────────────
-// Nota: questa funzione ora accetta filtri opzionali per evitare di caricare
-// tutti i record quando si applica un filtro.
 
 export async function getAllLeads(filters?: {
   stato?: string
@@ -119,35 +84,33 @@ export async function getAllLeads(filters?: {
     .select(LIST_COLUMNS)
     .order("ora_ultima_attivita", { ascending: false })
 
-  // Filtri SQL — sfruttano gli indici su stato_lead, sede, lead_proprietario_id
   if (filters?.stato && filters.stato !== "all")
     query = query.eq("stato_lead", filters.stato)
   if (filters?.sede && filters.sede !== "all")
     query = query.eq("sede", filters.sede)
   if (filters?.commerciale && filters.commerciale !== "all")
     query = query.eq("lead_proprietario_id", filters.commerciale)
-  if (filters?.search?.trim())
-    query = query.or(
-      `nome_lead.ilike.%${filters.search}%,email.ilike.%${filters.search}%,telefono.ilike.%${filters.search}%`
+  if (filters?.search?.trim()) {
+    // Fulltext search con indice GIN
+    query = query.textSearch(
+      "idx_leads_search",
+      filters.search.trim(),
+      { type: "websearch", config: "italian" }
     )
+  }
 
-  if (filters?.limit) query = query.limit(filters.limit)
-  if (filters?.offset) query = query.range(
-    filters.offset,
-    filters.offset + (filters.limit ?? 100) - 1
-  )
+  if (filters?.limit) {
+    const from = filters.offset ?? 0
+    query = query.range(from, from + filters.limit - 1)
+  }
 
   const { data, error } = await query
-
   if (error) {
     console.error("[server-store] getAllLeads error:", error.message)
     return []
   }
-
   return (data as Record<string, unknown>[]).map(mapRow)
 }
-
-// ─── getTotalCount ────────────────────────────────────────────────────────
 
 export async function getTotalCount(filters?: {
   stato?: string
@@ -167,10 +130,13 @@ export async function getTotalCount(filters?: {
     query = query.eq("sede", filters.sede)
   if (filters?.commerciale && filters.commerciale !== "all")
     query = query.eq("lead_proprietario_id", filters.commerciale)
-  if (filters?.search?.trim())
-    query = query.or(
-      `nome_lead.ilike.%${filters.search}%,email.ilike.%${filters.search}%,telefono.ilike.%${filters.search}%`
+  if (filters?.search?.trim()) {
+    query = query.textSearch(
+      "idx_leads_search",
+      filters.search.trim(),
+      { type: "websearch", config: "italian" }
     )
+  }
 
   const { count, error } = await query
   if (error) {
@@ -180,8 +146,6 @@ export async function getTotalCount(filters?: {
   return count ?? 0
 }
 
-// ─── getLeadById — dettaglio completo ────────────────────────────────────
-
 export async function getLeadById(id: string): Promise<Lead | undefined> {
   const supabase = await createClient()
   const { data, error } = await supabase
@@ -189,36 +153,27 @@ export async function getLeadById(id: string): Promise<Lead | undefined> {
     .select("*")
     .eq("id", id)
     .single()
-
   if (error || !data) return undefined
   return mapRow(data as Record<string, unknown>)
 }
 
-// ─── getLeadsByIds ────────────────────────────────────────────────────────
-
 export async function getLeadsByIds(ids: Iterable<string>): Promise<Lead[]> {
   const idArray = Array.from(ids)
   if (idArray.length === 0) return []
-
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("leads")
     .select(LIST_COLUMNS)
     .in("id", idArray)
-
   if (error) {
     console.error("[server-store] getLeadsByIds error:", error.message)
     return []
   }
-
   return (data as Record<string, unknown>[]).map(mapRow)
 }
 
-// ─── insertLead ───────────────────────────────────────────────────────────
-
 export async function insertLead(lead: Lead): Promise<Lead> {
   const supabase = await createClient()
-
   const { data, error } = await supabase
     .from("leads")
     .insert({
@@ -251,19 +206,12 @@ export async function insertLead(lead: Lead): Promise<Lead> {
     })
     .select()
     .single()
-
   if (error) throw new Error(`insertLead: ${error.message}`)
   return mapRow(data as Record<string, unknown>)
 }
 
-// ─── patchLead ────────────────────────────────────────────────────────────
-
-export async function patchLead(
-  id: string,
-  patch: Partial<Lead>
-): Promise<Lead | undefined> {
+export async function patchLead(id: string, patch: Partial<Lead>): Promise<Lead | undefined> {
   const supabase = await createClient()
-
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (patch["Nome Lead"] !== undefined) row.nome_lead = patch["Nome Lead"]
   if (patch.Nome !== undefined) row.nome = patch.Nome
@@ -285,29 +233,23 @@ export async function patchLead(
   if (patch["Wallbox richiesto"] !== undefined) row.wallbox_richiesto = patch["Wallbox richiesto"]
   if (patch.kWp !== undefined) row.kwp = patch.kWp
   if (patch.kWh !== undefined) row.kwh = patch.kWh
-
   const { data, error } = await supabase
     .from("leads")
     .update(row)
     .eq("id", id)
     .select()
     .single()
-
   if (error || !data) return undefined
   return mapRow(data as Record<string, unknown>)
 }
 
-// ─── removeLeads ──────────────────────────────────────────────────────────
-
 export async function removeLeads(ids: string[]): Promise<number> {
   if (ids.length === 0) return 0
   const supabase = await createClient()
-
   const { error, count } = await supabase
     .from("leads")
     .delete({ count: "exact" })
     .in("id", ids)
-
   if (error) throw new Error(`removeLeads: ${error.message}`)
   return count ?? 0
 }

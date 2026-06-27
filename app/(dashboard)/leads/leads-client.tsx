@@ -596,8 +596,8 @@ export function LeadsClient({
         density={density}
       />
 
-      {/* Footer paginazione */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* Footer paginazione — sempre visibile e in primo piano */}
+      <div className="sticky bottom-0 z-30 -mx-5 -mb-6 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background/95 px-5 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground">
             {rangeStart}-{rangeEnd} di {total.toLocaleString("it-IT")}

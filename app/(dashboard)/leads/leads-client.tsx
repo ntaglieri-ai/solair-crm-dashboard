@@ -672,18 +672,6 @@ export function LeadsClient({
 
       {/* Footer paginazione — sempre visibile e in primo piano */}
       <div className="sticky bottom-0 z-30 -mx-5 flex shrink-0 flex-col gap-2 border-t border-border bg-background/95 px-5 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        {/* Scrollbar orizzontale sincronizzata: visibile solo quando le colonne eccedono */}
-        {hOverflow ? (
-          <div
-            ref={hBarRef}
-            onScroll={syncTableFromBar}
-            className="w-full overflow-x-auto overflow-y-hidden [scrollbar-color:var(--color-muted-foreground)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5"
-            aria-hidden
-          >
-            <div style={{ width: hScrollWidth }} className="h-px" />
-          </div>
-        ) : null}
-
         <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground">

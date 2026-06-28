@@ -2,6 +2,7 @@
 // Search fulltext con indice GIN, paginazione server-side, query aggregate.
 import { createClient } from "@/lib/supabase/server"
 import type { Lead } from "@/lib/mock-data"
+import type { AdvancedFilterState } from "@/lib/leads/advanced-filter-logic"
 
 function mapRow(row: Record<string, unknown>): Lead {
   return {
@@ -92,6 +93,80 @@ function resolveSort(sortBy?: string | null, sortDir?: "asc" | "desc") {
   return { column, ascending }
 }
 
+// Mappa campo Lead (UI filtri avanzati) -> colonna DB. I campi senza colonna
+// (es. Tag, Installatore) vengono ignorati lato server.
+const ADVANCED_DB_COLUMN: Record<string, string> = {
+  "Account convertito": "account_convertito_id",
+  "campaign name": "campaign_name",
+  Città: "citta",
+  "Codice postale": "codice_postale",
+  Cognome: "cognome",
+  "Connesso a": "connesso_a",
+  "Contatto convertito": "contatto_convertito",
+  "Creato da": "creato_da",
+  "Data Click": "data_click",
+  "Data sopralluogo": "data_sopralluogo",
+  "Data/Ora": "data_ora",
+  Descrizione: "descrizione",
+  "E-mail": "email",
+  kWh: "kwh",
+  kWp: "kwp",
+  "Lead Proprietario": "lead_proprietario_id",
+  "Mobile/Fisso": "mobile_fisso",
+  "Modalità iscrizione annullata": "modalita_iscrizione_annullata",
+  "Modello pannello": "modello_pannello",
+  Nome: "nome",
+  "Nome Lead": "nome_lead",
+  "Ora iscrizione annullata": "ora_iscrizione_annullata",
+  "Ora creazione": "created_at",
+  "Ora ultima attività": "ora_ultima_attivita",
+  "Origine Lead": "origine_lead",
+  Paese: "paese",
+  Provincia: "provincia",
+  "Residente in Sicilia": "residente_in_sicilia",
+  Sede: "sede",
+  "Social Lead ID": "social_lead_id",
+  Stato: "stato_email",
+  "Stato Lead": "stato_lead",
+  Telefono: "telefono",
+  "Tempo di conversione Lead": "tempo_conversione_lead",
+  Valutazione: "valutazione",
+}
+
+// Traduce i filtri "per campo" avanzati in vincoli Supabase (AND tra campi).
+// Generico sul builder: ogni metodo filtro ritorna lo stesso tipo, così la
+// stessa funzione vale sia per la query lista che per quella di conteggio.
+function applyAdvancedFilters<
+  Q extends {
+    ilike(column: string, pattern: string): Q
+    in(column: string, values: string[]): Q
+    gte(column: string, value: string | number): Q
+    lte(column: string, value: string | number): Q
+    eq(column: string, value: boolean): Q
+  },
+>(query: Q, advanced?: AdvancedFilterState): Q {
+  if (!advanced) return query
+  for (const [fid, fv] of Object.entries(advanced.fields)) {
+    const col = ADVANCED_DB_COLUMN[fid]
+    if (!col) continue
+    if (fv.type === "text") {
+      const c = fv.contains.trim()
+      if (c) query = query.ilike(col, `%${c}%`)
+    } else if (fv.type === "enum") {
+      if (fv.selected.length > 0) query = query.in(col, fv.selected)
+    } else if (fv.type === "number") {
+      if (fv.min !== "") query = query.gte(col, Number(fv.min))
+      if (fv.max !== "") query = query.lte(col, Number(fv.max))
+    } else if (fv.type === "date") {
+      if (fv.from !== "") query = query.gte(col, fv.from)
+      if (fv.to !== "") query = query.lte(col, fv.to)
+    } else if (fv.type === "boolean") {
+      if (fv.value !== "all") query = query.eq(col, fv.value === "yes")
+    }
+  }
+  return query
+}
+
 export async function candidateIdsByIndex(_filters: {
   stato?: string
   sede?: string
@@ -109,6 +184,7 @@ export async function getAllLeads(filters?: {
   search?: string
   sortBy?: string | null
   sortDir?: "asc" | "desc"
+  advanced?: AdvancedFilterState
   limit?: number
   offset?: number
 }): Promise<Lead[]> {
@@ -150,6 +226,9 @@ export async function getAllLeads(filters?: {
     )
   }
 
+  // Filtri avanzati "per campo" — applicati PRIMA di range/paginazione.
+  query = applyAdvancedFilters(query, filters?.advanced)
+
   if (filters?.limit) {
     const from = filters.offset ?? 0
     query = query.range(from, from + filters.limit - 1)
@@ -170,6 +249,7 @@ export async function getTotalCount(filters?: {
   origine?: string
   score?: string
   search?: string
+  advanced?: AdvancedFilterState
 }): Promise<number> {
   const supabase = await createClient()
 
@@ -199,6 +279,9 @@ export async function getTotalCount(filters?: {
       { type: "websearch", config: "italian" }
     )
   }
+
+  // Stessi filtri avanzati della lista, per un conteggio coerente.
+  query = applyAdvancedFilters(query, filters?.advanced)
 
   const { count, error } = await query
   if (error) {

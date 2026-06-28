@@ -45,6 +45,7 @@ export async function queryLeads(params: LeadListParams): Promise<LeadListRespon
     origine: params.origine,
     score: params.score,
     search: params.search,
+    advanced: params.advanced,
   }
 
   const [base, total] = await Promise.all([

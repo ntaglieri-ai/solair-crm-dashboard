@@ -62,9 +62,8 @@ function FilterSelect({
   className?: string
   ariaLabel: string
 }) {
-  const items = toItems(options)
   return (
-    <Select items={items} value={value} onValueChange={onValueChange}>
+    <Select value={value} onValueChange={onValueChange}>
       <SelectTrigger className={className ?? "w-[160px] bg-card"} aria-label={ariaLabel}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>

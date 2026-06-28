@@ -2,6 +2,7 @@
 
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -219,6 +220,43 @@ export function LeadTable({
     [leads, activeIndex, moveActive, router],
   )
 
+  // --- Scrollbar orizzontale dedicata (sempre in fondo all'area tabella) ---
+  // Header e body restano in un'unica <table> (così le larghezze auto delle
+  // colonne dinamiche combaciano sempre). Il contenitore verticale nasconde la
+  // scrollbar orizzontale nativa; una barra separata, pinnata in basso e
+  // sincronizzata via scrollLeft, la sostituisce e si adatta dinamicamente a
+  // colonne mostrate/nascoste, ordine e larghezza totale.
+  const hScrollRef = useRef<HTMLDivElement>(null)
+  const [contentWidth, setContentWidth] = useState(0)
+  const [hasXOverflow, setHasXOverflow] = useState(false)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const measure = () => {
+      setContentWidth(el.scrollWidth)
+      setHasXOverflow(el.scrollWidth - el.clientWidth > 1)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    if (el.firstElementChild) ro.observe(el.firstElementChild)
+    return () => ro.disconnect()
+    // Ricalcola quando cambiano colonne visibili, righe, densità o espansioni.
+  }, [scrollRef, columns, leads, density, expanded])
+
+  // Sync scrollLeft tra contenitore e barra (no loop: scrive solo se differente).
+  const syncBarFromContainer = useCallback((el: HTMLDivElement) => {
+    const bar = hScrollRef.current
+    if (bar && bar.scrollLeft !== el.scrollLeft) bar.scrollLeft = el.scrollLeft
+  }, [])
+  const syncContainerFromBar = useCallback(() => {
+    const bar = hScrollRef.current
+    const el = scrollRef.current
+    if (bar && el && el.scrollLeft !== bar.scrollLeft)
+      el.scrollLeft = bar.scrollLeft
+  }, [scrollRef])
+
   const renderMainRow = (lead: Lead, leadIndex: number, vIndex: number) => {
     const isOpen = expanded.has(lead.id)
     const isActive = leadIndex === activeIndex
@@ -414,19 +452,33 @@ export function LeadTable({
   )
 
   return (
-    <div
-      ref={scrollRef}
-      tabIndex={0}
-      role="grid"
-      aria-label="Tabella lead"
-      onKeyDown={handleKeyDown}
-      onScroll={(e) => {
-        setStuck(e.currentTarget.scrollTop > 0)
-        onScrollerScroll?.(e.currentTarget)
-      }}
-      className="h-full max-h-full overflow-y-auto overflow-x-scroll bg-card outline-none focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--color-muted-foreground)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5"
-    >
-      <Table>
+    <div className="flex h-full max-h-full flex-col">
+      {/* Area scrollabile: header sticky + body virtualizzato in un'unica table.
+          Scrolla verticalmente; orizzontalmente è pilotata dalla barra dedicata. */}
+      <div
+        ref={scrollRef}
+        tabIndex={0}
+        role="grid"
+        aria-label="Tabella lead"
+        onKeyDown={handleKeyDown}
+        onScroll={(e) => {
+          setStuck(e.currentTarget.scrollTop > 0)
+          onScrollerScroll?.(e.currentTarget)
+          syncBarFromContainer(e.currentTarget)
+        }}
+        onWheel={(e) => {
+          // Trackpad orizzontale / Shift+rotella: la scrollbar nativa orizzontale
+          // è nascosta, quindi pilotiamo scrollLeft manualmente (sync via onScroll).
+          const el = e.currentTarget
+          if (el.scrollWidth <= el.clientWidth) return
+          const horizontal =
+            e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)
+          if (!horizontal) return
+          el.scrollLeft += e.deltaX !== 0 ? e.deltaX : e.deltaY
+        }}
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-card outline-none focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--color-muted-foreground)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:w-2.5"
+      >
+        <Table>
         <TableHeader
           className={cn(
             "sticky top-0 z-20 bg-muted/95 backdrop-blur transition-shadow duration-150",
@@ -529,6 +581,20 @@ export function LeadTable({
           ) : null}
         </TableBody>
       </Table>
+      </div>
+
+      {/* Scrollbar orizzontale dedicata: sempre in fondo all'area tabella (mai
+          dopo le righe virtualizzate), sincronizzata con header e body. */}
+      {hasXOverflow ? (
+        <div
+          ref={hScrollRef}
+          onScroll={syncContainerFromBar}
+          aria-hidden
+          className="shrink-0 overflow-x-auto overflow-y-hidden border-t border-border bg-card [scrollbar-color:var(--color-muted-foreground)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5"
+        >
+          <div style={{ width: contentWidth }} className="h-px" />
+        </div>
+      ) : null}
     </div>
   )
 }

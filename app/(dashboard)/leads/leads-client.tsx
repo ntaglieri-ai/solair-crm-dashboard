@@ -533,7 +533,7 @@ export function LeadsClient({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Impostazioni lead (generali, colonne, tag, regole) */}
+          {/* Impostazioni lead (generali, vista colonne) */}
           <LeadSettingsSheet
             open={settingsOpen}
             onOpenChange={setSettingsOpen}

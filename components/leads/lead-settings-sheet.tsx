@@ -59,7 +59,7 @@ function ColumnsSection({
           Ripristina default
         </Button>
       </div>
-      <div className="flex flex-col gap-0.5">
+      <div className="grid grid-cols-1 gap-x-4 gap-y-0.5 sm:grid-cols-2 xl:grid-cols-3">
         {LEAD_COLUMNS.map((col) => (
           <label
             key={col.id}
@@ -127,7 +127,7 @@ export function GeneralSection({
   entityLabel?: string
 }) {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
       <SettingRow
         title="Densità tabella"
         description={`Spaziatura delle righe nell'elenco ${entityLabel}.`}
@@ -245,7 +245,7 @@ export function LeadSettingsSheet({
       {trigger ? <SheetTrigger render={trigger} /> : null}
       <SheetContent
         side="right"
-        className="w-full gap-0 p-0 data-[side=right]:sm:max-w-2xl"
+        className="w-full gap-0 p-0 data-[side=right]:sm:w-1/2 data-[side=right]:sm:min-w-[34rem] data-[side=right]:sm:max-w-none"
       >
         <SheetHeader className="border-b border-border">
           <SheetTitle>Impostazioni Lead</SheetTitle>

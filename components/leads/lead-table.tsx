@@ -424,17 +424,7 @@ export function LeadTable({
         setStuck(e.currentTarget.scrollTop > 0)
         onScrollerScroll?.(e.currentTarget)
       }}
-      onWheel={(e) => {
-        // Scroll orizzontale via trackpad/Shift+rotella: la scrollbar nativa
-        // orizzontale è nascosta, ma il contenuto resta scorribile.
-        const el = e.currentTarget
-        if (el.scrollWidth <= el.clientWidth) return
-        const horizontal = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)
-        if (!horizontal) return
-        el.scrollLeft += e.deltaX !== 0 ? e.deltaX : e.deltaY
-        onScrollerScroll?.(el)
-      }}
-      className="h-full max-h-full overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-card outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+      className="h-full max-h-full overflow-y-auto overflow-x-scroll bg-card outline-none focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--color-muted-foreground)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5"
     >
       <Table>
         <TableHeader

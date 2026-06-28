@@ -8,7 +8,8 @@ import {
   IconDownload,
   IconTable,
   IconPrinter,
-  IconFileImport,
+  IconTags,
+  IconRoute,
   IconCopyCheck,
   IconArrowsExchange,
   IconPencil,
@@ -58,9 +59,13 @@ import {
   SEDE_LABELS,
 } from "@/lib/mock-data"
 import type { SettingsSectionId } from "./lead-settings-sheet"
+import { LeadTagSection } from "./lead-tag-section"
+import { RulesSection } from "./assignment-rules"
 
 type Dialogs =
   | "none"
+  | "tags"
+  | "rules"
   | "compose"
   | "drafts"
   | "fullscreen"
@@ -274,6 +279,14 @@ export function LeadActionsMenu({
             <>
               <DropdownMenuGroup>
                 <DropdownMenuLabel>Gestione</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => setDialog("tags")}>
+                  <IconTags size={16} stroke={1.8} data-icon="inline-start" />
+                  Gestisci tag
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setDialog("rules")}>
+                  <IconRoute size={16} stroke={1.8} data-icon="inline-start" />
+                  Regole di assegnazione
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={onCheckDuplicates}>
                   <IconCopyCheck size={16} stroke={1.8} data-icon="inline-start" />
                   Controlla duplicati
@@ -297,14 +310,6 @@ export function LeadActionsMenu({
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuLabel>Dati e vista</DropdownMenuLabel>
-                <DropdownMenuItem onClick={onExportFiltered}>
-                  <IconDownload size={16} stroke={1.8} data-icon="inline-start" />
-                  Esporta Lead
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onImport}>
-                  <IconFileImport size={16} stroke={1.8} data-icon="inline-start" />
-                  Importa…
-                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setDialog("fullscreen")}>
                   <IconTable size={16} stroke={1.8} data-icon="inline-start" />
                   Vista tabellare avanzata
@@ -342,6 +347,43 @@ export function LeadActionsMenu({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* -------------------- Dialog: Gestisci tag -------------------- */}
+      <Dialog
+        open={dialog === "tags"}
+        onOpenChange={(o) => !o && setDialog("none")}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Gestisci tag</DialogTitle>
+            <DialogDescription>
+              Crea, rinomina, cambia colore o elimina i tag dei lead.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-1">
+            <LeadTagSection />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* -------------------- Dialog: Regole di assegnazione -------------------- */}
+      <Dialog
+        open={dialog === "rules"}
+        onOpenChange={(o) => !o && setDialog("none")}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Regole di assegnazione</DialogTitle>
+            <DialogDescription>
+              Assegna automaticamente i nuovi lead ai commerciali in base a
+              criteri.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[70vh] overflow-auto py-1">
+            <RulesSection />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* -------------------- Dialog: Invia Email -------------------- */}
       <Dialog

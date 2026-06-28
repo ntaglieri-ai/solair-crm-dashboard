@@ -368,7 +368,7 @@ export function CrmSettingsSidebar() {
             role="dialog"
             aria-modal="true"
             aria-label="Impostazioni CRM"
-            className="absolute flex flex-col overflow-hidden bg-[#0F1923] shadow-[-20px_0_60px_rgba(0,0,0,0.5)] border-t-2 border-t-[#2E8B72] inset-x-0 bottom-0 h-[90vh] rounded-t-2xl md:inset-y-0 md:right-0 md:left-auto md:h-full md:w-[480px] md:rounded-none"
+            className="absolute flex flex-col overflow-hidden bg-[#0F1923] shadow-[-20px_0_60px_rgba(0,0,0,0.5)] border-t-2 border-t-[#2E8B72] inset-x-0 bottom-0 h-[90vh] rounded-t-2xl md:inset-y-0 md:right-0 md:left-auto md:h-full md:w-1/2 md:min-w-[520px] md:rounded-none"
             initial={panelInitial}
             animate={panelAnimate}
             exit={panelInitial}
@@ -422,7 +422,7 @@ export function CrmSettingsSidebar() {
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div
                   key={layer}
-                  className="flex h-full flex-col gap-4 overflow-y-auto px-6 pb-4"
+                  className="grid h-full grid-cols-1 content-start gap-4 overflow-y-auto px-6 pb-4 sm:grid-cols-2 xl:grid-cols-3"
                   initial={{ x: isRoot ? "-100%" : "100%" }}
                   animate={{ x: 0 }}
                   exit={{ x: isRoot ? "100%" : "-100%" }}

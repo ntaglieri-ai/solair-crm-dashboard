@@ -22,7 +22,6 @@ import {
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -478,7 +477,9 @@ export function LeadTable({
         }}
         className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-card outline-none focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--color-muted-foreground)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:w-2.5"
       >
-        <Table>
+        {/* table semplice (no wrapper shadcn): un solo contenitore di scroll,
+            così l'header sticky e la barra orizzontale dedicata funzionano. */}
+        <table className="w-full caption-bottom text-sm" data-slot="table">
         <TableHeader
           className={cn(
             "sticky top-0 z-20 bg-muted/95 backdrop-blur transition-shadow duration-150",
@@ -580,7 +581,7 @@ export function LeadTable({
             </TableRow>
           ) : null}
         </TableBody>
-      </Table>
+      </table>
       </div>
 
       {/* Scrollbar orizzontale dedicata: sempre in fondo all'area tabella (mai

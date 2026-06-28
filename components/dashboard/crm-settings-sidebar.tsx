@@ -26,6 +26,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
+import { cn } from "@/lib/utils"
 
 type Layer = "root" | "account-security" | "file-manager" | "system"
 
@@ -346,6 +347,9 @@ export function CrmSettingsSidebar() {
   const panelAnimate = isMobile ? { y: 0 } : { x: 0 }
   const header = LAYER_HEADER[layer]
   const isRoot = layer === "root"
+  // Solo "Impostazioni di sistema" usa il pannello a metà schermo con griglia
+  // multi-colonna; gli altri layer restano nel pannello stretto a colonna singola.
+  const isSystem = layer === "system"
 
   return (
     <AnimatePresence>
@@ -368,7 +372,10 @@ export function CrmSettingsSidebar() {
             role="dialog"
             aria-modal="true"
             aria-label="Impostazioni CRM"
-            className="absolute flex flex-col overflow-hidden bg-[#0F1923] shadow-[-20px_0_60px_rgba(0,0,0,0.5)] border-t-2 border-t-[#2E8B72] inset-x-0 bottom-0 h-[90vh] rounded-t-2xl md:inset-y-0 md:right-0 md:left-auto md:h-full md:w-1/2 md:min-w-[520px] md:rounded-none"
+            className={cn(
+              "absolute flex flex-col overflow-hidden bg-[#0F1923] shadow-[-20px_0_60px_rgba(0,0,0,0.5)] border-t-2 border-t-[#2E8B72] inset-x-0 bottom-0 h-[90vh] rounded-t-2xl md:inset-y-0 md:right-0 md:left-auto md:h-full md:rounded-none",
+              isSystem ? "md:w-1/2 md:min-w-[520px]" : "md:w-[480px]",
+            )}
             initial={panelInitial}
             animate={panelAnimate}
             exit={panelInitial}
@@ -422,7 +429,10 @@ export function CrmSettingsSidebar() {
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div
                   key={layer}
-                  className="grid h-full grid-cols-1 content-start gap-4 overflow-y-auto px-6 pb-4 sm:grid-cols-2 xl:grid-cols-3"
+                  className={cn(
+                    "grid h-full grid-cols-1 content-start gap-4 overflow-y-auto px-6 pb-4",
+                    isSystem && "sm:grid-cols-2 xl:grid-cols-3",
+                  )}
                   initial={{ x: isRoot ? "-100%" : "100%" }}
                   animate={{ x: 0 }}
                   exit={{ x: isRoot ? "100%" : "-100%" }}

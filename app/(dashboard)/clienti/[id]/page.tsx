@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation"
-import { getClienteById } from "@/lib/mock-data"
+import { getClienteById } from "@/lib/clienti/repository"
 import { ClienteDetailHeader } from "@/components/clienti/cliente-detail-header"
 import { ClienteDetailContent } from "@/components/clienti/cliente-detail-content"
 import { ClienteIntelligencePanel } from "@/components/clienti/cliente-intelligence-panel"
@@ -10,7 +10,7 @@ export default async function ClienteDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const cliente = getClienteById(id)
+  const cliente = await getClienteById(id)
 
   if (!cliente) notFound()
 

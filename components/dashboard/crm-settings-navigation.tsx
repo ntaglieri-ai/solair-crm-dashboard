@@ -31,10 +31,8 @@ function pathOnly(href: string) {
 
 export function CrmSettingsNavigationProvider({
   children,
-  prefetchHrefs = [],
 }: {
   children: ReactNode
-  prefetchHrefs?: string[]
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -65,10 +63,6 @@ export function CrmSettingsNavigationProvider({
     const timeout = window.setTimeout(() => setPendingHref(null), 3000)
     return () => window.clearTimeout(timeout)
   }, [pendingHref])
-
-  useEffect(() => {
-    for (const href of prefetchHrefs) router.prefetch(href)
-  }, [prefetchHrefs, router])
 
   const value = useMemo(
     () => ({

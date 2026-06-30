@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, type ReactNode } from "react"
+import type { ReactNode } from "react"
 import { usePathname } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import {
@@ -100,10 +100,8 @@ function CrmSettingsHeader() {
 }
 
 export function CrmSettingsShell({ children }: { children: ReactNode }) {
-  const prefetchHrefs = useMemo(() => Object.keys(PAGE_TITLES), [])
-
   return (
-    <CrmSettingsNavigationProvider prefetchHrefs={prefetchHrefs}>
+    <CrmSettingsNavigationProvider>
       <CrmSettingsLauncherProvider>
         <CrmSettingsRouteProgress />
         <div className="flex min-h-screen flex-col bg-muted/30">

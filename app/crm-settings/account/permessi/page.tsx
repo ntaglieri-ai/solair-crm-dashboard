@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
-import { loadCurrentAccountProfile } from "@/lib/crm-settings/current-account"
+import { currentAccountProfileFromSnapshot } from "@/lib/crm-settings/current-account"
+import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permissions"
 import {
   PAGINE,
   MODULI_RECORD,
@@ -159,7 +160,7 @@ export default async function PermissionManagementPage() {
   const supabase = await createClient()
 
   const [
-    currentProfile,
+    currentPermissions,
     { data: ruoli },
     { data: permessiPagina },
     { data: permessiRecord },
@@ -170,7 +171,7 @@ export default async function PermissionManagementPage() {
     { data: utenti },
   ] =
     await Promise.all([
-      loadCurrentAccountProfile(),
+      loadCurrentPermissionSnapshot(),
       supabase
         .from("ruoli")
         .select("id, code, nome, descrizione, colore, ordinamento")
@@ -198,7 +199,7 @@ export default async function PermissionManagementPage() {
   return (
     <PermissionManagementClient
       ruoli={mapped}
-      currentProfile={currentProfile}
+      currentProfile={currentAccountProfileFromSnapshot(currentPermissions)}
     />
   )
 }

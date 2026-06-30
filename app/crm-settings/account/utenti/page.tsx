@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { loadCurrentAccountProfile } from "@/lib/crm-settings/current-account"
 import { AccountManagementClient } from "./account-management-client"
 
 type Utente = {
@@ -20,8 +21,13 @@ type RuoloProfilo = {
 
 async function loadAccountManagementData() {
   const supabase = await createClient()
-  const [{ data: utenti, error: utentiError }, { data: ruoli, error: ruoliError }] =
+  const [
+    currentProfile,
+    { data: utenti, error: utentiError },
+    { data: ruoli, error: ruoliError },
+  ] =
     await Promise.all([
+      loadCurrentAccountProfile(),
       supabase
         .from("utenti")
         .select("id, nome, email, ruolo, ruolo_id, sede, attivo, created_at")
@@ -54,6 +60,7 @@ async function loadAccountManagementData() {
       attivo: utente.attivo !== false,
     })),
     initialRoles: normalizedRoles,
+    currentProfile,
     initialError: error?.message ?? null,
   }
 }

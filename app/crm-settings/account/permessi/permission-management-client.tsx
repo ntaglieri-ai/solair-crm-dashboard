@@ -17,6 +17,8 @@ import {
   type VisibilitaScope,
 } from "@/lib/ruoli-data"
 import { SectionHeader } from "@/components/impostazioni/settings-ui"
+import { AccountProfileCard } from "@/components/crm-settings/account-profile-card"
+import type { CurrentAccountProfile } from "@/lib/crm-settings/current-account"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -315,10 +317,10 @@ function countEnabledActions(permessi: RuoloPermessi) {
 
 export function PermissionManagementClient({
   ruoli: initialRuoli,
-  currentRoleId,
+  currentProfile,
 }: {
   ruoli: Ruolo[]
-  currentRoleId: string | null
+  currentProfile: CurrentAccountProfile | null
 }) {
   const [ruoli, setRuoli] = useState<Ruolo[]>(initialRuoli)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -481,12 +483,13 @@ export function PermissionManagementClient({
           </Button>
         }
       />
+      <AccountProfileCard profile={currentProfile} />
 
       {/* Card ruoli */}
       <div className="grid gap-4 md:grid-cols-3">
         {ruoli.map((r) => {
           const isActive = activeId === r.id
-          const isCurrentRole = currentRoleId === r.id
+          const isCurrentRole = currentProfile?.ruoloId === r.id
           return (
             <div
               key={r.id}

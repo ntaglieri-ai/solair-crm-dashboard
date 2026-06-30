@@ -16,6 +16,8 @@ import {
   SectionHeader,
   StatCard,
 } from "@/components/impostazioni/settings-ui"
+import { AccountProfileCard } from "@/components/crm-settings/account-profile-card"
+import type { CurrentAccountProfile } from "@/lib/crm-settings/current-account"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -86,6 +88,7 @@ type UserForm = typeof EMPTY_FORM
 type AccountManagementClientProps = {
   initialUsers: Utente[]
   initialRoles: RuoloProfilo[]
+  currentProfile: CurrentAccountProfile | null
   initialError?: string | null
 }
 
@@ -142,6 +145,7 @@ function userToForm(user: Utente): UserForm {
 export function AccountManagementClient({
   initialUsers,
   initialRoles,
+  currentProfile,
   initialError = null,
 }: AccountManagementClientProps) {
   const router = useRouter()
@@ -306,6 +310,7 @@ export function AccountManagementClient({
           </Button>
         }
       />
+      <AccountProfileCard profile={currentProfile} />
 
       {error ? (
         <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">

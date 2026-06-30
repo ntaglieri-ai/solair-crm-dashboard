@@ -158,7 +158,7 @@ export function AccountManagementClient({
   const [deleteTarget, setDeleteTarget] = useState<Utente | null>(null)
 
   const roleLabel = useMemo(
-    () => new Map(roles.map((role) => [role.code, role.nome])),
+    () => new Map(roles.map((role) => [role.code.toUpperCase(), role.nome])),
     [roles],
   )
 
@@ -396,7 +396,7 @@ export function AccountManagementClient({
                 <TableCell>
                   <RolePill
                     code={user.ruolo}
-                    label={roleLabel.get(user.ruolo) ?? user.ruolo}
+                    label={roleLabel.get(user.ruolo.toUpperCase()) ?? user.ruolo}
                   />
                 </TableCell>
                 <TableCell className="text-muted-foreground">{user.sede}</TableCell>

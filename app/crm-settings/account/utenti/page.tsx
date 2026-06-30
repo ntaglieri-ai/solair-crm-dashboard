@@ -33,18 +33,27 @@ async function loadAccountManagementData() {
     ])
 
   const error = utentiError ?? ruoliError
+  const normalizedRoles = ((ruoli ?? []) as RuoloProfilo[]).map((ruolo) => ({
+    ...ruolo,
+    code: ruolo.code ?? "",
+  }))
+  const rolesById = new Map(normalizedRoles.map((ruolo) => [ruolo.id, ruolo]))
+  const rolesByCode = new Map(
+    normalizedRoles.map((ruolo) => [ruolo.code.toUpperCase(), ruolo]),
+  )
 
   return {
     initialUsers: ((utenti ?? []) as Utente[]).map((utente) => ({
       ...utente,
-      ruolo: utente.ruolo ?? "",
+      ruolo:
+        rolesById.get(utente.ruolo_id ?? "")?.code ??
+        rolesByCode.get((utente.ruolo ?? "").toUpperCase())?.code ??
+        utente.ruolo ??
+        "",
       sede: utente.sede ?? "",
       attivo: utente.attivo !== false,
     })),
-    initialRoles: ((ruoli ?? []) as RuoloProfilo[]).map((ruolo) => ({
-      ...ruolo,
-      code: ruolo.code ?? "",
-    })),
+    initialRoles: normalizedRoles,
     initialError: error?.message ?? null,
   }
 }

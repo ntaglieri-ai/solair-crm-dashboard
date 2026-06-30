@@ -315,8 +315,10 @@ function countEnabledActions(permessi: RuoloPermessi) {
 
 export function PermissionManagementClient({
   ruoli: initialRuoli,
+  currentRoleId,
 }: {
   ruoli: Ruolo[]
+  currentRoleId: string | null
 }) {
   const [ruoli, setRuoli] = useState<Ruolo[]>(initialRuoli)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -484,23 +486,36 @@ export function PermissionManagementClient({
       <div className="grid gap-4 md:grid-cols-3">
         {ruoli.map((r) => {
           const isActive = activeId === r.id
+          const isCurrentRole = currentRoleId === r.id
           return (
             <div
               key={r.id}
               className={cn(
                 "flex flex-col gap-3 rounded-xl border bg-card p-4 transition-colors",
-                isActive ? "border-teal ring-1 ring-teal/30" : "border-border",
+                isActive
+                  ? "border-teal ring-1 ring-teal/30"
+                  : isCurrentRole
+                    ? "border-navy/40"
+                    : "border-border",
               )}
             >
               <div className="flex items-center justify-between gap-2">
-                <span
-                  className={cn(
-                    "inline-flex h-6 items-center rounded-full px-2.5 text-xs font-semibold",
-                    RUOLO_COLOR_CLASS[r.colore],
-                  )}
-                >
-                  {r.nome}
-                </span>
+                <div className="flex min-w-0 items-center gap-2">
+                  <span
+                    className={cn(
+                      "inline-flex h-6 items-center rounded-full px-2.5 text-xs font-semibold",
+                      RUOLO_COLOR_CLASS[r.colore],
+                    )}
+                  >
+                    {r.nome}
+                  </span>
+                  {isCurrentRole ? (
+                    <Badge variant="outline" className="shrink-0 gap-1 text-[11px]">
+                      <Check className="size-3" />
+                      Il tuo ruolo
+                    </Badge>
+                  ) : null}
+                </div>
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Users className="size-3.5" />
                   {r.utenti} utenti

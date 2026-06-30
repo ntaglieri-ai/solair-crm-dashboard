@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import {
   MapPin,
   MoreHorizontal,
@@ -143,6 +144,7 @@ export function AccountManagementClient({
   initialRoles,
   initialError = null,
 }: AccountManagementClientProps) {
+  const router = useRouter()
   const [users, setUsers] = useState<Utente[]>(initialUsers)
   const [roles] = useState<RuoloProfilo[]>(initialRoles)
   const [error, setError] = useState<string | null>(initialError)
@@ -222,6 +224,7 @@ export function AccountManagementClient({
       )
       setSelected(body.utente)
       setEditForm(userToForm(body.utente))
+      router.refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Salvataggio utente non riuscito")
     } finally {

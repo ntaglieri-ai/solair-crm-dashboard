@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permissions"
 import {
   PAGINE,
   MODULI_RECORD,
@@ -141,6 +142,7 @@ export default async function PermissionManagementPage() {
   const supabase = await createClient()
 
   const [
+    currentPermissions,
     { data: ruoli },
     { data: permessiPagina },
     { data: permessiRecord },
@@ -151,6 +153,7 @@ export default async function PermissionManagementPage() {
     { data: utenti },
   ] =
     await Promise.all([
+      loadCurrentPermissionSnapshot(),
       supabase
         .from("ruoli")
         .select("id, code, nome, descrizione, colore, ordinamento")
@@ -175,5 +178,10 @@ export default async function PermissionManagementPage() {
     (utenti as UtenteRuoloRow[] | null) ?? [],
   )
 
-  return <PermissionManagementClient ruoli={mapped} />
+  return (
+    <PermissionManagementClient
+      ruoli={mapped}
+      currentRoleId={currentPermissions.subject.ruoloId}
+    />
+  )
 }

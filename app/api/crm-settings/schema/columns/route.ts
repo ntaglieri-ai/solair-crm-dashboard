@@ -19,10 +19,18 @@ type ColumnBody = {
 
 function schemaErrorMessage(error: { message?: string; code?: string }) {
   const message = error.message ?? "Operazione schema non riuscita"
+  const lowerMessage = message.toLowerCase()
+  if (
+    lowerMessage.includes("column attributi_record.") ||
+    lowerMessage.includes("could not find the") ||
+    lowerMessage.includes("column") && lowerMessage.includes("does not exist")
+  ) {
+    return "Schema campi CRM incompleto su Supabase. Esegui la query di aggiornamento attributi_record."
+  }
   if (
     error.code === "42883" ||
-    message.toLowerCase().includes("function") ||
-    message.toLowerCase().includes("schema cache")
+    lowerMessage.includes("function") ||
+    lowerMessage.includes("schema cache")
   ) {
     return "Funzioni schema CRM non presenti su Supabase. Applica supabase/permission-engine-schema.sql."
   }
@@ -46,7 +54,6 @@ export async function GET(request: Request) {
     .eq("table_name", tableName)
     .is("deleted_at", null)
     .order("ordinamento", { ascending: true })
-    .order("label", { ascending: true })
 
   if (error) {
     return NextResponse.json({ error: schemaErrorMessage(error) }, { status: 500 })

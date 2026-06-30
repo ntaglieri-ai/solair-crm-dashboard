@@ -44,10 +44,27 @@ type PermessoCampoRow = {
 }
 type UtenteRuoloRow = { ruolo: string | null; ruolo_id: string | null }
 
-// Coerce il colore DB su uno dei colori UI supportati (fallback: gray).
-function toColore(value: string | null): RuoloColore {
-  return value === "navy" || value === "teal" || value === "gray"
-    ? value
+function toColore(value: string | null, code: string | null): RuoloColore {
+  const builtInColors: Record<string, RuoloColore> = {
+    SUPERADMIN: "violet",
+    ADMIN: "navy",
+    DIRECTOR: "amber",
+    STANDARD: "teal",
+    AGENT: "rose",
+  }
+  const builtIn = builtInColors[(code ?? "").toUpperCase()]
+  if (builtIn) return builtIn
+
+  const supported: RuoloColore[] = [
+    "navy",
+    "teal",
+    "gray",
+    "violet",
+    "amber",
+    "rose",
+  ]
+  return supported.includes(value as RuoloColore)
+    ? (value as RuoloColore)
     : "gray"
 }
 
@@ -120,7 +137,7 @@ function buildRuoli(
       id: r.id,
       nome: r.nome,
       descrizione: r.descrizione ?? "",
-      colore: toColore(r.colore),
+      colore: toColore(r.colore, r.code),
       utenti: utenti.filter(
         (u) => u.ruolo_id === r.id || (r.code !== null && u.ruolo === r.code),
       ).length,

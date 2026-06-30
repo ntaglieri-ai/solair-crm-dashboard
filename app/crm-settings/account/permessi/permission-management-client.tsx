@@ -139,6 +139,9 @@ const TEMPLATE_OPTIONS: {
 const ROLE_COLORS: { id: RuoloColore; label: string }[] = [
   { id: "teal", label: "Operativo" },
   { id: "navy", label: "Direzionale" },
+  { id: "violet", label: "Tecnico" },
+  { id: "amber", label: "Coordinamento" },
+  { id: "rose", label: "Limitato" },
   { id: "gray", label: "Neutro" },
 ]
 
@@ -494,7 +497,7 @@ export function PermissionManagementClient({
             <div
               key={r.id}
               className={cn(
-                "flex flex-col gap-3 rounded-xl border bg-card p-4 transition-colors",
+                "group relative flex flex-col gap-3 rounded-xl border bg-card p-4 transition-all hover:-translate-y-px hover:border-foreground/25 hover:shadow-sm focus-within:ring-2 focus-within:ring-teal/30",
                 isActive
                   ? "border-teal ring-1 ring-teal/30"
                   : isCurrentRole
@@ -502,7 +505,18 @@ export function PermissionManagementClient({
                     : "border-border",
               )}
             >
-              <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                className="absolute inset-0 rounded-xl"
+                aria-label={`${isActive ? "Chiudi configurazione" : "Configura"} ruolo ${r.nome}`}
+                aria-pressed={isActive}
+                onClick={() => openConfig(r)}
+              >
+                <span className="sr-only">
+                  {isActive ? "Chiudi" : "Configura"} {r.nome}
+                </span>
+              </button>
+              <div className="pointer-events-none relative z-10 flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
                   <span
                     className={cn(
@@ -524,10 +538,10 @@ export function PermissionManagementClient({
                   {r.utenti} utenti
                 </span>
               </div>
-              <p className="text-sm leading-relaxed text-muted-foreground">
+              <p className="pointer-events-none relative z-10 text-sm leading-relaxed text-muted-foreground">
                 {r.descrizione}
               </p>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="pointer-events-none relative z-10 flex flex-wrap gap-1.5">
                 {permessiHighlights(r.permessi).map((p) => (
                   <span
                     key={p}
@@ -537,13 +551,16 @@ export function PermissionManagementClient({
                   </span>
                 ))}
               </div>
-              <Button
-                variant={isActive ? "secondary" : "outline"}
-                className="mt-1 w-full"
-                onClick={() => openConfig(r)}
+              <span
+                className={cn(
+                  "pointer-events-none relative z-10 mt-1 inline-flex h-9 w-full items-center justify-center rounded-md border text-sm font-medium transition-colors",
+                  isActive
+                    ? "border-transparent bg-secondary text-secondary-foreground"
+                    : "border-input bg-background group-hover:bg-accent group-hover:text-accent-foreground",
+                )}
               >
                 {isActive ? "Chiudi" : "Configura"}
-              </Button>
+              </span>
             </div>
           )
         })}

@@ -66,6 +66,13 @@ create table if not exists public.attributi_record (
   unique (modulo, key)
 );
 
+create table if not exists public.crm_settings_store (
+  key text primary key,
+  value jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists permessi_azione_ruolo_idx
   on public.permessi_azione (ruolo_id);
 
@@ -77,3 +84,6 @@ create index if not exists permessi_scope_ruolo_idx
 
 create index if not exists user_preferences_user_idx
   on public.user_preferences (user_id);
+
+create index if not exists crm_settings_store_updated_idx
+  on public.crm_settings_store (updated_at desc);

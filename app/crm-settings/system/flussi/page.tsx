@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import { Plus, MoreHorizontal, Pencil, Trash2, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -16,6 +15,7 @@ import {
   WORKFLOW_TRIGGER_LABEL,
   type Workflow,
 } from "@/lib/system-settings-data"
+import { usePersistentSystemSetting } from "@/lib/crm-settings/use-persistent-system-setting"
 
 const TRIGGER_TONE: Record<string, string> = {
   creazione: "bg-teal/10 text-teal",
@@ -25,7 +25,10 @@ const TRIGGER_TONE: Record<string, string> = {
 }
 
 export default function FlussiPage() {
-  const [workflows, setWorkflows] = useState<Workflow[]>(workflowsIniziali)
+  const [workflows, setWorkflows, store] = usePersistentSystemSetting<Workflow[]>(
+    "system.flussi",
+    workflowsIniziali,
+  )
 
   function toggleAttivo(id: string) {
     setWorkflows((prev) =>
@@ -41,7 +44,11 @@ export default function FlussiPage() {
     <div className="flex flex-col gap-5">
       <SectionHeader
         title="Flussi di lavoro"
-        description="Configura trigger automatici che si attivano al verificarsi di eventi nel CRM."
+        description={
+          store.saving
+            ? "Salvataggio configurazione..."
+            : "Configura trigger automatici che si attivano al verificarsi di eventi nel CRM."
+        }
         action={
           <Button className="bg-teal text-teal-foreground hover:bg-teal/90">
             <Plus className="size-4" />
@@ -49,6 +56,12 @@ export default function FlussiPage() {
           </Button>
         }
       />
+
+      {store.error ? (
+        <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {store.error}
+        </p>
+      ) : null}
 
       <div className="flex flex-col gap-3">
         {workflows.map((w) => (

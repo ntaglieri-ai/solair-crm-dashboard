@@ -35,6 +35,7 @@ import {
   type ValoreConfig,
 } from "@/lib/system-settings-data"
 import { usePermissions } from "@/lib/permissions/provider"
+import { usePersistentSystemSetting } from "@/lib/crm-settings/use-persistent-system-setting"
 
 function SortableValore({
   valore,
@@ -181,7 +182,10 @@ const PALETTE = ["#3b82f6", "#2e8b72", "#f59e0b", "#dc2626", "#8b5cf6", "#94a3b8
 export default function ValoriPage() {
   const permissions = usePermissions()
   const [modulo, setModulo] = useState<ModuloValori>("Lead")
-  const [tutti, setTutti] = useState<Record<ModuloValori, CampoValori[]>>(() =>
+  const [tutti, setTutti, store] = usePersistentSystemSetting<
+    Record<ModuloValori, CampoValori[]>
+  >(
+    "system.valori",
     structuredClone(valoriPerModulo),
   )
 
@@ -244,8 +248,18 @@ export default function ValoriPage() {
     <div className="flex flex-col gap-5">
       <SectionHeader
         title="Valori configurabili"
-        description="Gestisci i valori delle select configurabili per ogni modulo e campo."
+        description={
+          store.saving
+            ? "Salvataggio configurazione..."
+            : "Gestisci i valori delle select configurabili per ogni modulo e campo."
+        }
       />
+
+      {store.error ? (
+        <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {store.error}
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
         {MODULI_VALORI.map((m) => (

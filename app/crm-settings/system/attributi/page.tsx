@@ -49,6 +49,7 @@ import {
   type CampoTipo,
 } from "@/lib/system-settings-data"
 import { usePermissions } from "@/lib/permissions/provider"
+import { usePersistentSystemSetting } from "@/lib/crm-settings/use-persistent-system-setting"
 
 const ACCESSO_OPZIONI: CampoAccesso[] = ["no_access", "r", "rw"]
 
@@ -59,8 +60,11 @@ function moduloKey(modulo: ModuloAttributi) {
 export default function AttributiPage() {
   const permissions = usePermissions()
   const [modulo, setModulo] = useState<ModuloAttributi>("Lead")
-  const [tutti, setTutti] = useState<Record<ModuloAttributi, CampoRecord[]>>(
-    () => structuredClone(campiPerModulo),
+  const [tutti, setTutti, store] = usePersistentSystemSetting<
+    Record<ModuloAttributi, CampoRecord[]>
+  >(
+    "system.attributi",
+    structuredClone(campiPerModulo),
   )
   const [dialogOpen, setDialogOpen] = useState(false)
 
@@ -134,8 +138,18 @@ export default function AttributiPage() {
     <div className="flex flex-col gap-5">
       <SectionHeader
         title="Attributi record"
-        description="Gestisci i campi personalizzati per ogni modulo. I nuovi campi vengono automaticamente aggiunti alla matrice permessi per tutti i ruoli."
+        description={
+          store.saving
+            ? "Salvataggio configurazione..."
+            : "Gestisci i campi personalizzati per ogni modulo. I nuovi campi vengono automaticamente aggiunti alla matrice permessi per tutti i ruoli."
+        }
       />
+
+      {store.error ? (
+        <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {store.error}
+        </p>
+      ) : null}
 
       {/* Tab selector modulo */}
       <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">

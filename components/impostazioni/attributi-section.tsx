@@ -273,7 +273,7 @@ export function AttributiSection() {
   return (
     <div className="flex flex-col gap-5">
       <SectionHeader
-        title="Attributi record"
+        title="Campi personalizzati"
         description="Configura i campi di sistema e personalizzati per ogni modulo del CRM."
         action={
           <Button onClick={() => setAddOpen(true)}>

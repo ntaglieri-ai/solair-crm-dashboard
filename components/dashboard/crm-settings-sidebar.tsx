@@ -157,16 +157,16 @@ const SYSTEM_BLOCKS: SubBlock[] = [
   },
   {
     icon: Settings2,
-    title: "Attributi record",
-    description: "Campi personalizzati per ogni modulo",
+    title: "Campi personalizzati",
+    description: "Attributi, colonne e visibilità per ogni modulo",
     href: "/crm-settings/system/attributi",
     image:
       "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=800&q=80",
   },
   {
     icon: ListFilter,
-    title: "Valori configurabili",
-    description: "Valori delle select per modulo e campo",
+    title: "Valori predefiniti",
+    description: "Liste, stati e opzioni standard del CRM",
     href: "/crm-settings/system/valori",
     image:
       "https://images.unsplash.com/photo-1531403009284-440f080d1e12?w=800&q=80",

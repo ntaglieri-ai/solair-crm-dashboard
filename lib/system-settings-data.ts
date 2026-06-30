@@ -23,8 +23,8 @@ export interface SystemSectionLink {
 
 export const SYSTEM_SECTION_LINKS: SystemSectionLink[] = [
   { href: "/crm-settings/system/sedi", label: "Sedi", icon: Building2 },
-  { href: "/crm-settings/system/attributi", label: "Attributi record", icon: Settings2 },
-  { href: "/crm-settings/system/valori", label: "Valori configurabili", icon: ListFilter },
+  { href: "/crm-settings/system/attributi", label: "Campi personalizzati", icon: Settings2 },
+  { href: "/crm-settings/system/valori", label: "Valori predefiniti", icon: ListFilter },
   { href: "/crm-settings/system/regole", label: "Regole di assegnazione", icon: GitBranch },
   { href: "/crm-settings/system/flussi", label: "Flussi di lavoro", icon: Zap },
   { href: "/crm-settings/system/import-export", label: "Import / Export", icon: ArrowLeftRight },

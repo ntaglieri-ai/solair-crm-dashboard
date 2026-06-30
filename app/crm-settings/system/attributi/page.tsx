@@ -74,6 +74,8 @@ export default function AttributiPage() {
   const [tipo, setTipo] = useState<CampoTipo>("text")
   const [obbligatorio, setObbligatorio] = useState(false)
   const [accesso, setAccesso] = useState<CampoAccesso>("rw")
+  const [editingCampo, setEditingCampo] = useState<CampoRecord | null>(null)
+  const [editingEtichetta, setEditingEtichetta] = useState("")
 
   const campi = tutti[modulo]
   const nomeValido = /^[a-z][a-z0-9_]*$/.test(nome)
@@ -134,14 +136,27 @@ export default function AttributiPage() {
     setDialogOpen(false)
   }
 
+  function openEdit(campo: CampoRecord) {
+    if (!canEditFields) return
+    setEditingCampo(campo)
+    setEditingEtichetta(campo.etichetta)
+  }
+
+  function saveEdit() {
+    if (!editingCampo || !editingEtichetta.trim()) return
+    updateCampo(editingCampo.nome, { etichetta: editingEtichetta.trim() })
+    setEditingCampo(null)
+    setEditingEtichetta("")
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <SectionHeader
-        title="Attributi record"
+        title="Campi personalizzati"
         description={
           store.saving
             ? "Salvataggio configurazione..."
-            : "Gestisci i campi personalizzati per ogni modulo. I nuovi campi vengono automaticamente aggiunti alla matrice permessi per tutti i ruoli."
+            : "Definisci attributi, colonne e regole di visibilità dei record. I nuovi campi entrano nella matrice permessi per ruolo."
         }
       />
 
@@ -269,13 +284,7 @@ export default function AttributiPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
                           disabled={!canEditFields}
-                          onClick={() => {
-                            const nuova = window.prompt(
-                              "Nuova etichetta",
-                              campo.etichetta,
-                            )
-                            if (nuova) updateCampo(campo.nome, { etichetta: nuova })
-                          }}
+                          onClick={() => openEdit(campo)}
                         >
                           <Pencil className="size-4" />
                           Modifica etichetta
@@ -405,6 +414,46 @@ export default function AttributiPage() {
               className="bg-teal text-teal-foreground hover:bg-teal/90"
             >
               Salva
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={editingCampo !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingCampo(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Modifica etichetta</DialogTitle>
+            <DialogDescription>
+              Aggiorna il nome visualizzato del campo senza cambiare la chiave tecnica.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 py-2">
+            <Label htmlFor="campo-edit-etichetta">Etichetta campo</Label>
+            <Input
+              id="campo-edit-etichetta"
+              value={editingEtichetta}
+              onChange={(e) => setEditingEtichetta(e.target.value)}
+            />
+            {editingCampo ? (
+              <span className="text-xs text-muted-foreground">
+                Chiave tecnica: <code>{editingCampo.nome}</code>
+              </span>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingCampo(null)}>
+              Annulla
+            </Button>
+            <Button
+              onClick={saveEdit}
+              className="bg-teal text-teal-foreground hover:bg-teal/90"
+            >
+              Salva modifica
             </Button>
           </DialogFooter>
         </DialogContent>

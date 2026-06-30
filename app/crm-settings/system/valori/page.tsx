@@ -19,12 +19,21 @@ import { CSS } from "@dnd-kit/utilities"
 import { GripVertical, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Accordion,
   AccordionItem,
   AccordionTrigger,
   AccordionContent,
 } from "@/components/ui/accordion"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { SectionHeader, ColorDot } from "@/components/impostazioni/settings-ui"
 import { cn } from "@/lib/utils"
 import {
@@ -188,8 +197,12 @@ export default function ValoriPage() {
     "system.valori",
     structuredClone(valoriPerModulo),
   )
+  const [newValueField, setNewValueField] = useState<string | null>(null)
+  const [newValueLabel, setNewValueLabel] = useState("")
+  const [newValueColor, setNewValueColor] = useState(PALETTE[0])
 
   const campi = tutti[modulo]
+  const selectedField = campi.find((campo) => campo.campo === newValueField)
   const canManageDefaultValues = permissions.canAction(
     "crm_settings.system.default_values.manage",
   )
@@ -210,26 +223,34 @@ export default function ValoriPage() {
 
   function addValore(campoNome: string) {
     if (!canManageDefaultValues) return
-    const etichetta = window.prompt("Etichetta nuovo valore")
-    if (!etichetta) return
+    const campo = campi.find((item) => item.campo === campoNome)
+    setNewValueField(campoNome)
+    setNewValueLabel("")
+    setNewValueColor(PALETTE[(campo?.valori.length ?? 0) % PALETTE.length])
+  }
+
+  function saveValore() {
+    if (!newValueField || !newValueLabel.trim()) return
     setTutti((prev) => ({
       ...prev,
       [modulo]: prev[modulo].map((c) =>
-        c.campo === campoNome
+        c.campo === newValueField
           ? {
               ...c,
               valori: [
                 ...c.valori,
                 {
                   id: `v_${Date.now()}`,
-                  etichetta,
-                  colore: PALETTE[c.valori.length % PALETTE.length],
+                  etichetta: newValueLabel.trim(),
+                  colore: newValueColor,
                 },
               ],
             }
           : c,
       ),
     }))
+    setNewValueField(null)
+    setNewValueLabel("")
   }
 
   function deleteValore(campoNome: string, id: string) {
@@ -247,11 +268,11 @@ export default function ValoriPage() {
   return (
     <div className="flex flex-col gap-5">
       <SectionHeader
-        title="Valori configurabili"
+        title="Valori predefiniti"
         description={
           store.saving
             ? "Salvataggio configurazione..."
-            : "Gestisci i valori delle select configurabili per ogni modulo e campo."
+            : "Gestisci stati, priorità, fonti e opzioni standard usate nei moduli del CRM."
         }
       />
 
@@ -293,6 +314,67 @@ export default function ValoriPage() {
           ))}
         </Accordion>
       </div>
+
+      <Dialog
+        open={newValueField !== null}
+        onOpenChange={(open) => {
+          if (!open) setNewValueField(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Nuovo valore predefinito</DialogTitle>
+            <DialogDescription>
+              {selectedField
+                ? `Aggiungi una nuova opzione per ${selectedField.etichetta}.`
+                : "Aggiungi una nuova opzione configurabile."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-2">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="valore-etichetta">Etichetta</Label>
+              <Input
+                id="valore-etichetta"
+                value={newValueLabel}
+                onChange={(e) => setNewValueLabel(e.target.value)}
+                placeholder="Es. Da richiamare"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Colore</Label>
+              <div className="flex flex-wrap gap-2">
+                {PALETTE.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => setNewValueColor(color)}
+                    className={cn(
+                      "size-8 rounded-full border-2 transition-transform hover:scale-105",
+                      newValueColor === color
+                        ? "border-foreground"
+                        : "border-transparent",
+                    )}
+                    style={{ backgroundColor: color }}
+                    aria-label={`Seleziona colore ${color}`}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNewValueField(null)}>
+              Annulla
+            </Button>
+            <Button
+              onClick={saveValore}
+              disabled={!newValueLabel.trim()}
+              className="bg-teal text-teal-foreground hover:bg-teal/90"
+            >
+              Aggiungi valore
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

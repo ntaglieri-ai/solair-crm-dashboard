@@ -7,6 +7,7 @@ import {
   type RuoloColore,
   type RuoloPermessi,
 } from "@/lib/ruoli-data"
+import { requireApiAction } from "@/lib/permissions/server"
 
 type PatchPayload = {
   ruoloId: string
@@ -107,6 +108,9 @@ async function savePermissions(ruoloId: string, permessi: RuoloPermessi) {
 }
 
 export async function POST(request: Request) {
+  const guard = await requireApiAction("crm_settings.account.roles.manage")
+  if (guard.response) return guard.response
+
   const body = (await request.json().catch(() => null)) as CreatePayload | null
   if (!body?.nome?.trim() || !body.permessi) {
     return NextResponse.json({ error: "Payload non valido" }, { status: 400 })
@@ -165,6 +169,9 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const guard = await requireApiAction("crm_settings.account.roles.manage")
+  if (guard.response) return guard.response
+
   const body = (await request.json().catch(() => null)) as PatchPayload | null
   if (!body?.ruoloId || !body.permessi) {
     return NextResponse.json({ error: "Payload non valido" }, { status: 400 })

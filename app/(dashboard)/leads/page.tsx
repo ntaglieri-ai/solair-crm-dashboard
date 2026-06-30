@@ -7,11 +7,14 @@ import {
 } from "@/lib/leads/api-types"
 import { queryLeads, computeStats } from "@/lib/leads/repository"
 import { LeadsClient } from "./leads-client"
+import { requirePage } from "@/lib/permissions/server"
 
 // Sempre dinamica: i dati dipendono dallo stato corrente del DB.
 export const dynamic = "force-dynamic"
 
 export default async function LeadsPage() {
+  await requirePage("lead")
+
   const initialParams = getInitialLeadsParams()
   const initialSp = buildLeadsSearchParams(initialParams).toString()
 

@@ -26,6 +26,8 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
+import { pageKeyFromPath } from "@/lib/permissions/constants"
+import { usePermissions } from "@/lib/permissions/provider"
 import { cn } from "@/lib/utils"
 
 type Layer = "root" | "account-security" | "file-manager" | "system"
@@ -298,6 +300,7 @@ function SettingsCard({
 export function CrmSettingsSidebar() {
   const { open, closeLauncher, layer, setLayer } = useCrmSettingsLauncher()
   const router = useRouter()
+  const permissions = usePermissions()
   const isMobile = useIsMobile()
   const panelRef = useRef<HTMLDivElement>(null)
   const closeBtnRef = useRef<HTMLButtonElement>(null)
@@ -350,6 +353,17 @@ export function CrmSettingsSidebar() {
   // Solo "Impostazioni di sistema" usa il pannello a metà schermo con griglia
   // multi-colonna; gli altri layer restano nel pannello stretto a colonna singola.
   const isSystem = layer === "system"
+  const canSeeBlock = (block: SubBlock) => {
+    const page = pageKeyFromPath(block.href)
+    return page ? permissions.canPage(page) : true
+  }
+  const visibleAccountBlocks = ACCOUNT_SECURITY_BLOCKS.filter(canSeeBlock)
+  const visibleSystemBlocks = SYSTEM_BLOCKS.filter(canSeeBlock)
+  const visibleRootBlocks = ROOT_BLOCKS.filter((block) => {
+    if (block.layer === "account-security") return visibleAccountBlocks.length > 0
+    if (block.layer === "system") return visibleSystemBlocks.length > 0
+    return true
+  })
 
   return (
     <AnimatePresence>
@@ -439,7 +453,7 @@ export function CrmSettingsSidebar() {
                   transition={{ type: "spring", damping: 25, stiffness: 260 }}
                 >
                   {layer === "root"
-                    ? ROOT_BLOCKS.map((block) => (
+                    ? visibleRootBlocks.map((block) => (
                         <SettingsCard
                           key={block.title}
                           icon={block.icon}
@@ -452,7 +466,7 @@ export function CrmSettingsSidebar() {
                     : null}
 
                   {layer === "account-security"
-                    ? ACCOUNT_SECURITY_BLOCKS.map((block) => (
+                    ? visibleAccountBlocks.map((block) => (
                         <SettingsCard
                           key={block.title}
                           icon={block.icon}
@@ -478,7 +492,7 @@ export function CrmSettingsSidebar() {
                     : null}
 
                   {layer === "system"
-                    ? SYSTEM_BLOCKS.map((block) => (
+                    ? visibleSystemBlocks.map((block) => (
                         <SettingsCard
                           key={block.title}
                           icon={block.icon}

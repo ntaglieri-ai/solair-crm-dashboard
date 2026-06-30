@@ -4,6 +4,7 @@ import {
   deleteLeadRecords,
   type BulkField,
 } from "@/lib/leads/repository"
+import { requireApiRecord } from "@/lib/permissions/server"
 
 type BulkPayload =
   | { action: "delete"; ids: string[] }
@@ -21,18 +22,26 @@ export async function POST(request: Request) {
   }
   switch (body.action) {
     case "delete": {
+      const guard = await requireApiRecord("lead", "delete")
+      if (guard.response) return guard.response
       const affected = await deleteLeadRecords(body.ids)
       return NextResponse.json({ affected })
     }
     case "convert": {
+      const guard = await requireApiRecord("lead", "edit")
+      if (guard.response) return guard.response
       const affected = await bulkUpdateRecords(body.ids, "Stato Lead", "Convertito")
       return NextResponse.json({ affected })
     }
     case "transfer": {
+      const guard = await requireApiRecord("lead", "assign")
+      if (guard.response) return guard.response
       const affected = await bulkUpdateRecords(body.ids, "Lead Proprietario", body.value)
       return NextResponse.json({ affected })
     }
     case "update": {
+      const guard = await requireApiRecord("lead", "bulk_update")
+      if (guard.response) return guard.response
       const affected = await bulkUpdateRecords(body.ids, body.field, body.value)
       return NextResponse.json({ affected })
     }

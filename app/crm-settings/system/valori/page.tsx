@@ -34,13 +34,16 @@ import {
   type CampoValori,
   type ValoreConfig,
 } from "@/lib/system-settings-data"
+import { usePermissions } from "@/lib/permissions/provider"
 
 function SortableValore({
   valore,
   onDelete,
+  disabled,
 }: {
   valore: ValoreConfig
   onDelete: () => void
+  disabled: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: valore.id })
@@ -59,10 +62,16 @@ function SortableValore({
     >
       <button
         type="button"
-        className="cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
+        disabled={disabled}
+        className={cn(
+          "text-muted-foreground",
+          disabled
+            ? "cursor-not-allowed opacity-50"
+            : "cursor-grab hover:text-foreground active:cursor-grabbing",
+        )}
         aria-label="Trascina per riordinare"
-        {...attributes}
-        {...listeners}
+        {...(disabled ? {} : attributes)}
+        {...(disabled ? {} : listeners)}
       >
         <GripVertical className="size-4" />
       </button>
@@ -79,6 +88,7 @@ function SortableValore({
       <button
         type="button"
         onClick={onDelete}
+        disabled={disabled}
         className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
         aria-label={`Elimina ${valore.etichetta}`}
       >
@@ -93,11 +103,13 @@ function CampoAccordion({
   onReorder,
   onAdd,
   onDelete,
+  disabled,
 }: {
   campo: CampoValori
   onReorder: (campoNome: string, ids: string[]) => void
   onAdd: (campoNome: string) => void
   onDelete: (campoNome: string, id: string) => void
+  disabled: boolean
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -105,7 +117,7 @@ function CampoAccordion({
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
-    if (!over || active.id === over.id) return
+    if (disabled || !over || active.id === over.id) return
     const oldIndex = campo.valori.findIndex((v) => v.id === active.id)
     const newIndex = campo.valori.findIndex((v) => v.id === over.id)
     const next = arrayMove(campo.valori, oldIndex, newIndex)
@@ -141,6 +153,7 @@ function CampoAccordion({
                   <SortableValore
                     key={valore.id}
                     valore={valore}
+                    disabled={disabled}
                     onDelete={() => onDelete(campo.campo, valore.id)}
                   />
                 ))}
@@ -152,6 +165,7 @@ function CampoAccordion({
             size="sm"
             className="w-fit"
             onClick={() => onAdd(campo.campo)}
+            disabled={disabled}
           >
             <Plus className="size-4" />
             Aggiungi valore
@@ -165,12 +179,16 @@ function CampoAccordion({
 const PALETTE = ["#3b82f6", "#2e8b72", "#f59e0b", "#dc2626", "#8b5cf6", "#94a3b8"]
 
 export default function ValoriPage() {
+  const permissions = usePermissions()
   const [modulo, setModulo] = useState<ModuloValori>("Lead")
   const [tutti, setTutti] = useState<Record<ModuloValori, CampoValori[]>>(() =>
     structuredClone(valoriPerModulo),
   )
 
   const campi = tutti[modulo]
+  const canManageDefaultValues = permissions.canAction(
+    "crm_settings.system.default_values.manage",
+  )
 
   function reorder(campoNome: string, ids: string[]) {
     setTutti((prev) => ({
@@ -187,6 +205,7 @@ export default function ValoriPage() {
   }
 
   function addValore(campoNome: string) {
+    if (!canManageDefaultValues) return
     const etichetta = window.prompt("Etichetta nuovo valore")
     if (!etichetta) return
     setTutti((prev) => ({
@@ -210,6 +229,7 @@ export default function ValoriPage() {
   }
 
   function deleteValore(campoNome: string, id: string) {
+    if (!canManageDefaultValues) return
     setTutti((prev) => ({
       ...prev,
       [modulo]: prev[modulo].map((c) =>
@@ -254,6 +274,7 @@ export default function ValoriPage() {
               onReorder={reorder}
               onAdd={addValore}
               onDelete={deleteValore}
+              disabled={!canManageDefaultValues}
             />
           ))}
         </Accordion>

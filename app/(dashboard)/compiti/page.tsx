@@ -6,11 +6,14 @@ import {
 } from "@/lib/compiti/api-types"
 import { queryCompiti } from "@/lib/compiti/repository"
 import { CompitiClient } from "./compiti-client"
+import { requirePage } from "@/lib/permissions/server"
 
 // Sempre dinamica: i dati dipendono dallo stato corrente del DB.
 export const dynamic = "force-dynamic"
 
 export default async function CompitiPage() {
+  await requirePage("compiti")
+
   const initialParams = DEFAULT_COMPITI_PARAMS
   const initialSp = buildCompitiSearchParams(initialParams).toString()
   const initialData = await queryCompiti(initialParams)

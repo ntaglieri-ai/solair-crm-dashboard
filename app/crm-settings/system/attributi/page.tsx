@@ -48,10 +48,16 @@ import {
   type CampoAccesso,
   type CampoTipo,
 } from "@/lib/system-settings-data"
+import { usePermissions } from "@/lib/permissions/provider"
 
 const ACCESSO_OPZIONI: CampoAccesso[] = ["no_access", "r", "rw"]
 
+function moduloKey(modulo: ModuloAttributi) {
+  return modulo.toLowerCase()
+}
+
 export default function AttributiPage() {
+  const permissions = usePermissions()
   const [modulo, setModulo] = useState<ModuloAttributi>("Lead")
   const [tutti, setTutti] = useState<Record<ModuloAttributi, CampoRecord[]>>(
     () => structuredClone(campiPerModulo),
@@ -67,6 +73,16 @@ export default function AttributiPage() {
 
   const campi = tutti[modulo]
   const nomeValido = /^[a-z][a-z0-9_]*$/.test(nome)
+  const currentModule = moduloKey(modulo)
+  const canCreateFields = permissions.canAction(`${currentModule}.fields.create`)
+  const canEditFields = permissions.canAction(`${currentModule}.fields.edit`)
+  const canDeleteFields = permissions.canAction(`${currentModule}.fields.delete`)
+  const canManageVisibility = permissions.canAction(
+    `${currentModule}.fields.visibility.manage`,
+  )
+  const canManageRequired = permissions.canAction(
+    `${currentModule}.fields.required.manage`,
+  )
 
   function updateCampo(nomeCampo: string, patch: Partial<CampoRecord>) {
     setTutti((prev) => ({
@@ -85,6 +101,7 @@ export default function AttributiPage() {
   }
 
   function openNew() {
+    if (!canCreateFields) return
     setNome("")
     setEtichetta("")
     setTipo("text")
@@ -94,7 +111,7 @@ export default function AttributiPage() {
   }
 
   function handleSave() {
-    if (!nomeValido || !etichetta.trim()) return
+    if (!canCreateFields || !nomeValido || !etichetta.trim()) return
     setTutti((prev) => ({
       ...prev,
       [modulo]: [
@@ -170,6 +187,7 @@ export default function AttributiPage() {
                 <TableCell className="text-center">
                   <Switch
                     checked={campo.obbligatorio}
+                    disabled={!canManageRequired}
                     onCheckedChange={(v) =>
                       updateCampo(campo.nome, { obbligatorio: v })
                     }
@@ -179,6 +197,7 @@ export default function AttributiPage() {
                 <TableCell className="text-center">
                   <Switch
                     checked={campo.visibile}
+                    disabled={!canManageVisibility}
                     onCheckedChange={(v) =>
                       updateCampo(campo.nome, { visibile: v })
                     }
@@ -188,6 +207,7 @@ export default function AttributiPage() {
                 <TableCell>
                   <Select
                     value={campo.accesso_default}
+                    disabled={!canManageVisibility}
                     onValueChange={(v) =>
                       updateCampo(campo.nome, {
                         accesso_default: (v ?? "rw") as CampoAccesso,
@@ -219,7 +239,7 @@ export default function AttributiPage() {
                   )}
                 </TableCell>
                 <TableCell>
-                  {campo.sistema ? null : (
+                  {campo.sistema || (!canEditFields && !canDeleteFields) ? null : (
                     <DropdownMenu>
                       <DropdownMenuTrigger
                         render={
@@ -234,6 +254,7 @@ export default function AttributiPage() {
                       />
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
+                          disabled={!canEditFields}
                           onClick={() => {
                             const nuova = window.prompt(
                               "Nuova etichetta",
@@ -247,6 +268,7 @@ export default function AttributiPage() {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           variant="destructive"
+                          disabled={!canDeleteFields}
                           onClick={() => deleteCampo(campo.nome)}
                         >
                           <Trash2 className="size-4" />
@@ -263,7 +285,7 @@ export default function AttributiPage() {
       </div>
 
       <div>
-        <Button variant="outline" onClick={openNew}>
+        <Button variant="outline" onClick={openNew} disabled={!canCreateFields}>
           <Plus className="size-4" />
           Aggiungi campo
         </Button>
@@ -365,7 +387,7 @@ export default function AttributiPage() {
             </Button>
             <Button
               onClick={handleSave}
-              disabled={!nomeValido || !etichetta.trim()}
+              disabled={!canCreateFields || !nomeValido || !etichetta.trim()}
               className="bg-teal text-teal-foreground hover:bg-teal/90"
             >
               Salva

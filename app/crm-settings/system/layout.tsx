@@ -4,9 +4,10 @@ import type { ReactNode } from "react"
 import { useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
-import { CURRENT_USER } from "@/lib/mock-data"
 import { SYSTEM_SECTION_LINKS } from "@/lib/system-settings-data"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
+import { pageKeyFromPath } from "@/lib/permissions/constants"
+import { usePermissions } from "@/lib/permissions/provider"
 import {
   CrmBreadcrumb,
   CrmSectionBackLink,
@@ -21,14 +22,19 @@ export default function SystemSettingsLayout({
   const pathname = usePathname()
   const router = useRouter()
   const { openCrmSettings, openCrmSettingsLayer } = useCrmSettingsLauncher()
-  const isAdmin = CURRENT_USER.ruoloKey === "admin"
+  const permissions = usePermissions()
+  const currentPage = pageKeyFromPath(pathname)
+  const canAccessCurrentPage = currentPage ? permissions.canPage(currentPage) : false
+  const visibleLinks = SYSTEM_SECTION_LINKS.filter((link) => {
+    const page = pageKeyFromPath(link.href)
+    return page ? permissions.canPage(page) : true
+  })
 
-  // Accesso riservato a Superadmin / Amministratore.
   useEffect(() => {
-    if (!isAdmin) router.replace("/")
-  }, [isAdmin, router])
+    if (!canAccessCurrentPage) router.replace("/")
+  }, [canAccessCurrentPage, router])
 
-  if (!isAdmin) return null
+  if (!canAccessCurrentPage) return null
 
   const current = SYSTEM_SECTION_LINKS.find((l) => l.href === pathname)
   const currentTitle = current?.label ?? "System Settings"
@@ -58,7 +64,7 @@ export default function SystemSettingsLayout({
             className="flex flex-col gap-1"
             aria-label="Sezioni System Settings"
           >
-            {SYSTEM_SECTION_LINKS.map((link) => {
+            {visibleLinks.map((link) => {
               const active = pathname === link.href
               const Icon = link.icon
               return (

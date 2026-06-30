@@ -6,11 +6,14 @@ import {
 } from "@/lib/clienti/api-types"
 import { queryClienti } from "@/lib/clienti/repository"
 import { ClientiClient } from "./clienti-client"
+import { requirePage } from "@/lib/permissions/server"
 
 // Sempre dinamica: i dati dipendono dallo stato corrente del DB.
 export const dynamic = "force-dynamic"
 
 export default async function ClientiPage() {
+  await requirePage("clienti")
+
   const initialParams = DEFAULT_CLIENTI_PARAMS
   const initialSp = buildClientiSearchParams(initialParams).toString()
   const initialData = await queryClienti(initialParams)

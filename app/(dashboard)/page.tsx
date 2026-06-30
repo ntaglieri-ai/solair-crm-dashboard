@@ -13,6 +13,7 @@ import { MiniStats } from "@/components/dashboard/mini-stats"
 import { HotLeads } from "@/components/dashboard/hot-leads"
 import { Pipeline } from "@/components/dashboard/pipeline"
 import { LiveFeed } from "@/components/dashboard/live-feed"
+import { PermissionPageGuard } from "@/lib/permissions/client-guard"
 
 export default function DashboardPage() {
   const [sede, setSede] = useState<SedeId>("all")
@@ -22,7 +23,8 @@ export default function DashboardPage() {
   const leads = useMemo(() => getHotLeads(sede), [sede])
 
   return (
-    <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
+    <PermissionPageGuard page="dashboard">
+      <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
       {/* Header dashboard + filtro sede */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col">
@@ -52,6 +54,7 @@ export default function DashboardPage() {
           <LiveFeed />
         </div>
       </div>
-    </div>
+      </div>
+    </PermissionPageGuard>
   )
 }

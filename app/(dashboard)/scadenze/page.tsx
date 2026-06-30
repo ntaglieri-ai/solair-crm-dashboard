@@ -47,6 +47,7 @@ import {
 import { ScadenzaCreateButton } from "@/components/scadenze/scadenza-create-button"
 import { ScadenzaFormDialog } from "@/components/scadenze/scadenza-form-dialog"
 import { LeadImportDialog } from "@/components/leads/lead-import-dialog"
+import { PermissionPageGuard } from "@/lib/permissions/client-guard"
 
 const ROWS_ITEMS: Record<string, string> = {
   "10": "10 righe",
@@ -288,7 +289,8 @@ export default function ScadenzePage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <PermissionPageGuard page="scadenze">
+      <div className="flex flex-col gap-5">
       {/* Header pagina */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-0.5">
@@ -513,6 +515,7 @@ export default function ScadenzePage() {
         onOpenChange={setImportOpen}
         entityLabel="scadenze"
       />
-    </div>
+      </div>
+    </PermissionPageGuard>
   )
 }

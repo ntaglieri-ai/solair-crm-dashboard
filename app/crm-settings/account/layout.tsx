@@ -5,8 +5,9 @@ import { useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
 import { Users, Shield, ClipboardList, Lock, type LucideIcon } from "lucide-react"
-import { CURRENT_USER } from "@/lib/mock-data"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
+import { pageKeyFromPath } from "@/lib/permissions/constants"
+import { usePermissions } from "@/lib/permissions/provider"
 import {
   CrmBreadcrumb,
   CrmSectionBackLink,
@@ -41,14 +42,19 @@ export default function AccountSecurityLayout({
   const pathname = usePathname()
   const router = useRouter()
   const { openCrmSettings, openCrmSettingsLayer } = useCrmSettingsLauncher()
-  const isAdmin = CURRENT_USER.ruoloKey === "admin"
+  const permissions = usePermissions()
+  const currentPage = pageKeyFromPath(pathname)
+  const canAccessCurrentPage = currentPage ? permissions.canPage(currentPage) : false
+  const visibleLinks = SECTION_LINKS.filter((link) => {
+    const page = pageKeyFromPath(link.href)
+    return page ? permissions.canPage(page) : true
+  })
 
-  // Accesso riservato agli Admin.
   useEffect(() => {
-    if (!isAdmin) router.replace("/")
-  }, [isAdmin, router])
+    if (!canAccessCurrentPage) router.replace("/")
+  }, [canAccessCurrentPage, router])
 
-  if (!isAdmin) return null
+  if (!canAccessCurrentPage) return null
 
   const currentTitle = PAGE_TITLE[pathname] ?? "Account & Security"
 
@@ -74,7 +80,7 @@ export default function AccountSecurityLayout({
             onClick={() => openCrmSettingsLayer("account-security")}
           />
           <nav className="flex flex-col gap-1" aria-label="Sezioni Account & Security">
-            {SECTION_LINKS.map((link) => {
+            {visibleLinks.map((link) => {
               const active = pathname === link.href
               const Icon = link.icon
               return (

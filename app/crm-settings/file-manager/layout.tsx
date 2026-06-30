@@ -2,8 +2,7 @@
 
 import type { ReactNode } from "react"
 import { useEffect } from "react"
-import { usePathname, useRouter } from "next/navigation"
-import Link from "next/link"
+import { usePathname } from "next/navigation"
 import {
   Cloud,
   FolderTree,
@@ -13,6 +12,10 @@ import {
 } from "lucide-react"
 import { CURRENT_USER } from "@/lib/mock-data"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
+import {
+  CrmSettingsNavLink,
+  useCrmSettingsNavigation,
+} from "@/components/dashboard/crm-settings-navigation"
 import {
   CrmBreadcrumb,
   CrmSectionBackLink,
@@ -45,14 +48,14 @@ export default function FileManagerLayout({
   children: ReactNode
 }) {
   const pathname = usePathname()
-  const router = useRouter()
   const { openCrmSettings, openCrmSettingsLayer } = useCrmSettingsLauncher()
+  const { navigate } = useCrmSettingsNavigation()
   const isAdmin = CURRENT_USER.ruoloKey === "admin"
 
   // Accesso riservato agli Admin / Superadmin.
   useEffect(() => {
-    if (!isAdmin) router.replace("/")
-  }, [isAdmin, router])
+    if (!isAdmin) navigate("/", { replace: true })
+  }, [isAdmin, navigate])
 
   if (!isAdmin) return null
 
@@ -62,7 +65,7 @@ export default function FileManagerLayout({
     <div className="flex flex-col gap-5">
       <CrmBreadcrumb
         items={[
-          { label: "Solair CRM", action: () => router.push("/") },
+          { label: "Solair CRM", action: () => navigate("/") },
           { label: "CRM Settings", action: openCrmSettings },
           {
             label: "File Manager",
@@ -84,7 +87,7 @@ export default function FileManagerLayout({
               const active = pathname === link.href
               const Icon = link.icon
               return (
-                <Link
+                <CrmSettingsNavLink
                   key={link.href}
                   href={link.href}
                   aria-current={active ? "page" : undefined}
@@ -94,10 +97,11 @@ export default function FileManagerLayout({
                       ? "border-teal bg-navy/5 text-foreground"
                       : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
+                  pendingClassName="border-teal bg-navy/5 text-foreground"
                 >
                   <Icon className="size-[18px] shrink-0" />
                   <span className="truncate">{link.label}</span>
-                </Link>
+                </CrmSettingsNavLink>
               )
             })}
           </nav>

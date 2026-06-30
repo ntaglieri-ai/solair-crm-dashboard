@@ -60,6 +60,7 @@ function CartellaCard({
       <Button
         variant="outline"
         size="sm"
+        nativeButton={false}
         className="shrink-0 gap-1.5 bg-card"
         render={
           <a

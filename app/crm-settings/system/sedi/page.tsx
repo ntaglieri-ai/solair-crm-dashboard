@@ -29,9 +29,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { SectionHeader } from "@/components/impostazioni/settings-ui"
 import { sediIniziali, type SystemSede } from "@/lib/system-settings-data"
+import { usePersistentSystemSetting } from "@/lib/crm-settings/use-persistent-system-setting"
 
 export default function SediPage() {
-  const [sedi, setSedi] = useState<SystemSede[]>(sediIniziali)
+  const [sedi, setSedi, store] = usePersistentSystemSetting<SystemSede[]>(
+    "system.sedi",
+    sediIniziali,
+  )
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<SystemSede | null>(null)
   const [nome, setNome] = useState("")
@@ -88,7 +92,11 @@ export default function SediPage() {
     <div className="flex flex-col gap-5">
       <SectionHeader
         title="Sedi"
-        description="Gestisci le sedi operative di Solair Group. Le sedi sono attributi assegnabili agli utenti."
+        description={
+          store.saving
+            ? "Salvataggio configurazione..."
+            : "Gestisci le sedi operative di Solair Group. Le sedi sono attributi assegnabili agli utenti."
+        }
         action={
           <Button onClick={openNew} className="bg-teal text-teal-foreground hover:bg-teal/90">
             <Plus className="size-4" />
@@ -96,6 +104,12 @@ export default function SediPage() {
           </Button>
         }
       />
+
+      {store.error ? (
+        <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {store.error}
+        </p>
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2">
         {sedi.map((sede) => (

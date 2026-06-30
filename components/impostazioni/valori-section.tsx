@@ -108,7 +108,7 @@ export function ValoriSection() {
   return (
     <div className="flex flex-col gap-5">
       <SectionHeader
-        title="Valori configurabili"
+        title="Valori predefiniti"
         description="Gestisci gli elenchi a valori fissi (stati, priorità, origini) usati nei record."
       />
 

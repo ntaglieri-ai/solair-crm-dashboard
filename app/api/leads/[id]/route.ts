@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server"
 import type { Lead } from "@/lib/mock-data"
 import { updateLeadRecord, deleteLeadRecords } from "@/lib/leads/repository"
+import { requireApiRecord } from "@/lib/permissions/server"
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const guard = await requireApiRecord("lead", "edit")
+  if (guard.response) return guard.response
+
   const { id } = await params
   const patch = (await request.json()) as Partial<Lead>
   const updated = await updateLeadRecord(id, patch)
@@ -19,6 +23,9 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const guard = await requireApiRecord("lead", "delete")
+  if (guard.response) return guard.response
+
   const { id } = await params
   const removed = await deleteLeadRecords([id])
   if (removed === 0) {

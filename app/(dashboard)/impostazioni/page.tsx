@@ -47,8 +47,8 @@ const ADMIN_SECTIONS: SectionDef[] = [
 
 const GENERAL_SECTIONS: SectionDef[] = [
   { id: "sedi", label: "Sedi", icon: Building2 },
-  { id: "attributi", label: "Attributi record", icon: Settings2 },
-  { id: "valori", label: "Valori configurabili", icon: Settings2 },
+  { id: "attributi", label: "Campi personalizzati", icon: Settings2 },
+  { id: "valori", label: "Valori predefiniti", icon: Settings2 },
   { id: "regole", label: "Regole di assegnazione", icon: ListFilter },
 ]
 
@@ -209,14 +209,14 @@ export default function CrmSettingsPage() {
           )}
           {active === "attributi" && (
             <PlaceholderSection
-              title="Attributi record"
+              title="Campi personalizzati"
               description="Configura i campi personalizzati per lead, clienti e attività."
               icon={Settings2}
             />
           )}
           {active === "valori" && (
             <PlaceholderSection
-              title="Valori configurabili"
+              title="Valori predefiniti"
               description="Gestisci gli elenchi di valori usati nei menu a tendina del CRM."
               icon={Settings2}
             />

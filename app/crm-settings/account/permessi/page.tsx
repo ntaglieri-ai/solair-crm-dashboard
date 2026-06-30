@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
+import { currentAccountProfileFromSnapshot } from "@/lib/crm-settings/current-account"
+import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permissions"
 import {
   PAGINE,
   MODULI_RECORD,
@@ -20,7 +22,12 @@ type RuoloRow = {
   colore: string | null
   ordinamento: number | null
 }
-type PermessoPaginaRow = { ruolo_id: string; pagina: string; accesso: boolean }
+type PaginaAccesso = "no_access" | "r" | "rw"
+type PermessoPaginaRow = {
+  ruolo_id: string
+  pagina: string
+  accesso: PaginaAccesso | boolean | null
+}
 type PermessoRecordRow = {
   ruolo_id: string
   modulo: string
@@ -28,11 +35,37 @@ type PermessoRecordRow = {
   abilitato: boolean
 }
 type PermessoUiRow = { ruolo_id: string; chiave: string; abilitato: boolean }
+type PermessoAzioneRow = { ruolo_id: string; azione: string; abilitato: boolean }
+type PermessoScopeRow = { ruolo_id: string; risorsa: string; scope: string }
+type PermessoCampoRow = {
+  ruolo_id: string
+  modulo: string
+  campo: string
+  accesso: string
+}
+type UtenteRuoloRow = { ruolo: string | null; ruolo_id: string | null }
 
-// Coerce il colore DB su uno dei colori UI supportati (fallback: gray).
-function toColore(value: string | null): RuoloColore {
-  return value === "navy" || value === "teal" || value === "gray"
-    ? value
+function toColore(value: string | null, code: string | null): RuoloColore {
+  const builtInColors: Record<string, RuoloColore> = {
+    SUPERADMIN: "violet",
+    ADMIN: "navy",
+    DIRECTOR: "amber",
+    STANDARD: "teal",
+    AGENT: "rose",
+  }
+  const builtIn = builtInColors[(code ?? "").toUpperCase()]
+  if (builtIn) return builtIn
+
+  const supported: RuoloColore[] = [
+    "navy",
+    "teal",
+    "gray",
+    "violet",
+    "amber",
+    "rose",
+  ]
+  return supported.includes(value as RuoloColore)
+    ? (value as RuoloColore)
     : "gray"
 }
 
@@ -42,6 +75,10 @@ function buildRuoli(
   permessiPagina: PermessoPaginaRow[],
   permessiRecord: PermessoRecordRow[],
   permessiUi: PermessoUiRow[],
+  permessiAzione: PermessoAzioneRow[],
+  permessiScope: PermessoScopeRow[],
+  permessiCampo: PermessoCampoRow[],
+  utenti: UtenteRuoloRow[],
 ): Ruolo[] {
   const validPagine = new Set<string>(PAGINE.map((p) => p.id))
   const validModuli = new Set<string>(MODULI_RECORD.map((m) => m.id))
@@ -54,7 +91,8 @@ function buildRuoli(
     ) as Record<PaginaId, boolean>
     for (const row of permessiPagina) {
       if (row.ruolo_id === r.id && validPagine.has(row.pagina)) {
-        pagine[row.pagina as PaginaId] = row.accesso
+        pagine[row.pagina as PaginaId] =
+          row.accesso === true || row.accesso === "r" || row.accesso === "rw"
       }
     }
 
@@ -79,19 +117,40 @@ function buildRuoli(
         .filter((row) => row.ruolo_id === r.id)
         .map((row) => [row.chiave, row.abilitato]),
     )
+    const azioni = Object.fromEntries(
+      permessiAzione
+        .filter((row) => row.ruolo_id === r.id)
+        .map((row) => [row.azione, row.abilitato]),
+    )
+    const scope_dati = Object.fromEntries(
+      permessiScope
+        .filter((row) => row.ruolo_id === r.id)
+        .map((row) => [row.risorsa, row.scope]),
+    )
+    const campi: Record<string, Record<string, string>> = {}
+    for (const row of permessiCampo) {
+      if (row.ruolo_id !== r.id) continue
+      campi[row.modulo] ??= {}
+      campi[row.modulo][row.campo] = row.accesso
+    }
 
     return {
       id: r.id,
       nome: r.nome,
       descrizione: r.descrizione ?? "",
-      colore: toColore(r.colore),
-      utenti: 0,
+      colore: toColore(r.colore, r.code),
+      utenti: utenti.filter(
+        (u) => u.ruolo_id === r.id || (r.code !== null && u.ruolo === r.code),
+      ).length,
       permessi: {
         pagine,
         record,
         visibilita_sedi: ui.get("visibilita_sedi") ? "all" : "own",
         cartelle_nextcloud: ui.get("cartelle_nextcloud") ? "all" : "own",
         riconfigurazioni: ui.get("riconfigurazioni") === true,
+        azioni,
+        scope_dati,
+        campi,
       },
     } satisfies Ruolo
   })
@@ -100,8 +159,19 @@ function buildRuoli(
 export default async function PermissionManagementPage() {
   const supabase = await createClient()
 
-  const [{ data: ruoli }, { data: permessiPagina }, { data: permessiRecord }, { data: permessiUi }] =
+  const [
+    currentPermissions,
+    { data: ruoli },
+    { data: permessiPagina },
+    { data: permessiRecord },
+    { data: permessiUi },
+    { data: permessiAzione },
+    { data: permessiScope },
+    { data: permessiCampo },
+    { data: utenti },
+  ] =
     await Promise.all([
+      loadCurrentPermissionSnapshot(),
       supabase
         .from("ruoli")
         .select("id, code, nome, descrizione, colore, ordinamento")
@@ -109,6 +179,10 @@ export default async function PermissionManagementPage() {
       supabase.from("permessi_pagina").select("ruolo_id, pagina, accesso"),
       supabase.from("permessi_record").select("ruolo_id, modulo, azione, abilitato"),
       supabase.from("permessi_ui").select("ruolo_id, chiave, abilitato"),
+      supabase.from("permessi_azione").select("ruolo_id, azione, abilitato"),
+      supabase.from("permessi_scope").select("ruolo_id, risorsa, scope"),
+      supabase.from("permessi_campo").select("ruolo_id, modulo, campo, accesso"),
+      supabase.from("utenti").select("ruolo, ruolo_id"),
     ])
 
   const mapped = buildRuoli(
@@ -116,7 +190,16 @@ export default async function PermissionManagementPage() {
     (permessiPagina as PermessoPaginaRow[] | null) ?? [],
     (permessiRecord as PermessoRecordRow[] | null) ?? [],
     (permessiUi as PermessoUiRow[] | null) ?? [],
+    (permessiAzione as PermessoAzioneRow[] | null) ?? [],
+    (permessiScope as PermessoScopeRow[] | null) ?? [],
+    (permessiCampo as PermessoCampoRow[] | null) ?? [],
+    (utenti as UtenteRuoloRow[] | null) ?? [],
   )
 
-  return <PermissionManagementClient ruoli={mapped} />
+  return (
+    <PermissionManagementClient
+      ruoli={mapped}
+      currentProfile={currentAccountProfileFromSnapshot(currentPermissions)}
+    />
+  )
 }

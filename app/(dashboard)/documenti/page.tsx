@@ -7,12 +7,14 @@ import { CartellePreferite } from "@/components/documenti/cartelle-preferite"
 import { DocumentiRecenti } from "@/components/documenti/documenti-recenti"
 import { StorageCta } from "@/components/documenti/storage-cta"
 import { currentDocumentiUser } from "@/lib/documenti-data"
+import { PermissionPageGuard } from "@/lib/permissions/client-guard"
 
 export default function DocumentiPage() {
   const user = currentDocumentiUser
 
   return (
-    <div className="flex flex-col gap-6 p-4 md:p-6">
+    <PermissionPageGuard page="documenti">
+      <div className="flex flex-col gap-6 p-4 md:p-6">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -48,6 +50,7 @@ export default function DocumentiPage() {
       />
 
       <StorageCta baseUrl={user.nextcloud_url} />
-    </div>
+      </div>
+    </PermissionPageGuard>
   )
 }

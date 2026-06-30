@@ -36,6 +36,7 @@ import {
   UTENTI_ASSEGNABILI,
   type RegolaAssegnazione,
 } from "@/lib/system-settings-data"
+import { usePersistentSystemSetting } from "@/lib/crm-settings/use-persistent-system-setting"
 
 function iniziali(nome: string) {
   return nome
@@ -47,7 +48,9 @@ function iniziali(nome: string) {
 }
 
 export default function RegolePage() {
-  const [regole, setRegole] = useState<RegolaAssegnazione[]>(regoleIniziali)
+  const [regole, setRegole, store] = usePersistentSystemSetting<
+    RegolaAssegnazione[]
+  >("system.regole", regoleIniziali)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<RegolaAssegnazione | null>(null)
 
@@ -118,7 +121,11 @@ export default function RegolePage() {
     <div className="flex flex-col gap-5">
       <SectionHeader
         title="Regole di assegnazione"
-        description="Configura le regole automatiche di assegnazione dei lead agli utenti."
+        description={
+          store.saving
+            ? "Salvataggio configurazione..."
+            : "Configura le regole automatiche di assegnazione dei lead agli utenti."
+        }
         action={
           <Button
             onClick={openNew}
@@ -129,6 +136,12 @@ export default function RegolePage() {
           </Button>
         }
       />
+
+      {store.error ? (
+        <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {store.error}
+        </p>
+      ) : null}
 
       <div className="flex flex-col gap-3">
         {regole.map((r) => (

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Plus, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -38,7 +38,6 @@ import {
 import { SectionHeader } from "@/components/impostazioni/settings-ui"
 import { cn } from "@/lib/utils"
 import {
-  campiPerModulo,
   MODULI_ATTRIBUTI,
   CAMPO_TIPI,
   CAMPO_TIPO_LABEL,
@@ -48,14 +47,40 @@ import {
   type CampoAccesso,
   type CampoTipo,
 } from "@/lib/system-settings-data"
+import { usePermissions } from "@/lib/permissions/provider"
+import { CRM_FIELD_TARGETS, tableForCrmModule } from "@/lib/crm-settings/schema-admin"
 
 const ACCESSO_OPZIONI: CampoAccesso[] = ["no_access", "r", "rw"]
 
+function createEmptyCustomFields(): Record<ModuloAttributi, CampoRecord[]> {
+  return {
+    Lead: [],
+    Clienti: [],
+    Compiti: [],
+    Scadenze: [],
+    Installatori: [],
+  }
+}
+
+type SchemaColumnRow = {
+  field_key?: string | null
+  label: string
+  tipo: CampoTipo
+  required: boolean
+  visible: boolean
+  system: boolean
+  column_name: string | null
+}
+
+function moduloKey(modulo: ModuloAttributi) {
+  return modulo.toLowerCase()
+}
+
 export default function AttributiPage() {
+  const permissions = usePermissions()
   const [modulo, setModulo] = useState<ModuloAttributi>("Lead")
-  const [tutti, setTutti] = useState<Record<ModuloAttributi, CampoRecord[]>>(
-    () => structuredClone(campiPerModulo),
-  )
+  const [fieldsByModule, setFieldsByModule] =
+    useState<Record<ModuloAttributi, CampoRecord[]>>(createEmptyCustomFields)
   const [dialogOpen, setDialogOpen] = useState(false)
 
   // Stato modale nuovo campo.
@@ -64,12 +89,76 @@ export default function AttributiPage() {
   const [tipo, setTipo] = useState<CampoTipo>("text")
   const [obbligatorio, setObbligatorio] = useState(false)
   const [accesso, setAccesso] = useState<CampoAccesso>("rw")
+  const [editingCampo, setEditingCampo] = useState<CampoRecord | null>(null)
+  const [editingEtichetta, setEditingEtichetta] = useState("")
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
+  const [loadingSchema, setLoadingSchema] = useState(false)
 
-  const campi = tutti[modulo]
+  const campi = useMemo(() => fieldsByModule[modulo], [fieldsByModule, modulo])
   const nomeValido = /^[a-z][a-z0-9_]*$/.test(nome)
+  const currentModule = moduloKey(modulo)
+  const canManageSchema = permissions.canAction("crm_settings.system.schema.manage")
+  const canCreateFields =
+    canManageSchema && permissions.canAction(`${currentModule}.fields.create`)
+  const canEditFields =
+    canManageSchema && permissions.canAction(`${currentModule}.fields.edit`)
+  const canDeleteFields =
+    canManageSchema && permissions.canAction(`${currentModule}.fields.delete`)
+  const canManageVisibility = permissions.canAction(
+    `${currentModule}.fields.visibility.manage`,
+  )
+  const canManageRequired = permissions.canAction(
+    `${currentModule}.fields.required.manage`,
+  )
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadCustomFields() {
+      if (!canManageSchema) return
+      setLoadingSchema(true)
+      setApiError(null)
+      const response = await fetch(
+        `/api/crm-settings/schema/columns?module=${encodeURIComponent(modulo)}`,
+      )
+
+      if (cancelled) return
+      setLoadingSchema(false)
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null
+        setApiError(body?.error ?? "Caricamento campi Supabase non riuscito.")
+        return
+      }
+
+      const body = (await response.json().catch(() => null)) as
+        | { columns?: SchemaColumnRow[] }
+        | null
+      const rows = body?.columns ?? []
+      setFieldsByModule((prev) => ({
+        ...prev,
+        [modulo]: rows
+          .filter((row) => row.column_name || row.field_key)
+          .map((row) => ({
+            nome: row.column_name ?? row.field_key ?? "",
+            etichetta: row.label,
+            tipo: row.tipo,
+            obbligatorio: row.required,
+            visibile: row.visible,
+            accesso_default: "rw",
+            sistema: row.system,
+          })),
+      }))
+    }
+
+    void loadCustomFields()
+    return () => {
+      cancelled = true
+    }
+  }, [canManageSchema, modulo])
 
   function updateCampo(nomeCampo: string, patch: Partial<CampoRecord>) {
-    setTutti((prev) => ({
+    setFieldsByModule((prev) => ({
       ...prev,
       [modulo]: prev[modulo].map((c) =>
         c.nome === nomeCampo ? { ...c, ...patch } : c,
@@ -77,14 +166,51 @@ export default function AttributiPage() {
     }))
   }
 
-  function deleteCampo(nomeCampo: string) {
-    setTutti((prev) => ({
+  async function persistCampoPatch(nomeCampo: string, patch: Partial<CampoRecord>) {
+    const campo = campi.find((item) => item.nome === nomeCampo)
+    if (!campo || campo.sistema) return
+    updateCampo(nomeCampo, patch)
+
+    setApiError(null)
+    const response = await fetch("/api/crm-settings/schema/columns", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        module: modulo,
+        column: nomeCampo,
+        label: patch.etichetta,
+        required: patch.obbligatorio,
+        visible: patch.visibile,
+      }),
+    })
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null
+      setApiError(body?.error ?? "Aggiornamento campo non riuscito.")
+    }
+  }
+
+  async function deleteCampo(nomeCampo: string) {
+    if (!canDeleteFields) return
+    setPending(true)
+    setApiError(null)
+    const response = await fetch(
+      `/api/crm-settings/schema/columns?module=${encodeURIComponent(modulo)}&column=${encodeURIComponent(nomeCampo)}`,
+      { method: "DELETE" },
+    )
+    setPending(false)
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null
+      setApiError(body?.error ?? "Eliminazione colonna non riuscita.")
+      return
+    }
+    setFieldsByModule((prev) => ({
       ...prev,
       [modulo]: prev[modulo].filter((c) => c.nome !== nomeCampo),
     }))
   }
 
   function openNew() {
+    if (!canCreateFields) return
     setNome("")
     setEtichetta("")
     setTipo("text")
@@ -93,15 +219,35 @@ export default function AttributiPage() {
     setDialogOpen(true)
   }
 
-  function handleSave() {
-    if (!nomeValido || !etichetta.trim()) return
-    setTutti((prev) => ({
+  async function handleSave() {
+    if (!canCreateFields || !nomeValido || !etichetta.trim()) return
+    setPending(true)
+    setApiError(null)
+    const response = await fetch("/api/crm-settings/schema/columns", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        module: modulo,
+        name: nome,
+        label: etichetta.trim(),
+        type: tipo,
+        required: obbligatorio,
+        visible: true,
+      }),
+    })
+    setPending(false)
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null
+      setApiError(body?.error ?? "Creazione colonna non riuscita.")
+      return
+    }
+    setFieldsByModule((prev) => ({
       ...prev,
       [modulo]: [
         ...prev[modulo],
         {
           nome,
-          etichetta,
+          etichetta: etichetta.trim(),
           tipo,
           obbligatorio,
           visibile: true,
@@ -113,12 +259,54 @@ export default function AttributiPage() {
     setDialogOpen(false)
   }
 
+  function openEdit(campo: CampoRecord) {
+    if (!canEditFields) return
+    setEditingCampo(campo)
+    setEditingEtichetta(campo.etichetta)
+  }
+
+  async function saveEdit() {
+    if (!editingCampo || !editingEtichetta.trim()) return
+    await persistCampoPatch(editingCampo.nome, { etichetta: editingEtichetta.trim() })
+    setEditingCampo(null)
+    setEditingEtichetta("")
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <SectionHeader
-        title="Attributi record"
-        description="Gestisci i campi personalizzati per ogni modulo. I nuovi campi vengono automaticamente aggiunti alla matrice permessi per tutti i ruoli."
+        title="Campi personalizzati"
+        description={
+          pending || loadingSchema
+            ? "Salvataggio schema CRM..."
+            : `Crea e governa colonne reali Supabase per ${tableForCrmModule(modulo) ?? modulo}, con metadati usati dal permission engine.`
+        }
       />
+
+      {apiError ? (
+        <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {apiError}
+        </p>
+      ) : null}
+
+      <div className="grid gap-2 md:grid-cols-5">
+        {CRM_FIELD_TARGETS.map((target) => (
+          <button
+            key={target.module}
+            type="button"
+            onClick={() => setModulo(target.module)}
+            className={cn(
+              "rounded-lg border px-3 py-2 text-left transition-colors",
+              modulo === target.module
+                ? "border-teal bg-teal/5 text-foreground"
+                : "border-border bg-card text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <span className="block text-sm font-semibold">{target.module}</span>
+            <span className="block font-mono text-[11px]">{target.tableName}</span>
+          </button>
+        ))}
+      </div>
 
       {/* Tab selector modulo */}
       <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
@@ -170,8 +358,9 @@ export default function AttributiPage() {
                 <TableCell className="text-center">
                   <Switch
                     checked={campo.obbligatorio}
+                    disabled={campo.sistema || !canManageRequired}
                     onCheckedChange={(v) =>
-                      updateCampo(campo.nome, { obbligatorio: v })
+                      void persistCampoPatch(campo.nome, { obbligatorio: v })
                     }
                     aria-label={`${campo.etichetta} obbligatorio`}
                   />
@@ -179,8 +368,9 @@ export default function AttributiPage() {
                 <TableCell className="text-center">
                   <Switch
                     checked={campo.visibile}
+                    disabled={campo.sistema || !canManageVisibility}
                     onCheckedChange={(v) =>
-                      updateCampo(campo.nome, { visibile: v })
+                      void persistCampoPatch(campo.nome, { visibile: v })
                     }
                     aria-label={`${campo.etichetta} visibile`}
                   />
@@ -188,6 +378,7 @@ export default function AttributiPage() {
                 <TableCell>
                   <Select
                     value={campo.accesso_default}
+                    disabled={campo.sistema || !canManageVisibility}
                     onValueChange={(v) =>
                       updateCampo(campo.nome, {
                         accesso_default: (v ?? "rw") as CampoAccesso,
@@ -219,7 +410,7 @@ export default function AttributiPage() {
                   )}
                 </TableCell>
                 <TableCell>
-                  {campo.sistema ? null : (
+                  {campo.sistema || (!canEditFields && !canDeleteFields) ? null : (
                     <DropdownMenu>
                       <DropdownMenuTrigger
                         render={
@@ -234,20 +425,16 @@ export default function AttributiPage() {
                       />
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
-                          onClick={() => {
-                            const nuova = window.prompt(
-                              "Nuova etichetta",
-                              campo.etichetta,
-                            )
-                            if (nuova) updateCampo(campo.nome, { etichetta: nuova })
-                          }}
+                          disabled={!canEditFields}
+                          onClick={() => openEdit(campo)}
                         >
                           <Pencil className="size-4" />
                           Modifica etichetta
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           variant="destructive"
-                          onClick={() => deleteCampo(campo.nome)}
+                          disabled={!canDeleteFields}
+                          onClick={() => void deleteCampo(campo.nome)}
                         >
                           <Trash2 className="size-4" />
                           Elimina
@@ -263,7 +450,7 @@ export default function AttributiPage() {
       </div>
 
       <div>
-        <Button variant="outline" onClick={openNew}>
+        <Button variant="outline" onClick={openNew} disabled={!canCreateFields || pending}>
           <Plus className="size-4" />
           Aggiungi campo
         </Button>
@@ -356,7 +543,7 @@ export default function AttributiPage() {
             </div>
             <p className="rounded-lg bg-muted px-3 py-2 text-xs leading-relaxed text-muted-foreground">
               Il campo verrà aggiunto alla matrice permessi per tutti i ruoli
-              con l&apos;accesso default selezionato.
+              con l&apos;accesso default selezionato e alla tabella Supabase del modulo.
             </p>
           </div>
           <DialogFooter>
@@ -365,10 +552,50 @@ export default function AttributiPage() {
             </Button>
             <Button
               onClick={handleSave}
-              disabled={!nomeValido || !etichetta.trim()}
+              disabled={!canCreateFields || pending || !nomeValido || !etichetta.trim()}
               className="bg-teal text-teal-foreground hover:bg-teal/90"
             >
               Salva
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={editingCampo !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingCampo(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Modifica etichetta</DialogTitle>
+            <DialogDescription>
+              Aggiorna il nome visualizzato del campo senza cambiare la chiave tecnica.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 py-2">
+            <Label htmlFor="campo-edit-etichetta">Etichetta campo</Label>
+            <Input
+              id="campo-edit-etichetta"
+              value={editingEtichetta}
+              onChange={(e) => setEditingEtichetta(e.target.value)}
+            />
+            {editingCampo ? (
+              <span className="text-xs text-muted-foreground">
+                Chiave tecnica: <code>{editingCampo.nome}</code>
+              </span>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingCampo(null)}>
+              Annulla
+            </Button>
+            <Button
+              onClick={saveEdit}
+              className="bg-teal text-teal-foreground hover:bg-teal/90"
+            >
+              Salva modifica
             </Button>
           </DialogFooter>
         </DialogContent>

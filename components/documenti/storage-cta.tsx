@@ -24,6 +24,7 @@ export function StorageCta({ baseUrl }: { baseUrl: string }) {
 
       <Button
         className="shrink-0 gap-1.5"
+        nativeButton={false}
         render={
           <a href={baseUrl} target="_blank" rel="noopener noreferrer" />
         }

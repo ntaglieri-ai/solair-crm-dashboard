@@ -2,11 +2,15 @@
 
 import type { ReactNode } from "react"
 import { useEffect } from "react"
-import { usePathname, useRouter } from "next/navigation"
-import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { Users, Shield, ClipboardList, Lock, type LucideIcon } from "lucide-react"
-import { CURRENT_USER } from "@/lib/mock-data"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
+import {
+  CrmSettingsNavLink,
+  useCrmSettingsNavigation,
+} from "@/components/dashboard/crm-settings-navigation"
+import { pageKeyFromPath } from "@/lib/permissions/constants"
+import { usePermissions } from "@/lib/permissions/provider"
 import {
   CrmBreadcrumb,
   CrmSectionBackLink,
@@ -39,16 +43,21 @@ export default function AccountSecurityLayout({
   children: ReactNode
 }) {
   const pathname = usePathname()
-  const router = useRouter()
   const { openCrmSettings, openCrmSettingsLayer } = useCrmSettingsLauncher()
-  const isAdmin = CURRENT_USER.ruoloKey === "admin"
+  const { navigate } = useCrmSettingsNavigation()
+  const permissions = usePermissions()
+  const currentPage = pageKeyFromPath(pathname)
+  const canAccessCurrentPage = currentPage ? permissions.canPage(currentPage) : false
+  const visibleLinks = SECTION_LINKS.filter((link) => {
+    const page = pageKeyFromPath(link.href)
+    return page ? permissions.canPage(page) : true
+  })
 
-  // Accesso riservato agli Admin.
   useEffect(() => {
-    if (!isAdmin) router.replace("/")
-  }, [isAdmin, router])
+    if (!canAccessCurrentPage) navigate("/", { replace: true })
+  }, [canAccessCurrentPage, navigate])
 
-  if (!isAdmin) return null
+  if (!canAccessCurrentPage) return null
 
   const currentTitle = PAGE_TITLE[pathname] ?? "Account & Security"
 
@@ -56,7 +65,7 @@ export default function AccountSecurityLayout({
     <div className="flex flex-col gap-5">
       <CrmBreadcrumb
         items={[
-          { label: "Solair CRM", action: () => router.push("/") },
+          { label: "Solair CRM", action: () => navigate("/") },
           { label: "CRM Settings", action: openCrmSettings },
           {
             label: "Account & Security",
@@ -74,11 +83,11 @@ export default function AccountSecurityLayout({
             onClick={() => openCrmSettingsLayer("account-security")}
           />
           <nav className="flex flex-col gap-1" aria-label="Sezioni Account & Security">
-            {SECTION_LINKS.map((link) => {
+            {visibleLinks.map((link) => {
               const active = pathname === link.href
               const Icon = link.icon
               return (
-                <Link
+                <CrmSettingsNavLink
                   key={link.href}
                   href={link.href}
                   aria-current={active ? "page" : undefined}
@@ -88,10 +97,11 @@ export default function AccountSecurityLayout({
                       ? "border-teal bg-navy/5 text-foreground"
                       : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
+                  pendingClassName="border-teal bg-navy/5 text-foreground"
                 >
                   <Icon className="size-[18px] shrink-0" />
                   <span className="truncate">{link.label}</span>
-                </Link>
+                </CrmSettingsNavLink>
               )
             })}
           </nav>

@@ -125,7 +125,7 @@ export function NewLeadDialog({
       "Mobile/Fisso": "Mobile",
       "Origine Lead": form.origine,
       "E-mail": form.email,
-      Stato: "Non inviata",
+      Stato: "—",
       Nome: form.nome,
       Cognome: form.cognome,
       "Creato da": form.proprietario,
@@ -305,7 +305,7 @@ export function NewLeadDialog({
             <Select
               items={COMM_ITEMS}
               value={form.proprietario}
-              onValueChange={(v) => set("proprietario", v)}
+              onValueChange={(v) => set("proprietario", v ?? "")}
             >
               <SelectTrigger className="bg-card">
                 <SelectValue />

@@ -20,7 +20,7 @@ function mapRow(row: Record<string, unknown>): Lead {
     "Codice postale": (row.codice_postale as string) ?? "",
     Paese: (row.paese as string) ?? "Italia",
     "Stato Lead": (row.stato_lead as Lead["Stato Lead"]) ?? "Non contattato",
-    Stato: (row.stato_email as Lead["Stato"]) ?? null,
+    Stato: (row.stato_email as Lead["Stato"]) ?? "—",
     Valutazione: (row.valutazione as number) ?? 0,
     "Lead Proprietario": (row.lead_proprietario_id as string) ?? "",
     "Origine Lead": (row.origine_lead as Lead["Origine Lead"]) ?? "",
@@ -41,6 +41,7 @@ function mapRow(row: Record<string, unknown>): Lead {
     "Connesso a": (row.connesso_a as string) ?? null,
     "Creato da": (row.creato_da as string) ?? "",
     "Data Click": (row.data_click as string) ?? "",
+    "Ora creazione": (row.created_at as string) ?? "",
     "Data/Ora": (row.data_ora as string) ?? "",
     "Ora ultima attività": (row.ora_ultima_attivita as string) ?? "",
     "Badge dell'attività": false,
@@ -239,7 +240,7 @@ export async function getAllLeads(filters?: {
     console.error("[server-store] getAllLeads error:", error.message)
     return []
   }
-  return (data as Record<string, unknown>[]).map(mapRow)
+  return (data as unknown as Record<string, unknown>[]).map(mapRow)
 }
 
 export async function getTotalCount(filters?: {
@@ -314,7 +315,7 @@ export async function getLeadsByIds(ids: Iterable<string>): Promise<Lead[]> {
     console.error("[server-store] getLeadsByIds error:", error.message)
     return []
   }
-  return (data as Record<string, unknown>[]).map(mapRow)
+  return (data as unknown as Record<string, unknown>[]).map(mapRow)
 }
 
 export async function insertLead(lead: Lead): Promise<Lead> {

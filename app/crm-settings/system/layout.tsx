@@ -2,11 +2,15 @@
 
 import type { ReactNode } from "react"
 import { useEffect } from "react"
-import { usePathname, useRouter } from "next/navigation"
-import Link from "next/link"
-import { CURRENT_USER } from "@/lib/mock-data"
+import { usePathname } from "next/navigation"
 import { SYSTEM_SECTION_LINKS } from "@/lib/system-settings-data"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
+import {
+  CrmSettingsNavLink,
+  useCrmSettingsNavigation,
+} from "@/components/dashboard/crm-settings-navigation"
+import { pageKeyFromPath } from "@/lib/permissions/constants"
+import { usePermissions } from "@/lib/permissions/provider"
 import {
   CrmBreadcrumb,
   CrmSectionBackLink,
@@ -19,16 +23,21 @@ export default function SystemSettingsLayout({
   children: ReactNode
 }) {
   const pathname = usePathname()
-  const router = useRouter()
   const { openCrmSettings, openCrmSettingsLayer } = useCrmSettingsLauncher()
-  const isAdmin = CURRENT_USER.ruoloKey === "admin"
+  const { navigate } = useCrmSettingsNavigation()
+  const permissions = usePermissions()
+  const currentPage = pageKeyFromPath(pathname)
+  const canAccessCurrentPage = currentPage ? permissions.canPage(currentPage) : false
+  const visibleLinks = SYSTEM_SECTION_LINKS.filter((link) => {
+    const page = pageKeyFromPath(link.href)
+    return page ? permissions.canPage(page) : true
+  })
 
-  // Accesso riservato a Superadmin / Amministratore.
   useEffect(() => {
-    if (!isAdmin) router.replace("/")
-  }, [isAdmin, router])
+    if (!canAccessCurrentPage) navigate("/", { replace: true })
+  }, [canAccessCurrentPage, navigate])
 
-  if (!isAdmin) return null
+  if (!canAccessCurrentPage) return null
 
   const current = SYSTEM_SECTION_LINKS.find((l) => l.href === pathname)
   const currentTitle = current?.label ?? "System Settings"
@@ -37,7 +46,7 @@ export default function SystemSettingsLayout({
     <div className="flex flex-col gap-5">
       <CrmBreadcrumb
         items={[
-          { label: "Solair CRM", action: () => router.push("/") },
+          { label: "Solair CRM", action: () => navigate("/") },
           { label: "CRM Settings", action: openCrmSettings },
           {
             label: "System Settings",
@@ -58,11 +67,11 @@ export default function SystemSettingsLayout({
             className="flex flex-col gap-1"
             aria-label="Sezioni System Settings"
           >
-            {SYSTEM_SECTION_LINKS.map((link) => {
+            {visibleLinks.map((link) => {
               const active = pathname === link.href
               const Icon = link.icon
               return (
-                <Link
+                <CrmSettingsNavLink
                   key={link.href}
                   href={link.href}
                   aria-current={active ? "page" : undefined}
@@ -72,10 +81,11 @@ export default function SystemSettingsLayout({
                       ? "border-teal bg-navy/5 text-foreground"
                       : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
+                  pendingClassName="border-teal bg-navy/5 text-foreground"
                 >
                   <Icon className="size-[18px] shrink-0" />
                   <span className="truncate">{link.label}</span>
-                </Link>
+                </CrmSettingsNavLink>
               )
             })}
           </nav>

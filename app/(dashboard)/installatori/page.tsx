@@ -43,6 +43,7 @@ import { InstallatoreActionsMenu } from "@/components/installatori/installatore-
 import { InstallatoreCreateButton } from "@/components/installatori/installatore-create-button"
 import { NewInstallatoreDialog } from "@/components/installatori/new-installatore-dialog"
 import { LeadImportDialog } from "@/components/leads/lead-import-dialog"
+import { PermissionPageGuard } from "@/lib/permissions/client-guard"
 
 function norm(v: string | undefined): string {
   return (v ?? "").trim().toLowerCase()
@@ -510,8 +511,10 @@ function InstallatoriPageInner() {
 
 export default function InstallatoriPage() {
   return (
-    <InstallatoreTagProvider>
-      <InstallatoriPageInner />
-    </InstallatoreTagProvider>
+    <PermissionPageGuard page="installatori">
+      <InstallatoreTagProvider>
+        <InstallatoriPageInner />
+      </InstallatoreTagProvider>
+    </PermissionPageGuard>
   )
 }

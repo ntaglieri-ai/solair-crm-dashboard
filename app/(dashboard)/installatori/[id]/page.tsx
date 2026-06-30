@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { getInstallatoreById } from "@/lib/mock-data"
+import { requirePage } from "@/lib/permissions/server"
 import {
   InstallatoreAvatar,
   StatoInstallatoreBadge,
@@ -67,6 +68,8 @@ export default async function InstallatoreDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  await requirePage("installatori")
+
   const { id } = await params
   const installatore = getInstallatoreById(id)
 

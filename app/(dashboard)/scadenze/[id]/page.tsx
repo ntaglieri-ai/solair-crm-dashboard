@@ -1,12 +1,15 @@
 import { notFound } from "next/navigation"
 import { getScadenzaById, mockScadenze } from "@/lib/mock-data"
 import { ScadenzaDetailView } from "@/components/scadenze/scadenza-detail-view"
+import { requirePage } from "@/lib/permissions/server"
 
 export default async function ScadenzaDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
+  await requirePage("scadenze")
+
   const { id } = await params
   const scadenza = getScadenzaById(id)
 

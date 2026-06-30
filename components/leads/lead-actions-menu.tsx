@@ -572,7 +572,7 @@ export function LeadActionsMenu({
           </DialogHeader>
           <div className="flex flex-col gap-1.5 py-1">
             <Label>Nuovo Lead Proprietario</Label>
-            <Select value={owner} onValueChange={setOwner}>
+            <Select value={owner} onValueChange={(next) => setOwner(next ?? "")}>
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -639,7 +639,10 @@ export function LeadActionsMenu({
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Nuovo valore</Label>
-              <Select value={updValue} onValueChange={setUpdValue}>
+              <Select
+                value={updValue}
+                onValueChange={(next) => setUpdValue(next ?? "")}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Seleziona…" />
                 </SelectTrigger>

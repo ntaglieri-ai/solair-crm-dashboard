@@ -5,7 +5,13 @@
 
 import type { UserRole } from "./mock-data"
 
-export type RuoloColore = "navy" | "teal" | "gray"
+export type RuoloColore =
+  | "navy"
+  | "teal"
+  | "gray"
+  | "violet"
+  | "amber"
+  | "rose"
 
 /** Colore associato a ciascun ruolo utente (allineato alle card ruolo). */
 export const USER_ROLE_COLORE: Record<UserRole, RuoloColore> = {
@@ -65,6 +71,9 @@ export interface RuoloPermessi {
   visibilita_sedi: VisibilitaScope
   cartelle_nextcloud: VisibilitaScope
   riconfigurazioni: boolean
+  azioni?: Record<string, boolean>
+  scope_dati?: Record<string, string>
+  campi?: Record<string, Record<string, string>>
 }
 
 export interface Ruolo {
@@ -80,6 +89,9 @@ export const RUOLO_COLOR_CLASS: Record<RuoloColore, string> = {
   navy: "bg-navy text-navy-foreground",
   teal: "bg-teal text-teal-foreground",
   gray: "bg-muted text-muted-foreground",
+  violet: "bg-violet-100 text-violet-800",
+  amber: "bg-amber-100 text-amber-800",
+  rose: "bg-rose-100 text-rose-800",
 }
 
 export const mockRuoli: Ruolo[] = [

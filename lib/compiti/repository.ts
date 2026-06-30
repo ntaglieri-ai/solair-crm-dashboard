@@ -1,227 +1,287 @@
-// ============================================================
-// COMPITI — repository.ts
-// Pattern identico a Lead — sostituire mock con Supabase
-// ============================================================
+// Repository server-side del modulo Compiti — pattern identico a Lead/Clienti.
+// Nessun mock: tutte le query vanno su Supabase con proiezione selettiva.
+import { createClient } from "@/lib/supabase/server"
+import type {
+  Compito,
+  StatoCompito,
+  PrioritaCompito,
+  SedeLabel,
+} from "@/lib/mock-data"
+import type {
+  CompitiListParams,
+  CompitiListResponse,
+} from "@/lib/compiti/api-types"
 
-export type Compito = {
-  id: string;
-  titolo: string;
-  descrizione: string | null;
-  stato: "da_fare" | "in_corso" | "completato" | "annullato";
-  priorita: "Alta" | "Media" | "Bassa";
-  scadenza: string | null;
-  proprietario_id: string | null;
-  proprietario_nome: string | null;
-  lead_id: string | null;
-  cliente_id: string | null;
-  lead_nome: string | null;
-  cliente_nome: string | null;
-  created_at: string;
-  updated_at: string;
-};
+// Colonne proiettate in lettura — mai SELECT *.
+const LIST_COLUMNS = [
+  "id",
+  "oggetto",
+  "priorita",
+  "stato",
+  "scadenza",
+  "proprietario_id",
+  "correlato_id",
+  "correlato_tipo",
+  "descrizione",
+  "sede",
+  "created_at",
+  "updated_at",
+].join(",")
 
-export type CompitiFilters = {
-  search?: string;
-  stato?: string;
-  priorita?: string;
-  proprietario_id?: string;
-  lead_id?: string;
-  cliente_id?: string;
-  scadenza_da?: string;
-  scadenza_a?: string;
-};
-
-export type CompitiSort = {
-  field: keyof Compito;
-  direction: "asc" | "desc";
-};
-
-export type CompitiPage = {
-  data: Compito[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
-};
-
-export type CompitiAggregations = {
-  totale: number;
-  da_fare: number;
-  in_corso: number;
-  completati: number;
-  scaduti: number;
-};
-
-// ============================================================
-// MOCK DATA
-// ============================================================
-
-const MOCK_COMPITI: Compito[] = [
-  {
-    id: "cmp_001",
-    titolo: "Chiamata follow-up Mario Bianchi",
-    descrizione: "Verificare disponibilità per sopralluogo",
-    stato: "da_fare",
-    priorita: "Alta",
-    scadenza: "2026-06-27T10:00:00Z",
-    proprietario_id: "usr_002",
-    proprietario_nome: "Gaetano Grasso",
-    lead_id: "lead_042",
-    cliente_id: null,
-    lead_nome: "Mario Bianchi",
-    cliente_nome: null,
-    created_at: "2026-06-24T09:00:00Z",
-    updated_at: "2026-06-24T09:00:00Z",
-  },
-  {
-    id: "cmp_002",
-    titolo: "Inviare preventivo Lucia Rossi",
-    descrizione: "Preventivo impianto 4kW con batteria",
-    stato: "in_corso",
-    priorita: "Alta",
-    scadenza: "2026-06-26T18:00:00Z",
-    proprietario_id: "usr_003",
-    proprietario_nome: "Mariarosa De Leo",
-    lead_id: null,
-    cliente_id: "cli_002",
-    lead_nome: null,
-    cliente_nome: "Lucia Rossi",
-    created_at: "2026-06-23T14:00:00Z",
-    updated_at: "2026-06-25T10:00:00Z",
-  },
-  {
-    id: "cmp_003",
-    titolo: "Sopralluogo Antonio Ferrara",
-    descrizione: "Valutazione tetto per installazione 6kW",
-    stato: "completato",
-    priorita: "Media",
-    scadenza: "2026-06-20T09:00:00Z",
-    proprietario_id: "usr_004",
-    proprietario_nome: "Ivan Lo Faro",
-    lead_id: null,
-    cliente_id: "cli_003",
-    lead_nome: null,
-    cliente_nome: "Antonio Ferrara",
-    created_at: "2026-06-15T08:00:00Z",
-    updated_at: "2026-06-20T16:00:00Z",
-  },
-  {
-    id: "cmp_004",
-    titolo: "Conferma appuntamento Giovanna Verdi",
-    descrizione: null,
-    stato: "da_fare",
-    priorita: "Bassa",
-    scadenza: "2026-06-30T12:00:00Z",
-    proprietario_id: "usr_008",
-    proprietario_nome: "Gianluca Silvestro",
-    lead_id: null,
-    cliente_id: "cli_004",
-    lead_nome: null,
-    cliente_nome: "Giovanna Verdi",
-    created_at: "2026-06-22T11:00:00Z",
-    updated_at: "2026-06-22T11:00:00Z",
-  },
-  {
-    id: "cmp_005",
-    titolo: "Aggiornare CRM con dati firma",
-    descrizione: "Caricare contratto firmato e aggiornare stato lead",
-    stato: "da_fare",
-    priorita: "Media",
-    scadenza: "2026-06-28T17:00:00Z",
-    proprietario_id: "usr_002",
-    proprietario_nome: "Gaetano Grasso",
-    lead_id: "lead_038",
-    cliente_id: null,
-    lead_nome: "Paolo Conti",
-    cliente_nome: null,
-    created_at: "2026-06-25T08:00:00Z",
-    updated_at: "2026-06-25T08:00:00Z",
-  },
-];
-
-// ============================================================
-// REPOSITORY FUNCTIONS
-// ============================================================
-
-function applyFilters(compiti: Compito[], filters: CompitiFilters): Compito[] {
-  const now = new Date();
-  return compiti.filter((c) => {
-    if (filters.search) {
-      const q = filters.search.toLowerCase();
-      const match =
-        c.titolo.toLowerCase().includes(q) ||
-        c.descrizione?.toLowerCase().includes(q) ||
-        c.lead_nome?.toLowerCase().includes(q) ||
-        c.cliente_nome?.toLowerCase().includes(q);
-      if (!match) return false;
-    }
-    if (filters.stato && c.stato !== filters.stato) return false;
-    if (filters.priorita && c.priorita !== filters.priorita) return false;
-    if (filters.proprietario_id && c.proprietario_id !== filters.proprietario_id) return false;
-    if (filters.lead_id && c.lead_id !== filters.lead_id) return false;
-    if (filters.cliente_id && c.cliente_id !== filters.cliente_id) return false;
-    if (filters.scadenza_da && c.scadenza && new Date(c.scadenza) < new Date(filters.scadenza_da)) return false;
-    if (filters.scadenza_a && c.scadenza && new Date(c.scadenza) > new Date(filters.scadenza_a)) return false;
-    return true;
-  });
+// Whitelist ordinamento: campo UI → colonna DB.
+const SORT_COLUMN: Record<string, string> = {
+  Oggetto: "oggetto",
+  Stato: "stato",
+  Priorità: "priorita",
+  "Data di scadenza": "scadenza",
+  "Proprietario del compito": "proprietario_id",
 }
 
-function applySort(compiti: Compito[], sort: CompitiSort): Compito[] {
-  return [...compiti].sort((a, b) => {
-    const aVal = a[sort.field] ?? "";
-    const bVal = b[sort.field] ?? "";
-    const cmp = String(aVal).localeCompare(String(bVal), "it");
-    return sort.direction === "asc" ? cmp : -cmp;
-  });
+// Mapping DB → UI per il campo priorita.
+const PRIORITA_MAP: Record<string, PrioritaCompito> = {
+  Alta: "Alto",
+  Media: "Medio",
+  Bassa: "Basso",
+  // Tolleranza se il DB salva già i valori UI
+  Alto: "Alto",
+  Medio: "Medio",
+  Basso: "Basso",
 }
 
-// ============================================================
-// QUERY PRINCIPALE — da sostituire con Supabase
-// ============================================================
+// Mapping UI → DB per il campo priorita in inserimento/aggiornamento.
+const PRIORITA_DB: Record<PrioritaCompito, string> = {
+  Alto: "Alta",
+  Medio: "Media",
+  Basso: "Bassa",
+}
 
-export async function getCompiti(params: {
-  page?: number;
-  pageSize?: number;
-  filters?: CompitiFilters;
-  sort?: CompitiSort;
-}): Promise<CompitiPage> {
-  const { page = 1, pageSize = 20, filters = {}, sort = { field: "scadenza", direction: "asc" } } = params;
+// Mapping DB → UI per il campo stato.
+const STATO_MAP: Record<string, StatoCompito> = {
+  da_fare: "Da fare",
+  in_corso: "In corso",
+  in_attesa: "In attesa",
+  completato: "Completato",
+  annullato: "Completato", // fallback
+  "Da fare": "Da fare",
+  "In corso": "In corso",
+  "In attesa": "In attesa",
+  Completato: "Completato",
+}
 
-  // TODO: sostituire con query Supabase
-  // const { data, count } = await supabase
-  //   .from("compiti")
-  //   .select("id, titolo, stato, priorita, scadenza, proprietario_id, proprietario_nome, lead_id, cliente_id, lead_nome, cliente_nome", { count: "exact" })
-  //   .order(sort.field, { ascending: sort.direction === "asc" })
-  //   .range((page - 1) * pageSize, page * pageSize - 1);
+// Mapping UI → DB per il campo stato.
+const STATO_DB: Record<StatoCompito, string> = {
+  "Da fare": "da_fare",
+  "In corso": "in_corso",
+  "In attesa": "in_attesa",
+  Completato: "completato",
+}
 
-  let result = [...MOCK_COMPITI];
-  result = applyFilters(result, filters);
-  result = applySort(result, sort);
+/** ISO (o YYYY-MM-DD) → DD/MM/YYYY. Restituisce "" se non valido. */
+function isoToDMY(iso: string | null): string {
+  if (!iso) return ""
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ""
+  const day = String(d.getUTCDate()).padStart(2, "0")
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0")
+  return `${day}/${month}/${d.getUTCFullYear()}`
+}
 
-  const total = result.length;
-  const totalPages = Math.ceil(total / pageSize);
-  const start = (page - 1) * pageSize;
-  const data = result.slice(start, start + pageSize);
+/** DD/MM/YYYY → ISO (YYYY-MM-DDT00:00:00Z). Restituisce null se non valido. */
+function dmyToISO(dmy: string): string | null {
+  const [d, m, y] = dmy.split("/")
+  if (!d || !m || !y) return null
+  return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}T00:00:00Z`
+}
 
-  return { data, total, page, pageSize, totalPages };
+function mapRow(row: Record<string, unknown>): Compito {
+  const correlato_id = row.correlato_id as string | null
+  const correlato_tipo = row.correlato_tipo as string | null
+
+  return {
+    id: row.id as string,
+    Oggetto: (row.oggetto as string) ?? "",
+    Stato:
+      STATO_MAP[row.stato as string] ?? "Da fare",
+    Priorità:
+      PRIORITA_MAP[row.priorita as string] ?? "Medio",
+    "Data di scadenza": isoToDMY(row.scadenza as string | null),
+    "Proprietario del compito": (row.proprietario_id as string) ?? "",
+    Sede: (row.sede as SedeLabel) ?? ("" as SedeLabel),
+    "Correlato a":
+      correlato_id && correlato_tipo
+        ? {
+            tipo: correlato_tipo === "Lead" ? "Lead" : "Cliente",
+            id: correlato_id,
+            nome: correlato_id, // nome non in DB — fallback all'id
+          }
+        : null,
+    Descrizione: (row.descrizione as string) ?? "",
+    Promemoria: null,
+    "Data di creazione": isoToDMY(row.created_at as string | null),
+    "Orario di chiusura": null,
+    Note: [],
+  }
+}
+
+export async function queryCompiti(
+  params: CompitiListParams,
+): Promise<CompitiListResponse> {
+  const supabase = await createClient()
+  const sortCol = (params.sortBy && SORT_COLUMN[params.sortBy]) || "scadenza"
+  const ascending = params.sortDir === "asc"
+  const from = (params.page - 1) * params.pageSize
+  const to = from + params.pageSize - 1
+  const now = new Date().toISOString()
+
+  let listQ = supabase
+    .from("compiti")
+    .select(LIST_COLUMNS)
+    .order(sortCol, { ascending, nullsFirst: false })
+    .range(from, to)
+
+  let countQ = supabase
+    .from("compiti")
+    .select("id", { count: "exact", head: true })
+
+  let scadutiQ = supabase
+    .from("compiti")
+    .select("id", { count: "exact", head: true })
+    .lt("scadenza", now)
+    .not("stato", "in", '("completato","annullato")')
+
+  if (params.search.trim()) {
+    const p = `%${params.search.trim()}%`
+    const f = `oggetto.ilike.${p},descrizione.ilike.${p}`
+    listQ = listQ.or(f)
+    countQ = countQ.or(f)
+    scadutiQ = scadutiQ.or(f)
+  }
+  if (params.stati.length > 0) {
+    const dbStati = params.stati.map((s) => STATO_DB[s] ?? s)
+    listQ = listQ.in("stato", dbStati)
+    countQ = countQ.in("stato", dbStati)
+    scadutiQ = scadutiQ.in("stato", dbStati)
+  }
+  if (params.priorita !== "all") {
+    const dbPriorita = PRIORITA_DB[params.priorita as PrioritaCompito] ?? params.priorita
+    listQ = listQ.eq("priorita", dbPriorita)
+    countQ = countQ.eq("priorita", dbPriorita)
+    scadutiQ = scadutiQ.eq("priorita", dbPriorita)
+  }
+  if (params.proprietario !== "all") {
+    listQ = listQ.eq("proprietario_id", params.proprietario)
+    countQ = countQ.eq("proprietario_id", params.proprietario)
+    scadutiQ = scadutiQ.eq("proprietario_id", params.proprietario)
+  }
+  if (params.sede !== "all") {
+    listQ = listQ.eq("sede", params.sede)
+    countQ = countQ.eq("sede", params.sede)
+    scadutiQ = scadutiQ.eq("sede", params.sede)
+  }
+  if (params.scadenzaDa) {
+    listQ = listQ.gte("scadenza", params.scadenzaDa)
+    countQ = countQ.gte("scadenza", params.scadenzaDa)
+  }
+  if (params.scadenzaA) {
+    listQ = listQ.lte("scadenza", params.scadenzaA + "T23:59:59Z")
+    countQ = countQ.lte("scadenza", params.scadenzaA + "T23:59:59Z")
+  }
+
+  const [
+    { data, error },
+    { count, error: countError },
+    { count: scadutiCount, error: scadutiError },
+  ] = await Promise.all([listQ, countQ, scadutiQ])
+
+  if (error) console.error("[compiti/repository] queryCompiti:", error.message)
+  if (countError) console.error("[compiti/repository] count:", countError.message)
+  if (scadutiError) console.error("[compiti/repository] scaduti:", scadutiError.message)
+
+  return {
+    rows: (data ?? []).map((r) => mapRow(r as unknown as Record<string, unknown>)),
+    total: count ?? 0,
+    page: params.page,
+    pageSize: params.pageSize,
+    scadutiTotal: scadutiCount ?? 0,
+  }
 }
 
 export async function getCompitoById(id: string): Promise<Compito | null> {
-  return MOCK_COMPITI.find((c) => c.id === id) ?? null;
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("compiti")
+    .select(LIST_COLUMNS)
+    .eq("id", id)
+    .single()
+  if (error || !data) return null
+  return mapRow(data as unknown as Record<string, unknown>)
 }
 
-export async function getCompitiAggregations(filters: CompitiFilters = {}): Promise<CompitiAggregations> {
-  // TODO: sostituire con query aggregata Supabase
-  const now = new Date();
-  const filtered = applyFilters(MOCK_COMPITI, filters);
-  return {
-    totale: filtered.length,
-    da_fare: filtered.filter((c) => c.stato === "da_fare").length,
-    in_corso: filtered.filter((c) => c.stato === "in_corso").length,
-    completati: filtered.filter((c) => c.stato === "completato").length,
-    scaduti: filtered.filter((c) =>
-      c.stato !== "completato" && c.stato !== "annullato" &&
-      c.scadenza != null && new Date(c.scadenza) < now
-    ).length,
-  };
+export async function createCompitoRecord(
+  body: Partial<Compito>,
+): Promise<Compito> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("compiti")
+    .insert({
+      oggetto: body.Oggetto || null,
+      stato: body.Stato ? (STATO_DB[body.Stato] ?? body.Stato) : "da_fare",
+      priorita: body.Priorità ? (PRIORITA_DB[body.Priorità] ?? body.Priorità) : "Media",
+      scadenza: body["Data di scadenza"]
+        ? dmyToISO(body["Data di scadenza"])
+        : null,
+      proprietario_id: body["Proprietario del compito"] || null,
+      sede: body.Sede || null,
+      descrizione: body.Descrizione || null,
+      correlato_id: body["Correlato a"]?.id || null,
+      correlato_tipo: body["Correlato a"]?.tipo || null,
+    })
+    .select(LIST_COLUMNS)
+    .single()
+  if (error) throw new Error(`createCompitoRecord: ${error.message}`)
+  return mapRow(data as unknown as Record<string, unknown>)
+}
+
+export async function updateCompitoRecord(
+  id: string,
+  patch: Partial<Compito>,
+): Promise<Compito | null> {
+  const supabase = await createClient()
+  const row: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  }
+  if (patch.Oggetto !== undefined) row.oggetto = patch.Oggetto
+  if (patch.Stato !== undefined) row.stato = STATO_DB[patch.Stato] ?? patch.Stato
+  if (patch.Priorità !== undefined)
+    row.priorita = PRIORITA_DB[patch.Priorità] ?? patch.Priorità
+  if (patch["Data di scadenza"] !== undefined)
+    row.scadenza = dmyToISO(patch["Data di scadenza"])
+  if (patch["Proprietario del compito"] !== undefined)
+    row.proprietario_id = patch["Proprietario del compito"]
+  if (patch.Sede !== undefined) row.sede = patch.Sede
+  if (patch.Descrizione !== undefined) row.descrizione = patch.Descrizione
+  if (patch["Correlato a"] !== undefined) {
+    row.correlato_id = patch["Correlato a"]?.id ?? null
+    row.correlato_tipo = patch["Correlato a"]?.tipo ?? null
+  }
+
+  const { data, error } = await supabase
+    .from("compiti")
+    .update(row)
+    .eq("id", id)
+    .select(LIST_COLUMNS)
+    .single()
+  if (error || !data) return null
+  return mapRow(data as unknown as Record<string, unknown>)
+}
+
+export async function deleteCompitoRecords(ids: string[]): Promise<number> {
+  if (ids.length === 0) return 0
+  const supabase = await createClient()
+  const { error, count } = await supabase
+    .from("compiti")
+    .delete({ count: "exact" })
+    .in("id", ids)
+  if (error) throw new Error(`deleteCompitoRecords: ${error.message}`)
+  return count ?? 0
 }

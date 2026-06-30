@@ -1,16 +1,9 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Inter, Geist_Mono } from 'next/font/google'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { QueryProvider } from '@/components/providers/query-provider'
 import './globals.css'
-
-const inter = Inter({ variable: '--font-inter', subsets: ['latin'] })
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-})
 
 export const metadata: Metadata = {
   title: 'Solair CRM',
@@ -46,7 +39,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="it" className={`light ${inter.variable} ${geistMono.variable}`}>
+    <html lang="it" className="light">
       <body className="font-sans antialiased bg-background">
         <QueryProvider>
           <TooltipProvider delay={150}>{children}</TooltipProvider>

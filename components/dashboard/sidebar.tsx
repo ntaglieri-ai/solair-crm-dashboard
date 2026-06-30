@@ -16,10 +16,11 @@ import {
   NAV_PRINCIPALE,
   NAV_GESTIONE,
   NAV_ADMIN,
-  CURRENT_USER,
   type NavItem,
 } from "@/lib/mock-data"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
+import { pageKeyFromPath } from "@/lib/permissions/constants"
+import { usePermissions } from "@/lib/permissions/provider"
 import { NAV_ICONS } from "./icons"
 
 function isActive(href: string, pathname: string) {
@@ -83,6 +84,8 @@ function NavLauncherButton({ item }: { item: NavItem }) {
 
 function ProfileMenu() {
   const router = useRouter()
+  const permissions = usePermissions()
+  const subject = permissions.snapshot.subject
 
   async function handleLogout() {
     try {
@@ -102,14 +105,15 @@ function ProfileMenu() {
         )}
       >
         <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-semibold text-navy-foreground">
-          {CURRENT_USER.iniziali}
+          {subject.iniziali}
         </div>
         <div className="flex min-w-0 flex-col leading-tight">
           <span className="truncate text-sm font-semibold text-foreground">
-            {CURRENT_USER.nome}
+            {subject.nome}
           </span>
           <span className="truncate text-xs text-muted-foreground">
-            {CURRENT_USER.ruolo}
+            {subject.ruoloNome}
+            {subject.sede ? ` · ${subject.sede}` : ""}
           </span>
         </div>
         <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted-foreground" />
@@ -151,6 +155,17 @@ function NavSection({ title, items }: { title: string; items: NavItem[] }) {
 }
 
 export function Sidebar() {
+  const permissions = usePermissions()
+  const visiblePrincipale = NAV_PRINCIPALE.filter((item) => {
+    const page = pageKeyFromPath(item.href)
+    return page ? permissions.canPage(page) : true
+  })
+  const visibleGestione = NAV_GESTIONE.filter((item) => {
+    const page = pageKeyFromPath(item.href)
+    return page ? permissions.canPage(page) : true
+  })
+  const canOpenCrmSettings = permissions.canPage("crm_settings")
+
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[228px] flex-col border-r border-sidebar-border bg-sidebar lg:flex">
       {/* Logo */}
@@ -166,11 +181,14 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-5">
-        <NavSection title="Principale" items={NAV_PRINCIPALE} />
-        <NavSection title="Gestione" items={NAV_GESTIONE} />
+        {visiblePrincipale.length > 0 ? (
+          <NavSection title="Principale" items={visiblePrincipale} />
+        ) : null}
+        {visibleGestione.length > 0 ? (
+          <NavSection title="Gestione" items={visibleGestione} />
+        ) : null}
 
-        {/* CRM Settings: solo admin, separata dalle voci operative */}
-        {CURRENT_USER.ruoloKey === "admin" ? (
+        {canOpenCrmSettings ? (
           <div className="mt-auto border-t border-sidebar-border pt-4">
             <NavLauncherButton item={NAV_ADMIN} />
           </div>

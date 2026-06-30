@@ -89,12 +89,28 @@ export function CrmSettingsNavigationProvider({
 
 export function useCrmSettingsNavigation() {
   const ctx = useContext(CrmSettingsNavigationContext)
-  if (!ctx) {
-    throw new Error(
-      "useCrmSettingsNavigation must be used within CrmSettingsNavigationProvider",
-    )
-  }
-  return ctx
+  const pathname = usePathname()
+  const router = useRouter()
+  const fallbackMarkNavigating = useCallback(() => {}, [])
+  const fallbackNavigate = useCallback(
+    (href: string, options?: { replace?: boolean }) => {
+      if (pathOnly(href) === pathname) return
+      startTransition(() => {
+        if (options?.replace) router.replace(href)
+        else router.push(href)
+      })
+    },
+    [pathname, router],
+  )
+
+  return (
+    ctx ?? {
+      pendingHref: null,
+      navigating: false,
+      navigate: fallbackNavigate,
+      markNavigating: fallbackMarkNavigating,
+    }
+  )
 }
 
 type CrmSettingsNavLinkProps = Omit<

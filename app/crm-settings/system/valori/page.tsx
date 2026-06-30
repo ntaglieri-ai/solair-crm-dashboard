@@ -45,6 +45,7 @@ import {
 } from "@/lib/system-settings-data"
 import { usePermissions } from "@/lib/permissions/provider"
 import { usePersistentSystemSetting } from "@/lib/crm-settings/use-persistent-system-setting"
+import { tableForCrmModule, valueKeyFromLabel } from "@/lib/crm-settings/schema-admin"
 
 function SortableValore({
   valore,
@@ -200,6 +201,8 @@ export default function ValoriPage() {
   const [newValueField, setNewValueField] = useState<string | null>(null)
   const [newValueLabel, setNewValueLabel] = useState("")
   const [newValueColor, setNewValueColor] = useState(PALETTE[0])
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
 
   const campi = tutti[modulo]
   const selectedField = campi.find((campo) => campo.campo === newValueField)
@@ -207,7 +210,7 @@ export default function ValoriPage() {
     "crm_settings.system.default_values.manage",
   )
 
-  function reorder(campoNome: string, ids: string[]) {
+  async function reorder(campoNome: string, ids: string[]) {
     setTutti((prev) => ({
       ...prev,
       [modulo]: prev[modulo].map((c) =>
@@ -217,8 +220,18 @@ export default function ValoriPage() {
               valori: ids.map((id) => c.valori.find((v) => v.id === id)!),
             }
           : c,
-      ),
+        ),
     }))
+    setApiError(null)
+    const response = await fetch("/api/crm-settings/schema/default-values", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ module: modulo, field: campoNome, order: ids }),
+    })
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null
+      setApiError(body?.error ?? "Riordino valori non riuscito.")
+    }
   }
 
   function addValore(campoNome: string) {
@@ -229,8 +242,28 @@ export default function ValoriPage() {
     setNewValueColor(PALETTE[(campo?.valori.length ?? 0) % PALETTE.length])
   }
 
-  function saveValore() {
+  async function saveValore() {
     if (!newValueField || !newValueLabel.trim()) return
+    setPending(true)
+    setApiError(null)
+    const response = await fetch("/api/crm-settings/schema/default-values", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        module: modulo,
+        field: newValueField,
+        label: newValueLabel.trim(),
+        color: newValueColor,
+      }),
+    })
+    setPending(false)
+    const body = (await response.json().catch(() => null)) as
+      | { id?: string; error?: string }
+      | null
+    if (!response.ok || !body?.id) {
+      setApiError(body?.error ?? "Creazione valore non riuscita.")
+      return
+    }
     setTutti((prev) => ({
       ...prev,
       [modulo]: prev[modulo].map((c) =>
@@ -240,7 +273,7 @@ export default function ValoriPage() {
               valori: [
                 ...c.valori,
                 {
-                  id: `v_${Date.now()}`,
+                  id: body.id,
                   etichetta: newValueLabel.trim(),
                   colore: newValueColor,
                 },
@@ -253,8 +286,29 @@ export default function ValoriPage() {
     setNewValueLabel("")
   }
 
-  function deleteValore(campoNome: string, id: string) {
+  async function deleteValore(campoNome: string, id: string) {
     if (!canManageDefaultValues) return
+    const valore = campi
+      .find((campo) => campo.campo === campoNome)
+      ?.valori.find((item) => item.id === id)
+    const params = new URLSearchParams({ module: modulo, field: campoNome })
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+      params.set("id", id)
+    } else if (valore) {
+      params.set("value", valueKeyFromLabel(valore.etichetta))
+    }
+
+    setPending(true)
+    setApiError(null)
+    const response = await fetch(`/api/crm-settings/schema/default-values?${params}`, {
+      method: "DELETE",
+    })
+    setPending(false)
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null
+      setApiError(body?.error ?? "Eliminazione valore non riuscita.")
+      return
+    }
     setTutti((prev) => ({
       ...prev,
       [modulo]: prev[modulo].map((c) =>
@@ -270,15 +324,15 @@ export default function ValoriPage() {
       <SectionHeader
         title="Valori predefiniti"
         description={
-          store.saving
-            ? "Salvataggio configurazione..."
-            : "Gestisci stati, priorità, fonti e opzioni standard usate nei moduli del CRM."
+          pending || store.saving
+            ? "Salvataggio valori CRM..."
+            : `Gestisci opzioni reali per le colonne configurabili di ${tableForCrmModule(modulo) ?? modulo}.`
         }
       />
 
-      {store.error ? (
+      {apiError || store.error ? (
         <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {store.error}
+          {apiError ?? store.error}
         </p>
       ) : null}
 
@@ -309,7 +363,7 @@ export default function ValoriPage() {
               onReorder={reorder}
               onAdd={addValore}
               onDelete={deleteValore}
-              disabled={!canManageDefaultValues}
+              disabled={!canManageDefaultValues || pending}
             />
           ))}
         </Accordion>
@@ -367,7 +421,7 @@ export default function ValoriPage() {
             </Button>
             <Button
               onClick={saveValore}
-              disabled={!newValueLabel.trim()}
+              disabled={pending || !newValueLabel.trim()}
               className="bg-teal text-teal-foreground hover:bg-teal/90"
             >
               Aggiungi valore

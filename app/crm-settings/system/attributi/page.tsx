@@ -50,6 +50,7 @@ import {
 } from "@/lib/system-settings-data"
 import { usePermissions } from "@/lib/permissions/provider"
 import { usePersistentSystemSetting } from "@/lib/crm-settings/use-persistent-system-setting"
+import { tableForCrmModule } from "@/lib/crm-settings/schema-admin"
 
 const ACCESSO_OPZIONI: CampoAccesso[] = ["no_access", "r", "rw"]
 
@@ -76,13 +77,19 @@ export default function AttributiPage() {
   const [accesso, setAccesso] = useState<CampoAccesso>("rw")
   const [editingCampo, setEditingCampo] = useState<CampoRecord | null>(null)
   const [editingEtichetta, setEditingEtichetta] = useState("")
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
 
   const campi = tutti[modulo]
   const nomeValido = /^[a-z][a-z0-9_]*$/.test(nome)
   const currentModule = moduloKey(modulo)
-  const canCreateFields = permissions.canAction(`${currentModule}.fields.create`)
-  const canEditFields = permissions.canAction(`${currentModule}.fields.edit`)
-  const canDeleteFields = permissions.canAction(`${currentModule}.fields.delete`)
+  const canManageSchema = permissions.canAction("crm_settings.system.schema.manage")
+  const canCreateFields =
+    canManageSchema && permissions.canAction(`${currentModule}.fields.create`)
+  const canEditFields =
+    canManageSchema && permissions.canAction(`${currentModule}.fields.edit`)
+  const canDeleteFields =
+    canManageSchema && permissions.canAction(`${currentModule}.fields.delete`)
   const canManageVisibility = permissions.canAction(
     `${currentModule}.fields.visibility.manage`,
   )
@@ -99,7 +106,43 @@ export default function AttributiPage() {
     }))
   }
 
-  function deleteCampo(nomeCampo: string) {
+  async function persistCampoPatch(nomeCampo: string, patch: Partial<CampoRecord>) {
+    const campo = campi.find((item) => item.nome === nomeCampo)
+    updateCampo(nomeCampo, patch)
+    if (!campo || campo.sistema) return
+
+    setApiError(null)
+    const response = await fetch("/api/crm-settings/schema/columns", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        module: modulo,
+        column: nomeCampo,
+        label: patch.etichetta,
+        required: patch.obbligatorio,
+        visible: patch.visibile,
+      }),
+    })
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null
+      setApiError(body?.error ?? "Aggiornamento campo non riuscito.")
+    }
+  }
+
+  async function deleteCampo(nomeCampo: string) {
+    if (!canDeleteFields) return
+    setPending(true)
+    setApiError(null)
+    const response = await fetch(
+      `/api/crm-settings/schema/columns?module=${encodeURIComponent(modulo)}&column=${encodeURIComponent(nomeCampo)}`,
+      { method: "DELETE" },
+    )
+    setPending(false)
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null
+      setApiError(body?.error ?? "Eliminazione colonna non riuscita.")
+      return
+    }
     setTutti((prev) => ({
       ...prev,
       [modulo]: prev[modulo].filter((c) => c.nome !== nomeCampo),
@@ -116,15 +159,35 @@ export default function AttributiPage() {
     setDialogOpen(true)
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!canCreateFields || !nomeValido || !etichetta.trim()) return
+    setPending(true)
+    setApiError(null)
+    const response = await fetch("/api/crm-settings/schema/columns", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        module: modulo,
+        name: nome,
+        label: etichetta.trim(),
+        type: tipo,
+        required: obbligatorio,
+        visible: true,
+      }),
+    })
+    setPending(false)
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null
+      setApiError(body?.error ?? "Creazione colonna non riuscita.")
+      return
+    }
     setTutti((prev) => ({
       ...prev,
       [modulo]: [
         ...prev[modulo],
         {
           nome,
-          etichetta,
+          etichetta: etichetta.trim(),
           tipo,
           obbligatorio,
           visibile: true,
@@ -142,9 +205,9 @@ export default function AttributiPage() {
     setEditingEtichetta(campo.etichetta)
   }
 
-  function saveEdit() {
+  async function saveEdit() {
     if (!editingCampo || !editingEtichetta.trim()) return
-    updateCampo(editingCampo.nome, { etichetta: editingEtichetta.trim() })
+    await persistCampoPatch(editingCampo.nome, { etichetta: editingEtichetta.trim() })
     setEditingCampo(null)
     setEditingEtichetta("")
   }
@@ -154,15 +217,15 @@ export default function AttributiPage() {
       <SectionHeader
         title="Campi personalizzati"
         description={
-          store.saving
-            ? "Salvataggio configurazione..."
-            : "Definisci attributi, colonne e regole di visibilità dei record. I nuovi campi entrano nella matrice permessi per ruolo."
+          pending || store.saving
+            ? "Salvataggio schema CRM..."
+            : `Crea e governa colonne reali Supabase per ${tableForCrmModule(modulo) ?? modulo}, con metadati usati dal permission engine.`
         }
       />
 
-      {store.error ? (
+      {apiError || store.error ? (
         <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {store.error}
+          {apiError ?? store.error}
         </p>
       ) : null}
 
@@ -218,7 +281,7 @@ export default function AttributiPage() {
                     checked={campo.obbligatorio}
                     disabled={!canManageRequired}
                     onCheckedChange={(v) =>
-                      updateCampo(campo.nome, { obbligatorio: v })
+                      void persistCampoPatch(campo.nome, { obbligatorio: v })
                     }
                     aria-label={`${campo.etichetta} obbligatorio`}
                   />
@@ -228,7 +291,7 @@ export default function AttributiPage() {
                     checked={campo.visibile}
                     disabled={!canManageVisibility}
                     onCheckedChange={(v) =>
-                      updateCampo(campo.nome, { visibile: v })
+                      void persistCampoPatch(campo.nome, { visibile: v })
                     }
                     aria-label={`${campo.etichetta} visibile`}
                   />
@@ -292,7 +355,7 @@ export default function AttributiPage() {
                         <DropdownMenuItem
                           variant="destructive"
                           disabled={!canDeleteFields}
-                          onClick={() => deleteCampo(campo.nome)}
+                          onClick={() => void deleteCampo(campo.nome)}
                         >
                           <Trash2 className="size-4" />
                           Elimina
@@ -308,7 +371,7 @@ export default function AttributiPage() {
       </div>
 
       <div>
-        <Button variant="outline" onClick={openNew} disabled={!canCreateFields}>
+        <Button variant="outline" onClick={openNew} disabled={!canCreateFields || pending}>
           <Plus className="size-4" />
           Aggiungi campo
         </Button>
@@ -401,7 +464,7 @@ export default function AttributiPage() {
             </div>
             <p className="rounded-lg bg-muted px-3 py-2 text-xs leading-relaxed text-muted-foreground">
               Il campo verrà aggiunto alla matrice permessi per tutti i ruoli
-              con l&apos;accesso default selezionato.
+              con l&apos;accesso default selezionato e alla tabella Supabase del modulo.
             </p>
           </div>
           <DialogFooter>
@@ -410,7 +473,7 @@ export default function AttributiPage() {
             </Button>
             <Button
               onClick={handleSave}
-              disabled={!canCreateFields || !nomeValido || !etichetta.trim()}
+              disabled={!canCreateFields || pending || !nomeValido || !etichetta.trim()}
               className="bg-teal text-teal-foreground hover:bg-teal/90"
             >
               Salva

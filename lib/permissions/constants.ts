@@ -85,6 +85,7 @@ export const ACTION_KEYS = [
   "crm_settings.system.backup.view",
   "crm_settings.system.backup.run",
   "crm_settings.system.maintenance.run",
+  "crm_settings.system.schema.manage",
   "crm_settings.system.default_values.manage",
   "lead.columns.customize_own",
   "lead.tags.edit",
@@ -232,6 +233,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       "lead.columns.customize_own",
       "lead.tags.edit",
       "lead.default_values.manage",
+      "crm_settings.system.schema.manage",
       "crm_settings.system.default_values.manage",
     ])
     grantFieldManagement([...MODULE_KEYS])

@@ -206,20 +206,9 @@ function applyUiPermission(snapshot: PermissionSnapshot, row: PermessoUiRow) {
 
 async function loadCurrentUser() {
   const supabase = await createClient()
-
-  // Middleware/server client already refreshes the session cookie; this avoids
-  // an extra Auth round-trip in loaders while keeping getUser as fallback.
   const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  let user = session?.user ?? null
-  if (!user) {
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser()
-    user = authUser
-  }
+    data: { user },
+  } = await supabase.auth.getUser()
 
   if (!user) {
     return { supabase, authUser: null, utente: null as UtenteRow | null }

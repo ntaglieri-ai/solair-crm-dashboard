@@ -1,3 +1,4 @@
+import { cache } from "react"
 import { createClient } from "@/lib/supabase/server"
 import { buildDefaultPermissionSnapshot, normalizeRoleCode } from "./constants"
 import type { DataScope, FieldAccess, PageAccess, PermissionSnapshot } from "./types"
@@ -51,10 +52,47 @@ type PermessoScopeRow = {
   scope: DataScope | null
 }
 
+const unavailableOptionalTables = new Set<string>()
+
 function normalizePageAccess(value: PageAccess | boolean | null): PageAccess {
   if (value === true) return "rw"
   if (value === "r" || value === "rw" || value === "no_access") return value
   return "no_access"
+}
+
+function isMissingTableError(error: { code?: string; message?: string } | null | undefined) {
+  const message = error?.message?.toLowerCase() ?? ""
+  return (
+    error?.code === "42P01" ||
+    message.includes("does not exist") ||
+    message.includes("could not find the table") ||
+    message.includes("schema cache")
+  )
+}
+
+async function selectOptionalPermissionRows<T>(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  table: string,
+  columns: string,
+  roleId: string,
+) {
+  if (unavailableOptionalTables.has(table)) return [] as T[]
+
+  const { data, error } = await supabase
+    .from(table)
+    .select(columns)
+    .eq("ruolo_id", roleId)
+
+  if (error) {
+    if (isMissingTableError(error)) {
+      unavailableOptionalTables.add(table)
+    } else {
+      console.warn(`[permissions] optional table ${table} warning:`, error.message)
+    }
+    return [] as T[]
+  }
+
+  return (data ?? []) as T[]
 }
 
 function applyUiPermission(snapshot: PermissionSnapshot, row: PermessoUiRow) {
@@ -111,7 +149,7 @@ async function loadCurrentUser() {
   return { supabase, authUser: user, utente: (byEmail as UtenteRow | null) ?? null }
 }
 
-export async function loadCurrentPermissionSnapshot(): Promise<PermissionSnapshot> {
+async function loadCurrentPermissionSnapshotUncached(): Promise<PermissionSnapshot> {
   const { supabase, authUser, utente } = await loadCurrentUser()
 
   if (!authUser) {
@@ -151,7 +189,7 @@ export async function loadCurrentPermissionSnapshot(): Promise<PermissionSnapsho
 
   if (!snapshot.subject.ruoloId) return snapshot
 
-  const [pagesRes, recordsRes, uiRes, actionsRes, fieldsRes, scopesRes] = await Promise.all([
+  const [pagesRes, recordsRes, uiRes] = await Promise.all([
     supabase
       .from("permessi_pagina")
       .select("pagina, accesso")
@@ -164,18 +202,27 @@ export async function loadCurrentPermissionSnapshot(): Promise<PermissionSnapsho
       .from("permessi_ui")
       .select("chiave, abilitato")
       .eq("ruolo_id", snapshot.subject.ruoloId),
-    supabase
-      .from("permessi_azione")
-      .select("azione, abilitato")
-      .eq("ruolo_id", snapshot.subject.ruoloId),
-    supabase
-      .from("permessi_campo")
-      .select("modulo, campo, accesso")
-      .eq("ruolo_id", snapshot.subject.ruoloId),
-    supabase
-      .from("permessi_scope")
-      .select("risorsa, scope")
-      .eq("ruolo_id", snapshot.subject.ruoloId),
+  ])
+
+  const [actionsRows, fieldsRows, scopesRows] = await Promise.all([
+    selectOptionalPermissionRows<PermessoAzioneRow>(
+      supabase,
+      "permessi_azione",
+      "azione, abilitato",
+      snapshot.subject.ruoloId,
+    ),
+    selectOptionalPermissionRows<PermessoCampoRow>(
+      supabase,
+      "permessi_campo",
+      "modulo, campo, accesso",
+      snapshot.subject.ruoloId,
+    ),
+    selectOptionalPermissionRows<PermessoScopeRow>(
+      supabase,
+      "permessi_scope",
+      "risorsa, scope",
+      snapshot.subject.ruoloId,
+    ),
   ])
 
   for (const row of ((pagesRes.data ?? []) as PermessoPaginaRow[])) {
@@ -191,18 +238,20 @@ export async function loadCurrentPermissionSnapshot(): Promise<PermissionSnapsho
     applyUiPermission(snapshot, row)
   }
 
-  for (const row of ((actionsRes.data ?? []) as PermessoAzioneRow[])) {
+  for (const row of actionsRows) {
     snapshot.actions[row.azione] = row.abilitato === true
   }
 
-  for (const row of ((fieldsRes.data ?? []) as PermessoCampoRow[])) {
+  for (const row of fieldsRows) {
     snapshot.fields[row.modulo] ??= {}
     snapshot.fields[row.modulo][row.campo] = row.accesso ?? "hidden"
   }
 
-  for (const row of ((scopesRes.data ?? []) as PermessoScopeRow[])) {
+  for (const row of scopesRows) {
     snapshot.scopes[row.risorsa] = row.scope ?? "none"
   }
 
   return snapshot
 }
+
+export const loadCurrentPermissionSnapshot = cache(loadCurrentPermissionSnapshotUncached)

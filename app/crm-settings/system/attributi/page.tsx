@@ -38,7 +38,6 @@ import {
 import { SectionHeader } from "@/components/impostazioni/settings-ui"
 import { cn } from "@/lib/utils"
 import {
-  campiPerModulo,
   MODULI_ATTRIBUTI,
   CAMPO_TIPI,
   CAMPO_TIPO_LABEL,
@@ -80,7 +79,7 @@ function moduloKey(modulo: ModuloAttributi) {
 export default function AttributiPage() {
   const permissions = usePermissions()
   const [modulo, setModulo] = useState<ModuloAttributi>("Lead")
-  const [customFields, setCustomFields] =
+  const [fieldsByModule, setFieldsByModule] =
     useState<Record<ModuloAttributi, CampoRecord[]>>(createEmptyCustomFields)
   const [dialogOpen, setDialogOpen] = useState(false)
 
@@ -96,19 +95,7 @@ export default function AttributiPage() {
   const [pending, setPending] = useState(false)
   const [loadingSchema, setLoadingSchema] = useState(false)
 
-  const campiBase = useMemo(
-    () => campiPerModulo[modulo].filter((campo) => campo.sistema),
-    [modulo],
-  )
-  const campi = useMemo(
-    () => [
-      ...campiBase,
-      ...customFields[modulo].filter(
-        (custom) => !campiBase.some((base) => base.nome === custom.nome),
-      ),
-    ],
-    [campiBase, customFields, modulo],
-  )
+  const campi = useMemo(() => fieldsByModule[modulo], [fieldsByModule, modulo])
   const nomeValido = /^[a-z][a-z0-9_]*$/.test(nome)
   const currentModule = moduloKey(modulo)
   const canManageSchema = permissions.canAction("crm_settings.system.schema.manage")
@@ -148,10 +135,10 @@ export default function AttributiPage() {
         | { columns?: SchemaColumnRow[] }
         | null
       const rows = body?.columns ?? []
-      setCustomFields((prev) => ({
+      setFieldsByModule((prev) => ({
         ...prev,
         [modulo]: rows
-          .filter((row) => !row.system && (row.column_name || row.field_key))
+          .filter((row) => row.column_name || row.field_key)
           .map((row) => ({
             nome: row.column_name ?? row.field_key ?? "",
             etichetta: row.label,
@@ -159,7 +146,7 @@ export default function AttributiPage() {
             obbligatorio: row.required,
             visibile: row.visible,
             accesso_default: "rw",
-            sistema: false,
+            sistema: row.system,
           })),
       }))
     }
@@ -171,7 +158,7 @@ export default function AttributiPage() {
   }, [canManageSchema, modulo])
 
   function updateCampo(nomeCampo: string, patch: Partial<CampoRecord>) {
-    setCustomFields((prev) => ({
+    setFieldsByModule((prev) => ({
       ...prev,
       [modulo]: prev[modulo].map((c) =>
         c.nome === nomeCampo ? { ...c, ...patch } : c,
@@ -216,7 +203,7 @@ export default function AttributiPage() {
       setApiError(body?.error ?? "Eliminazione colonna non riuscita.")
       return
     }
-    setCustomFields((prev) => ({
+    setFieldsByModule((prev) => ({
       ...prev,
       [modulo]: prev[modulo].filter((c) => c.nome !== nomeCampo),
     }))
@@ -254,7 +241,7 @@ export default function AttributiPage() {
       setApiError(body?.error ?? "Creazione colonna non riuscita.")
       return
     }
-    setCustomFields((prev) => ({
+    setFieldsByModule((prev) => ({
       ...prev,
       [modulo]: [
         ...prev[modulo],

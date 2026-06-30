@@ -17,6 +17,46 @@ type ColumnBody = {
   visible?: boolean
 }
 
+type PhysicalColumnRow = {
+  column_name: string
+  data_type: string
+  is_nullable: string
+  ordinal_position: number
+}
+
+type CustomFieldRow = {
+  id: string
+  field_key: string
+  label: string
+  tipo: CampoTipo
+  required: boolean
+  visible: boolean
+  system: boolean
+  table_name: string
+  column_name: string
+  db_type: string
+}
+
+function titleFromColumn(value: string) {
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ")
+}
+
+function fieldTypeFromDbType(value: string): CampoTipo {
+  const type = value.toLowerCase()
+  if (type.includes("timestamp")) return "datetime"
+  if (type === "date") return "date"
+  if (type === "boolean") return "boolean"
+  if (type.includes("numeric") || type.includes("integer") || type.includes("double")) {
+    return "number"
+  }
+  if (type === "uuid") return "lookup"
+  return "text"
+}
+
 function schemaErrorMessage(error: { message?: string; code?: string }) {
   const message = error.message ?? "Operazione schema non riuscita"
   const lowerMessage = message.toLowerCase()
@@ -37,6 +77,17 @@ function schemaErrorMessage(error: { message?: string; code?: string }) {
   return message
 }
 
+function isMissingSchemaObject(error: { message?: string; code?: string } | null | undefined) {
+  const message = error?.message?.toLowerCase() ?? ""
+  return (
+    error?.code === "42P01" ||
+    error?.code === "42883" ||
+    message.includes("does not exist") ||
+    message.includes("schema cache") ||
+    message.includes("could not find")
+  )
+}
+
 export async function GET(request: Request) {
   const guard = await requireApiAction("crm_settings.system.schema.manage")
   if (guard.response) return guard.response
@@ -48,18 +99,47 @@ export async function GET(request: Request) {
   }
 
   const supabase = await createClient()
-  const { data, error } = await supabase
+  const { data: physicalColumns, error: physicalError } = await supabase.rpc(
+    "crm_admin_list_columns",
+    { p_table_name: tableName },
+  )
+
+  if (physicalError) {
+    return NextResponse.json({ error: schemaErrorMessage(physicalError) }, { status: 500 })
+  }
+
+  const { data: customFields, error: customError } = await supabase
     .from("crm_custom_fields")
     .select("id, field_key, label, tipo, required, visible, system, table_name, column_name, db_type")
     .eq("table_name", tableName)
     .is("deleted_at", null)
     .order("ordinamento", { ascending: true })
 
-  if (error) {
-    return NextResponse.json({ error: schemaErrorMessage(error) }, { status: 500 })
+  if (customError && !isMissingSchemaObject(customError)) {
+    return NextResponse.json({ error: schemaErrorMessage(customError) }, { status: 500 })
   }
 
-  return NextResponse.json({ columns: data ?? [] })
+  const customByColumn = new Map(
+    ((customFields ?? []) as CustomFieldRow[]).map((field) => [field.column_name, field]),
+  )
+  const columns = ((physicalColumns ?? []) as PhysicalColumnRow[]).map((column) => {
+    const custom = customByColumn.get(column.column_name)
+    return {
+      id: custom?.id ?? column.column_name,
+      field_key: custom?.field_key ?? column.column_name,
+      label: custom?.label ?? titleFromColumn(column.column_name),
+      tipo: custom?.tipo ?? fieldTypeFromDbType(column.data_type),
+      required: custom?.required ?? column.is_nullable === "NO",
+      visible: custom?.visible ?? true,
+      system: custom ? custom.system : true,
+      table_name: tableName,
+      column_name: column.column_name,
+      db_type: custom?.db_type ?? column.data_type,
+      ordinal_position: column.ordinal_position,
+    }
+  })
+
+  return NextResponse.json({ columns })
 }
 
 export async function POST(request: Request) {

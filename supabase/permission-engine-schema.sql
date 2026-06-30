@@ -117,6 +117,37 @@ create index if not exists crm_column_values_table_column_idx
   on public.crm_column_values (table_name, column_name, sort_order)
   where active = true;
 
+create or replace function public.crm_admin_list_columns(
+  p_table_name text
+)
+returns table (
+  column_name text,
+  data_type text,
+  is_nullable text,
+  ordinal_position integer
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_table_name not in ('leads', 'clienti', 'compiti', 'scadenze', 'installatori') then
+    raise exception 'Tabella CRM non abilitata: %', p_table_name;
+  end if;
+
+  return query
+  select
+    c.column_name::text,
+    c.data_type::text,
+    c.is_nullable::text,
+    c.ordinal_position::integer
+  from information_schema.columns c
+  where c.table_schema = 'public'
+    and c.table_name = p_table_name
+  order by c.ordinal_position;
+end;
+$$;
+
 create or replace function public.crm_admin_add_column(
   p_table_name text,
   p_column_name text,
@@ -258,5 +289,6 @@ begin
 end;
 $$;
 
+grant execute on function public.crm_admin_list_columns(text) to authenticated;
 grant execute on function public.crm_admin_add_column(text, text, text, text, text, boolean, boolean) to authenticated;
 grant execute on function public.crm_admin_drop_column(text, text) to authenticated;

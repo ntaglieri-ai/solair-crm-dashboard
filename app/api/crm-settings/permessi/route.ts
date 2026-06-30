@@ -71,19 +71,39 @@ async function savePermissions(ruoloId: string, permessi: RuoloPermessi) {
   const supabase = await createClient()
   const { paginaRows, recordRows, uiRows } = buildPermissionRows(ruoloId, permessi)
 
-  const [paginaRes, recordRes, uiRes] = await Promise.all([
-    supabase
-      .from("permessi_pagina")
-      .upsert(paginaRows, { onConflict: "ruolo_id,pagina" }),
-    supabase
-      .from("permessi_record")
-      .upsert(recordRows, { onConflict: "ruolo_id,modulo,azione" }),
-    supabase
-      .from("permessi_ui")
-      .upsert(uiRows, { onConflict: "ruolo_id,chiave" }),
-  ])
+  const paginaRes = await supabase
+    .from("permessi_pagina")
+    .upsert(paginaRows, { onConflict: "ruolo_id,pagina" })
+  if (paginaRes.error) return paginaRes.error
 
-  return paginaRes.error ?? recordRes.error ?? uiRes.error
+  const recordRes = await supabase
+    .from("permessi_record")
+    .upsert(recordRows, { onConflict: "ruolo_id,modulo,azione" })
+  if (recordRes.error) return recordRes.error
+
+  const { data: existingUiRows, error: existingUiError } = await supabase
+    .from("permessi_ui")
+    .select("chiave")
+    .eq("ruolo_id", ruoloId)
+
+  if (existingUiError) {
+    console.warn("[crm-settings/permessi] read ui permissions warning:", existingUiError.message)
+    return null
+  }
+
+  const existingUiKeys = new Set((existingUiRows ?? []).map((row) => row.chiave as string))
+  const uiRowsToUpdate = uiRows.filter((row) => existingUiKeys.has(row.chiave))
+  if (uiRowsToUpdate.length === 0) return null
+
+  const uiRes = await supabase
+    .from("permessi_ui")
+    .upsert(uiRowsToUpdate, { onConflict: "ruolo_id,chiave" })
+
+  if (uiRes.error) {
+    console.warn("[crm-settings/permessi] save ui permissions warning:", uiRes.error.message)
+  }
+
+  return null
 }
 
 export async function POST(request: Request) {

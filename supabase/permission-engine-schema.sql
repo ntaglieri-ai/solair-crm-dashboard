@@ -48,10 +48,10 @@ create table if not exists public.user_preferences (
   unique (user_id, chiave)
 );
 
-create table if not exists public.attributi_record (
+create table if not exists public.crm_custom_fields (
   id uuid primary key default gen_random_uuid(),
   modulo text not null,
-  key text not null,
+  field_key text not null,
   label text not null,
   tipo text not null,
   required boolean not null default false,
@@ -61,61 +61,15 @@ create table if not exists public.attributi_record (
   ordinamento integer not null default 0,
   created_by uuid references public.utenti(id) on delete set null,
   updated_by uuid references public.utenti(id) on delete set null,
+  table_name text not null,
+  column_name text not null,
+  db_type text not null,
+  deleted_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (modulo, key)
+  unique (modulo, field_key),
+  unique (table_name, column_name)
 );
-
-alter table public.attributi_record
-  add column if not exists modulo text,
-  add column if not exists key text,
-  add column if not exists label text,
-  add column if not exists tipo text,
-  add column if not exists required boolean not null default false,
-  add column if not exists visible boolean not null default true,
-  add column if not exists system boolean not null default false,
-  add column if not exists options jsonb not null default '[]'::jsonb,
-  add column if not exists ordinamento integer not null default 0,
-  add column if not exists created_by uuid references public.utenti(id) on delete set null,
-  add column if not exists updated_by uuid references public.utenti(id) on delete set null,
-  add column if not exists created_at timestamptz not null default now(),
-  add column if not exists updated_at timestamptz not null default now(),
-  add column if not exists table_name text,
-  add column if not exists column_name text,
-  add column if not exists db_type text,
-  add column if not exists deleted_at timestamptz;
-
-update public.attributi_record
-   set table_name = coalesce(table_name, modulo),
-       column_name = coalesce(column_name, key),
-       key = coalesce(key, column_name),
-       modulo = coalesce(modulo, table_name),
-       label = coalesce(label, column_name, key),
-       tipo = coalesce(tipo, 'text'),
-       updated_at = now()
- where table_name is null
-    or column_name is null
-    or key is null
-    or modulo is null
-    or label is null
-    or tipo is null;
-
-do $$
-begin
-  if not exists (
-    select 1
-      from pg_constraint
-     where conrelid = 'public.attributi_record'::regclass
-       and contype = 'u'
-       and conkey = array[
-         (select attnum from pg_attribute where attrelid = 'public.attributi_record'::regclass and attname = 'modulo'),
-         (select attnum from pg_attribute where attrelid = 'public.attributi_record'::regclass and attname = 'key')
-       ]::smallint[]
-  ) then
-    alter table public.attributi_record
-      add constraint attributi_record_modulo_key_unique unique (modulo, key);
-  end if;
-end $$;
 
 create table if not exists public.crm_column_values (
   id uuid primary key default gen_random_uuid(),
@@ -155,8 +109,8 @@ create index if not exists user_preferences_user_idx
 create index if not exists crm_settings_store_updated_idx
   on public.crm_settings_store (updated_at desc);
 
-create index if not exists attributi_record_table_column_idx
-  on public.attributi_record (table_name, column_name)
+create index if not exists crm_custom_fields_table_column_idx
+  on public.crm_custom_fields (table_name, column_name)
   where deleted_at is null;
 
 create index if not exists crm_column_values_table_column_idx
@@ -206,9 +160,9 @@ begin
 
   execute format('alter table public.%I add column if not exists %I %s', p_table_name, p_column_name, v_type);
 
-  insert into public.attributi_record (
+  insert into public.crm_custom_fields (
     modulo,
-    key,
+    field_key,
     label,
     tipo,
     required,
@@ -238,7 +192,7 @@ begin
     null,
     now()
   )
-  on conflict (modulo, key) do update set
+  on conflict (modulo, field_key) do update set
     label = excluded.label,
     tipo = excluded.tipo,
     required = excluded.required,
@@ -265,7 +219,7 @@ security definer
 set search_path = public
 as $$
 declare
-  v_attr public.attributi_record%rowtype;
+  v_attr public.crm_custom_fields%rowtype;
 begin
   if p_table_name not in ('leads', 'clienti', 'compiti', 'scadenze', 'installatori') then
     raise exception 'Tabella CRM non abilitata: %', p_table_name;
@@ -277,7 +231,7 @@ begin
 
   select *
     into v_attr
-    from public.attributi_record
+    from public.crm_custom_fields
    where table_name = p_table_name
      and column_name = p_column_name
      and coalesce(system, false) = false
@@ -290,7 +244,7 @@ begin
 
   execute format('alter table public.%I drop column if exists %I', p_table_name, p_column_name);
 
-  update public.attributi_record
+  update public.crm_custom_fields
      set deleted_at = now(),
          visible = false,
          updated_at = now()

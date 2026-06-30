@@ -21,11 +21,11 @@ function schemaErrorMessage(error: { message?: string; code?: string }) {
   const message = error.message ?? "Operazione schema non riuscita"
   const lowerMessage = message.toLowerCase()
   if (
-    lowerMessage.includes("column attributi_record.") ||
+    lowerMessage.includes("column crm_custom_fields.") ||
     lowerMessage.includes("could not find the") ||
     lowerMessage.includes("column") && lowerMessage.includes("does not exist")
   ) {
-    return "Schema campi CRM incompleto su Supabase. Esegui la query di aggiornamento attributi_record."
+    return "Schema campi CRM incompleto su Supabase. Esegui la query di creazione crm_custom_fields."
   }
   if (
     error.code === "42883" ||
@@ -49,8 +49,8 @@ export async function GET(request: Request) {
 
   const supabase = await createClient()
   const { data, error } = await supabase
-    .from("attributi_record")
-    .select("id, label, tipo, required, visible, system, table_name, column_name, db_type")
+    .from("crm_custom_fields")
+    .select("id, field_key, label, tipo, required, visible, system, table_name, column_name, db_type")
     .eq("table_name", tableName)
     .is("deleted_at", null)
     .order("ordinamento", { ascending: true })
@@ -128,7 +128,7 @@ export async function PATCH(request: Request) {
 
   const supabase = await createClient()
   const { error } = await supabase
-    .from("attributi_record")
+    .from("crm_custom_fields")
     .update(patch)
     .eq("table_name", tableName)
     .eq("column_name", columnName)

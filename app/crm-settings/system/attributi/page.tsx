@@ -64,7 +64,7 @@ function createEmptyCustomFields(): Record<ModuloAttributi, CampoRecord[]> {
 }
 
 type SchemaColumnRow = {
-  key?: string | null
+  field_key?: string | null
   label: string
   tipo: CampoTipo
   required: boolean
@@ -151,9 +151,9 @@ export default function AttributiPage() {
       setCustomFields((prev) => ({
         ...prev,
         [modulo]: rows
-          .filter((row) => !row.system && (row.column_name || row.key))
+          .filter((row) => !row.system && (row.column_name || row.field_key))
           .map((row) => ({
-            nome: row.column_name ?? row.key ?? "",
+            nome: row.column_name ?? row.field_key ?? "",
             etichetta: row.label,
             tipo: row.tipo,
             obbligatorio: row.required,

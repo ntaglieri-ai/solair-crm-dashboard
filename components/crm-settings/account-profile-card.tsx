@@ -1,4 +1,10 @@
-import { CheckCircle2, Mail, MapPin, ShieldCheck } from "lucide-react"
+import {
+  AlertCircle,
+  CheckCircle2,
+  Mail,
+  MapPin,
+  ShieldCheck,
+} from "lucide-react"
 import type { CurrentAccountProfile } from "@/lib/crm-settings/current-account"
 import { InitialsAvatar } from "@/components/impostazioni/settings-ui"
 import { Badge } from "@/components/ui/badge"
@@ -18,7 +24,19 @@ export function AccountProfileCard({
 }: {
   profile: CurrentAccountProfile | null
 }) {
-  if (!profile) return null
+  if (!profile) {
+    return (
+      <section className="flex items-center gap-3 rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+        <AlertCircle className="size-5 shrink-0" />
+        <div>
+          <p className="font-medium">Profilo sessione non disponibile</p>
+          <p className="text-xs opacity-80">
+            La sessione autenticata non è stata risolta. Ricarica o accedi nuovamente.
+          </p>
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section className="flex flex-col gap-4 rounded-lg border border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">

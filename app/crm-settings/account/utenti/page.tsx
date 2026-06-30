@@ -123,10 +123,21 @@ export default function AccountManagementPage() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
+    if (!newForm.nome.trim() || !newForm.email.trim() || !newForm.ruolo || !newForm.sede) {
+      return
+    }
     setNewSaving(true)
+    const ruoloSelezionato = profili.find((p) => p.code === newForm.ruolo)
     const { data, error } = await supabase
       .from("utenti")
-      .insert([{ nome: newForm.nome, email: newForm.email, ruolo: newForm.ruolo, sede: newForm.sede, attivo: newForm.attivo }])
+      .insert([{
+        nome: newForm.nome,
+        email: newForm.email,
+        ruolo: newForm.ruolo,
+        ruolo_id: ruoloSelezionato?.id ?? null,
+        sede: newForm.sede,
+        attivo: newForm.attivo,
+      }])
       .select("id, nome, email, ruolo, sede, attivo, created_at")
       .single()
     if (!error && data) {
@@ -340,7 +351,17 @@ export default function AccountManagementPage() {
               <Button type="button" variant="outline" onClick={() => { setNewOpen(false); setNewForm(EMPTY_FORM) }}>
                 Annulla
               </Button>
-              <Button type="submit" className="bg-teal text-teal-foreground hover:bg-teal/90" disabled={newSaving}>
+              <Button
+                type="submit"
+                className="bg-teal text-teal-foreground hover:bg-teal/90"
+                disabled={
+                  newSaving ||
+                  !newForm.nome.trim() ||
+                  !newForm.email.trim() ||
+                  !newForm.ruolo ||
+                  !newForm.sede
+                }
+              >
                 {newSaving ? "Salvataggio..." : "Crea account"}
               </Button>
             </SheetFooter>

@@ -19,7 +19,17 @@ import { SectionHeader } from "@/components/impostazioni/settings-ui"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Accordion,
   AccordionItem,
@@ -58,6 +68,23 @@ function RadioRow({
   )
 }
 
+function emptyPermessi(): RuoloPermessi {
+  const record = Object.fromEntries(
+    MODULI_RECORD.map((m) => [m.id, [] as RecordPermesso[]]),
+  ) as unknown as Record<ModuloRecordId, RecordPermesso[]>
+
+  return {
+    pagine: Object.fromEntries(PAGINE.map((p) => [p.id, false])) as Record<
+      PaginaId,
+      boolean
+    >,
+    record,
+    visibilita_sedi: "own",
+    cartelle_nextcloud: "own",
+    riconfigurazioni: false,
+  }
+}
+
 export function PermissionManagementClient({
   ruoli: initialRuoli,
 }: {
@@ -69,6 +96,13 @@ export function PermissionManagementClient({
   const [draft, setDraft] = useState<RuoloPermessi | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [roleDialogOpen, setRoleDialogOpen] = useState(false)
+  const [roleName, setRoleName] = useState("")
+  const [roleDescription, setRoleDescription] = useState("")
+  const [rolePermessi, setRolePermessi] = useState<RuoloPermessi>(() =>
+    emptyPermessi(),
+  )
+  const [creatingRole, setCreatingRole] = useState(false)
 
   const active = ruoli.find((r) => r.id === activeId) ?? null
 
@@ -81,6 +115,56 @@ export function PermissionManagementClient({
     setError(null)
     setActiveId(r.id)
     setDraft(structuredClone(r.permessi))
+  }
+
+  function openNewRole() {
+    setError(null)
+    setRoleName("")
+    setRoleDescription("")
+    setRolePermessi(emptyPermessi())
+    setRoleDialogOpen(true)
+  }
+
+  function openDuplicateRole() {
+    if (!active) return
+    setError(null)
+    setRoleName(`Copia di ${active.nome}`)
+    setRoleDescription(active.descrizione)
+    setRolePermessi(structuredClone(draft ?? active.permessi))
+    setRoleDialogOpen(true)
+  }
+
+  async function createRole() {
+    if (!roleName.trim()) return
+    setCreatingRole(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/crm-settings/permessi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome: roleName,
+          descrizione: roleDescription,
+          colore: "gray",
+          permessi: rolePermessi,
+        }),
+      })
+      const body = (await res.json().catch(() => null)) as {
+        ruolo?: Ruolo
+        error?: string
+      } | null
+      if (!res.ok || !body?.ruolo) {
+        throw new Error(body?.error ?? "Creazione ruolo non riuscita")
+      }
+      setRuoli((prev) => [...prev, body.ruolo!])
+      setRoleDialogOpen(false)
+      setActiveId(body.ruolo.id)
+      setDraft(structuredClone(body.ruolo.permessi))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Creazione ruolo non riuscita")
+    } finally {
+      setCreatingRole(false)
+    }
   }
 
   async function save() {
@@ -137,7 +221,10 @@ export function PermissionManagementClient({
         title="Permission Management"
         description="Configura i permessi per ogni ruolo. Controlla l'accesso a pagine, record, cartelle e funzionalità di riconfigurazione."
         action={
-          <Button className="bg-teal text-teal-foreground hover:bg-teal/90">
+          <Button
+            className="bg-teal text-teal-foreground hover:bg-teal/90"
+            onClick={openNewRole}
+          >
             <Plus className="size-4" />
             Nuovo ruolo
           </Button>
@@ -339,12 +426,64 @@ export function PermissionManagementClient({
             >
               Annulla
             </Button>
-            <Button variant="outline" className="ml-auto">
+            <Button
+              variant="outline"
+              className="ml-auto"
+              disabled={saving}
+              onClick={openDuplicateRole}
+            >
               Duplica ruolo
             </Button>
           </div>
         </div>
       ) : null}
+
+      <Dialog open={roleDialogOpen} onOpenChange={setRoleDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Nuovo ruolo</DialogTitle>
+            <DialogDescription>
+              Crea un ruolo e inizializza la sua matrice permessi.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="role-name">Nome ruolo</Label>
+              <Input
+                id="role-name"
+                value={roleName}
+                onChange={(e) => setRoleName(e.target.value)}
+                placeholder="Es. Back office"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="role-description">Descrizione</Label>
+              <Input
+                id="role-description"
+                value={roleDescription}
+                onChange={(e) => setRoleDescription(e.target.value)}
+                placeholder="Sintesi operativa del ruolo"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setRoleDialogOpen(false)}
+              disabled={creatingRole}
+            >
+              Annulla
+            </Button>
+            <Button
+              className="bg-teal text-teal-foreground hover:bg-teal/90"
+              onClick={createRole}
+              disabled={creatingRole || !roleName.trim()}
+            >
+              {creatingRole ? "Creazione..." : "Crea ruolo"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

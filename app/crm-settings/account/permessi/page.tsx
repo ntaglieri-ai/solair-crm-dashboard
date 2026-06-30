@@ -20,7 +20,12 @@ type RuoloRow = {
   colore: string | null
   ordinamento: number | null
 }
-type PermessoPaginaRow = { ruolo_id: string; pagina: string; accesso: boolean }
+type PaginaAccesso = "no_access" | "r" | "rw"
+type PermessoPaginaRow = {
+  ruolo_id: string
+  pagina: string
+  accesso: PaginaAccesso | boolean | null
+}
 type PermessoRecordRow = {
   ruolo_id: string
   modulo: string
@@ -28,6 +33,7 @@ type PermessoRecordRow = {
   abilitato: boolean
 }
 type PermessoUiRow = { ruolo_id: string; chiave: string; abilitato: boolean }
+type UtenteRuoloRow = { ruolo: string | null; ruolo_id: string | null }
 
 // Coerce il colore DB su uno dei colori UI supportati (fallback: gray).
 function toColore(value: string | null): RuoloColore {
@@ -42,6 +48,7 @@ function buildRuoli(
   permessiPagina: PermessoPaginaRow[],
   permessiRecord: PermessoRecordRow[],
   permessiUi: PermessoUiRow[],
+  utenti: UtenteRuoloRow[],
 ): Ruolo[] {
   const validPagine = new Set<string>(PAGINE.map((p) => p.id))
   const validModuli = new Set<string>(MODULI_RECORD.map((m) => m.id))
@@ -54,7 +61,8 @@ function buildRuoli(
     ) as Record<PaginaId, boolean>
     for (const row of permessiPagina) {
       if (row.ruolo_id === r.id && validPagine.has(row.pagina)) {
-        pagine[row.pagina as PaginaId] = row.accesso
+        pagine[row.pagina as PaginaId] =
+          row.accesso === true || row.accesso === "r" || row.accesso === "rw"
       }
     }
 
@@ -85,7 +93,9 @@ function buildRuoli(
       nome: r.nome,
       descrizione: r.descrizione ?? "",
       colore: toColore(r.colore),
-      utenti: 0,
+      utenti: utenti.filter(
+        (u) => u.ruolo_id === r.id || (r.code !== null && u.ruolo === r.code),
+      ).length,
       permessi: {
         pagine,
         record,
@@ -100,7 +110,13 @@ function buildRuoli(
 export default async function PermissionManagementPage() {
   const supabase = await createClient()
 
-  const [{ data: ruoli }, { data: permessiPagina }, { data: permessiRecord }, { data: permessiUi }] =
+  const [
+    { data: ruoli },
+    { data: permessiPagina },
+    { data: permessiRecord },
+    { data: permessiUi },
+    { data: utenti },
+  ] =
     await Promise.all([
       supabase
         .from("ruoli")
@@ -109,6 +125,7 @@ export default async function PermissionManagementPage() {
       supabase.from("permessi_pagina").select("ruolo_id, pagina, accesso"),
       supabase.from("permessi_record").select("ruolo_id, modulo, azione, abilitato"),
       supabase.from("permessi_ui").select("ruolo_id, chiave, abilitato"),
+      supabase.from("utenti").select("ruolo, ruolo_id"),
     ])
 
   const mapped = buildRuoli(
@@ -116,6 +133,7 @@ export default async function PermissionManagementPage() {
     (permessiPagina as PermessoPaginaRow[] | null) ?? [],
     (permessiRecord as PermessoRecordRow[] | null) ?? [],
     (permessiUi as PermessoUiRow[] | null) ?? [],
+    (utenti as UtenteRuoloRow[] | null) ?? [],
   )
 
   return <PermissionManagementClient ruoli={mapped} />

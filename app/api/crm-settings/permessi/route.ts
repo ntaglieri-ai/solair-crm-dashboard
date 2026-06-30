@@ -4,6 +4,7 @@ import {
   PAGINE,
   MODULI_RECORD,
   RECORD_PERMESSI,
+  type RuoloColore,
   type RuoloPermessi,
 } from "@/lib/ruoli-data"
 
@@ -12,23 +13,30 @@ type PatchPayload = {
   permessi: RuoloPermessi
 }
 
-export async function PATCH(request: Request) {
-  const body = (await request.json().catch(() => null)) as PatchPayload | null
-  if (!body?.ruoloId || !body.permessi) {
-    return NextResponse.json({ error: "Payload non valido" }, { status: 400 })
-  }
+type CreatePayload = {
+  nome: string
+  descrizione?: string
+  colore?: RuoloColore
+  permessi: RuoloPermessi
+}
 
-  const { ruoloId, permessi } = body
-  const supabase = await createClient()
+function slugify(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+}
 
-  // Pagine: una riga per ogni pagina con il relativo accesso (incl. revoche).
+function buildPermissionRows(ruoloId: string, permessi: RuoloPermessi) {
   const paginaRows = PAGINE.map((p) => ({
     ruolo_id: ruoloId,
     pagina: p.id,
-    accesso: permessi.pagine[p.id] === true,
+    accesso: permessi.pagine[p.id] === true ? "rw" : "no_access",
   }))
 
-  // Record: una riga per ogni combinazione modulo×azione, abilitato true/false.
   const recordRows = MODULI_RECORD.flatMap((m) =>
     RECORD_PERMESSI.map((perm) => ({
       ruolo_id: ruoloId,
@@ -38,7 +46,6 @@ export async function PATCH(request: Request) {
     })),
   )
 
-  // UI: scope sedi/cartelle ("all" => true) e flag riconfigurazioni.
   const uiRows = [
     {
       ruolo_id: ruoloId,
@@ -57,6 +64,13 @@ export async function PATCH(request: Request) {
     },
   ]
 
+  return { paginaRows, recordRows, uiRows }
+}
+
+async function savePermissions(ruoloId: string, permessi: RuoloPermessi) {
+  const supabase = await createClient()
+  const { paginaRows, recordRows, uiRows } = buildPermissionRows(ruoloId, permessi)
+
   const [paginaRes, recordRes, uiRes] = await Promise.all([
     supabase
       .from("permessi_pagina")
@@ -69,9 +83,81 @@ export async function PATCH(request: Request) {
       .upsert(uiRows, { onConflict: "ruolo_id,chiave" }),
   ])
 
-  const error = paginaRes.error ?? recordRes.error ?? uiRes.error
+  return paginaRes.error ?? recordRes.error ?? uiRes.error
+}
+
+export async function POST(request: Request) {
+  const body = (await request.json().catch(() => null)) as CreatePayload | null
+  if (!body?.nome?.trim() || !body.permessi) {
+    return NextResponse.json({ error: "Payload non valido" }, { status: 400 })
+  }
+
+  const supabase = await createClient()
+  const { data: lastRole } = await supabase
+    .from("ruoli")
+    .select("ordinamento")
+    .order("ordinamento", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle()
+
+  const codeBase = slugify(body.nome) || "ruolo"
+  const code = `${codeBase}_${Date.now()}`
+  const { data: ruolo, error: ruoloError } = await supabase
+    .from("ruoli")
+    .insert({
+      code,
+      nome: body.nome.trim(),
+      descrizione: body.descrizione?.trim() || null,
+      colore: body.colore ?? "gray",
+      ordinamento: ((lastRole?.ordinamento as number | null) ?? 0) + 1,
+      sistema: false,
+    })
+    .select("id, nome, descrizione, colore")
+    .single()
+
+  if (ruoloError || !ruolo) {
+    console.error("[crm-settings/permessi] create role error:", ruoloError?.message)
+    return NextResponse.json(
+      { error: "Creazione ruolo non riuscita. Riprova." },
+      { status: 500 },
+    )
+  }
+
+  const permissionError = await savePermissions(ruolo.id as string, body.permessi)
+  if (permissionError) {
+    console.error("[crm-settings/permessi] create permissions error:", permissionError.message)
+    return NextResponse.json(
+      { error: "Ruolo creato, ma inizializzazione permessi non riuscita." },
+      { status: 500 },
+    )
+  }
+
+  return NextResponse.json({
+    ruolo: {
+      id: ruolo.id,
+      nome: ruolo.nome,
+      descrizione: ruolo.descrizione ?? "",
+      colore: ruolo.colore ?? "gray",
+      utenti: 0,
+      permessi: body.permessi,
+    },
+  }, { status: 201 })
+}
+
+export async function PATCH(request: Request) {
+  const body = (await request.json().catch(() => null)) as PatchPayload | null
+  if (!body?.ruoloId || !body.permessi) {
+    return NextResponse.json({ error: "Payload non valido" }, { status: 400 })
+  }
+
+  const { ruoloId, permessi } = body
+  const error = await savePermissions(ruoloId, permessi)
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error("[crm-settings/permessi] update error:", error.message)
+    return NextResponse.json(
+      { error: "Salvataggio permessi non riuscito. Riprova." },
+      { status: 500 },
+    )
   }
 
   return NextResponse.json({ ok: true })

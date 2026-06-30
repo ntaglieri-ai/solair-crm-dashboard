@@ -2,10 +2,13 @@
 
 import type { ReactNode } from "react"
 import { useEffect } from "react"
-import { usePathname, useRouter } from "next/navigation"
-import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { SYSTEM_SECTION_LINKS } from "@/lib/system-settings-data"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
+import {
+  CrmSettingsNavLink,
+  useCrmSettingsNavigation,
+} from "@/components/dashboard/crm-settings-navigation"
 import { pageKeyFromPath } from "@/lib/permissions/constants"
 import { usePermissions } from "@/lib/permissions/provider"
 import {
@@ -20,8 +23,8 @@ export default function SystemSettingsLayout({
   children: ReactNode
 }) {
   const pathname = usePathname()
-  const router = useRouter()
   const { openCrmSettings, openCrmSettingsLayer } = useCrmSettingsLauncher()
+  const { navigate } = useCrmSettingsNavigation()
   const permissions = usePermissions()
   const currentPage = pageKeyFromPath(pathname)
   const canAccessCurrentPage = currentPage ? permissions.canPage(currentPage) : false
@@ -31,8 +34,8 @@ export default function SystemSettingsLayout({
   })
 
   useEffect(() => {
-    if (!canAccessCurrentPage) router.replace("/")
-  }, [canAccessCurrentPage, router])
+    if (!canAccessCurrentPage) navigate("/", { replace: true })
+  }, [canAccessCurrentPage, navigate])
 
   if (!canAccessCurrentPage) return null
 
@@ -43,7 +46,7 @@ export default function SystemSettingsLayout({
     <div className="flex flex-col gap-5">
       <CrmBreadcrumb
         items={[
-          { label: "Solair CRM", action: () => router.push("/") },
+          { label: "Solair CRM", action: () => navigate("/") },
           { label: "CRM Settings", action: openCrmSettings },
           {
             label: "System Settings",
@@ -68,7 +71,7 @@ export default function SystemSettingsLayout({
               const active = pathname === link.href
               const Icon = link.icon
               return (
-                <Link
+                <CrmSettingsNavLink
                   key={link.href}
                   href={link.href}
                   aria-current={active ? "page" : undefined}
@@ -78,10 +81,11 @@ export default function SystemSettingsLayout({
                       ? "border-teal bg-navy/5 text-foreground"
                       : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
+                  pendingClassName="border-teal bg-navy/5 text-foreground"
                 >
                   <Icon className="size-[18px] shrink-0" />
                   <span className="truncate">{link.label}</span>
-                </Link>
+                </CrmSettingsNavLink>
               )
             })}
           </nav>

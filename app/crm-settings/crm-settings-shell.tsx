@@ -1,7 +1,7 @@
 "use client"
 
-import type { ReactNode } from "react"
-import { usePathname, useRouter } from "next/navigation"
+import { useMemo, type ReactNode } from "react"
+import { usePathname } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import {
   CrmSettingsLauncherProvider,
@@ -13,6 +13,11 @@ import {
   CrmBreadcrumb,
   type CrmBreadcrumbItem,
 } from "@/components/dashboard/crm-settings-nav"
+import {
+  CrmSettingsNavigationProvider,
+  CrmSettingsRouteProgress,
+  useCrmSettingsNavigation,
+} from "@/components/dashboard/crm-settings-navigation"
 
 const SECTIONS: Record<string, { label: string; layer: CrmSettingsLayer }> = {
   account: { label: "Account & Security", layer: "account-security" },
@@ -41,8 +46,8 @@ const PAGE_TITLES: Record<string, string> = {
 
 function CrmSettingsHeader() {
   const pathname = usePathname()
-  const router = useRouter()
   const { openCrmSettings, openCrmSettingsLayer } = useCrmSettingsLauncher()
+  const { navigate } = useCrmSettingsNavigation()
 
   const sectionKey = pathname.split("/").filter(Boolean)[1] ?? ""
   const section = SECTIONS[sectionKey]
@@ -79,7 +84,7 @@ function CrmSettingsHeader() {
 
         <button
           type="button"
-          onClick={() => router.push("/")}
+          onClick={() => navigate("/")}
           className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ArrowLeft className="size-4" />
@@ -95,13 +100,18 @@ function CrmSettingsHeader() {
 }
 
 export function CrmSettingsShell({ children }: { children: ReactNode }) {
+  const prefetchHrefs = useMemo(() => Object.keys(PAGE_TITLES), [])
+
   return (
-    <CrmSettingsLauncherProvider>
-      <div className="flex min-h-screen flex-col bg-muted/30">
-        <CrmSettingsHeader />
-        <main className="w-full flex-1 px-5 py-6">{children}</main>
-      </div>
-      <CrmSettingsSidebar />
-    </CrmSettingsLauncherProvider>
+    <CrmSettingsNavigationProvider prefetchHrefs={prefetchHrefs}>
+      <CrmSettingsLauncherProvider>
+        <CrmSettingsRouteProgress />
+        <div className="flex min-h-screen flex-col bg-muted/30">
+          <CrmSettingsHeader />
+          <main className="w-full flex-1 px-5 py-6">{children}</main>
+        </div>
+        <CrmSettingsSidebar />
+      </CrmSettingsLauncherProvider>
+    </CrmSettingsNavigationProvider>
   )
 }

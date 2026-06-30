@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import {
   Shield,
@@ -26,6 +25,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
+import { useCrmSettingsNavigation } from "@/components/dashboard/crm-settings-navigation"
 import { pageKeyFromPath } from "@/lib/permissions/constants"
 import { usePermissions } from "@/lib/permissions/provider"
 import { cn } from "@/lib/utils"
@@ -299,7 +299,7 @@ function SettingsCard({
 
 export function CrmSettingsSidebar() {
   const { open, closeLauncher, layer, setLayer } = useCrmSettingsLauncher()
-  const router = useRouter()
+  const { navigate, markNavigating } = useCrmSettingsNavigation()
   const permissions = usePermissions()
   const isMobile = useIsMobile()
   const panelRef = useRef<HTMLDivElement>(null)
@@ -342,8 +342,9 @@ export function CrmSettingsSidebar() {
   }, [open, closeLauncher])
 
   function handleNavigate(href: string) {
+    markNavigating(href)
     closeLauncher()
-    router.push(href)
+    navigate(href)
   }
 
   const panelInitial = isMobile ? { y: "100%" } : { x: "100%" }

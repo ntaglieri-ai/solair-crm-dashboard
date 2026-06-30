@@ -187,3 +187,15 @@
     @apply font-sans;
   }
 }
+
+@keyframes crm-progress {
+  0% {
+    transform: translateX(-110%);
+  }
+  55% {
+    transform: translateX(105%);
+  }
+  100% {
+    transform: translateX(210%);
+  }
+}

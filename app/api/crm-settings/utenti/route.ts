@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { requireApiAction } from "@/lib/permissions/server"
+import {
+  accountRoleErrorMessage,
+  resolveRole,
+} from "@/lib/crm-settings/roles"
 
 type UserPayload = {
   nome: string
@@ -8,15 +12,6 @@ type UserPayload = {
   ruolo: string
   sede: string
   attivo?: boolean
-}
-
-async function resolveRole(supabase: Awaited<ReturnType<typeof createClient>>, code: string) {
-  const { data } = await supabase
-    .from("ruoli")
-    .select("id, code, nome")
-    .eq("code", code)
-    .maybeSingle()
-  return data as { id: string; code: string; nome: string } | null
 }
 
 export async function GET() {
@@ -54,14 +49,20 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createClient()
-  const ruolo = await resolveRole(supabase, body.ruolo)
+  const ruolo = await resolveRole(supabase, body.ruolo).catch(() => null)
+  if (!ruolo) {
+    return NextResponse.json(
+      { error: "Il ruolo selezionato non esiste o non è più disponibile." },
+      { status: 400 },
+    )
+  }
   const { data, error } = await supabase
     .from("utenti")
     .insert({
       nome: body.nome.trim(),
       email: body.email.trim().toLowerCase(),
-      ruolo: body.ruolo,
-      ruolo_id: ruolo?.id ?? null,
+      ruolo: ruolo.code,
+      ruolo_id: ruolo.id,
       sede: body.sede,
       attivo: body.attivo ?? true,
     })
@@ -69,7 +70,10 @@ export async function POST(request: Request) {
     .single()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(
+      { error: accountRoleErrorMessage(error.message) },
+      { status: 500 },
+    )
   }
 
   return NextResponse.json({ utente: data }, { status: 201 })

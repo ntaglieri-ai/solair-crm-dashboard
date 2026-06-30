@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { requireApiAction } from "@/lib/permissions/server"
+import {
+  accountRoleErrorMessage,
+  resolveRole,
+} from "@/lib/crm-settings/roles"
 
 type PatchPayload = {
   nome?: string
@@ -8,15 +12,6 @@ type PatchPayload = {
   ruolo?: string
   sede?: string
   attivo?: boolean
-}
-
-async function resolveRole(supabase: Awaited<ReturnType<typeof createClient>>, code: string) {
-  const { data } = await supabase
-    .from("ruoli")
-    .select("id, code, nome")
-    .eq("code", code)
-    .maybeSingle()
-  return data as { id: string; code: string; nome: string } | null
 }
 
 export async function PATCH(
@@ -39,9 +34,15 @@ export async function PATCH(
   if (body.sede !== undefined) patch.sede = body.sede
   if (body.attivo !== undefined) patch.attivo = body.attivo
   if (body.ruolo !== undefined) {
-    const ruolo = await resolveRole(supabase, body.ruolo)
-    patch.ruolo = body.ruolo
-    patch.ruolo_id = ruolo?.id ?? null
+    const ruolo = await resolveRole(supabase, body.ruolo).catch(() => null)
+    if (!ruolo) {
+      return NextResponse.json(
+        { error: "Il ruolo selezionato non esiste o non è più disponibile." },
+        { status: 400 },
+      )
+    }
+    patch.ruolo = ruolo.code
+    patch.ruolo_id = ruolo.id
   }
 
   const { data, error } = await supabase
@@ -52,7 +53,10 @@ export async function PATCH(
     .single()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(
+      { error: accountRoleErrorMessage(error.message) },
+      { status: 500 },
+    )
   }
 
   return NextResponse.json({ utente: data })

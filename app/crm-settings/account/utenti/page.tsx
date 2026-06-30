@@ -2,111 +2,207 @@
 
 import { useEffect, useMemo, useState } from "react"
 import {
-  Users, UserCheck, ShieldCheck, MapPin,
-  MoreHorizontal, Search, Plus,
+  MapPin,
+  MoreHorizontal,
+  Plus,
+  Search,
+  ShieldCheck,
+  UserCheck,
+  Users,
 } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
 import {
-  RoleBadge, InitialsAvatar, SectionHeader, StatCard,
+  InitialsAvatar,
+  SectionHeader,
+  StatCard,
 } from "@/components/impostazioni/settings-ui"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { Badge } from "@/components/ui/badge"
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select"
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table"
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  Sheet, SheetContent, SheetHeader, SheetTitle,
-  SheetDescription, SheetFooter,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
 } from "@/components/ui/sheet"
+import { Switch } from "@/components/ui/switch"
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-  DialogDescription, DialogFooter,
-} from "@/components/ui/dialog"
-import { type UserRole } from "@/lib/mock-data"
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { cn } from "@/lib/utils"
 
-const SEDI = ["Catania", "Giarre (CT)", "Treviso", "Torino", "Porto Sant'Elpidio"]
-const USER_ROLES: UserRole[] = ["admin", "commerciale", "tecnico"]
+const DEFAULT_SEDI = ["Catania", "Giarre (CT)", "Treviso", "Torino", "Porto Sant'Elpidio"]
+const EMPTY_FORM = { nome: "", email: "", ruolo: "", sede: "", attivo: true }
 
 type Utente = {
   id: string
   nome: string
   email: string
   ruolo: string
+  ruolo_id: string | null
   sede: string
   attivo: boolean
   created_at: string
 }
 
-const EMPTY_FORM = { nome: "", email: "", ruolo: "", sede: "", attivo: true }
-
-function toUserRole(ruolo: string): UserRole {
-  return USER_ROLES.includes(ruolo as UserRole) ? (ruolo as UserRole) : "commerciale"
+type RuoloProfilo = {
+  id: string
+  code: string
+  nome: string
 }
 
+type UserForm = typeof EMPTY_FORM
+
 function getIniziali(nome: string) {
-  return nome.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+  return nome
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2)
 }
 
 function formatData(iso: string) {
-  return new Date(iso).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" })
+  return new Date(iso).toLocaleDateString("it-IT", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  })
+}
+
+function roleTone(code: string) {
+  const normalized = code.toUpperCase()
+  if (normalized === "SUPERADMIN" || normalized === "ADMIN") return "navy"
+  if (normalized === "AGENT" || normalized === "STANDARD") return "teal"
+  return "gray"
+}
+
+function RolePill({ code, label }: { code: string; label: string }) {
+  const tone = roleTone(code)
+  return (
+    <span
+      className={cn(
+        "inline-flex h-6 items-center rounded-full px-2.5 text-xs font-semibold",
+        tone === "navy" && "bg-navy text-navy-foreground",
+        tone === "teal" && "bg-teal text-teal-foreground",
+        tone === "gray" && "bg-muted text-muted-foreground",
+      )}
+    >
+      {label}
+    </span>
+  )
+}
+
+function userToForm(user: Utente): UserForm {
+  return {
+    nome: user.nome,
+    email: user.email,
+    ruolo: user.ruolo,
+    sede: user.sede,
+    attivo: user.attivo,
+  }
 }
 
 export default function AccountManagementPage() {
-  const supabase = useMemo(() => createClient(), [])
   const [users, setUsers] = useState<Utente[]>([])
+  const [roles, setRoles] = useState<RuoloProfilo[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [ruolo, setRuolo] = useState("")
   const [sede, setSede] = useState("")
   const [stato, setStato] = useState("")
-  const [selected, setSelected] = useState<Utente | null>(null)
   const [newOpen, setNewOpen] = useState(false)
-  const [newForm, setNewForm] = useState(EMPTY_FORM)
-  const [newSaving, setNewSaving] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
-  const [deleting, setDeleting] = useState(false)
-  const [profili, setProfili] = useState<{ id: string; code: string; nome: string }[]>([])
+  const [newForm, setNewForm] = useState<UserForm>(EMPTY_FORM)
+  const [selected, setSelected] = useState<Utente | null>(null)
+  const [editForm, setEditForm] = useState<UserForm>(EMPTY_FORM)
+  const [saving, setSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Utente | null>(null)
 
-  useEffect(() => {
-    async function load() {
-      const [{ data: utenti }, { data: ruoli }] = await Promise.all([
-        supabase
-          .from("utenti")
-          .select("id, nome, email, ruolo, sede, attivo, created_at")
-          .order("nome"),
-        supabase
-          .from("ruoli")
-          .select("id, code, nome")
-          .order("ordinamento", { ascending: true }),
-      ])
-      setUsers(utenti ?? [])
-      setProfili(ruoli ?? [])
+  async function load() {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/crm-settings/utenti", { cache: "no-store" })
+      const body = (await res.json().catch(() => null)) as {
+        utenti?: Utente[]
+        ruoli?: RuoloProfilo[]
+        error?: string
+      } | null
+      if (!res.ok) throw new Error(body?.error ?? "Caricamento utenti non riuscito")
+      setUsers(body?.utenti ?? [])
+      setRoles(body?.ruoli ?? [])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Caricamento utenti non riuscito")
+    } finally {
       setLoading(false)
     }
-    load()
-  }, [supabase])
+  }
 
-  const stats = useMemo(() => ({
-    totali: users.length,
-    attivi: users.filter((u) => u.attivo).length,
-    admin: users.filter((u) => u.ruolo === "admin").length,
-    sedi: new Set(users.map((u) => u.sede)).size,
-  }), [users])
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void load()
+    }, 0)
+    return () => window.clearTimeout(timeoutId)
+  }, [])
+
+  const roleLabel = useMemo(
+    () => new Map(roles.map((role) => [role.code, role.nome])),
+    [roles],
+  )
+
+  const sedi = useMemo(() => {
+    const values = new Set([...DEFAULT_SEDI, ...users.map((user) => user.sede)])
+    return Array.from(values).filter(Boolean).sort((a, b) => a.localeCompare(b))
+  }, [users])
+
+  const stats = useMemo(
+    () => ({
+      totali: users.length,
+      attivi: users.filter((u) => u.attivo).length,
+      admin: users.filter((u) =>
+        ["SUPERADMIN", "ADMIN"].includes(u.ruolo.toUpperCase()),
+      ).length,
+      sedi: new Set(users.map((u) => u.sede)).size,
+    }),
+    [users],
+  )
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return users.filter((u) => {
-      if (q && !u.nome.toLowerCase().includes(q) && !u.email.toLowerCase().includes(q)) return false
+      if (q && !u.nome.toLowerCase().includes(q) && !u.email.toLowerCase().includes(q)) {
+        return false
+      }
       if (ruolo && u.ruolo !== ruolo) return false
       if (sede && u.sede !== sede) return false
       if (stato === "active" && !u.attivo) return false
@@ -115,68 +211,126 @@ export default function AccountManagementPage() {
     })
   }, [users, search, ruolo, sede, stato])
 
-  async function toggleAttivo(id: string, current: boolean) {
-    await supabase.from("utenti").update({ attivo: !current }).eq("id", id)
-    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, attivo: !current } : u))
-    setSelected((prev) => prev?.id === id ? { ...prev, attivo: !current } : prev)
+  function openEdit(user: Utente) {
+    setSelected(user)
+    setEditForm(userToForm(user))
+    setError(null)
   }
 
-  async function handleCreate(e: React.FormEvent) {
+  async function saveUser(id: string, form: UserForm) {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/crm-settings/utenti/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      })
+      const body = (await res.json().catch(() => null)) as {
+        utente?: Utente
+        error?: string
+      } | null
+      if (!res.ok || !body?.utente) {
+        throw new Error(body?.error ?? "Salvataggio utente non riuscito")
+      }
+      setUsers((prev) =>
+        prev
+          .map((user) => (user.id === id ? body.utente! : user))
+          .sort((a, b) => a.nome.localeCompare(b.nome)),
+      )
+      setSelected(body.utente)
+      setEditForm(userToForm(body.utente))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Salvataggio utente non riuscito")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function createUser(e: React.FormEvent) {
     e.preventDefault()
     if (!newForm.nome.trim() || !newForm.email.trim() || !newForm.ruolo || !newForm.sede) {
       return
     }
-    setNewSaving(true)
-    const ruoloSelezionato = profili.find((p) => p.code === newForm.ruolo)
-    const { data, error } = await supabase
-      .from("utenti")
-      .insert([{
-        nome: newForm.nome,
-        email: newForm.email,
-        ruolo: newForm.ruolo,
-        ruolo_id: ruoloSelezionato?.id ?? null,
-        sede: newForm.sede,
-        attivo: newForm.attivo,
-      }])
-      .select("id, nome, email, ruolo, sede, attivo, created_at")
-      .single()
-    if (!error && data) {
-      setUsers((prev) => [...prev, data].sort((a, b) => a.nome.localeCompare(b.nome)))
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/crm-settings/utenti", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newForm),
+      })
+      const body = (await res.json().catch(() => null)) as {
+        utente?: Utente
+        error?: string
+      } | null
+      if (!res.ok || !body?.utente) {
+        throw new Error(body?.error ?? "Creazione account non riuscita")
+      }
+      setUsers((prev) =>
+        [...prev, body.utente!].sort((a, b) => a.nome.localeCompare(b.nome)),
+      )
       setNewOpen(false)
       setNewForm(EMPTY_FORM)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Creazione account non riuscita")
+    } finally {
+      setSaving(false)
     }
-    setNewSaving(false)
   }
 
-  async function handleDelete() {
+  async function toggleActive(user: Utente) {
+    await saveUser(user.id, { ...userToForm(user), attivo: !user.attivo })
+  }
+
+  async function deleteUser() {
     if (!deleteTarget) return
-    setDeleting(true)
-    await supabase.from("utenti").delete().eq("id", deleteTarget)
-    setUsers((prev) => prev.filter((u) => u.id !== deleteTarget))
-    if (selected?.id === deleteTarget) setSelected(null)
-    setDeleteTarget(null)
-    setDeleting(false)
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/crm-settings/utenti/${deleteTarget.id}`, {
+        method: "DELETE",
+      })
+      const body = (await res.json().catch(() => null)) as { error?: string } | null
+      if (!res.ok) throw new Error(body?.error ?? "Eliminazione account non riuscita")
+      setUsers((prev) => prev.filter((user) => user.id !== deleteTarget.id))
+      if (selected?.id === deleteTarget.id) setSelected(null)
+      setDeleteTarget(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Eliminazione account non riuscita")
+    } finally {
+      setSaving(false)
+    }
   }
 
-  function openDelete(id: string) {
-    setSelected(null)
-    setDeleteTarget(id)
+  if (loading) {
+    return <div className="p-8 text-muted-foreground">Caricamento utenti...</div>
   }
-
-  if (loading) return <div className="p-8 text-muted-foreground">Caricamento utenti...</div>
 
   return (
     <div className="flex flex-col gap-6">
       <SectionHeader
         title="Account Management"
-        description="Gestisci gli account nominativi del team Solair. Ogni utente ha credenziali proprie, un ruolo e una sede assegnata."
+        description="Gestisci account nominativi, ruolo, sede, stato di accesso e profilo operativo."
         action={
-          <Button className="bg-teal text-teal-foreground hover:bg-teal/90" onClick={() => setNewOpen(true)}>
+          <Button
+            className="bg-teal text-teal-foreground hover:bg-teal/90"
+            onClick={() => {
+              setNewForm(EMPTY_FORM)
+              setNewOpen(true)
+            }}
+          >
             <Plus className="size-4" />
             Nuovo account
           </Button>
         }
       />
+
+      {error ? (
+        <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Utenti totali" value={stats.totali} icon={<Users className="size-5" />} />
@@ -187,16 +341,25 @@ export default function AccountManagementPage() {
 
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         <div className="relative flex-1 sm:min-w-64">
-          <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cerca per nome o email" className="pl-9" />
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Cerca per nome o email"
+            className="pl-9"
+          />
         </div>
         <Select value={ruolo} onValueChange={(v) => setRuolo(v === "all" ? "" : v ?? "")}>
-          <SelectTrigger className="w-full sm:w-44">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder="Tutti i ruoli" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tutti i ruoli</SelectItem>
-            {profili.map((r) => <SelectItem key={r.id} value={r.code}>{r.nome}</SelectItem>)}
+            {roles.map((role) => (
+              <SelectItem key={role.id} value={role.code}>
+                {role.nome}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Select value={sede} onValueChange={(v) => setSede(v === "all" ? "" : v ?? "")}>
@@ -205,7 +368,11 @@ export default function AccountManagementPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tutte le sedi</SelectItem>
-            {SEDI.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            {sedi.map((item) => (
+              <SelectItem key={item} value={item}>
+                {item}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Select value={stato} onValueChange={(v) => setStato(v === "all" ? "" : v ?? "")}>
@@ -233,24 +400,39 @@ export default function AccountManagementPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((u) => (
-              <TableRow key={u.id} className="cursor-pointer" onClick={() => setSelected(u)}>
+            {filtered.map((user) => (
+              <TableRow
+                key={user.id}
+                className="cursor-pointer"
+                onClick={() => openEdit(user)}
+              >
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <InitialsAvatar iniziali={getIniziali(u.nome)} />
+                    <InitialsAvatar iniziali={getIniziali(user.nome)} />
                     <div className="flex flex-col">
-                      <span className="font-medium text-foreground">{u.nome}</span>
-                      <span className="text-xs text-muted-foreground">{u.email}</span>
+                      <span className="font-medium text-foreground">{user.nome}</span>
+                      <span className="text-xs text-muted-foreground">{user.email}</span>
                     </div>
                   </div>
                 </TableCell>
-                <TableCell><RoleBadge ruolo={toUserRole(u.ruolo)} /></TableCell>
-                <TableCell className="text-muted-foreground">{u.sede}</TableCell>
-                <TableCell className="text-muted-foreground">{formatData(u.created_at)}</TableCell>
                 <TableCell>
-                  {u.attivo
-                    ? <Badge className="bg-teal/15 text-teal">Attivo</Badge>
-                    : <Badge variant="outline" className="text-muted-foreground">Inattivo</Badge>}
+                  <RolePill
+                    code={user.ruolo}
+                    label={roleLabel.get(user.ruolo) ?? user.ruolo}
+                  />
+                </TableCell>
+                <TableCell className="text-muted-foreground">{user.sede}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {formatData(user.created_at)}
+                </TableCell>
+                <TableCell>
+                  {user.attivo ? (
+                    <Badge className="bg-teal/15 text-teal">Attivo</Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-muted-foreground">
+                      Inattivo
+                    </Badge>
+                  )}
                 </TableCell>
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <DropdownMenu>
@@ -260,18 +442,23 @@ export default function AccountManagementPage() {
                           type="button"
                           className="inline-flex size-8 items-center justify-center rounded-md hover:bg-muted"
                           aria-label="Azioni account"
-                        />
+                        >
+                          <MoreHorizontal className="size-4" />
+                        </button>
                       }
-                    >
-                      <MoreHorizontal className="size-4" />
-                    </DropdownMenuTrigger>
+                    />
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setSelected(u)}>Modifica</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => toggleAttivo(u.id, u.attivo)}>
-                        {u.attivo ? "Disattiva" : "Attiva"}
+                      <DropdownMenuItem onClick={() => openEdit(user)}>
+                        Modifica
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => toggleActive(user)}>
+                        {user.attivo ? "Disattiva" : "Attiva"}
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem className="text-destructive" onClick={() => openDelete(u.id)}>
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() => setDeleteTarget(user)}
+                      >
                         Elimina
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -279,167 +466,229 @@ export default function AccountManagementPage() {
                 </TableCell>
               </TableRow>
             ))}
-            {filtered.length === 0 && (
+            {filtered.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
                   Nessun account trovato.
                 </TableCell>
               </TableRow>
-            )}
+            ) : null}
           </TableBody>
         </Table>
       </div>
 
-      {/* Sheet — Nuovo account */}
-      <Sheet open={newOpen} onOpenChange={(open) => { if (!open) { setNewOpen(false); setNewForm(EMPTY_FORM) } }}>
-        <SheetContent className="w-full sm:max-w-[480px]">
-          <SheetHeader className="border-b border-border">
-            <SheetTitle>Nuovo account</SheetTitle>
-            <SheetDescription>Crea un nuovo utente per il team Solair.</SheetDescription>
-          </SheetHeader>
-          <form onSubmit={handleCreate} className="flex flex-col gap-5 overflow-y-auto px-4 py-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="new-nome">Nome</Label>
-              <Input
-                id="new-nome"
-                required
-                value={newForm.nome}
-                onChange={(e) => setNewForm((f) => ({ ...f, nome: e.target.value }))}
-                placeholder="Mario Rossi"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="new-email">Email</Label>
-              <Input
-                id="new-email"
-                type="email"
-                required
-                value={newForm.email}
-                onChange={(e) => setNewForm((f) => ({ ...f, email: e.target.value }))}
-                placeholder="mario@solair.it"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Ruolo</Label>
-              <Select value={newForm.ruolo} onValueChange={(v) => setNewForm((f) => ({ ...f, ruolo: v ?? "" }))}>
-                <SelectTrigger><SelectValue placeholder="Seleziona ruolo" /></SelectTrigger>
-                <SelectContent>
-                  {profili.map((r) => <SelectItem key={r.id} value={r.code}>{r.nome}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Sede</Label>
-              <Select value={newForm.sede} onValueChange={(v) => setNewForm((f) => ({ ...f, sede: v ?? "" }))}>
-                <SelectTrigger><SelectValue placeholder="Seleziona sede" /></SelectTrigger>
-                <SelectContent>
-                  {SEDI.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
-              <div className="flex flex-col">
-                <span className="text-sm font-medium">Attivo</span>
-                <span className="text-xs text-muted-foreground">L&apos;utente può accedere al sistema</span>
-              </div>
-              <Switch
-                checked={newForm.attivo}
-                onCheckedChange={(v) => setNewForm((f) => ({ ...f, attivo: v }))}
-              />
-            </div>
-            <SheetFooter className="border-t border-border pt-4">
-              <Button type="button" variant="outline" onClick={() => { setNewOpen(false); setNewForm(EMPTY_FORM) }}>
-                Annulla
-              </Button>
-              <Button
-                type="submit"
-                className="bg-teal text-teal-foreground hover:bg-teal/90"
-                disabled={
-                  newSaving ||
-                  !newForm.nome.trim() ||
-                  !newForm.email.trim() ||
-                  !newForm.ruolo ||
-                  !newForm.sede
-                }
-              >
-                {newSaving ? "Salvataggio..." : "Crea account"}
-              </Button>
-            </SheetFooter>
-          </form>
-        </SheetContent>
-      </Sheet>
+      <UserSheet
+        title="Nuovo account"
+        description="Crea un nuovo utente e assegna subito ruolo, sede e stato."
+        open={newOpen}
+        form={newForm}
+        roles={roles}
+        sedi={sedi}
+        saving={saving}
+        submitLabel="Crea account"
+        onOpenChange={(open) => {
+          setNewOpen(open)
+          if (!open) setNewForm(EMPTY_FORM)
+        }}
+        onChange={setNewForm}
+        onSubmit={createUser}
+      />
 
-      {/* Sheet — Dettaglio utente */}
-      <Sheet open={selected !== null} onOpenChange={(open) => { if (!open) setSelected(null) }}>
-        <SheetContent className="w-full sm:max-w-[480px]">
-          {selected && (
-            <>
-              <SheetHeader className="border-b border-border">
-                <SheetTitle>Dettaglio account</SheetTitle>
-                <SheetDescription>Informazioni dell&apos;utente</SheetDescription>
-              </SheetHeader>
-              <div className="flex flex-col gap-5 overflow-y-auto px-4 py-4">
-                <div className="flex items-center gap-4">
-                  <InitialsAvatar iniziali={getIniziali(selected.nome)} className="size-14 text-lg" />
-                  <div className="flex flex-col gap-1">
-                    <span className="text-base font-semibold">{selected.nome}</span>
-                    <span className="text-sm text-muted-foreground">{selected.email}</span>
-                    <div className="flex items-center gap-2 pt-1">
-                      <RoleBadge ruolo={toUserRole(selected.ruolo)} />
-                      <span className="text-xs text-muted-foreground">{selected.sede}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium">Stato account</span>
-                    <span className="text-xs text-muted-foreground">{selected.attivo ? "Attivo" : "Inattivo"}</span>
-                  </div>
-                  <Switch checked={selected.attivo} onCheckedChange={() => toggleAttivo(selected.id, selected.attivo)} />
-                </div>
-                <dl className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="flex flex-col gap-0.5">
-                    <dt className="text-xs text-muted-foreground">Creato il</dt>
-                    <dd>{formatData(selected.created_at)}</dd>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <dt className="text-xs text-muted-foreground">Sede</dt>
-                    <dd>{selected.sede}</dd>
-                  </div>
-                </dl>
-                <Button variant="outline" className="w-full">Reimposta password</Button>
-              </div>
-              <SheetFooter className="border-t border-border">
-                <Button
-                  variant="ghost"
-                  className="w-full text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  onClick={() => openDelete(selected.id)}
-                >
-                  Elimina account
-                </Button>
-              </SheetFooter>
-            </>
-          )}
-        </SheetContent>
-      </Sheet>
+      <UserSheet
+        title="Modifica account"
+        description="Aggiorna anagrafica, ruolo, sede e stato operativo."
+        open={selected !== null}
+        form={editForm}
+        roles={roles}
+        sedi={sedi}
+        saving={saving}
+        submitLabel="Salva modifiche"
+        dangerLabel="Elimina account"
+        onOpenChange={(open) => {
+          if (!open) setSelected(null)
+        }}
+        onChange={setEditForm}
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (selected) saveUser(selected.id, editForm)
+        }}
+        onDanger={() => {
+          if (selected) setDeleteTarget(selected)
+        }}
+      />
 
-      {/* Dialog — Conferma eliminazione */}
-      <Dialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
+      <Dialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Elimina account</DialogTitle>
             <DialogDescription>
-              Questa operazione è irreversibile. L&apos;account verrà eliminato definitivamente.
+              Questa azione rimuove l&apos;utente da CRM Settings. L&apos;account
+              Auth Supabase, se presente, va gestito dalla console Auth o da una
+              funzione service-role dedicata.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Annulla</Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-              {deleting ? "Eliminazione..." : "Elimina"}
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+              Annulla
+            </Button>
+            <Button variant="destructive" onClick={deleteUser} disabled={saving}>
+              {saving ? "Eliminazione..." : "Elimina"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+function UserSheet({
+  title,
+  description,
+  open,
+  form,
+  roles,
+  sedi,
+  saving,
+  submitLabel,
+  dangerLabel,
+  onOpenChange,
+  onChange,
+  onSubmit,
+  onDanger,
+}: {
+  title: string
+  description: string
+  open: boolean
+  form: UserForm
+  roles: RuoloProfilo[]
+  sedi: string[]
+  saving: boolean
+  submitLabel: string
+  dangerLabel?: string
+  onOpenChange: (open: boolean) => void
+  onChange: (form: UserForm) => void
+  onSubmit: (event: React.FormEvent) => void
+  onDanger?: () => void
+}) {
+  const canSubmit =
+    !saving &&
+    form.nome.trim().length > 0 &&
+    form.email.trim().length > 0 &&
+    form.ruolo.length > 0 &&
+    form.sede.length > 0
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full sm:max-w-[520px]">
+        <SheetHeader className="border-b border-border">
+          <SheetTitle>{title}</SheetTitle>
+          <SheetDescription>{description}</SheetDescription>
+        </SheetHeader>
+        <form onSubmit={onSubmit} className="flex flex-col gap-5 overflow-y-auto px-4 py-4">
+          <div className="grid gap-4 sm:grid-cols-[auto_1fr] sm:items-center">
+            <InitialsAvatar iniziali={getIniziali(form.nome || "Utente")} className="size-14 text-lg" />
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-foreground">
+                {form.nome || "Nuovo utente"}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {form.email || "Email non impostata"}
+              </span>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`${title}-nome`}>Nome</Label>
+            <Input
+              id={`${title}-nome`}
+              value={form.nome}
+              onChange={(e) => onChange({ ...form, nome: e.target.value })}
+              placeholder="Mario Rossi"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`${title}-email`}>Email</Label>
+            <Input
+              id={`${title}-email`}
+              type="email"
+              value={form.email}
+              onChange={(e) => onChange({ ...form, email: e.target.value })}
+              placeholder="mario@solair.it"
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label>Ruolo</Label>
+              <Select
+                value={form.ruolo}
+                onValueChange={(value) => onChange({ ...form, ruolo: value ?? "" })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona ruolo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles.map((role) => (
+                    <SelectItem key={role.id} value={role.code}>
+                      {role.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Sede</Label>
+              <Select
+                value={form.sede}
+                onValueChange={(value) => onChange({ ...form, sede: value ?? "" })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona sede" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sedi.map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {item}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
+            <div className="flex flex-col">
+              <span className="text-sm font-medium">Account attivo</span>
+              <span className="text-xs text-muted-foreground">
+                L&apos;utente puo accedere al sistema se ha credenziali Auth valide.
+              </span>
+            </div>
+            <Switch
+              checked={form.attivo}
+              onCheckedChange={(value) => onChange({ ...form, attivo: value === true })}
+            />
+          </div>
+          <SheetFooter className="border-t border-border pt-4">
+            {dangerLabel && onDanger ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="mr-auto text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={onDanger}
+              >
+                {dangerLabel}
+              </Button>
+            ) : null}
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Annulla
+            </Button>
+            <Button
+              type="submit"
+              className="bg-teal text-teal-foreground hover:bg-teal/90"
+              disabled={!canSubmit}
+            >
+              {saving ? "Salvataggio..." : submitLabel}
+            </Button>
+          </SheetFooter>
+        </form>
+      </SheetContent>
+    </Sheet>
   )
 }

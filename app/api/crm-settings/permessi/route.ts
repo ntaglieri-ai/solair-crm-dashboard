@@ -65,12 +65,39 @@ function buildPermissionRows(ruoloId: string, permessi: RuoloPermessi) {
     },
   ]
 
-  return { paginaRows, recordRows, uiRows }
+  const actionRows = Object.entries(permessi.azioni ?? {}).map(
+    ([azione, abilitato]) => ({
+      ruolo_id: ruoloId,
+      azione,
+      abilitato: abilitato === true,
+    }),
+  )
+
+  const scopeRows = Object.entries(permessi.scope_dati ?? {}).map(
+    ([risorsa, scope]) => ({
+      ruolo_id: ruoloId,
+      risorsa,
+      scope,
+    }),
+  )
+
+  const fieldRows = Object.entries(permessi.campi ?? {}).flatMap(
+    ([modulo, fields]) =>
+      Object.entries(fields).map(([campo, accesso]) => ({
+        ruolo_id: ruoloId,
+        modulo,
+        campo,
+        accesso,
+      })),
+  )
+
+  return { paginaRows, recordRows, uiRows, actionRows, scopeRows, fieldRows }
 }
 
 async function savePermissions(ruoloId: string, permessi: RuoloPermessi) {
   const supabase = await createClient()
-  const { paginaRows, recordRows, uiRows } = buildPermissionRows(ruoloId, permessi)
+  const { paginaRows, recordRows, uiRows, actionRows, scopeRows, fieldRows } =
+    buildPermissionRows(ruoloId, permessi)
 
   const paginaRes = await supabase
     .from("permessi_pagina")
@@ -102,6 +129,34 @@ async function savePermissions(ruoloId: string, permessi: RuoloPermessi) {
 
   if (uiRes.error) {
     console.warn("[crm-settings/permessi] save ui permissions warning:", uiRes.error.message)
+  }
+
+  const optionalWrites = [
+    actionRows.length > 0
+      ? supabase
+          .from("permessi_azione")
+          .upsert(actionRows, { onConflict: "ruolo_id,azione" })
+      : null,
+    scopeRows.length > 0
+      ? supabase
+          .from("permessi_scope")
+          .upsert(scopeRows, { onConflict: "ruolo_id,risorsa" })
+      : null,
+    fieldRows.length > 0
+      ? supabase
+          .from("permessi_campo")
+          .upsert(fieldRows, { onConflict: "ruolo_id,modulo,campo" })
+      : null,
+  ].filter(Boolean)
+
+  const optionalResults = await Promise.all(optionalWrites)
+  for (const result of optionalResults) {
+    if (result?.error) {
+      console.warn(
+        "[crm-settings/permessi] save optional permission warning:",
+        result.error.message,
+      )
+    }
   }
 
   return null

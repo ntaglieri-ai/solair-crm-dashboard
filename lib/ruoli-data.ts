@@ -65,6 +65,9 @@ export interface RuoloPermessi {
   visibilita_sedi: VisibilitaScope
   cartelle_nextcloud: VisibilitaScope
   riconfigurazioni: boolean
+  azioni?: Record<string, boolean>
+  scope_dati?: Record<string, string>
+  campi?: Record<string, Record<string, string>>
 }
 
 export interface Ruolo {

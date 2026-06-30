@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Plus, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -49,10 +49,29 @@ import {
   type CampoTipo,
 } from "@/lib/system-settings-data"
 import { usePermissions } from "@/lib/permissions/provider"
-import { usePersistentSystemSetting } from "@/lib/crm-settings/use-persistent-system-setting"
 import { tableForCrmModule } from "@/lib/crm-settings/schema-admin"
 
 const ACCESSO_OPZIONI: CampoAccesso[] = ["no_access", "r", "rw"]
+
+function createEmptyCustomFields(): Record<ModuloAttributi, CampoRecord[]> {
+  return {
+    Lead: [],
+    Clienti: [],
+    Compiti: [],
+    Scadenze: [],
+    Installatori: [],
+  }
+}
+
+type SchemaColumnRow = {
+  key: string
+  label: string
+  tipo: CampoTipo
+  required: boolean
+  visible: boolean
+  system: boolean
+  column_name: string | null
+}
 
 function moduloKey(modulo: ModuloAttributi) {
   return modulo.toLowerCase()
@@ -61,12 +80,8 @@ function moduloKey(modulo: ModuloAttributi) {
 export default function AttributiPage() {
   const permissions = usePermissions()
   const [modulo, setModulo] = useState<ModuloAttributi>("Lead")
-  const [tutti, setTutti, store] = usePersistentSystemSetting<
-    Record<ModuloAttributi, CampoRecord[]>
-  >(
-    "system.attributi",
-    structuredClone(campiPerModulo),
-  )
+  const [customFields, setCustomFields] =
+    useState<Record<ModuloAttributi, CampoRecord[]>>(createEmptyCustomFields)
   const [dialogOpen, setDialogOpen] = useState(false)
 
   // Stato modale nuovo campo.
@@ -79,8 +94,21 @@ export default function AttributiPage() {
   const [editingEtichetta, setEditingEtichetta] = useState("")
   const [apiError, setApiError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const [loadingSchema, setLoadingSchema] = useState(false)
 
-  const campi = tutti[modulo]
+  const campiBase = useMemo(
+    () => campiPerModulo[modulo].filter((campo) => campo.sistema),
+    [modulo],
+  )
+  const campi = useMemo(
+    () => [
+      ...campiBase,
+      ...customFields[modulo].filter(
+        (custom) => !campiBase.some((base) => base.nome === custom.nome),
+      ),
+    ],
+    [campiBase, customFields, modulo],
+  )
   const nomeValido = /^[a-z][a-z0-9_]*$/.test(nome)
   const currentModule = moduloKey(modulo)
   const canManageSchema = permissions.canAction("crm_settings.system.schema.manage")
@@ -97,8 +125,53 @@ export default function AttributiPage() {
     `${currentModule}.fields.required.manage`,
   )
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadCustomFields() {
+      if (!canManageSchema) return
+      setLoadingSchema(true)
+      setApiError(null)
+      const response = await fetch(
+        `/api/crm-settings/schema/columns?module=${encodeURIComponent(modulo)}`,
+      )
+
+      if (cancelled) return
+      setLoadingSchema(false)
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null
+        setApiError(body?.error ?? "Caricamento campi Supabase non riuscito.")
+        return
+      }
+
+      const body = (await response.json().catch(() => null)) as
+        | { columns?: SchemaColumnRow[] }
+        | null
+      const rows = body?.columns ?? []
+      setCustomFields((prev) => ({
+        ...prev,
+        [modulo]: rows
+          .filter((row) => !row.system)
+          .map((row) => ({
+            nome: row.column_name ?? row.key,
+            etichetta: row.label,
+            tipo: row.tipo,
+            obbligatorio: row.required,
+            visibile: row.visible,
+            accesso_default: "rw",
+            sistema: false,
+          })),
+      }))
+    }
+
+    void loadCustomFields()
+    return () => {
+      cancelled = true
+    }
+  }, [canManageSchema, modulo])
+
   function updateCampo(nomeCampo: string, patch: Partial<CampoRecord>) {
-    setTutti((prev) => ({
+    setCustomFields((prev) => ({
       ...prev,
       [modulo]: prev[modulo].map((c) =>
         c.nome === nomeCampo ? { ...c, ...patch } : c,
@@ -108,8 +181,8 @@ export default function AttributiPage() {
 
   async function persistCampoPatch(nomeCampo: string, patch: Partial<CampoRecord>) {
     const campo = campi.find((item) => item.nome === nomeCampo)
-    updateCampo(nomeCampo, patch)
     if (!campo || campo.sistema) return
+    updateCampo(nomeCampo, patch)
 
     setApiError(null)
     const response = await fetch("/api/crm-settings/schema/columns", {
@@ -143,7 +216,7 @@ export default function AttributiPage() {
       setApiError(body?.error ?? "Eliminazione colonna non riuscita.")
       return
     }
-    setTutti((prev) => ({
+    setCustomFields((prev) => ({
       ...prev,
       [modulo]: prev[modulo].filter((c) => c.nome !== nomeCampo),
     }))
@@ -181,7 +254,7 @@ export default function AttributiPage() {
       setApiError(body?.error ?? "Creazione colonna non riuscita.")
       return
     }
-    setTutti((prev) => ({
+    setCustomFields((prev) => ({
       ...prev,
       [modulo]: [
         ...prev[modulo],
@@ -217,15 +290,15 @@ export default function AttributiPage() {
       <SectionHeader
         title="Campi personalizzati"
         description={
-          pending || store.saving
+          pending || loadingSchema
             ? "Salvataggio schema CRM..."
             : `Crea e governa colonne reali Supabase per ${tableForCrmModule(modulo) ?? modulo}, con metadati usati dal permission engine.`
         }
       />
 
-      {apiError || store.error ? (
+      {apiError ? (
         <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {apiError ?? store.error}
+          {apiError}
         </p>
       ) : null}
 
@@ -279,7 +352,7 @@ export default function AttributiPage() {
                 <TableCell className="text-center">
                   <Switch
                     checked={campo.obbligatorio}
-                    disabled={!canManageRequired}
+                    disabled={campo.sistema || !canManageRequired}
                     onCheckedChange={(v) =>
                       void persistCampoPatch(campo.nome, { obbligatorio: v })
                     }
@@ -289,7 +362,7 @@ export default function AttributiPage() {
                 <TableCell className="text-center">
                   <Switch
                     checked={campo.visibile}
-                    disabled={!canManageVisibility}
+                    disabled={campo.sistema || !canManageVisibility}
                     onCheckedChange={(v) =>
                       void persistCampoPatch(campo.nome, { visibile: v })
                     }
@@ -299,7 +372,7 @@ export default function AttributiPage() {
                 <TableCell>
                   <Select
                     value={campo.accesso_default}
-                    disabled={!canManageVisibility}
+                    disabled={campo.sistema || !canManageVisibility}
                     onValueChange={(v) =>
                       updateCampo(campo.nome, {
                         accesso_default: (v ?? "rw") as CampoAccesso,

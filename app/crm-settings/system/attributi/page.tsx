@@ -49,7 +49,7 @@ import {
   type CampoTipo,
 } from "@/lib/system-settings-data"
 import { usePermissions } from "@/lib/permissions/provider"
-import { tableForCrmModule } from "@/lib/crm-settings/schema-admin"
+import { CRM_FIELD_TARGETS, tableForCrmModule } from "@/lib/crm-settings/schema-admin"
 
 const ACCESSO_OPZIONI: CampoAccesso[] = ["no_access", "r", "rw"]
 
@@ -64,7 +64,7 @@ function createEmptyCustomFields(): Record<ModuloAttributi, CampoRecord[]> {
 }
 
 type SchemaColumnRow = {
-  key: string
+  key?: string | null
   label: string
   tipo: CampoTipo
   required: boolean
@@ -151,9 +151,9 @@ export default function AttributiPage() {
       setCustomFields((prev) => ({
         ...prev,
         [modulo]: rows
-          .filter((row) => !row.system)
+          .filter((row) => !row.system && (row.column_name || row.key))
           .map((row) => ({
-            nome: row.column_name ?? row.key,
+            nome: row.column_name ?? row.key ?? "",
             etichetta: row.label,
             tipo: row.tipo,
             obbligatorio: row.required,
@@ -301,6 +301,25 @@ export default function AttributiPage() {
           {apiError}
         </p>
       ) : null}
+
+      <div className="grid gap-2 md:grid-cols-5">
+        {CRM_FIELD_TARGETS.map((target) => (
+          <button
+            key={target.module}
+            type="button"
+            onClick={() => setModulo(target.module)}
+            className={cn(
+              "rounded-lg border px-3 py-2 text-left transition-colors",
+              modulo === target.module
+                ? "border-teal bg-teal/5 text-foreground"
+                : "border-border bg-card text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <span className="block text-sm font-semibold">{target.module}</span>
+            <span className="block font-mono text-[11px]">{target.tableName}</span>
+          </button>
+        ))}
+      </div>
 
       {/* Tab selector modulo */}
       <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">

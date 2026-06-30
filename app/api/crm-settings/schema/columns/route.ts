@@ -42,7 +42,7 @@ export async function GET(request: Request) {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("attributi_record")
-    .select("id, key, label, tipo, required, visible, system, table_name, column_name, db_type")
+    .select("id, label, tipo, required, visible, system, table_name, column_name, db_type")
     .eq("table_name", tableName)
     .is("deleted_at", null)
     .order("ordinamento", { ascending: true })

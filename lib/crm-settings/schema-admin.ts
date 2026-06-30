@@ -4,13 +4,49 @@ import type {
   ModuloValori,
 } from "@/lib/system-settings-data"
 
-export const CRM_MODULE_TABLES: Record<ModuloAttributi | ModuloValori, string> = {
-  Lead: "leads",
-  Clienti: "clienti",
-  Compiti: "compiti",
-  Scadenze: "scadenze",
-  Installatori: "installatori",
-}
+export const CRM_FIELD_TARGETS = [
+  {
+    module: "Lead",
+    pageKey: "lead",
+    href: "/leads",
+    tableName: "leads",
+    description: "Schede lead, form lead e colonne operative lead.",
+  },
+  {
+    module: "Clienti",
+    pageKey: "clienti",
+    href: "/clienti",
+    tableName: "clienti",
+    description: "Anagrafiche clienti, dettaglio cliente e liste clienti.",
+  },
+  {
+    module: "Compiti",
+    pageKey: "compiti",
+    href: "/compiti",
+    tableName: "compiti",
+    description: "Task, priorita', scadenze operative e assegnazioni.",
+  },
+  {
+    module: "Scadenze",
+    pageKey: "scadenze",
+    href: "/scadenze",
+    tableName: "scadenze",
+    description: "Scadenze CRM e campi data/processo collegati.",
+  },
+  {
+    module: "Installatori",
+    pageKey: "installatori",
+    href: "/installatori",
+    tableName: "installatori",
+    description: "Anagrafiche installatori e dati operativi rete.",
+  },
+] as const
+
+export const CRM_MODULE_TABLES = Object.fromEntries(
+  CRM_FIELD_TARGETS.map((target) => [target.module, target.tableName]),
+) as Record<ModuloAttributi | ModuloValori, string>
+
+export type CrmFieldTarget = (typeof CRM_FIELD_TARGETS)[number]
 
 export const CRM_FIELD_DB_TYPES: Record<CampoTipo, string> = {
   text: "text",

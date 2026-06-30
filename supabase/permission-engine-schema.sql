@@ -67,10 +67,55 @@ create table if not exists public.attributi_record (
 );
 
 alter table public.attributi_record
+  add column if not exists modulo text,
+  add column if not exists key text,
+  add column if not exists label text,
+  add column if not exists tipo text,
+  add column if not exists required boolean not null default false,
+  add column if not exists visible boolean not null default true,
+  add column if not exists system boolean not null default false,
+  add column if not exists options jsonb not null default '[]'::jsonb,
+  add column if not exists ordinamento integer not null default 0,
+  add column if not exists created_by uuid references public.utenti(id) on delete set null,
+  add column if not exists updated_by uuid references public.utenti(id) on delete set null,
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now(),
   add column if not exists table_name text,
   add column if not exists column_name text,
   add column if not exists db_type text,
   add column if not exists deleted_at timestamptz;
+
+update public.attributi_record
+   set table_name = coalesce(table_name, modulo),
+       column_name = coalesce(column_name, key),
+       key = coalesce(key, column_name),
+       modulo = coalesce(modulo, table_name),
+       label = coalesce(label, column_name, key),
+       tipo = coalesce(tipo, 'text'),
+       updated_at = now()
+ where table_name is null
+    or column_name is null
+    or key is null
+    or modulo is null
+    or label is null
+    or tipo is null;
+
+do $$
+begin
+  if not exists (
+    select 1
+      from pg_constraint
+     where conrelid = 'public.attributi_record'::regclass
+       and contype = 'u'
+       and conkey = array[
+         (select attnum from pg_attribute where attrelid = 'public.attributi_record'::regclass and attname = 'modulo'),
+         (select attnum from pg_attribute where attrelid = 'public.attributi_record'::regclass and attname = 'key')
+       ]::smallint[]
+  ) then
+    alter table public.attributi_record
+      add constraint attributi_record_modulo_key_unique unique (modulo, key);
+  end if;
+end $$;
 
 create table if not exists public.crm_column_values (
   id uuid primary key default gen_random_uuid(),

@@ -105,6 +105,7 @@ export function DocumentiRecenti({
                     <Button
                       variant="ghost"
                       size="icon-sm"
+                      nativeButton={false}
                       aria-label={`Apri ${doc.nome} in Nextcloud`}
                       render={
                         <a

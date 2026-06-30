@@ -63,7 +63,7 @@ function FilterSelect({
   ariaLabel: string
 }) {
   return (
-    <Select value={value} onValueChange={onValueChange}>
+    <Select value={value} onValueChange={(next) => onValueChange(next ?? "all")}>
       <SelectTrigger className={className ?? "w-[160px] bg-card"} aria-label={ariaLabel}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>

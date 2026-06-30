@@ -126,7 +126,7 @@ function PromemoriaSection() {
             Notifiche email
           </span>
           <span className="text-xs text-muted-foreground">
-            Ricevi un'email all'avvicinarsi della scadenza.
+            Ricevi un&apos;email all&apos;avvicinarsi della scadenza.
           </span>
         </span>
         <Switch checked={email} onCheckedChange={setEmail} />

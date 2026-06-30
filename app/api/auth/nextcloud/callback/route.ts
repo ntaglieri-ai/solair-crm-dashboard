@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Salva token su Supabase per l'utente corrente
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

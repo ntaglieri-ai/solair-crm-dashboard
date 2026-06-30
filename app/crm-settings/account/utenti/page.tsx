@@ -32,8 +32,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,
 } from "@/components/ui/dialog"
+import { type UserRole } from "@/lib/mock-data"
 
 const SEDI = ["Catania", "Giarre (CT)", "Treviso", "Torino", "Porto Sant'Elpidio"]
+const USER_ROLES: UserRole[] = ["admin", "commerciale", "tecnico"]
 
 type Utente = {
   id: string
@@ -47,6 +49,10 @@ type Utente = {
 
 const EMPTY_FORM = { nome: "", email: "", ruolo: "", sede: "", attivo: true }
 
+function toUserRole(ruolo: string): UserRole {
+  return USER_ROLES.includes(ruolo as UserRole) ? (ruolo as UserRole) : "commerciale"
+}
+
 function getIniziali(nome: string) {
   return nome.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
 }
@@ -56,7 +62,7 @@ function formatData(iso: string) {
 }
 
 export default function AccountManagementPage() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const [users, setUsers] = useState<Utente[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
@@ -88,7 +94,7 @@ export default function AccountManagementPage() {
       setLoading(false)
     }
     load()
-  }, [])
+  }, [supabase])
 
   const stats = useMemo(() => ({
     totali: users.length,
@@ -173,7 +179,7 @@ export default function AccountManagementPage() {
           <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cerca per nome o email" className="pl-9" />
         </div>
-        <Select value={ruolo} onValueChange={(v) => setRuolo(v === "all" ? "" : v)}>
+        <Select value={ruolo} onValueChange={(v) => setRuolo(v === "all" ? "" : v ?? "")}>
           <SelectTrigger className="w-full sm:w-44">
             <SelectValue placeholder="Tutti i ruoli" />
           </SelectTrigger>
@@ -182,7 +188,7 @@ export default function AccountManagementPage() {
             {profili.map((r) => <SelectItem key={r.id} value={r.code}>{r.nome}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={sede} onValueChange={(v) => setSede(v === "all" ? "" : v)}>
+        <Select value={sede} onValueChange={(v) => setSede(v === "all" ? "" : v ?? "")}>
           <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder="Tutte le sedi" />
           </SelectTrigger>
@@ -191,7 +197,7 @@ export default function AccountManagementPage() {
             {SEDI.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={stato} onValueChange={(v) => setStato(v === "all" ? "" : v)}>
+        <Select value={stato} onValueChange={(v) => setStato(v === "all" ? "" : v ?? "")}>
           <SelectTrigger className="w-full sm:w-40">
             <SelectValue placeholder="Tutti gli stati" />
           </SelectTrigger>
@@ -227,7 +233,7 @@ export default function AccountManagementPage() {
                     </div>
                   </div>
                 </TableCell>
-                <TableCell><RoleBadge ruolo={u.ruolo} /></TableCell>
+                <TableCell><RoleBadge ruolo={toUserRole(u.ruolo)} /></TableCell>
                 <TableCell className="text-muted-foreground">{u.sede}</TableCell>
                 <TableCell className="text-muted-foreground">{formatData(u.created_at)}</TableCell>
                 <TableCell>
@@ -304,7 +310,7 @@ export default function AccountManagementPage() {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Ruolo</Label>
-              <Select value={newForm.ruolo} onValueChange={(v) => setNewForm((f) => ({ ...f, ruolo: v }))}>
+              <Select value={newForm.ruolo} onValueChange={(v) => setNewForm((f) => ({ ...f, ruolo: v ?? "" }))}>
                 <SelectTrigger><SelectValue placeholder="Seleziona ruolo" /></SelectTrigger>
                 <SelectContent>
                   {profili.map((r) => <SelectItem key={r.id} value={r.code}>{r.nome}</SelectItem>)}
@@ -313,7 +319,7 @@ export default function AccountManagementPage() {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Sede</Label>
-              <Select value={newForm.sede} onValueChange={(v) => setNewForm((f) => ({ ...f, sede: v }))}>
+              <Select value={newForm.sede} onValueChange={(v) => setNewForm((f) => ({ ...f, sede: v ?? "" }))}>
                 <SelectTrigger><SelectValue placeholder="Seleziona sede" /></SelectTrigger>
                 <SelectContent>
                   {SEDI.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
@@ -358,7 +364,7 @@ export default function AccountManagementPage() {
                     <span className="text-base font-semibold">{selected.nome}</span>
                     <span className="text-sm text-muted-foreground">{selected.email}</span>
                     <div className="flex items-center gap-2 pt-1">
-                      <RoleBadge ruolo={selected.ruolo} />
+                      <RoleBadge ruolo={toUserRole(selected.ruolo)} />
                       <span className="text-xs text-muted-foreground">{selected.sede}</span>
                     </div>
                   </div>

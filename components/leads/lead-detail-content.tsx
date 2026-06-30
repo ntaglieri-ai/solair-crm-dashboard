@@ -525,7 +525,7 @@ function Sopralluogo({ lead }: { lead: Lead }) {
         <Select
           items={items}
           value={installatore || undefined}
-          onValueChange={setInstallatore}
+          onValueChange={(next) => setInstallatore(next ?? "")}
         >
           <SelectTrigger className="h-9 w-full bg-card text-[13px]">
             <SelectValue placeholder="Seleziona installatore" />

@@ -273,7 +273,10 @@ function NewRuleDialog({
               </Select>
 
               {valueOptions ? (
-                <Select value={value} onValueChange={setValue}>
+                <Select
+                  value={value}
+                  onValueChange={(next) => setValue(next ?? "")}
+                >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Valore" />
                   </SelectTrigger>
@@ -299,7 +302,10 @@ function NewRuleDialog({
 
           <div className="flex flex-col gap-1.5">
             <Label>Assegna a</Label>
-            <Select value={assignee} onValueChange={setAssignee}>
+            <Select
+              value={assignee}
+              onValueChange={(next) => setAssignee(next ?? "")}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>

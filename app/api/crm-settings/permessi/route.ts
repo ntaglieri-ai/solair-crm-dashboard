@@ -7,6 +7,7 @@ import {
   type RuoloColore,
   type RuoloPermessi,
 } from "@/lib/ruoli-data"
+import { invalidateRolePermissionCache } from "@/lib/permissions/load-permissions"
 import { requireApiAction } from "@/lib/permissions/server"
 
 type PatchPayload = {
@@ -210,6 +211,7 @@ export async function POST(request: Request) {
       { status: 500 },
     )
   }
+  invalidateRolePermissionCache(ruolo.id as string)
 
   return NextResponse.json({
     ruolo: {
@@ -241,6 +243,7 @@ export async function PATCH(request: Request) {
       { status: 500 },
     )
   }
+  invalidateRolePermissionCache(ruoloId)
 
   return NextResponse.json({ ok: true })
 }

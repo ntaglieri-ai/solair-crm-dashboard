@@ -53,6 +53,31 @@ type PermessoScopeRow = {
 }
 
 const unavailableOptionalTables = new Set<string>()
+const rolePermissionCacheMs = Number(
+  process.env.PERMISSION_CACHE_MS ?? (process.env.NODE_ENV === "development" ? 30_000 : 60_000),
+)
+const permissionRowColumns = "id, auth_user_id, nome, email, ruolo, ruolo_id, sede, attivo"
+
+type CachedRolePermissions = {
+  expiresAt: number
+  pages: PermessoPaginaRow[]
+  records: PermessoRecordRow[]
+  ui: PermessoUiRow[]
+  actions: PermessoAzioneRow[]
+  fields: PermessoCampoRow[]
+  scopes: PermessoScopeRow[]
+}
+
+const rolePermissionCache = new Map<string, CachedRolePermissions>()
+
+export function invalidateRolePermissionCache(roleId?: string) {
+  if (roleId) {
+    rolePermissionCache.delete(roleId)
+    return
+  }
+
+  rolePermissionCache.clear()
+}
 
 function normalizePageAccess(value: PageAccess | boolean | null): PageAccess {
   if (value === true) return "rw"
@@ -95,6 +120,63 @@ async function selectOptionalPermissionRows<T>(
   return (data ?? []) as T[]
 }
 
+async function loadRolePermissionRows(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  roleId: string,
+) {
+  const cached = rolePermissionCache.get(roleId)
+  if (cached && cached.expiresAt > Date.now()) return cached
+
+  const [pagesRes, recordsRes, uiRes] = await Promise.all([
+    supabase
+      .from("permessi_pagina")
+      .select("pagina, accesso")
+      .eq("ruolo_id", roleId),
+    supabase
+      .from("permessi_record")
+      .select("modulo, azione, abilitato")
+      .eq("ruolo_id", roleId),
+    supabase
+      .from("permessi_ui")
+      .select("chiave, abilitato")
+      .eq("ruolo_id", roleId),
+  ])
+
+  const [actions, fields, scopes] = await Promise.all([
+    selectOptionalPermissionRows<PermessoAzioneRow>(
+      supabase,
+      "permessi_azione",
+      "azione, abilitato",
+      roleId,
+    ),
+    selectOptionalPermissionRows<PermessoCampoRow>(
+      supabase,
+      "permessi_campo",
+      "modulo, campo, accesso",
+      roleId,
+    ),
+    selectOptionalPermissionRows<PermessoScopeRow>(
+      supabase,
+      "permessi_scope",
+      "risorsa, scope",
+      roleId,
+    ),
+  ])
+
+  const rows: CachedRolePermissions = {
+    expiresAt: Date.now() + rolePermissionCacheMs,
+    pages: (pagesRes.data ?? []) as PermessoPaginaRow[],
+    records: (recordsRes.data ?? []) as PermessoRecordRow[],
+    ui: (uiRes.data ?? []) as PermessoUiRow[],
+    actions,
+    fields,
+    scopes,
+  }
+
+  rolePermissionCache.set(roleId, rows)
+  return rows
+}
+
 function applyUiPermission(snapshot: PermissionSnapshot, row: PermessoUiRow) {
   const key = row.chiave
   const enabled = row.abilitato === true
@@ -124,9 +206,20 @@ function applyUiPermission(snapshot: PermissionSnapshot, row: PermessoUiRow) {
 
 async function loadCurrentUser() {
   const supabase = await createClient()
+
+  // Middleware/server client already refreshes the session cookie; this avoids
+  // an extra Auth round-trip in loaders while keeping getUser as fallback.
   const {
-    data: { user },
-  } = await supabase.auth.getUser()
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  let user = session?.user ?? null
+  if (!user) {
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser()
+    user = authUser
+  }
 
   if (!user) {
     return { supabase, authUser: null, utente: null as UtenteRow | null }
@@ -134,7 +227,7 @@ async function loadCurrentUser() {
 
   const { data: byAuthUser } = await supabase
     .from("utenti")
-    .select("id, auth_user_id, nome, email, ruolo, ruolo_id, sede, attivo")
+    .select(permissionRowColumns)
     .eq("auth_user_id", user.id)
     .maybeSingle()
 
@@ -142,7 +235,7 @@ async function loadCurrentUser() {
 
   const { data: byEmail } = await supabase
     .from("utenti")
-    .select("id, auth_user_id, nome, email, ruolo, ruolo_id, sede, attivo")
+    .select(permissionRowColumns)
     .eq("email", user.email ?? "")
     .maybeSingle()
 
@@ -189,65 +282,31 @@ async function loadCurrentPermissionSnapshotUncached(): Promise<PermissionSnapsh
 
   if (!snapshot.subject.ruoloId) return snapshot
 
-  const [pagesRes, recordsRes, uiRes] = await Promise.all([
-    supabase
-      .from("permessi_pagina")
-      .select("pagina, accesso")
-      .eq("ruolo_id", snapshot.subject.ruoloId),
-    supabase
-      .from("permessi_record")
-      .select("modulo, azione, abilitato")
-      .eq("ruolo_id", snapshot.subject.ruoloId),
-    supabase
-      .from("permessi_ui")
-      .select("chiave, abilitato")
-      .eq("ruolo_id", snapshot.subject.ruoloId),
-  ])
+  const roleRows = await loadRolePermissionRows(supabase, snapshot.subject.ruoloId)
 
-  const [actionsRows, fieldsRows, scopesRows] = await Promise.all([
-    selectOptionalPermissionRows<PermessoAzioneRow>(
-      supabase,
-      "permessi_azione",
-      "azione, abilitato",
-      snapshot.subject.ruoloId,
-    ),
-    selectOptionalPermissionRows<PermessoCampoRow>(
-      supabase,
-      "permessi_campo",
-      "modulo, campo, accesso",
-      snapshot.subject.ruoloId,
-    ),
-    selectOptionalPermissionRows<PermessoScopeRow>(
-      supabase,
-      "permessi_scope",
-      "risorsa, scope",
-      snapshot.subject.ruoloId,
-    ),
-  ])
-
-  for (const row of ((pagesRes.data ?? []) as PermessoPaginaRow[])) {
+  for (const row of roleRows.pages) {
     snapshot.pages[row.pagina] = normalizePageAccess(row.accesso)
   }
 
-  for (const row of ((recordsRes.data ?? []) as PermessoRecordRow[])) {
+  for (const row of roleRows.records) {
     snapshot.records[row.modulo] ??= {}
     snapshot.records[row.modulo][row.azione] = row.abilitato === true
   }
 
-  for (const row of ((uiRes.data ?? []) as PermessoUiRow[])) {
+  for (const row of roleRows.ui) {
     applyUiPermission(snapshot, row)
   }
 
-  for (const row of actionsRows) {
+  for (const row of roleRows.actions) {
     snapshot.actions[row.azione] = row.abilitato === true
   }
 
-  for (const row of fieldsRows) {
+  for (const row of roleRows.fields) {
     snapshot.fields[row.modulo] ??= {}
     snapshot.fields[row.modulo][row.campo] = row.accesso ?? "hidden"
   }
 
-  for (const row of scopesRows) {
+  for (const row of roleRows.scopes) {
     snapshot.scopes[row.risorsa] = row.scope ?? "none"
   }
 

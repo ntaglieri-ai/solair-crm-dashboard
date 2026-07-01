@@ -4,7 +4,6 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { SunMedium, User, Settings, LogOut, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +16,7 @@ import {
   NAV_GESTIONE,
   NAV_ADMIN,
   type NavItem,
-} from "@/lib/mock-data"
+} from "@/lib/navigation"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
 import { pageKeyFromPath } from "@/lib/permissions/constants"
 import { usePermissions } from "@/lib/permissions/provider"
@@ -45,18 +44,6 @@ function NavLink({ item }: { item: NavItem }) {
     >
       <Icon className="size-[18px] shrink-0" />
       <span className="flex-1 truncate">{item.label}</span>
-      {item.badge ? (
-        <Badge
-          className={cn(
-            "h-5 min-w-5 justify-center rounded-full px-1.5 text-[11px] tabular-nums",
-            item.badge.tone === "destructive"
-              ? "bg-destructive text-white"
-              : "bg-muted text-muted-foreground",
-          )}
-        >
-          {item.badge.count}
-        </Badge>
-      ) : null}
     </Link>
   )
 }

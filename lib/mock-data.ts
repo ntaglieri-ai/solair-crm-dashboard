@@ -2379,7 +2379,14 @@ export function getClienteById(id: string): ClienteRecord | undefined {
 // MODULO COMPITI (Tasks)
 // ============================================================================
 
-export type StatoCompito = "Da fare" | "In corso" | "In attesa" | "Completato"
+export type StatoCompito =
+  | "Non iniziato"
+  | "In corso"
+  | "Rinviato"
+  | "Completato"
+  | "In attesa di input"
+  | "Da fare"
+  | "In attesa"
 
 export type PrioritaCompito = "Alto" | "Medio" | "Basso"
 
@@ -2407,15 +2414,19 @@ export interface Compito {
 }
 
 export const STATO_COMPITO_ORDER: StatoCompito[] = [
-  "Da fare",
+  "Non iniziato",
   "In corso",
-  "In attesa",
+  "Rinviato",
+  "In attesa di input",
   "Completato",
 ]
 
 export const STATO_COMPITO_TONE: Record<StatoCompito, string> = {
+  "Non iniziato": "bg-secondary text-secondary-foreground",
   "Da fare": "bg-secondary text-secondary-foreground",
   "In corso": "bg-info/15 text-info",
+  Rinviato: "bg-warning/15 text-warning",
+  "In attesa di input": "bg-warning/15 text-warning",
   "In attesa": "bg-warning/15 text-warning",
   Completato: "bg-success/15 text-success",
 }

@@ -55,7 +55,7 @@ export function NewCompitoDialog({
   onCreate: (compito: Compito) => void
 }) {
   const [oggetto, setOggetto] = useState("")
-  const [stato, setStato] = useState<StatoCompito>("Da fare")
+  const [stato, setStato] = useState<StatoCompito>("Non iniziato")
   const [priorita, setPriorita] = useState<PrioritaCompito>("Medio")
   const [scadenza, setScadenza] = useState("")
   const [proprietario, setProprietario] = useState(mockProprietariCompito[0])
@@ -64,7 +64,7 @@ export function NewCompitoDialog({
 
   const reset = () => {
     setOggetto("")
-    setStato("Da fare")
+    setStato("Non iniziato")
     setPriorita("Medio")
     setScadenza("")
     setProprietario(mockProprietariCompito[0])

@@ -30,8 +30,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  mockLeads,
-  LEAD_TOTAL,
   LEAD_COLUMNS,
   DEFAULT_VISIBLE_COLUMNS,
   type Lead,
@@ -110,10 +108,7 @@ function downloadLeadsCsv(rows: LeadListItem[], filename: string) {
   URL.revokeObjectURL(url)
 }
 
-// Elenco tag per i menu a tendina dei filtri (metadati, non i dati di lista)
-const ALL_TAGS = Array.from(new Set(mockLeads.flatMap((l) => l.Tag))).sort(
-  (a, b) => a.localeCompare(b),
-)
+const ALL_TAGS: string[] = []
 
 interface LeadsClientProps {
   /** Query-string del prefetch server-side (per abbinare la chiave React Query). */
@@ -218,7 +213,7 @@ export function LeadsClient({
   // Le righe sono proiezioni selettive; la tabella usa solo i campi inclusi.
   const pageRows = (data?.rows ?? []) as Lead[]
   const total = data?.total ?? 0
-  const headerTotal = stats?.total ?? LEAD_TOTAL
+  const headerTotal = stats?.total ?? 0
 
   const totalPages = Math.max(1, Math.ceil(total / rowsPerPage))
   const start = (page - 1) * rowsPerPage

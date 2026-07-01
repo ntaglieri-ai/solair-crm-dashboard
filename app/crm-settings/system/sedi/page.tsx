@@ -112,6 +112,15 @@ export default function SediPage() {
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2">
+        {!store.loading && sedi.length === 0 ? (
+          <div className="col-span-full rounded-lg border border-dashed border-border px-6 py-10 text-center">
+            <Building2 className="mx-auto mb-3 size-6 text-muted-foreground" />
+            <p className="font-medium text-foreground">Nessuna sede configurata</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Aggiungi la prima sede operativa per renderla disponibile nel CRM.
+            </p>
+          </div>
+        ) : null}
         {sedi.map((sede) => (
           <div
             key={sede.id}

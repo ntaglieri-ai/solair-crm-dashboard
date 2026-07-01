@@ -27,9 +27,9 @@ export async function GET(_request: Request, { params }: Params) {
 
   const supabase = await createClient()
   const { data, error } = await supabase
-    .from("crm_settings_store")
-    .select("value")
-    .eq("key", key)
+    .from("crm_settings")
+    .select("valore")
+    .eq("chiave", key)
     .maybeSingle()
 
   if (error) {
@@ -37,7 +37,38 @@ export async function GET(_request: Request, { params }: Params) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ value: data?.value ?? null })
+  if (data?.valore !== null && data?.valore !== undefined) {
+    return NextResponse.json({ value: data.valore })
+  }
+
+  if (key === "system.sedi") {
+    const { data: users, error: usersError } = await supabase
+      .from("utenti")
+      .select("sede")
+      .not("sede", "is", null)
+
+    if (usersError) {
+      return NextResponse.json({ error: usersError.message }, { status: 500 })
+    }
+
+    const counts = new Map<string, number>()
+    for (const user of users ?? []) {
+      const sede = user.sede?.trim()
+      if (sede) counts.set(sede, (counts.get(sede) ?? 0) + 1)
+    }
+
+    return NextResponse.json({
+      value: Array.from(counts, ([nome, utenti]) => ({
+        id: `sede_${nome.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`,
+        nome,
+        indirizzo: "",
+        attiva: true,
+        utenti,
+      })),
+    })
+  }
+
+  return NextResponse.json({ value: null })
 }
 
 export async function PATCH(request: Request, { params }: Params) {
@@ -56,20 +87,21 @@ export async function PATCH(request: Request, { params }: Params) {
 
   const supabase = await createClient()
   const { error } = await supabase
-    .from("crm_settings_store")
+    .from("crm_settings")
     .upsert(
       {
-        key,
-        value: body.value,
+        chiave: key,
+        valore: body.value,
+        descrizione: `Configurazione CRM: ${key}`,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: "key" },
+      { onConflict: "chiave" },
     )
 
   if (error) {
     if (isMissingStoreError(error)) {
       return NextResponse.json(
-        { error: "Tabella crm_settings_store non presente. Applica lo schema Supabase." },
+        { error: "Tabella crm_settings non disponibile su Supabase." },
         { status: 500 },
       )
     }

@@ -1,8 +1,3 @@
-// ============================================================================
-// System Settings — dati mock per CRM Settings › System Settings.
-// Nessuna persistenza: lo stato è gestito lato client nei singoli componenti.
-// ============================================================================
-
 import type { LucideIcon } from "lucide-react"
 import {
   Building2,
@@ -42,13 +37,7 @@ export interface SystemSede {
   utenti: number
 }
 
-export const sediIniziali: SystemSede[] = [
-  { id: "sed_001", nome: "Catania", indirizzo: "Via Etnea 88, 95125 Catania CT", attiva: true, utenti: 3 },
-  { id: "sed_002", nome: "Giarre CT", indirizzo: "Via Roma 12, 95014 Giarre CT", attiva: true, utenti: 1 },
-  { id: "sed_003", nome: "Treviso", indirizzo: "Viale della Repubblica 5, 31100 Treviso TV", attiva: true, utenti: 3 },
-  { id: "sed_004", nome: "Torino", indirizzo: "Corso Vittorio Emanuele II 42, 10100 Torino TO", attiva: true, utenti: 1 },
-  { id: "sed_005", nome: "Porto Sant'Elpidio", indirizzo: "Via Adriatica 3, 63821 Porto Sant'Elpidio FM", attiva: true, utenti: 0 },
-]
+export const sediIniziali: SystemSede[] = []
 
 // --- Sezione 2: Attributi record --------------------------------------------
 

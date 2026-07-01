@@ -1,31 +1,19 @@
 "use client"
 
 import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps"
-import { cn } from "@/lib/utils"
-import { MAP_MARKERS, type MapMarker } from "@/lib/mock-data"
 
 // TopoJSON delle regioni italiane servito localmente (nessuna fetch esterna a runtime)
 const ITALY_GEO = "/italy-regions.json"
 
-const INTENSITY_COLOR: Record<MapMarker["intensity"], string> = {
-  caldo: "var(--destructive)",
-  medio: "var(--warning)",
-  freddo: "var(--info)",
+export type DashboardMapMarker = {
+  id: string
+  nome: string
+  coordinates: [number, number]
+  leads: number
 }
 
-const INTENSITY_SIZE: Record<MapMarker["intensity"], number> = {
-  caldo: 9,
-  medio: 7,
-  freddo: 5,
-}
-
-const LEGENDA: { label: string; key: MapMarker["intensity"] }[] = [
-  { label: "Lead caldi", key: "caldo" },
-  { label: "Lead medi", key: "medio" },
-  { label: "Lead freddi", key: "freddo" },
-]
-
-export function ItalyMap() {
+export function ItalyMap({ markers = [] }: { markers?: DashboardMapMarker[] }) {
+  const maxLeads = Math.max(...markers.map((marker) => marker.leads), 1)
   return (
     <div className="flex h-full flex-col gap-3">
       <div className="relative flex-1 overflow-hidden rounded-lg border border-border bg-secondary/40">
@@ -54,54 +42,42 @@ export function ItalyMap() {
             }
           </Geographies>
 
-          {MAP_MARKERS.map((m) => {
-            // coordinate approssimate delle 5 sedi Solair
-            const coords: Record<string, [number, number]> = {
-              torino: [7.68, 45.07],
-              treviso: [12.24, 45.66],
-              porto: [13.75, 43.25],
-              catania: [15.08, 37.5],
-              giarre: [15.18, 37.73],
-            }
-            const point = coords[m.id]
-            if (!point) return null
+          {markers.map((marker) => {
+            const radius = 6 + Math.round((marker.leads / maxLeads) * 5)
             return (
-              <Marker key={m.id} coordinates={point}>
+              <Marker key={marker.id} coordinates={marker.coordinates}>
                 <circle
-                  r={INTENSITY_SIZE[m.intensity] + 4}
-                  fill={INTENSITY_COLOR[m.intensity]}
+                  r={radius + 5}
+                  fill="var(--teal)"
                   opacity={0.18}
                 />
                 <circle
-                  r={INTENSITY_SIZE[m.intensity]}
-                  fill={INTENSITY_COLOR[m.intensity]}
+                  r={radius}
+                  fill="var(--teal)"
                   stroke="var(--card)"
                   strokeWidth={1.5}
                 />
                 <text
                   textAnchor="middle"
-                  y={-INTENSITY_SIZE[m.intensity] - 5}
+                  y={-radius - 6}
                   className="fill-foreground text-[9px] font-semibold"
                 >
-                  {m.citta}
+                  {marker.nome}
                 </text>
               </Marker>
             )
           })}
         </ComposableMap>
+        {markers.length === 0 ? (
+          <div className="pointer-events-none absolute inset-x-4 bottom-4 rounded-md bg-card/90 px-3 py-2 text-center text-xs text-muted-foreground shadow-sm">
+            Configura le sedi in CRM Settings per visualizzarle sulla mappa.
+          </div>
+        ) : null}
       </div>
 
-      {/* Legenda */}
-      <div className="flex flex-wrap items-center gap-4">
-        {LEGENDA.map((item) => (
-          <div key={item.key} className="flex items-center gap-1.5">
-            <span
-              className={cn("size-2.5 rounded-full")}
-              style={{ backgroundColor: INTENSITY_COLOR[item.key] }}
-            />
-            <span className="text-xs text-muted-foreground">{item.label}</span>
-          </div>
-        ))}
+      <div className="flex items-center gap-1.5">
+        <span className="size-2.5 rounded-full bg-teal" />
+        <span className="text-xs text-muted-foreground">Sedi operative</span>
       </div>
     </div>
   )

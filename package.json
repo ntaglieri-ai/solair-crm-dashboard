@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "migrate:zoho-users": "node --env-file=.env.local scripts/migrations/import-zoho-users.mjs"
+    "migrate:zoho-users": "node --env-file=.env.local scripts/migrations/import-zoho-users.mjs",
+    "migrate:zoho-leads": "node --env-file=.env.local scripts/migrations/import-zoho-leads.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
@@ -25,6 +26,7 @@
     "@vercel/analytics": "1.6.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "csv-parse": "^7.0.1",
     "framer-motion": "^12.42.0",
     "lucide-react": "^1.16.0",
     "next": "16.2.6",

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   DndContext,
   closestCenter,
@@ -203,6 +203,14 @@ export default function ValoriPage() {
   const [newValueColor, setNewValueColor] = useState(PALETTE[0])
   const [apiError, setApiError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("module")
+    const selected = MODULI_VALORI.find(
+      (module) => module.toLowerCase() === requested?.toLowerCase(),
+    )
+    if (selected) queueMicrotask(() => setModulo(selected))
+  }, [])
 
   const campi = tutti[modulo]
   const selectedField = campi.find((campo) => campo.campo === newValueField)

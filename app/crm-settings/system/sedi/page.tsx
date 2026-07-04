@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Building2,
   Plus,
@@ -40,6 +40,36 @@ export default function SediPage() {
   const [editing, setEditing] = useState<SystemSede | null>(null)
   const [nome, setNome] = useState("")
   const [indirizzo, setIndirizzo] = useState("")
+  const [userSites, setUserSites] = useState<string[]>([])
+
+  useEffect(() => {
+    let active = true
+    fetch("/api/crm-settings/utenti", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then((payload) => {
+        if (!active) return
+        const users = Array.isArray(payload) ? payload : payload.utenti ?? payload.data ?? []
+        setUserSites(
+          users
+            .map((user: { sede?: string | null }) => user.sede?.trim())
+            .filter(Boolean),
+        )
+      })
+      .catch(() => {
+        if (active) setUserSites([])
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const siteUserCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const site of userSites) {
+      counts.set(site, (counts.get(site) ?? 0) + 1)
+    }
+    return counts
+  }, [userSites])
 
   function openNew() {
     setEditing(null)
@@ -91,11 +121,11 @@ export default function SediPage() {
   return (
     <div className="flex flex-col gap-5">
       <SectionHeader
-        title="Sedi"
+        title="Sedi e territori"
         description={
           store.saving
             ? "Salvataggio configurazione..."
-            : "Gestisci le sedi operative di Solair Group. Le sedi sono attributi assegnabili agli utenti."
+            : "Gestisci le sedi operative usate da account, assegnazioni e dashboard."
         }
         action={
           <Button onClick={openNew} className="bg-teal text-teal-foreground hover:bg-teal/90">
@@ -139,7 +169,8 @@ export default function SediPage() {
                 </span>
                 <span className="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                   <Users className="size-3" />
-                  {sede.utenti} {sede.utenti === 1 ? "utente" : "utenti"}
+                  {siteUserCounts.get(sede.nome) ?? 0}{" "}
+                  {(siteUserCounts.get(sede.nome) ?? 0) === 1 ? "utente" : "utenti"}
                 </span>
               </div>
             </div>

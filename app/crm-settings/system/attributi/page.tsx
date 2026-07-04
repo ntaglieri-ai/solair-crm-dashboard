@@ -83,6 +83,14 @@ export default function AttributiPage() {
     useState<Record<ModuloAttributi, CampoRecord[]>>(createEmptyCustomFields)
   const [dialogOpen, setDialogOpen] = useState(false)
 
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("module")
+    const selected = MODULI_ATTRIBUTI.find(
+      (module) => module.toLowerCase() === requested?.toLowerCase(),
+    )
+    if (selected) queueMicrotask(() => setModulo(selected))
+  }, [])
+
   // Stato modale nuovo campo.
   const [nome, setNome] = useState("")
   const [etichetta, setEtichetta] = useState("")

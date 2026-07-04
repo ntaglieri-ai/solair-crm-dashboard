@@ -4,24 +4,10 @@ import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import {
   Shield,
-  FolderOpen,
   Settings2,
   X,
   ChevronRight,
   ChevronLeft,
-  Users,
-  ClipboardList,
-  Lock,
-  Cloud,
-  FolderTree,
-  ShieldCheck,
-  Building2,
-  ListFilter,
-  GitBranch,
-  Webhook,
-  Zap,
-  ArrowLeftRight,
-  DatabaseBackup,
   type LucideIcon,
 } from "lucide-react"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
@@ -29,6 +15,9 @@ import { useCrmSettingsNavigation } from "@/components/dashboard/crm-settings-na
 import { pageKeyFromPath } from "@/lib/permissions/constants"
 import { usePermissions } from "@/lib/permissions/provider"
 import { cn } from "@/lib/utils"
+import {
+  CRM_SETTINGS_CATALOG,
+} from "@/lib/crm-settings/catalog"
 
 type Layer = "root" | "account-security" | "file-manager" | "system"
 
@@ -36,7 +25,6 @@ interface RootBlock {
   icon: LucideIcon
   title: string
   description: string
-  image: string
   layer: Exclude<Layer, "root">
 }
 
@@ -45,7 +33,7 @@ interface SubBlock {
   title: string
   description: string
   href: string
-  image: string
+  status?: "active" | "restricted"
 }
 
 const ROOT_BLOCKS: RootBlock[] = [
@@ -53,165 +41,41 @@ const ROOT_BLOCKS: RootBlock[] = [
     icon: Shield,
     title: "Account & Sicurezza",
     description: "Utenti, ruoli, permessi e audit log",
-    image: "/crm-settings/account-security.png",
     layer: "account-security",
   },
   {
-    icon: FolderOpen,
-    title: "File Manager",
-    description: "Storage Nextcloud, cartelle e accessi",
-    image: "/crm-settings/file-manager.png",
-    layer: "file-manager",
-  },
-  {
     icon: Settings2,
-    title: "Impostazioni di sistema",
-    description: "Sedi, attributi, valori e regole",
-    image: "/crm-settings/system-settings.png",
+    title: "Organizzazione e sistema",
+    description: "Sedi, integrazioni e infrastruttura",
     layer: "system",
   },
 ]
 
 // Layer 2 — Account & Security: i sotto-blocchi puntano alle sezioni reali
 // della pagina /impostazioni tramite deep-link ?section=<id>.
-const ACCOUNT_SECURITY_BLOCKS: SubBlock[] = [
-  {
-    icon: Users,
-    title: "Account Management",
-    description: "Utenti, ruoli e sedi assegnate",
-    href: "/crm-settings/account/utenti",
-    image:
-      "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&q=80",
-  },
-  {
-    icon: Shield,
-    title: "Permission Management",
-    description: "Permessi per ruolo su pagine, record e cartelle",
-    href: "/crm-settings/account/permessi",
-    image:
-      "https://images.unsplash.com/photo-1563986768494-4dee2763ff3f?w=800&q=80",
-  },
-  {
-    icon: ClipboardList,
-    title: "Audit & Log",
-    description: "Storico accessi, modifiche e login falliti",
-    href: "/crm-settings/account/audit",
-    image:
-      "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80",
-  },
-  {
-    icon: Lock,
-    title: "Session & Access",
-    description: "Timeout, 2FA e dispositivi autorizzati",
-    href: "/crm-settings/account/session",
-    image:
-      "https://images.unsplash.com/photo-1510511459019-5dda7724fd87?w=800&q=80",
-  },
-]
+const ACCOUNT_SECURITY_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
+  .filter((item) => item.section === "account")
+  .map((item) => ({
+    icon: item.icon,
+    title: item.title,
+    description: item.description,
+    href: item.href,
+    status: item.status,
+  }))
 
 // Layer 2 — File Manager: sotto-blocchi che puntano alle route reali.
-const FILE_MANAGER_BLOCKS: SubBlock[] = [
-  {
-    icon: Cloud,
-    title: "Configurazione Nextcloud",
-    description: "Connessione istanza e account di servizio",
-    href: "/crm-settings/file-manager/nextcloud",
-    image:
-      "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=800&q=80",
-  },
-  {
-    icon: FolderTree,
-    title: "Struttura cartelle",
-    description: "Template di percorso per i moduli CRM",
-    href: "/crm-settings/file-manager/struttura",
-    image:
-      "https://images.unsplash.com/photo-1507925921958-8a62f3d1a50d?w=800&q=80",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Permessi storage",
-    description: "Cosa può fare ogni ruolo sullo storage",
-    href: "/crm-settings/file-manager/permessi",
-    image:
-      "https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=800&q=80",
-  },
-  {
-    icon: FolderOpen,
-    title: "Cartelle condivise",
-    description: "Cartelle accessibili a più utenti per ruolo",
-    href: "/crm-settings/file-manager/condivise",
-    image:
-      "https://images.unsplash.com/photo-1568667256549-094345857637?w=800&q=80",
-  },
-]
+const FILE_MANAGER_BLOCKS: SubBlock[] = []
 
 // Layer 2 — System Settings: sotto-blocchi verso le route reali.
-const SYSTEM_BLOCKS: SubBlock[] = [
-  {
-    icon: Building2,
-    title: "Sedi",
-    description: "Sedi operative assegnabili agli utenti",
-    href: "/crm-settings/system/sedi",
-    image:
-      "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&q=80",
-  },
-  {
-    icon: Settings2,
-    title: "Campi personalizzati",
-    description: "Attributi, colonne e visibilità per ogni modulo",
-    href: "/crm-settings/system/attributi",
-    image:
-      "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=800&q=80",
-  },
-  {
-    icon: ListFilter,
-    title: "Valori predefiniti",
-    description: "Liste, stati e opzioni standard del CRM",
-    href: "/crm-settings/system/valori",
-    image:
-      "https://images.unsplash.com/photo-1531403009284-440f080d1e12?w=800&q=80",
-  },
-  {
-    icon: GitBranch,
-    title: "Regole di assegnazione",
-    description: "Assegnazione automatica dei lead",
-    href: "/crm-settings/system/regole",
-    image:
-      "https://images.unsplash.com/photo-1606857521015-7f9fcf423740?w=800&q=80",
-  },
-  {
-    icon: Zap,
-    title: "Flussi di lavoro",
-    description: "Trigger automatici sugli eventi del CRM",
-    href: "/crm-settings/system/flussi",
-    image:
-      "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?w=800&q=80",
-  },
-  {
-    icon: ArrowLeftRight,
-    title: "Import / Export",
-    description: "Importa ed esporta dati in CSV",
-    href: "/crm-settings/system/import-export",
-    image:
-      "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&q=80",
-  },
-  {
-    icon: Webhook,
-    title: "Integrazione Make",
-    description: "Webhook Make.com collegati al CRM",
-    href: "/crm-settings/system/make",
-    image:
-      "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80",
-  },
-  {
-    icon: DatabaseBackup,
-    title: "Backup",
-    description: "Backup manuali del database CRM",
-    href: "/crm-settings/system/backup",
-    image:
-      "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&q=80",
-  },
-]
+const SYSTEM_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
+  .filter((item) => item.section !== "account")
+  .map((item) => ({
+    icon: item.icon,
+    title: item.title,
+    description: item.description,
+    href: item.href,
+    status: item.status,
+  }))
 
 // Testata dinamica per ciascun layer.
 const LAYER_HEADER: Record<
@@ -237,10 +101,10 @@ const LAYER_HEADER: Record<
     breadcrumb: "Impostazioni › File Manager",
   },
   system: {
-    eyebrow: "System Settings",
-    title: "Configurazione sistema",
-    subtitle: "Sedi, attributi, valori e regole",
-    breadcrumb: "Impostazioni › Impostazioni di sistema",
+    eyebrow: "Organizzazione",
+    title: "Azienda e sistema",
+    subtitle: "Struttura, integrazioni e controlli tecnici",
+    breadcrumb: "Impostazioni › Organizzazione e sistema",
   },
 }
 
@@ -262,37 +126,38 @@ function SettingsCard({
   icon: Icon,
   title,
   description,
-  image,
+  status,
   onClick,
 }: {
   icon: LucideIcon
   title: string
   description: string
-  image: string
+  status?: "active" | "restricted"
   onClick: () => void
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group relative h-40 w-full overflow-hidden rounded-xl border border-white/10 text-left transition-all duration-200 hover:scale-[1.01] hover:border-[#2E8B72] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2E8B72]"
+      className="group flex min-h-24 w-full items-center gap-4 rounded-lg border border-white/10 bg-white/[0.035] p-4 text-left transition-colors hover:border-[#2E8B72]/70 hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2E8B72]"
     >
-      <img
-        src={image || "/placeholder.svg"}
-        alt=""
-        className="absolute inset-0 size-full object-cover transition-transform duration-300 group-hover:brightness-110"
-      />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
-      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4">
-        <div className="flex flex-col gap-1">
-          <Icon className="mb-1 size-6 text-[#2E8B72]" />
-          <h3 className="text-lg font-semibold leading-tight text-white">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[#2E8B72]/15 text-[#55C2A4]">
+        <Icon className="size-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold leading-tight text-white">
             {title}
           </h3>
-          <p className="text-sm text-gray-300">{description}</p>
+          {status === "restricted" ? (
+            <span className="rounded bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
+              Riservato
+            </span>
+          ) : null}
         </div>
-        <ChevronRight className="size-5 shrink-0 text-white/70 transition-transform group-hover:translate-x-0.5 group-hover:text-white" />
+        <p className="mt-1 text-xs leading-relaxed text-gray-400">{description}</p>
       </div>
+      <ChevronRight className="size-4 shrink-0 text-gray-500 transition-transform group-hover:translate-x-0.5 group-hover:text-white" />
     </button>
   )
 }
@@ -353,7 +218,6 @@ export function CrmSettingsSidebar() {
   const isRoot = layer === "root"
   // Solo "Impostazioni di sistema" usa il pannello a metà schermo con griglia
   // multi-colonna; gli altri layer restano nel pannello stretto a colonna singola.
-  const isSystem = layer === "system"
   const canSeeBlock = (block: SubBlock) => {
     const page = pageKeyFromPath(block.href)
     return page ? permissions.canPage(page) : true
@@ -389,7 +253,7 @@ export function CrmSettingsSidebar() {
             aria-label="Impostazioni CRM"
             className={cn(
               "absolute flex flex-col overflow-hidden bg-[#0F1923] shadow-[-20px_0_60px_rgba(0,0,0,0.5)] border-t-2 border-t-[#2E8B72] inset-x-0 bottom-0 h-[90vh] rounded-t-2xl md:inset-y-0 md:right-0 md:left-auto md:h-full md:rounded-none",
-              isSystem ? "md:w-1/2 md:min-w-[520px]" : "md:w-[480px]",
+              "md:w-[520px]",
             )}
             initial={panelInitial}
             animate={panelAnimate}
@@ -446,7 +310,7 @@ export function CrmSettingsSidebar() {
                   key={layer}
                   className={cn(
                     "grid h-full grid-cols-1 content-start gap-4 overflow-y-auto px-6 pb-4",
-                    isSystem && "sm:grid-cols-2 xl:grid-cols-3",
+                    "grid-cols-1",
                   )}
                   initial={{ x: isRoot ? "-100%" : "100%" }}
                   animate={{ x: 0 }}
@@ -460,7 +324,7 @@ export function CrmSettingsSidebar() {
                           icon={block.icon}
                           title={block.title}
                           description={block.description}
-                          image={block.image}
+                          status={undefined}
                           onClick={() => setLayer(block.layer)}
                         />
                       ))
@@ -473,7 +337,7 @@ export function CrmSettingsSidebar() {
                           icon={block.icon}
                           title={block.title}
                           description={block.description}
-                          image={block.image}
+                          status={block.status}
                           onClick={() => handleNavigate(block.href)}
                         />
                       ))
@@ -486,7 +350,7 @@ export function CrmSettingsSidebar() {
                           icon={block.icon}
                           title={block.title}
                           description={block.description}
-                          image={block.image}
+                          status={block.status}
                           onClick={() => handleNavigate(block.href)}
                         />
                       ))
@@ -499,7 +363,7 @@ export function CrmSettingsSidebar() {
                           icon={block.icon}
                           title={block.title}
                           description={block.description}
-                          image={block.image}
+                          status={block.status}
                           onClick={() => handleNavigate(block.href)}
                         />
                       ))

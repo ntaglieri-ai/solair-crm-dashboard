@@ -6,6 +6,7 @@ import {
   IconLayoutList,
   IconList,
   IconListDetails,
+  IconDatabaseCog,
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -24,6 +25,7 @@ import {
   type LeadColumnId,
 } from "@/lib/mock-data"
 import type { Density } from "./lead-table"
+import { ModuleGovernanceSection } from "@/components/crm-settings/module-governance-section"
 
 /* -------------------------------------------------------------------------- */
 /*                           Sezione: Vista colonne                           */
@@ -191,7 +193,7 @@ export function GeneralSection({
 /*                          Sheet impostazioni Lead                           */
 /* -------------------------------------------------------------------------- */
 
-export type SettingsSectionId = "colonne" | "generali"
+export type SettingsSectionId = "colonne" | "generali" | "amministrazione"
 
 const SECTIONS: {
   id: SettingsSectionId
@@ -210,6 +212,12 @@ const SECTIONS: {
     label: "Vista colonne",
     description: "Scegli quali colonne mostrare nella tabella lead.",
     icon: IconColumns3,
+  },
+  {
+    id: "amministrazione",
+    label: "Amministrazione",
+    description: "Campi, valori, automazioni e trasferimenti del modulo Lead.",
+    icon: IconDatabaseCog,
   },
 ]
 
@@ -306,6 +314,9 @@ export function LeadSettingsSheet({
                   rowsPerPage={rowsPerPage}
                   onRowsPerPageChange={onRowsPerPageChange}
                 />
+              )}
+              {section === "amministrazione" && (
+                <ModuleGovernanceSection module="lead" label="Lead" />
               )}
             </div>
           </div>

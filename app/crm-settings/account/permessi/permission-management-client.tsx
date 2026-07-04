@@ -157,6 +157,20 @@ const ACTION_LABELS: Record<string, string> = {
   "lead.columns.customize_own": "Personalizza colonne Lead",
   "lead.tags.edit": "Modifica tag Lead",
   "lead.default_values.manage": "Gestisce default Lead",
+  "lead.assignment_rules.manage": "Gestisce assegnazioni Lead",
+  "lead.workflows.manage": "Gestisce flussi Lead",
+  "clienti.default_values.manage": "Gestisce valori Clienti",
+  "clienti.assignment_rules.manage": "Gestisce assegnazioni Clienti",
+  "clienti.workflows.manage": "Gestisce flussi Clienti",
+  "compiti.default_values.manage": "Gestisce valori Compiti",
+  "compiti.assignment_rules.manage": "Gestisce assegnazioni Compiti",
+  "compiti.workflows.manage": "Gestisce flussi Compiti",
+  "scadenze.default_values.manage": "Gestisce valori Scadenze",
+  "scadenze.assignment_rules.manage": "Gestisce assegnazioni Scadenze",
+  "scadenze.workflows.manage": "Gestisce flussi Scadenze",
+  "installatori.default_values.manage": "Gestisce valori Installatori",
+  "installatori.assignment_rules.manage": "Gestisce assegnazioni Installatori",
+  "installatori.workflows.manage": "Gestisce flussi Installatori",
 }
 
 function withAdvanced(

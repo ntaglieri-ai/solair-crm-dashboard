@@ -58,7 +58,7 @@ export default function RegolePage() {
   const [campo, setCampo] = useState("citta")
   const [operatore, setOperatore] = useState("=")
   const [valore, setValore] = useState("")
-  const [assegnaA, setAssegnaA] = useState(UTENTI_ASSEGNABILI[0])
+  const [assegnaA, setAssegnaA] = useState(UTENTI_ASSEGNABILI[0] ?? "")
 
   function openNew() {
     setEditing(null)
@@ -66,7 +66,7 @@ export default function RegolePage() {
     setCampo("citta")
     setOperatore("=")
     setValore("")
-    setAssegnaA(UTENTI_ASSEGNABILI[0])
+    setAssegnaA(UTENTI_ASSEGNABILI[0] ?? "")
     setDialogOpen(true)
   }
 

@@ -90,6 +90,8 @@ export const ACTION_KEYS = [
   "lead.columns.customize_own",
   "lead.tags.edit",
   "lead.default_values.manage",
+  "lead.assignment_rules.manage",
+  "lead.workflows.manage",
   "lead.fields.view",
   "lead.fields.create",
   "lead.fields.edit",
@@ -101,18 +103,30 @@ export const ACTION_KEYS = [
   "clienti.fields.create",
   "clienti.fields.edit",
   "clienti.fields.delete",
+  "clienti.default_values.manage",
+  "clienti.assignment_rules.manage",
+  "clienti.workflows.manage",
   "compiti.fields.view",
   "compiti.fields.create",
   "compiti.fields.edit",
   "compiti.fields.delete",
+  "compiti.default_values.manage",
+  "compiti.assignment_rules.manage",
+  "compiti.workflows.manage",
   "scadenze.fields.view",
   "scadenze.fields.create",
   "scadenze.fields.edit",
   "scadenze.fields.delete",
+  "scadenze.default_values.manage",
+  "scadenze.assignment_rules.manage",
+  "scadenze.workflows.manage",
   "installatori.fields.view",
   "installatori.fields.create",
   "installatori.fields.edit",
   "installatori.fields.delete",
+  "installatori.default_values.manage",
+  "installatori.assignment_rules.manage",
+  "installatori.workflows.manage",
 ] as const
 
 export function normalizeRoleCode(value: string | null | undefined): RoleCode {
@@ -238,6 +252,10 @@ export function buildDefaultPermissionSnapshot(params?: {
     ])
     grantFieldManagement([...MODULE_KEYS])
     for (const moduleKey of MODULE_KEYS) {
+      records[moduleKey].import = true
+      actions[`${moduleKey}.default_values.manage`] = true
+      actions[`${moduleKey}.assignment_rules.manage`] = true
+      actions[`${moduleKey}.workflows.manage`] = true
       fields[moduleKey] = { "*": "editable" }
       scopes[moduleKey] = "all"
     }

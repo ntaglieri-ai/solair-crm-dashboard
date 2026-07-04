@@ -45,9 +45,9 @@ import { Button } from "@/components/ui/button"
 import {
   type Lead,
   type StatoLead,
-  mockCommerciali,
 } from "@/lib/mock-data"
 import { TagPicker } from "./tag-controls"
+import { useTags } from "@/lib/tag-store"
 
 const STATI: StatoLead[] = [
   "Non contattato",
@@ -67,6 +67,7 @@ export function LeadRowContextMenu({
   children: ReactNode
   onDelete: (lead: Lead) => void
 }) {
+  const { owners } = useTags()
   const router = useRouter()
   const [tagOpen, setTagOpen] = useState(false)
   const [owner, setOwner] = useState(lead["Lead Proprietario"] ?? "")
@@ -149,22 +150,22 @@ export function LeadRowContextMenu({
                 Assegna commerciale
               </ContextMenuSubTrigger>
               <ContextMenuSubContent>
-                {mockCommerciali.map((c) => (
+                {owners.map((option) => (
                   <ContextMenuItem
-                    key={c}
+                    key={option.id}
                     onClick={() => {
-                      setOwner(c)
+                      setOwner(option.id)
                       toast.success("Proprietario aggiornato", {
-                        description: `${lead["Nome Lead"]} → ${c}`,
+                        description: `${lead["Nome Lead"]} → ${option.nome}`,
                       })
                     }}
                   >
-                    {owner === c ? (
+                    {owner === option.id ? (
                       <IconCheck size={15} stroke={2} className="text-teal" />
                     ) : (
                       <span className="size-[15px]" />
                     )}
-                    {c}
+                    {option.nome}
                   </ContextMenuItem>
                 ))}
               </ContextMenuSubContent>

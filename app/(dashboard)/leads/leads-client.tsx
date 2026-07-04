@@ -75,6 +75,7 @@ import {
   useBulkLeads,
   fetchLeadsForExport,
 } from "@/lib/leads/hooks"
+import { useTags } from "@/lib/tag-store"
 
 const ROWS_ITEMS: Record<string, string> = {
   "10": "10 righe",
@@ -108,8 +109,6 @@ function downloadLeadsCsv(rows: LeadListItem[], filename: string) {
   URL.revokeObjectURL(url)
 }
 
-const ALL_TAGS: string[] = []
-
 interface LeadsClientProps {
   /** Query-string del prefetch server-side (per abbinare la chiave React Query). */
   initialSp: string
@@ -124,6 +123,8 @@ export function LeadsClient({
   initialLeads,
   initialStats,
 }: LeadsClientProps) {
+  const { tags } = useTags()
+  const allTags = useMemo(() => tags.map((tag) => tag.name), [tags])
   const [newLeadOpen, setNewLeadOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [filters, setFilters] = useState<LeadFilterState>(DEFAULT_FILTERS)
@@ -560,7 +561,7 @@ export function LeadsClient({
             selectedCount={selected.size}
             filtered={pageRows}
             selectedRows={selectedRows}
-            tags={ALL_TAGS}
+            tags={allTags}
             onOpenSettings={openSettings}
             onCheckDuplicates={handleCheckDuplicates}
             onImport={() => setImportOpen(true)}
@@ -627,14 +628,14 @@ export function LeadsClient({
         <AdvancedFilters
           applied={advanced}
           onApply={handleAdvancedApply}
-          tags={ALL_TAGS}
+          tags={allTags}
         />
         <div className="min-w-0 flex-1">
           <LeadFilters
             filters={filters}
             onChange={handleFilterChange}
             onReset={handleReset}
-            tags={ALL_TAGS}
+            tags={allTags}
           />
         </div>
       </div>

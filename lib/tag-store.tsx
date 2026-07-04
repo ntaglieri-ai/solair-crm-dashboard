@@ -4,16 +4,22 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react"
-import { mockLeads } from "@/lib/mock-data"
+import { usePathname } from "next/navigation"
 
 export interface Tag {
   id: string
   name: string
   color: string
+}
+
+export interface ReferenceOption {
+  id: string
+  nome: string
 }
 
 export interface TagEvent {
@@ -23,7 +29,13 @@ export interface TagEvent {
   ora: string
 }
 
-// Palette 12 colori predefiniti per i tag
+type ReferencePayload = {
+  tags: Tag[]
+  leadTagIds: Record<string, string[]>
+  owners: ReferenceOption[]
+  installers: ReferenceOption[]
+}
+
 export const TAG_PALETTE = [
   "#3B82F6",
   "#22C55E",
@@ -39,49 +51,8 @@ export const TAG_PALETTE = [
   "#64748B",
 ] as const
 
-const CURRENT_USER = "Nando Taglieri"
-
-// Colori noti dei tag predefiniti (gli altri ereditano grigio)
-const PREDEFINED_COLORS: Record<string, string> = {
-  "Inviato Preventivo": "#3B82F6",
-  Richiamare: "#22C55E",
-  "NON RISPONDE": "#F97316",
-  Cantalupo: "#9CA3AF",
-  nuccio: "#9CA3AF",
-}
-
-let tagSeq = 0
-const nextTagId = () => `tag-${++tagSeq}`
-
-function buildInitialState() {
-  const byName = new Map<string, Tag>()
-  // Prima i predefiniti, in ordine
-  for (const [name, color] of Object.entries(PREDEFINED_COLORS)) {
-    byName.set(name, { id: nextTagId(), name, color })
-  }
-  // Poi eventuali tag presenti nei lead non ancora mappati (grigio default)
-  for (const lead of mockLeads) {
-    for (const name of lead.Tag) {
-      if (!byName.has(name)) {
-        byName.set(name, { id: nextTagId(), name, color: "#9CA3AF" })
-      }
-    }
-  }
-
-  const tags = Array.from(byName.values())
-  const nameToId = new Map(tags.map((t) => [t.name, t.id]))
-
-  const leadTagIds: Record<string, string[]> = {}
-  for (const lead of mockLeads) {
-    leadTagIds[lead.id] = lead.Tag.map((n) => nameToId.get(n)!).filter(Boolean)
-  }
-
-  return { tags, leadTagIds }
-}
-
-interface TagContextValue {
-  tags: Tag[]
-  leadTagIds: Record<string, string[]>
+interface TagContextValue extends ReferencePayload {
+  loading: boolean
   tagEvents: Record<string, TagEvent[]>
   getLeadTags: (leadId: string) => Tag[]
   usageCount: (tagId: string) => number
@@ -93,138 +64,192 @@ interface TagContextValue {
   deleteTag: (tagId: string) => void
 }
 
+const EMPTY: ReferencePayload = {
+  tags: [],
+  leadTagIds: {},
+  owners: [],
+  installers: [],
+}
+
 const TagContext = createContext<TagContextValue | null>(null)
 
+async function mutate(body: Record<string, unknown>) {
+  const response = await fetch("/api/leads/reference-data", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null
+    throw new Error(payload?.error ?? "Aggiornamento tag non riuscito")
+  }
+  return response.json()
+}
+
 export function TagProvider({ children }: { children: ReactNode }) {
-  const [{ tags: initialTags, leadTagIds: initialAssign }] = useState(
-    buildInitialState,
-  )
-  const [tags, setTags] = useState<Tag[]>(initialTags)
-  const [leadTagIds, setLeadTagIds] =
-    useState<Record<string, string[]>>(initialAssign)
+  const pathname = usePathname()
+  const [data, setData] = useState<ReferencePayload>(EMPTY)
+  const [loading, setLoading] = useState(true)
   const [tagEvents, setTagEvents] = useState<Record<string, TagEvent[]>>({})
 
+  useEffect(() => {
+    if (!pathname.startsWith("/leads")) {
+      return
+    }
+    let active = true
+    fetch("/api/leads/reference-data")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Caricamento riferimenti Lead non riuscito")
+        return response.json() as Promise<ReferencePayload>
+      })
+      .then((payload) => {
+        if (active) setData(payload)
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [pathname])
+
   const pushEvent = useCallback((leadId: string, testo: string) => {
-    setTagEvents((prev) => {
-      const ev: TagEvent = {
-        id: `tev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        testo,
-        autore: CURRENT_USER,
-        ora: "adesso",
-      }
-      return { ...prev, [leadId]: [ev, ...(prev[leadId] ?? [])] }
-    })
+    setTagEvents((previous) => ({
+      ...previous,
+      [leadId]: [
+        {
+          id: `tag-event-${Date.now()}`,
+          testo,
+          autore: "Utente CRM",
+          ora: "adesso",
+        },
+        ...(previous[leadId] ?? []),
+      ],
+    }))
   }, [])
 
   const getLeadTags = useCallback(
     (leadId: string) => {
-      const ids = leadTagIds[leadId] ?? []
+      const ids = data.leadTagIds[leadId] ?? []
       return ids
-        .map((id) => tags.find((t) => t.id === id))
-        .filter((t): t is Tag => Boolean(t))
+        .map((id) => data.tags.find((tag) => tag.id === id))
+        .filter((tag): tag is Tag => Boolean(tag))
     },
-    [leadTagIds, tags],
+    [data.leadTagIds, data.tags],
   )
 
   const usageCount = useCallback(
     (tagId: string) =>
-      Object.values(leadTagIds).reduce(
-        (acc, ids) => acc + (ids.includes(tagId) ? 1 : 0),
-        0,
-      ),
-    [leadTagIds],
+      Object.values(data.leadTagIds).filter((ids) => ids.includes(tagId)).length,
+    [data.leadTagIds],
   )
 
   const toggleLeadTag = useCallback(
     (leadId: string, tagId: string) => {
-      const tag = tags.find((t) => t.id === tagId)
-      setLeadTagIds((prev) => {
-        const current = prev[leadId] ?? []
-        const has = current.includes(tagId)
-        if (tag) {
-          pushEvent(
-            leadId,
-            `${has ? "Tag rimosso" : "Tag aggiunto"} — ${tag.name}`,
-          )
-        }
-        return {
-          ...prev,
-          [leadId]: has
-            ? current.filter((id) => id !== tagId)
-            : [...current, tagId],
-        }
+      const current = data.leadTagIds[leadId] ?? []
+      const enabled = !current.includes(tagId)
+      const tag = data.tags.find((item) => item.id === tagId)
+      setData((previous) => ({
+        ...previous,
+        leadTagIds: {
+          ...previous.leadTagIds,
+          [leadId]: enabled
+            ? [...current, tagId]
+            : current.filter((id) => id !== tagId),
+        },
+      }))
+      if (tag) pushEvent(leadId, `Tag ${enabled ? "aggiunto" : "rimosso"} — ${tag.name}`)
+      void mutate({ action: "toggle", leadId, tagId, enabled }).catch(() => {
+        setData((previous) => ({
+          ...previous,
+          leadTagIds: { ...previous.leadTagIds, [leadId]: current },
+        }))
       })
     },
-    [tags, pushEvent],
+    [data.leadTagIds, data.tags, pushEvent],
   )
 
   const createTag = useCallback(
-    (name: string, color: string) => {
-      const trimmed = name.trim()
-      if (!trimmed) return null
-      const existing = tags.find(
-        (t) => t.name.toLowerCase() === trimmed.toLowerCase(),
+    (name: string, _color: string) => {
+      const normalized = name.trim()
+      return (
+        data.tags.find(
+          (tag) => tag.name.toLocaleLowerCase("it") === normalized.toLocaleLowerCase("it"),
+        ) ?? null
       )
-      if (existing) return existing
-      const tag: Tag = { id: nextTagId(), name: trimmed, color }
-      setTags((prev) => [...prev, tag])
-      return tag
     },
-    [tags],
+    [data.tags],
   )
 
   const createAndAssign = useCallback(
     (leadId: string, name: string, color: string) => {
-      const trimmed = name.trim()
-      if (!trimmed) return
-      const existing = tags.find(
-        (t) => t.name.toLowerCase() === trimmed.toLowerCase(),
-      )
-      const tag: Tag = existing ?? {
-        id: nextTagId(),
-        name: trimmed,
+      const normalized = name.trim()
+      if (!normalized) return
+      void mutate({
+        action: "create_assign",
+        leadId,
+        name: normalized,
         color,
-      }
-      if (!existing) setTags((prev) => [...prev, tag])
-      setLeadTagIds((prev) => {
-        const current = prev[leadId] ?? []
-        if (current.includes(tag.id)) return prev
-        return { ...prev, [leadId]: [...current, tag.id] }
+      }).then(({ tag }: { tag: Tag }) => {
+        setData((previous) => ({
+          ...previous,
+          tags: previous.tags.some((item) => item.id === tag.id)
+            ? previous.tags
+            : [...previous.tags, tag],
+          leadTagIds: {
+            ...previous.leadTagIds,
+            [leadId]: [
+              ...new Set([...(previous.leadTagIds[leadId] ?? []), tag.id]),
+            ],
+          },
+        }))
+        pushEvent(leadId, `Tag aggiunto — ${tag.name}`)
       })
-      pushEvent(leadId, `Tag aggiunto — ${tag.name}`)
     },
-    [tags, pushEvent],
+    [pushEvent],
   )
 
   const renameTag = useCallback((tagId: string, name: string) => {
-    const trimmed = name.trim()
-    if (!trimmed) return
-    setTags((prev) =>
-      prev.map((t) => (t.id === tagId ? { ...t, name: trimmed } : t)),
-    )
+    const normalized = name.trim()
+    if (!normalized) return
+    setData((previous) => ({
+      ...previous,
+      tags: previous.tags.map((tag) =>
+        tag.id === tagId ? { ...tag, name: normalized } : tag,
+      ),
+    }))
+    void mutate({ action: "update", tagId, name: normalized })
   }, [])
 
   const recolorTag = useCallback((tagId: string, color: string) => {
-    setTags((prev) =>
-      prev.map((t) => (t.id === tagId ? { ...t, color } : t)),
-    )
+    setData((previous) => ({
+      ...previous,
+      tags: previous.tags.map((tag) =>
+        tag.id === tagId ? { ...tag, color } : tag,
+      ),
+    }))
+    void mutate({ action: "update", tagId, color })
   }, [])
 
   const deleteTag = useCallback((tagId: string) => {
-    setTags((prev) => prev.filter((t) => t.id !== tagId))
-    setLeadTagIds((prev) => {
-      const next: Record<string, string[]> = {}
-      for (const [leadId, ids] of Object.entries(prev)) {
-        next[leadId] = ids.filter((id) => id !== tagId)
-      }
-      return next
-    })
+    setData((previous) => ({
+      ...previous,
+      tags: previous.tags.filter((tag) => tag.id !== tagId),
+      leadTagIds: Object.fromEntries(
+        Object.entries(previous.leadTagIds).map(([leadId, ids]) => [
+          leadId,
+          ids.filter((id) => id !== tagId),
+        ]),
+      ),
+    }))
+    void mutate({ action: "delete", tagId })
   }, [])
 
   const value = useMemo<TagContextValue>(
     () => ({
-      tags,
-      leadTagIds,
+      ...data,
+      loading,
       tagEvents,
       getLeadTags,
       usageCount,
@@ -236,8 +261,8 @@ export function TagProvider({ children }: { children: ReactNode }) {
       deleteTag,
     }),
     [
-      tags,
-      leadTagIds,
+      data,
+      loading,
       tagEvents,
       getLeadTags,
       usageCount,
@@ -254,7 +279,7 @@ export function TagProvider({ children }: { children: ReactNode }) {
 }
 
 export function useTags() {
-  const ctx = useContext(TagContext)
-  if (!ctx) throw new Error("useTags must be used within TagProvider")
-  return ctx
+  const context = useContext(TagContext)
+  if (!context) throw new Error("useTags must be used within TagProvider")
+  return context
 }

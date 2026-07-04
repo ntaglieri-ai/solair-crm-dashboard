@@ -15,8 +15,8 @@ import {
   STATO_LEAD_ORDER,
   ORIGINE_LEAD_VALUES,
   SEDE_LABELS,
-  mockCommerciali,
 } from "@/lib/mock-data"
+import { useTags } from "@/lib/tag-store"
 
 export type ScoreFilter = "all" | "caldo" | "medio" | "freddo"
 
@@ -38,13 +38,6 @@ export const DEFAULT_FILTERS: LeadFilterState = {
   origine: "all",
   tag: "all",
   score: "all",
-}
-
-function toItems(entries: [string, string][]): Record<string, string> {
-  return entries.reduce<Record<string, string>>((acc, [k, v]) => {
-    acc[k] = v
-    return acc
-  }, {})
 }
 
 function FilterSelect({
@@ -91,6 +84,7 @@ export function LeadFilters({
   onReset: () => void
   tags: string[]
 }) {
+  const { owners } = useTags()
   const set = <K extends keyof LeadFilterState>(
     key: K,
     value: LeadFilterState[K],
@@ -149,7 +143,7 @@ export function LeadFilters({
         placeholder="Lead Proprietario"
         options={[
           ["all", "Tutti i proprietari"],
-          ...mockCommerciali.map((c) => [c, c] as [string, string]),
+          ...owners.map((owner) => [owner.id, owner.nome] as [string, string]),
         ]}
       />
 

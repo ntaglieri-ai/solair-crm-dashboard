@@ -14,6 +14,7 @@ import {
   LeadAvatar,
 } from "./lead-utils"
 import { LeadTagBadges } from "./tag-controls"
+import { useTags } from "@/lib/tag-store"
 
 // Colonne con allineamento a destra (valori numerici)
 export const NUMERIC_COLUMNS: LeadColumnId[] = ["Valutazione", "kWp", "kWh"]
@@ -27,6 +28,7 @@ export function LeadCell({
   column: LeadColumnId
   density?: "comoda" | "normale" | "densa"
 }) {
+  const { owners } = useTags()
   const value = lead[column]
 
   switch (column) {
@@ -75,6 +77,13 @@ export function LeadCell({
     case "E-mail":
       return (
         <span className="text-muted-foreground">{lead["E-mail"]}</span>
+      )
+
+    case "Lead Proprietario":
+      return (
+        <span className="text-foreground">
+          {owners.find((owner) => owner.id === value)?.nome || String(value || "—")}
+        </span>
       )
 
     case "kWp":

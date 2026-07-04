@@ -215,7 +215,7 @@ async function fetchLeadRows(supabase) {
     return await fetchAll(
       supabase,
       "leads",
-      ["id", "zoho_id", ...signatureFields].join(","),
+      ["id", "zoho_id", "zoho_modified_at", ...signatureFields].join(","),
     )
   } catch (error) {
     if (!String(error).includes("zoho_id")) throw error
@@ -267,6 +267,7 @@ const ownerIds = new Map(
 const dbIdByZohoId = new Map(
   dbRows.filter((row) => row.zoho_id).map((row) => [row.zoho_id, row.id]),
 )
+const dbById = new Map(dbRows.map((row) => [row.id, row]))
 const dbIdsBySignature = new Map()
 for (const row of dbRows.filter((item) => !item.zoho_id)) {
   const key = signature(row)
@@ -312,6 +313,12 @@ const importRows = sourceRows.map((row) => {
 })
 const existingRows = importRows.filter((row) => row.id)
 const newRows = importRows.filter((row) => !row.id)
+const changedRows = existingRows.filter((row) => {
+  const current = dbById.get(row.id)
+  return timestampValue(current?.zoho_modified_at) !== row.zoho_modified_at
+})
+const changedIds = new Set(changedRows.map((row) => row.id))
+const unchangedRows = existingRows.filter((row) => !changedIds.has(row.id))
 const missingBaselineIds = [...baselineIds].filter((id) => !sourceIds.has(id))
 const unresolvedOwners = new Set(
   sourceRows
@@ -334,6 +341,8 @@ console.log(
       source: sourceRows.length,
       currentDatabase: dbRows.length,
       matchedExisting: existingRows.length,
+      unchanged: unchangedRows.length,
+      toUpdate: changedRows.length,
       toInsert: newRows.length,
       noLongerInExport: missingBaselineIds.length,
       ownersResolved: ownerIds.size,
@@ -350,11 +359,23 @@ if (!apply) {
   process.exit(0)
 }
 
-await chunks(existingRows, 250, async (batch) => {
+await chunks(changedRows, 250, async (batch) => {
   const { error } = await supabase.from("leads").upsert(batch, {
     onConflict: "id",
   })
   if (error) throw new Error(`Aggiornamento Lead: ${error.message}`)
+})
+
+await chunks(unchangedRows, 250, async (batch) => {
+  const heartbeat = batch.map((row) => ({
+    id: row.id,
+    zoho_id: row.zoho_id,
+    zoho_last_seen_at: seenAt,
+  }))
+  const { error } = await supabase.from("leads").upsert(heartbeat, {
+    onConflict: "id",
+  })
+  if (error) throw new Error(`Verifica Lead invariati: ${error.message}`)
 })
 
 const insertedByZohoId = new Map()

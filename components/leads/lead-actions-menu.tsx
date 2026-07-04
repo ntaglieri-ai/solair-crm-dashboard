@@ -54,10 +54,10 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
   type Lead,
-  mockCommerciali,
   STATO_LEAD_ORDER,
   SEDE_LABELS,
 } from "@/lib/mock-data"
+import { useTags } from "@/lib/tag-store"
 import type { SettingsSectionId } from "./lead-settings-sheet"
 import { LeadTagSection } from "./lead-tag-section"
 import { RulesSection } from "./assignment-rules"
@@ -129,11 +129,12 @@ export function LeadActionsMenu({
   onBulkDedup: (idsToRemove: string[]) => void
   onBulkDelete: () => void
 }) {
+  const { owners } = useTags()
   const [dialog, setDialog] = useState<Dialogs>("none")
   const hasSelection = selectedCount > 0
 
   // Form state
-  const [owner, setOwner] = useState(mockCommerciali[0])
+  const [owner, setOwner] = useState("")
   const [updField, setUpdField] = useState<UpdateField>("Stato Lead")
   const [updValue, setUpdValue] = useState("")
   const [subject, setSubject] = useState("")
@@ -578,9 +579,9 @@ export function LeadActionsMenu({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {mockCommerciali.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
+                  {owners.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.nome}
                     </SelectItem>
                   ))}
                 </SelectGroup>

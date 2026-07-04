@@ -62,7 +62,6 @@ import { cn } from "@/lib/utils"
 import {
   type Lead,
   STATO_LEAD_ORDER,
-  mockInstallatori,
 } from "@/lib/mock-data"
 import { LeadAvatar } from "./lead-utils"
 
@@ -500,11 +499,14 @@ function Descrizione({ lead }: { lead: Lead }) {
 /* ---------- Sezione Sopralluogo ---------- */
 
 function Sopralluogo({ lead }: { lead: Lead }) {
+  const { installers } = useTags()
   const [data, setData] = useState(lead["Data sopralluogo"] ?? "")
   const [installatore, setInstallatore] = useState(
     lead["Installatore - Incaricato sopralluogo"] ?? "",
   )
-  const items = Object.fromEntries(mockInstallatori.map((i) => [i, i]))
+  const items = Object.fromEntries(
+    installers.map((installer) => [installer.id, installer.nome]),
+  )
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div className="flex flex-col gap-1">
@@ -532,9 +534,9 @@ function Sopralluogo({ lead }: { lead: Lead }) {
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              {mockInstallatori.map((i) => (
-                <SelectItem key={i} value={i}>
-                  {i}
+              {installers.map((installer) => (
+                <SelectItem key={installer.id} value={installer.id}>
+                  {installer.nome}
                 </SelectItem>
               ))}
             </SelectGroup>

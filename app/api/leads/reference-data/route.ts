@@ -7,6 +7,7 @@ import {
 
 type TagAction =
   | { action: "toggle"; leadId: string; tagId: string; enabled: boolean }
+  | { action: "create"; names: string[]; color: string }
   | { action: "create_assign"; leadId: string; name: string; color: string }
   | { action: "update"; tagId: string; name?: string; color?: string }
   | { action: "delete"; tagId: string }
@@ -84,6 +85,53 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createClient()
+
+  if (body.action === "create") {
+    if (!Array.isArray(body.names)) {
+      return NextResponse.json({ error: "Elenco tag non valido" }, { status: 400 })
+    }
+    const names = [
+      ...new Set(
+        body.names
+          .map((name) => name.trim())
+          .filter(Boolean),
+      ),
+    ]
+    if (!names.length) {
+      return NextResponse.json({ error: "Inserisci almeno un tag" }, { status: 400 })
+    }
+    const { data: existing, error: lookupError } = await supabase
+      .from("tag")
+      .select("id,nome,colore")
+      .eq("modulo", "lead")
+      .in("nome", names)
+    if (lookupError) {
+      return NextResponse.json({ error: lookupError.message }, { status: 500 })
+    }
+    const existingNames = new Set(
+      (existing ?? []).map((tag) => tag.nome.toLocaleLowerCase("it")),
+    )
+    const rows = names
+      .filter((name) => !existingNames.has(name.toLocaleLowerCase("it")))
+      .map((nome) => ({
+        nome,
+        colore: body.color || "#64748b",
+        modulo: "lead",
+      }))
+    const created = rows.length
+      ? await supabase.from("tag").insert(rows).select("id,nome,colore")
+      : { data: [], error: null }
+    if (created.error) {
+      return NextResponse.json({ error: created.error.message }, { status: 500 })
+    }
+    return NextResponse.json({
+      tags: [...(existing ?? []), ...(created.data ?? [])].map((tag) => ({
+        id: tag.id,
+        name: tag.nome,
+        color: tag.colore,
+      })),
+    })
+  }
 
   if (body.action === "toggle") {
     if (!body.leadId || !body.tagId) {

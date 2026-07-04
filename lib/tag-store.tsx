@@ -57,7 +57,7 @@ interface TagContextValue extends ReferencePayload {
   getLeadTags: (leadId: string) => Tag[]
   usageCount: (tagId: string) => number
   toggleLeadTag: (leadId: string, tagId: string) => void
-  createTag: (name: string, color: string) => Tag | null
+  createTags: (names: string, color: string) => void
   createAndAssign: (leadId: string, name: string, color: string) => void
   renameTag: (tagId: string, name: string) => void
   recolorTag: (tagId: string, color: string) => void
@@ -170,17 +170,26 @@ export function TagProvider({ children }: { children: ReactNode }) {
     [data.leadTagIds, data.tags, pushEvent],
   )
 
-  const createTag = useCallback(
-    (name: string, _color: string) => {
-      const normalized = name.trim()
-      return (
-        data.tags.find(
-          (tag) => tag.name.toLocaleLowerCase("it") === normalized.toLocaleLowerCase("it"),
-        ) ?? null
-      )
-    },
-    [data.tags],
-  )
+  const createTags = useCallback((names: string, color: string) => {
+    const parts = names
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean)
+    if (!parts.length) return
+    void mutate({ action: "create", names: parts, color }).then(
+      ({ tags }: { tags: Tag[] }) => {
+        setData((previous) => ({
+          ...previous,
+          tags: [
+            ...tags,
+            ...previous.tags.filter(
+              (current) => !tags.some((tag) => tag.id === current.id),
+            ),
+          ],
+        }))
+      },
+    )
+  }, [])
 
   const createAndAssign = useCallback(
     (leadId: string, name: string, color: string) => {
@@ -254,7 +263,7 @@ export function TagProvider({ children }: { children: ReactNode }) {
       getLeadTags,
       usageCount,
       toggleLeadTag,
-      createTag,
+      createTags,
       createAndAssign,
       renameTag,
       recolorTag,
@@ -267,7 +276,7 @@ export function TagProvider({ children }: { children: ReactNode }) {
       getLeadTags,
       usageCount,
       toggleLeadTag,
-      createTag,
+      createTags,
       createAndAssign,
       renameTag,
       recolorTag,

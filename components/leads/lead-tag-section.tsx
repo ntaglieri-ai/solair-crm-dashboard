@@ -6,7 +6,6 @@ import {
   IconTrash,
   IconChevronDown,
   IconPlus,
-  IconUser,
   IconSearch,
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
@@ -26,19 +25,26 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
-  LeadTagProvider,
-  useLeadTags,
-  LEAD_TAG_PALETTE,
-  MAX_LEAD_TAGS,
-  isLightColor,
-  type LeadTag,
-} from "@/lib/lead-tag-store"
+  useTags,
+  TAG_PALETTE,
+  type Tag,
+} from "@/lib/tag-store"
+
+const MAX_LEAD_TAGS = 100
+
+function isLightColor(hex: string): boolean {
+  const color = hex.replace("#", "")
+  const red = Number.parseInt(color.slice(0, 2), 16)
+  const green = Number.parseInt(color.slice(2, 4), 16)
+  const blue = Number.parseInt(color.slice(4, 6), 16)
+  return (0.299 * red + 0.587 * green + 0.114 * blue) / 255 > 0.62
+}
 
 /* -------------------------------------------------------------------------- */
 /*                          Pill a freccia (chevron)                          */
 /* -------------------------------------------------------------------------- */
 
-function LeadTagPill({ tag }: { tag: LeadTag }) {
+function LeadTagPill({ tag }: { tag: Tag }) {
   const light = isLightColor(tag.color)
   return (
     <span
@@ -89,7 +95,7 @@ function ColorDropdown({
       />
       <PopoverContent align="start" className="w-auto p-2">
         <div className="grid grid-cols-6 gap-1.5">
-          {LEAD_TAG_PALETTE.map((c) => (
+          {TAG_PALETTE.map((c) => (
             <button
               key={c}
               type="button"
@@ -113,8 +119,9 @@ function ColorDropdown({
 /*                                 Riga tag                                   */
 /* -------------------------------------------------------------------------- */
 
-function TagRow({ tag }: { tag: LeadTag }) {
-  const { renameTag, recolorTag, deleteTag } = useLeadTags()
+function TagRow({ tag }: { tag: Tag }) {
+  const { renameTag, recolorTag, deleteTag, usageCount } = useTags()
+  const usage = usageCount(tag.id)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(tag.name)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -126,7 +133,7 @@ function TagRow({ tag }: { tag: LeadTag }) {
 
   return (
     <>
-      <div className="group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-border px-3 py-2.5 transition-colors hover:bg-secondary/40">
+      <div className="group grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 border-b border-border px-3 py-2.5 transition-colors hover:bg-secondary/40">
         {/* Colore del tag */}
         <div>
           <ColorDropdown
@@ -180,17 +187,10 @@ function TagRow({ tag }: { tag: LeadTag }) {
           )}
 
           <span className="ml-1 hidden shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground group-hover:inline-block">
-            {tag.uso}
+            {usage}
           </span>
         </div>
 
-        {/* Ultima modifica */}
-        <div className="flex items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
-          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground">
-            <IconUser size={14} stroke={1.8} />
-          </span>
-          <span>{tag.modificato}</span>
-        </div>
       </div>
 
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
@@ -200,7 +200,7 @@ function TagRow({ tag }: { tag: LeadTag }) {
             <DialogDescription>
               Vuoi eliminare il tag{" "}
               <span className="font-medium text-foreground">{tag.name}</span>?
-              Verrà rimosso da {tag.uso} lead. L&apos;azione non è reversibile.
+              Verrà rimosso da {usage} lead. L&apos;azione non è reversibile.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -234,13 +234,13 @@ function AddTagDialog({
   open: boolean
   onOpenChange: (o: boolean) => void
 }) {
-  const { createTags } = useLeadTags()
+  const { createTags } = useTags()
   const [value, setValue] = useState("")
-  const [color, setColor] = useState<string>(LEAD_TAG_PALETTE[14])
+  const [color, setColor] = useState<string>(TAG_PALETTE[0])
 
   const reset = () => {
     setValue("")
-    setColor(LEAD_TAG_PALETTE[14])
+    setColor(TAG_PALETTE[0])
   }
 
   const save = () => {
@@ -288,7 +288,7 @@ function AddTagDialog({
                 aria-hidden="true"
               />
               <div className="flex flex-wrap items-center gap-1.5">
-                {LEAD_TAG_PALETTE.map((c) => (
+                {TAG_PALETTE.map((c) => (
                   <button
                     key={c}
                     type="button"
@@ -328,7 +328,7 @@ function AddTagDialog({
 /* -------------------------------------------------------------------------- */
 
 function TagManager() {
-  const { tags } = useLeadTags()
+  const { tags, loading } = useTags()
   const [query, setQuery] = useState("")
   const [addOpen, setAddOpen] = useState(false)
 
@@ -368,13 +368,16 @@ function TagManager() {
 
       {/* Tabella tag */}
       <div className="overflow-hidden rounded-lg border border-border">
-        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-3 border-b border-border bg-secondary/50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-3 border-b border-border bg-secondary/50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           <span>Colore del tag</span>
           <span>Nome tag</span>
-          <span>Ultima modifica</span>
         </div>
 
-        {filtered.length === 0 ? (
+        {loading ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            Caricamento tag…
+          </p>
+        ) : filtered.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">
             Nessun tag trovato.
           </p>
@@ -397,9 +400,5 @@ function TagManager() {
 /* -------------------------------------------------------------------------- */
 
 export function LeadTagSection() {
-  return (
-    <LeadTagProvider>
-      <TagManager />
-    </LeadTagProvider>
-  )
+  return <TagManager />
 }

@@ -76,6 +76,14 @@ import {
   fetchLeadsForExport,
 } from "@/lib/leads/hooks"
 import { useTags } from "@/lib/tag-store"
+import { usePermissions } from "@/lib/permissions/provider"
+
+type LeadViewPreferences = {
+  version: 1
+  visibleCols: LeadColumnId[]
+  columnWidths: Partial<Record<LeadColumnId, number>>
+  density: Density
+}
 
 const ROWS_ITEMS: Record<string, string> = {
   "10": "10 righe",
@@ -124,7 +132,13 @@ export function LeadsClient({
   initialStats,
 }: LeadsClientProps) {
   const { tags } = useTags()
+  const permissions = usePermissions()
   const allTags = useMemo(() => tags.map((tag) => tag.name), [tags])
+  const preferenceOwner =
+    permissions.snapshot.subject.userId ??
+    permissions.snapshot.subject.authUserId ??
+    "anonymous"
+  const preferenceKey = `solair:leads:view:${preferenceOwner}:v1`
   const [newLeadOpen, setNewLeadOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [filters, setFilters] = useState<LeadFilterState>(DEFAULT_FILTERS)
@@ -138,6 +152,10 @@ export function LeadsClient({
   const [visibleCols, setVisibleCols] = useState<LeadColumnId[]>(
     DEFAULT_VISIBLE_COLUMNS,
   )
+  const [columnWidths, setColumnWidths] = useState<
+    Partial<Record<LeadColumnId, number>>
+  >({})
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false)
   const [sortBy, setSortBy] = useState<LeadColumnId | null>("Valutazione")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [density, setDensity] = useState<Density>("normale")
@@ -147,8 +165,73 @@ export function LeadsClient({
     useState<SettingsSectionId>("generali")
 
   const columns = useMemo(
-    () => LEAD_COLUMNS.filter((c) => visibleCols.includes(c.id)),
+    () =>
+      visibleCols
+        .map((id) => LEAD_COLUMNS.find((column) => column.id === id))
+        .filter((column): column is (typeof LEAD_COLUMNS)[number] => Boolean(column)),
     [visibleCols],
+  )
+
+  useEffect(() => {
+    let active = true
+    queueMicrotask(() => {
+      if (!active) return
+      try {
+        const raw = window.localStorage.getItem(preferenceKey)
+        if (raw) {
+          const stored = JSON.parse(raw) as Partial<LeadViewPreferences>
+          const validIds = new Set(LEAD_COLUMNS.map((column) => column.id))
+          const order = (stored.visibleCols ?? []).filter((id) => validIds.has(id))
+          if (order.length) setVisibleCols(order)
+          if (stored.columnWidths) setColumnWidths(stored.columnWidths)
+          if (
+            stored.density === "comoda" ||
+            stored.density === "normale" ||
+            stored.density === "densa"
+          ) {
+            setDensity(stored.density)
+          }
+        }
+      } catch {
+        window.localStorage.removeItem(preferenceKey)
+      } finally {
+        setPreferencesLoaded(true)
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [preferenceKey])
+
+  useEffect(() => {
+    if (!preferencesLoaded) return
+    const preferences: LeadViewPreferences = {
+      version: 1,
+      visibleCols,
+      columnWidths,
+      density,
+    }
+    window.localStorage.setItem(preferenceKey, JSON.stringify(preferences))
+  }, [
+    columnWidths,
+    density,
+    preferenceKey,
+    preferencesLoaded,
+    visibleCols,
+  ])
+
+  const reorderColumns = useCallback(
+    (source: LeadColumnId, target: LeadColumnId) => {
+      setVisibleCols((current) => {
+        const from = current.indexOf(source)
+        const to = current.indexOf(target)
+        if (from < 0 || to < 0 || from === to) return current
+        const next = [...current]
+        next.splice(to, 0, next.splice(from, 1)[0])
+        return next
+      })
+    },
+    [],
   )
 
   // Ricerca con debounce: l'input resta reattivo (filters.search), ma la query
@@ -212,7 +295,10 @@ export function LeadsClient({
   const bulk = useBulkLeads()
 
   // Le righe sono proiezioni selettive; la tabella usa solo i campi inclusi.
-  const pageRows = (data?.rows ?? []) as Lead[]
+  const pageRows = useMemo(
+    () => (data?.rows ?? []) as Lead[],
+    [data?.rows],
+  )
   const total = data?.total ?? 0
   const headerTotal = stats?.total ?? 0
 
@@ -220,44 +306,6 @@ export function LeadsClient({
   const start = (page - 1) * rowsPerPage
   const rangeStart = total === 0 ? 0 : start + 1
   const rangeEnd = Math.min(start + rowsPerPage, total)
-
-  // --- Scrollbar orizzontale sempre visibile (ancorata col footer) ---
-  // Il contenitore della tabella nasconde la scrollbar nativa orizzontale; qui
-  // gestiamo una scrollbar sincronizzata e fissa in basso, visibile solo quando
-  // le colonne eccedono la larghezza disponibile (dinamica su resize/colonne).
-  const tableScrollRef = useRef<HTMLDivElement>(null)
-  const hBarRef = useRef<HTMLDivElement>(null)
-  const [hOverflow, setHOverflow] = useState(false)
-  const [hScrollWidth, setHScrollWidth] = useState(0)
-
-  // Sincronizza la barra esterna quando la tabella scrolla orizzontalmente.
-  const syncBarFromTable = useCallback((el: HTMLDivElement) => {
-    const bar = hBarRef.current
-    if (bar && bar.scrollLeft !== el.scrollLeft) bar.scrollLeft = el.scrollLeft
-  }, [])
-
-  // Sincronizza la tabella quando l'utente trascina la barra esterna.
-  const syncTableFromBar = useCallback(() => {
-    const bar = hBarRef.current
-    const el = tableScrollRef.current
-    if (bar && el && el.scrollLeft !== bar.scrollLeft) el.scrollLeft = bar.scrollLeft
-  }, [])
-
-  // Ricalcola overflow/larghezza su mount, cambio colonne/righe/densità e resize.
-  useEffect(() => {
-    const el = tableScrollRef.current
-    if (!el) return
-    const measure = () => {
-      const overflow = el.scrollWidth - el.clientWidth > 1
-      setHOverflow(overflow)
-      setHScrollWidth(el.scrollWidth)
-    }
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    if (el.firstElementChild) ro.observe(el.firstElementChild)
-    return () => ro.disconnect()
-  }, [columns, pageRows, density])
 
   // --- Altezza dinamica della pagina (footer sempre visibile) ---
   // La topbar ha altezza variabile (responsive/breakpoint), quindi un calc fisso
@@ -652,6 +700,11 @@ export function LeadsClient({
         <LeadTable
           leads={pageRows}
           columns={columns}
+          columnWidths={columnWidths}
+          onColumnWidthChange={(column, width) =>
+            setColumnWidths((current) => ({ ...current, [column]: width }))
+          }
+          onColumnReorder={reorderColumns}
           selected={selected}
           onToggle={toggle}
           onToggleAll={toggleAll}
@@ -661,8 +714,6 @@ export function LeadsClient({
           sortDir={sortDir}
           onSort={handleSort}
           density={density}
-          scrollRef={tableScrollRef}
-          onScrollerScroll={syncBarFromTable}
         />
       </div>
 

@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import {
   Shield,
   Settings2,
+  Wrench,
   X,
   ChevronRight,
   ChevronLeft,
@@ -19,7 +20,7 @@ import {
   CRM_SETTINGS_CATALOG,
 } from "@/lib/crm-settings/catalog"
 
-type Layer = "root" | "account-security" | "file-manager" | "system"
+type Layer = "root" | "account-security" | "maintenance" | "system"
 
 interface RootBlock {
   icon: LucideIcon
@@ -45,9 +46,15 @@ const ROOT_BLOCKS: RootBlock[] = [
   },
   {
     icon: Settings2,
-    title: "Organizzazione e sistema",
-    description: "Sedi, integrazioni e infrastruttura",
+    title: "Azienda e sistema",
+    description: "Informazioni, sedi e aspetto personale",
     layer: "system",
+  },
+  {
+    icon: Wrench,
+    title: "Manutenzione",
+    description: "Integrazioni, health check e File Manager",
+    layer: "maintenance",
   },
 ]
 
@@ -63,12 +70,18 @@ const ACCOUNT_SECURITY_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
     status: item.status,
   }))
 
-// Layer 2 — File Manager: sotto-blocchi che puntano alle route reali.
-const FILE_MANAGER_BLOCKS: SubBlock[] = []
-
-// Layer 2 — System Settings: sotto-blocchi verso le route reali.
 const SYSTEM_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
-  .filter((item) => item.section !== "account")
+  .filter((item) => item.section === "organization")
+  .map((item) => ({
+    icon: item.icon,
+    title: item.title,
+    description: item.description,
+    href: item.href,
+    status: item.status,
+  }))
+
+const MAINTENANCE_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
+  .filter((item) => item.section === "maintenance")
   .map((item) => ({
     icon: item.icon,
     title: item.title,
@@ -84,8 +97,8 @@ const LAYER_HEADER: Record<
 > = {
   root: {
     eyebrow: "Solair CRM",
-    title: "Impostazioni",
-    subtitle: "Gestisci il tuo CRM",
+    title: "CRM Settings & Admin",
+    subtitle: "Configurazione e amministrazione",
     breadcrumb: null,
   },
   "account-security": {
@@ -94,17 +107,17 @@ const LAYER_HEADER: Record<
     subtitle: "Configura utenti, permessi e sicurezza",
     breadcrumb: "Impostazioni › Account & Sicurezza",
   },
-  "file-manager": {
-    eyebrow: "File Manager",
-    title: "Archiviazione",
-    subtitle: "Storage Nextcloud, cartelle e accessi",
-    breadcrumb: "Impostazioni › File Manager",
+  maintenance: {
+    eyebrow: "Amministrazione",
+    title: "Manutenzione",
+    subtitle: "Integrazioni, servizi e controlli tecnici",
+    breadcrumb: "CRM Settings & Admin › Manutenzione",
   },
   system: {
     eyebrow: "Organizzazione",
     title: "Azienda e sistema",
-    subtitle: "Struttura, integrazioni e controlli tecnici",
-    breadcrumb: "Impostazioni › Organizzazione e sistema",
+    subtitle: "Informazioni, sedi e aspetto personale",
+    breadcrumb: "CRM Settings & Admin › Azienda e sistema",
   },
 }
 
@@ -224,9 +237,13 @@ export function CrmSettingsSidebar() {
   }
   const visibleAccountBlocks = ACCOUNT_SECURITY_BLOCKS.filter(canSeeBlock)
   const visibleSystemBlocks = SYSTEM_BLOCKS.filter(canSeeBlock)
+  const visibleMaintenanceBlocks = permissions.isSuperadmin
+    ? MAINTENANCE_BLOCKS.filter(canSeeBlock)
+    : []
   const visibleRootBlocks = ROOT_BLOCKS.filter((block) => {
     if (block.layer === "account-security") return visibleAccountBlocks.length > 0
     if (block.layer === "system") return visibleSystemBlocks.length > 0
+    if (block.layer === "maintenance") return visibleMaintenanceBlocks.length > 0
     return true
   })
 
@@ -343,8 +360,8 @@ export function CrmSettingsSidebar() {
                       ))
                     : null}
 
-                  {layer === "file-manager"
-                    ? FILE_MANAGER_BLOCKS.map((block) => (
+                  {layer === "maintenance"
+                    ? visibleMaintenanceBlocks.map((block) => (
                         <SettingsCard
                           key={block.title}
                           icon={block.icon}

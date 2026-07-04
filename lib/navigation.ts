@@ -28,7 +28,7 @@ export const NAV_GESTIONE: NavItem[] = [
 ]
 
 export const NAV_ADMIN: NavItem = {
-  label: "CRM Settings",
+  label: "CRM Settings & Admin",
   href: "/impostazioni",
   icon: "impostazioni",
 }

@@ -66,7 +66,7 @@ export default function AccountSecurityLayout({
       <CrmBreadcrumb
         items={[
           { label: "Solair CRM", action: () => navigate("/") },
-          { label: "CRM Settings", action: openCrmSettings },
+          { label: "CRM Settings & Admin", action: openCrmSettings },
           {
             label: "Account & Security",
             action: () => openCrmSettingsLayer("account-security"),

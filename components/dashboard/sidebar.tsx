@@ -151,7 +151,9 @@ export function Sidebar() {
     const page = pageKeyFromPath(item.href)
     return page ? permissions.canPage(page) : true
   })
-  const canOpenCrmSettings = permissions.canPage("crm_settings")
+  const canOpenCrmSettings =
+    permissions.canPage("crm_settings") ||
+    permissions.canAction("company.profile.view")
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[228px] flex-col border-r border-sidebar-border bg-sidebar lg:flex">

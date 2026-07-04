@@ -30,8 +30,11 @@ import {
 import { SectionHeader } from "@/components/impostazioni/settings-ui"
 import { sediIniziali, type SystemSede } from "@/lib/system-settings-data"
 import { usePersistentSystemSetting } from "@/lib/crm-settings/use-persistent-system-setting"
+import { usePermissions } from "@/lib/permissions/provider"
 
 export default function SediPage() {
+  const permissions = usePermissions()
+  const canEdit = permissions.canAction("company.sites.manage")
   const [sedi, setSedi, store] = usePersistentSystemSetting<SystemSede[]>(
     "system.sedi",
     sediIniziali,
@@ -44,15 +47,18 @@ export default function SediPage() {
 
   useEffect(() => {
     let active = true
-    fetch("/api/crm-settings/utenti", { cache: "no-store" })
+    fetch("/api/crm-settings/company/sites/counts", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : Promise.reject()))
       .then((payload) => {
         if (!active) return
-        const users = Array.isArray(payload) ? payload : payload.utenti ?? payload.data ?? []
+        const counts =
+          payload?.counts && typeof payload.counts === "object"
+            ? (payload.counts as Record<string, number>)
+            : {}
         setUserSites(
-          users
-            .map((user: { sede?: string | null }) => user.sede?.trim())
-            .filter(Boolean),
+          Object.entries(counts).flatMap(([site, count]) =>
+            Array.from({ length: count }, () => site),
+          ),
         )
       })
       .catch(() => {
@@ -125,13 +131,17 @@ export default function SediPage() {
         description={
           store.saving
             ? "Salvataggio configurazione..."
-            : "Gestisci le sedi operative usate da account, assegnazioni e dashboard."
+            : canEdit
+              ? "Gestisci le sedi operative usate da account, assegnazioni e dashboard."
+              : "Sedi operative e territori disponibili in sola lettura."
         }
         action={
-          <Button onClick={openNew} className="bg-teal text-teal-foreground hover:bg-teal/90">
-            <Plus className="size-4" />
-            Aggiungi sede
-          </Button>
+          canEdit ? (
+            <Button onClick={openNew} className="bg-teal text-teal-foreground hover:bg-teal/90">
+              <Plus className="size-4" />
+              Aggiungi sede
+            </Button>
+          ) : undefined
         }
       />
 
@@ -177,10 +187,11 @@ export default function SediPage() {
             <div className="flex shrink-0 items-center gap-1">
               <Switch
                 checked={sede.attiva}
+                disabled={!canEdit}
                 onCheckedChange={() => toggleAttiva(sede.id)}
                 aria-label={`Sede ${sede.nome} attiva`}
               />
-              <DropdownMenu>
+              {canEdit ? <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
                     <button
@@ -205,7 +216,7 @@ export default function SediPage() {
                     Elimina
                   </DropdownMenuItem>
                 </DropdownMenuContent>
-              </DropdownMenu>
+              </DropdownMenu> : null}
             </div>
           </div>
         ))}

@@ -25,7 +25,8 @@ import {
 
 const SECTIONS: Record<string, { label: string; layer: CrmSettingsLayer }> = {
   account: { label: "Account & Security", layer: "account-security" },
-  "file-manager": { label: "File Manager", layer: "file-manager" },
+  maintenance: { label: "Manutenzione", layer: "maintenance" },
+  "file-manager": { label: "Manutenzione", layer: "maintenance" },
   system: { label: "System Settings", layer: "system" },
 }
 
@@ -40,17 +41,16 @@ function CrmSettingsHeader() {
   const catalogItem = crmSettingsItemForPath(pathname)
 
   const items: CrmBreadcrumbItem[] = [
-    { label: "CRM Settings", action: openCrmSettings },
+    { label: "CRM Settings & Admin", action: openCrmSettings },
   ]
   if (section) {
     if (pageTitle) {
       items.push({
-        label: catalogItem?.section === "organization"
-          ? "Organizzazione"
-          : catalogItem?.section === "integrations"
-            ? "Integrazioni"
-            : catalogItem?.section === "infrastructure"
-              ? "Infrastruttura"
+        label:
+          catalogItem?.section === "organization"
+            ? "Azienda e sistema"
+            : catalogItem?.section === "maintenance"
+              ? "Manutenzione"
               : section.label,
         action: () => openCrmSettingsLayer(section.layer),
       })

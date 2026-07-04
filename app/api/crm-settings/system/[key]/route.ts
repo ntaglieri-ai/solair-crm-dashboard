@@ -17,12 +17,27 @@ function isMissingStoreError(error: { code?: string; message?: string } | null |
 }
 
 export async function GET(_request: Request, { params }: Params) {
-  const guard = await requireApiAction("crm_settings.system.default_values.manage")
-  if (guard.response) return guard.response
-
   const { key } = await params
   if (!isSystemSettingKey(key)) {
     return NextResponse.json({ error: "Configurazione non valida" }, { status: 400 })
+  }
+  const requiredAction =
+    key === "company.profile"
+      ? "company.profile.view"
+      : key === "system.sedi"
+        ? "company.sites.view"
+        : key === "company.integrations.make"
+          ? "maintenance.integrations.manage"
+          : key === "maintenance.nextcloud"
+            ? "maintenance.file_manager.manage"
+          : "crm_settings.system.default_values.manage"
+  const guard = await requireApiAction(requiredAction)
+  if (guard.response) return guard.response
+  if (
+    (key === "company.integrations.make" || key === "maintenance.nextcloud") &&
+    !guard.permissions.isSuperadmin
+  ) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
   const supabase = await createClient()
@@ -72,12 +87,27 @@ export async function GET(_request: Request, { params }: Params) {
 }
 
 export async function PATCH(request: Request, { params }: Params) {
-  const guard = await requireApiAction("crm_settings.system.default_values.manage")
-  if (guard.response) return guard.response
-
   const { key } = await params
   if (!isSystemSettingKey(key)) {
     return NextResponse.json({ error: "Configurazione non valida" }, { status: 400 })
+  }
+  const requiredAction =
+    key === "company.profile"
+      ? "company.profile.edit"
+      : key === "system.sedi"
+        ? "company.sites.manage"
+        : key === "company.integrations.make"
+          ? "maintenance.integrations.manage"
+          : key === "maintenance.nextcloud"
+            ? "maintenance.file_manager.manage"
+          : "crm_settings.system.default_values.manage"
+  const guard = await requireApiAction(requiredAction)
+  if (guard.response) return guard.response
+  if (
+    (key === "company.integrations.make" || key === "maintenance.nextcloud") &&
+    !guard.permissions.isSuperadmin
+  ) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
   const body = (await request.json().catch(() => null)) as { value?: unknown } | null

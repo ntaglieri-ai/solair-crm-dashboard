@@ -8,7 +8,7 @@ export interface SystemSectionLink {
 }
 
 export const SYSTEM_SECTION_LINKS: SystemSectionLink[] = CRM_SETTINGS_CATALOG
-  .filter((item) => item.section !== "account")
+  .filter((item) => item.section === "organization")
   .map((item) => ({ href: item.href, label: item.title, icon: item.icon }))
 
 // --- Sezione 1: Sedi --------------------------------------------------------

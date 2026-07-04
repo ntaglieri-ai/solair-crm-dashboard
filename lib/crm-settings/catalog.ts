@@ -1,8 +1,12 @@
 import type { LucideIcon } from "lucide-react"
 import {
+  Activity,
+  Building,
   Building2,
   DatabaseBackup,
+  FileCog,
   KeyRound,
+  Palette,
   PlugZap,
   ScrollText,
   ShieldCheck,
@@ -12,14 +16,13 @@ import {
 export type CrmSettingsLayer =
   | "root"
   | "account-security"
-  | "file-manager"
+  | "maintenance"
   | "system"
 
 export type CrmSettingsSectionId =
   | "account"
   | "organization"
-  | "integrations"
-  | "infrastructure"
+  | "maintenance"
 
 export interface CrmSettingsCatalogItem {
   id: string
@@ -44,13 +47,9 @@ export const CRM_SETTINGS_SECTIONS: Record<
     title: "Organizzazione",
     description: "Struttura aziendale e sedi operative",
   },
-  integrations: {
-    title: "Integrazioni",
-    description: "Servizi e automazioni trasversali",
-  },
-  infrastructure: {
-    title: "Infrastruttura",
-    description: "Controlli tecnici riservati",
+  maintenance: {
+    title: "Manutenzione",
+    description: "Integrazioni, servizi e controlli tecnici",
   },
 }
 
@@ -96,6 +95,16 @@ export const CRM_SETTINGS_CATALOG: CrmSettingsCatalogItem[] = [
     status: "restricted",
   },
   {
+    id: "company",
+    section: "organization",
+    title: "Informazioni aziendali",
+    description: "Identità, contatti e logo aziendale",
+    href: "/crm-settings/system/azienda",
+    pageKey: "crm_settings.system.azienda",
+    icon: Building,
+    status: "active",
+  },
+  {
     id: "sites",
     section: "organization",
     title: "Sedi e territori",
@@ -106,22 +115,53 @@ export const CRM_SETTINGS_CATALOG: CrmSettingsCatalogItem[] = [
     status: "active",
   },
   {
+    id: "appearance",
+    section: "organization",
+    title: "Aspetto personale",
+    description: "Tema e preferenze salvate per il tuo account",
+    href: "/crm-settings/system/aspetto",
+    pageKey: "crm_settings.system.aspetto",
+    icon: Palette,
+    status: "active",
+  },
+  {
     id: "make",
-    section: "integrations",
-    title: "Make",
-    description: "Connessioni e webhook aziendali",
-    href: "/crm-settings/system/make",
+    section: "maintenance",
+    title: "Integrazioni Make",
+    description: "Sito, Meta Ads, parametri e stato connessioni",
+    href: "/crm-settings/maintenance/make",
     pageKey: "crm_settings.system.make",
     icon: PlugZap,
+    status: "restricted",
   },
   {
     id: "backup",
-    section: "infrastructure",
+    section: "maintenance",
     title: "Backup",
     description: "Operazioni tecniche sul database",
-    href: "/crm-settings/system/backup",
+    href: "/crm-settings/maintenance/backup",
     pageKey: "crm_settings.system.backup",
     icon: DatabaseBackup,
+    status: "restricted",
+  },
+  {
+    id: "health",
+    section: "maintenance",
+    title: "Health check",
+    description: "Stato reale dei servizi collegati al CRM",
+    href: "/crm-settings/maintenance/health",
+    pageKey: "crm_settings.maintenance.health",
+    icon: Activity,
+    status: "restricted",
+  },
+  {
+    id: "nextcloud",
+    section: "maintenance",
+    title: "File Manager",
+    description: "Nextcloud, storage e configurazione documentale",
+    href: "/crm-settings/maintenance/file-manager",
+    pageKey: "crm_settings.file_manager",
+    icon: FileCog,
     status: "restricted",
   },
 ]

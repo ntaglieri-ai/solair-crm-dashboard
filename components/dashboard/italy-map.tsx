@@ -70,7 +70,7 @@ export function ItalyMap({ markers = [] }: { markers?: DashboardMapMarker[] }) {
         </ComposableMap>
         {markers.length === 0 ? (
           <div className="pointer-events-none absolute inset-x-4 bottom-4 rounded-md bg-card/90 px-3 py-2 text-center text-xs text-muted-foreground shadow-sm">
-            Configura le sedi in CRM Settings per visualizzarle sulla mappa.
+            Configura le sedi in CRM Settings & Admin per visualizzarle sulla mappa.
           </div>
         ) : null}
       </div>

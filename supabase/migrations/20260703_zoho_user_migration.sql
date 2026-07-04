@@ -38,3 +38,5 @@ comment on table public.zoho_user_staging is
 
 comment on column public.utenti.zoho_id is
   'Identificatore utente Zoho senza il prefisso zcrm_.';
+
+alter table public.zoho_user_staging enable row level security;

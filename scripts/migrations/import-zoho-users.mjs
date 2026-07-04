@@ -160,13 +160,43 @@ const crmRows = activeUsers.map((user) => {
   }
 })
 
-const { data: promoted, error: usersError } = await supabase
+const { data: existingUsers, error: existingUsersError } = await supabase
   .from("utenti")
-  .upsert(crmRows, { onConflict: "zoho_id" })
   .select("id, zoho_id")
-if (usersError) throw new Error(`Promozione utenti CRM: ${usersError.message}`)
+  .in("zoho_id", crmRows.map((user) => user.zoho_id))
+if (existingUsersError) {
+  throw new Error(`Lettura utenti CRM esistenti: ${existingUsersError.message}`)
+}
 
-const promotedIds = new Map((promoted ?? []).map((user) => [user.zoho_id, user.id]))
+const existingByZohoId = new Map(
+  (existingUsers ?? []).map((user) => [user.zoho_id, user.id]),
+)
+const rowsToInsert = crmRows.filter((user) => !existingByZohoId.has(user.zoho_id))
+const rowsToUpdate = crmRows.filter((user) => existingByZohoId.has(user.zoho_id))
+const promoted = [...(existingUsers ?? [])]
+
+if (rowsToInsert.length > 0) {
+  const { data, error } = await supabase
+    .from("utenti")
+    .insert(rowsToInsert)
+    .select("id, zoho_id")
+  if (error) throw new Error(`Inserimento utenti CRM: ${error.message}`)
+  promoted.push(...(data ?? []))
+}
+
+for (const user of rowsToUpdate) {
+  const id = existingByZohoId.get(user.zoho_id)
+  const { data, error } = await supabase
+    .from("utenti")
+    .update(user)
+    .eq("id", id)
+    .select("id, zoho_id")
+    .single()
+  if (error) throw new Error(`Aggiornamento utente ${user.zoho_id}: ${error.message}`)
+  promoted.push(data)
+}
+
+const promotedIds = new Map(promoted.map((user) => [user.zoho_id, user.id]))
 for (const [zohoId, crmUserId] of promotedIds) {
   const { error } = await supabase
     .from("zoho_user_staging")
@@ -179,7 +209,9 @@ console.log(
   JSON.stringify(
     {
       staged: users.length,
-      promoted: promoted?.length ?? 0,
+      promoted: promoted.length,
+      inserted: rowsToInsert.length,
+      updated: rowsToUpdate.length,
       invitationsSent: 0,
       authUsersCreated: 0,
     },

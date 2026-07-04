@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "migrate:zoho-users": "node scripts/migrations/import-zoho-users.mjs"
+    "migrate:zoho-users": "node --env-file=.env.local scripts/migrations/import-zoho-users.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

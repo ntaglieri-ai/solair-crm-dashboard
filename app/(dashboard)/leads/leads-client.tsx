@@ -22,14 +22,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
   LEAD_COLUMNS,
   DEFAULT_VISIBLE_COLUMNS,
   type Lead,
@@ -725,27 +717,21 @@ export function LeadsClient({
             {rangeStart}-{rangeEnd} di {total.toLocaleString("it-IT")}
             {selected.size > 0 ? ` · ${selected.size} selezionati` : ""}
           </span>
-          <Select
-            items={ROWS_ITEMS}
+          <select
+            aria-label="Numero di righe per pagina"
             value={String(rowsPerPage)}
-            onValueChange={(v) => {
-              setRowsPerPage(Number(v))
+            onChange={(event) => {
+              setRowsPerPage(Number(event.target.value))
               setPage(1)
             }}
+            className="h-8 rounded-md border border-input bg-card px-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
           >
-            <SelectTrigger className="h-8 w-[120px] bg-card">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {Object.entries(ROWS_ITEMS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+            {Object.entries(ROWS_ITEMS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="flex items-center gap-2">

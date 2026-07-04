@@ -41,7 +41,12 @@ export function useLeadsQuery(
     queryKey: leadsKeys.list(sp),
     queryFn: async ({ signal }) => {
       const res = await fetch(`/api/leads?${sp}`, { signal })
-      if (!res.ok) throw new Error("Errore nel caricamento dei lead")
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => null)) as
+          | { error?: string }
+          | null
+        throw new Error(payload?.error ?? "Errore nel caricamento dei lead")
+      }
       return (await res.json()) as LeadListResponse
     },
     // Mantiene la pagina precedente visibile durante filtri/paginazione

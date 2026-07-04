@@ -14,6 +14,7 @@ export function createPermissionEngine(snapshot: PermissionSnapshot): Permission
   const isSuperadmin = snapshot.subject.ruoloCode === "SUPERADMIN"
 
   function pageAccess(page: string): PageAccess {
+    if (isSuperadmin) return "rw"
     const direct = snapshot.pages[page]
     if (direct) return direct
 
@@ -26,10 +27,11 @@ export function createPermissionEngine(snapshot: PermissionSnapshot): Permission
   }
 
   function canRecord(module: string, action: string) {
-    return snapshot.records[module]?.[action] === true
+    return isSuperadmin || snapshot.records[module]?.[action] === true
   }
 
   function fieldAccess(module: string, field: string): FieldAccess {
+    if (isSuperadmin) return "editable"
     return snapshot.fields[module]?.[field] ?? snapshot.fields[module]?.["*"] ?? "hidden"
   }
 
@@ -40,11 +42,11 @@ export function createPermissionEngine(snapshot: PermissionSnapshot): Permission
   }
 
   function canAction(action: string) {
-    return snapshot.actions[action] === true
+    return isSuperadmin || snapshot.actions[action] === true
   }
 
   function getScope(resource: string): DataScope {
-    return snapshot.scopes[resource] ?? "none"
+    return isSuperadmin ? "all" : snapshot.scopes[resource] ?? "none"
   }
 
   return {

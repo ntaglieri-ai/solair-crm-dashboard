@@ -78,31 +78,9 @@ as $$
         from public.permessi_ui p
         where p.ruolo_id = account.resolved_role_id
       ), '[]'::jsonb),
-      'actions', coalesce((
-        select jsonb_agg(jsonb_build_object(
-          'azione', p.azione,
-          'abilitato', p.abilitato
-        ))
-        from public.permessi_azione p
-        where p.ruolo_id = account.resolved_role_id
-      ), '[]'::jsonb),
-      'fields', coalesce((
-        select jsonb_agg(jsonb_build_object(
-          'modulo', p.modulo,
-          'campo', p.campo,
-          'accesso', p.accesso
-        ))
-        from public.permessi_campo p
-        where p.ruolo_id = account.resolved_role_id
-      ), '[]'::jsonb),
-      'scopes', coalesce((
-        select jsonb_agg(jsonb_build_object(
-          'risorsa', p.risorsa,
-          'scope', p.scope
-        ))
-        from public.permessi_scope p
-        where p.ruolo_id = account.resolved_role_id
-      ), '[]'::jsonb)
+      'actions', '[]'::jsonb,
+      'fields', '[]'::jsonb,
+      'scopes', '[]'::jsonb
     )
   end
   from (select 1) seed

@@ -1,19 +1,5 @@
-// ============================================================================
-// System Settings — dati mock per CRM Settings › System Settings.
-// Nessuna persistenza: lo stato è gestito lato client nei singoli componenti.
-// ============================================================================
-
 import type { LucideIcon } from "lucide-react"
-import {
-  Building2,
-  Settings2,
-  ListFilter,
-  GitBranch,
-  Zap,
-  ArrowLeftRight,
-  Webhook,
-  DatabaseBackup,
-} from "lucide-react"
+import { CRM_SETTINGS_CATALOG } from "@/lib/crm-settings/catalog"
 
 export interface SystemSectionLink {
   href: string
@@ -21,16 +7,9 @@ export interface SystemSectionLink {
   icon: LucideIcon
 }
 
-export const SYSTEM_SECTION_LINKS: SystemSectionLink[] = [
-  { href: "/crm-settings/system/sedi", label: "Sedi", icon: Building2 },
-  { href: "/crm-settings/system/attributi", label: "Campi personalizzati", icon: Settings2 },
-  { href: "/crm-settings/system/valori", label: "Valori predefiniti", icon: ListFilter },
-  { href: "/crm-settings/system/regole", label: "Regole di assegnazione", icon: GitBranch },
-  { href: "/crm-settings/system/flussi", label: "Flussi di lavoro", icon: Zap },
-  { href: "/crm-settings/system/import-export", label: "Import / Export", icon: ArrowLeftRight },
-  { href: "/crm-settings/system/make", label: "Integrazione Make", icon: Webhook },
-  { href: "/crm-settings/system/backup", label: "Backup", icon: DatabaseBackup },
-]
+export const SYSTEM_SECTION_LINKS: SystemSectionLink[] = CRM_SETTINGS_CATALOG
+  .filter((item) => item.section === "organization")
+  .map((item) => ({ href: item.href, label: item.title, icon: item.icon }))
 
 // --- Sezione 1: Sedi --------------------------------------------------------
 
@@ -42,13 +21,7 @@ export interface SystemSede {
   utenti: number
 }
 
-export const sediIniziali: SystemSede[] = [
-  { id: "sed_001", nome: "Catania", indirizzo: "Via Etnea 88, 95125 Catania CT", attiva: true, utenti: 3 },
-  { id: "sed_002", nome: "Giarre CT", indirizzo: "Via Roma 12, 95014 Giarre CT", attiva: true, utenti: 1 },
-  { id: "sed_003", nome: "Treviso", indirizzo: "Viale della Repubblica 5, 31100 Treviso TV", attiva: true, utenti: 3 },
-  { id: "sed_004", nome: "Torino", indirizzo: "Corso Vittorio Emanuele II 42, 10100 Torino TO", attiva: true, utenti: 1 },
-  { id: "sed_005", nome: "Porto Sant'Elpidio", indirizzo: "Via Adriatica 3, 63821 Porto Sant'Elpidio FM", attiva: true, utenti: 0 },
-]
+export const sediIniziali: SystemSede[] = []
 
 // --- Sezione 2: Attributi record --------------------------------------------
 
@@ -251,20 +224,9 @@ export interface RegolaAssegnazione {
   assegna_a: string
 }
 
-export const regoleIniziali: RegolaAssegnazione[] = [
-  { id: "reg_001", nome: "Lead Catania → Gaetano", attiva: true, modulo: "lead", condizioni: [{ campo: "citta", operatore: "=", valore: "Catania" }], assegna_a: "Gaetano Grasso" },
-  { id: "reg_002", nome: "Lead Treviso → Mariarosa", attiva: true, modulo: "lead", condizioni: [{ campo: "citta", operatore: "=", valore: "Treviso" }], assegna_a: "Mariarosa De Leo" },
-  { id: "reg_003", nome: "Lead Torino → Gianluca", attiva: false, modulo: "lead", condizioni: [{ campo: "citta", operatore: "=", valore: "Torino" }], assegna_a: "Gianluca Silvestro" },
-]
+export const regoleIniziali: RegolaAssegnazione[] = []
 
-export const UTENTI_ASSEGNABILI = [
-  "Gaetano Grasso",
-  "Mariarosa De Leo",
-  "Gianluca Silvestro",
-  "Ivan Lo Faro",
-  "Fabio Tizi",
-  "Filippo Ferrara",
-]
+export const UTENTI_ASSEGNABILI: string[] = []
 
 // --- Sezione 5: Flussi di lavoro --------------------------------------------
 
@@ -286,11 +248,7 @@ export interface Workflow {
   azioni: string[]
 }
 
-export const workflowsIniziali: Workflow[] = [
-  { id: "wf_001", nome: "Notifica nuovo lead", attivo: true, modulo: "lead", trigger: "creazione", azioni: ["Invia notifica a proprietario"] },
-  { id: "wf_002", nome: "Aggiorna stato cliente dopo firma", attivo: true, modulo: "lead", trigger: "modifica", azioni: ["Crea cliente", "Aggiorna stato lead → Chiuso vinto"] },
-  { id: "wf_003", nome: "Promemoria scadenza 7gg", attivo: false, modulo: "scadenze", trigger: "data", azioni: ["Invia notifica a proprietario"] },
-]
+export const workflowsIniziali: Workflow[] = []
 
 // --- Sezione 7: Integrazione Make -------------------------------------------
 
@@ -302,10 +260,7 @@ export interface ScenarioMake {
   ultimo_trigger: string | null
 }
 
-export const scenariIniziali: ScenarioMake[] = [
-  { id: "mk_001", nome: "Lead da Meta Ads", webhook_url: "https://hook.eu1.make.com/xxx", attivo: false, ultimo_trigger: null },
-  { id: "mk_002", nome: "PDF + Firma digitale", webhook_url: "https://hook.eu1.make.com/yyy", attivo: true, ultimo_trigger: "2026-06-24T10:28:00Z" },
-]
+export const scenariIniziali: ScenarioMake[] = []
 
 /** Formatta una data ISO come data relativa breve in italiano. */
 export function formatRelativeIt(iso: string | null): string {

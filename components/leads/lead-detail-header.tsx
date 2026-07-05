@@ -38,13 +38,19 @@ import {
 import { type Lead } from "@/lib/mock-data"
 import { LeadAvatar, StatoLeadBadge, ScoreBar } from "./lead-utils"
 import { LeadTagBadges, TagAssignPopover } from "./tag-controls"
+import { useTags } from "@/lib/tag-store"
 
 export function LeadDetailHeader({ lead }: { lead: Lead }) {
+  const { owners } = useTags()
   const router = useRouter()
   const [showDelete, setShowDelete] = useState(false)
   const [showLost, setShowLost] = useState(false)
   const [showConvert, setShowConvert] = useState(false)
   const nome = lead["Nome Lead"]
+  const ownerName =
+    owners.find((owner) => owner.id === lead["Lead Proprietario"])?.nome ||
+    lead["Lead Proprietario"] ||
+    "Non assegnato"
 
   return (
     <div className="flex flex-col gap-4">
@@ -141,7 +147,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
         <span className="text-border">|</span>
         <span className="inline-flex items-center gap-1.5">
           <UserCircle className="size-3.5" />
-          {lead["Lead Proprietario"]}
+          {ownerName}
         </span>
         <span className="text-border">|</span>
         <span className="inline-flex items-center gap-1.5">

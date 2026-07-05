@@ -8,12 +8,9 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import type { CrmSettingsLayer } from "@/lib/crm-settings/catalog"
 
-export type CrmSettingsLayer =
-  | "root"
-  | "account-security"
-  | "file-manager"
-  | "system"
+export type { CrmSettingsLayer } from "@/lib/crm-settings/catalog"
 
 interface CrmSettingsLauncherValue {
   open: boolean

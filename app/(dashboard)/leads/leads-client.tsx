@@ -22,16 +22,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  mockLeads,
-  LEAD_TOTAL,
   LEAD_COLUMNS,
   DEFAULT_VISIBLE_COLUMNS,
   type Lead,
@@ -48,7 +38,6 @@ import {
   type Density,
 } from "@/components/leads/lead-table"
 import { BulkToolbar } from "@/components/leads/bulk-toolbar"
-import { LeadKpis } from "@/components/leads/lead-kpis"
 import { NewLeadDialog } from "@/components/leads/new-lead-dialog"
 import {
   LeadSettingsSheet,
@@ -77,6 +66,18 @@ import {
   useBulkLeads,
   fetchLeadsForExport,
 } from "@/lib/leads/hooks"
+import { useTags } from "@/lib/tag-store"
+import { usePermissions } from "@/lib/permissions/provider"
+import { motion } from "framer-motion"
+import { useQueryClient } from "@tanstack/react-query"
+import { leadsKeys } from "@/lib/leads/hooks"
+
+type LeadViewPreferences = {
+  version: 3
+  visibleCols: LeadColumnId[]
+  columnWidths: Partial<Record<LeadColumnId, number>>
+  density: Density
+}
 
 const ROWS_ITEMS: Record<string, string> = {
   "10": "10 righe",
@@ -110,11 +111,6 @@ function downloadLeadsCsv(rows: LeadListItem[], filename: string) {
   URL.revokeObjectURL(url)
 }
 
-// Elenco tag per i menu a tendina dei filtri (metadati, non i dati di lista)
-const ALL_TAGS = Array.from(new Set(mockLeads.flatMap((l) => l.Tag))).sort(
-  (a, b) => a.localeCompare(b),
-)
-
 interface LeadsClientProps {
   /** Query-string del prefetch server-side (per abbinare la chiave React Query). */
   initialSp: string
@@ -129,6 +125,15 @@ export function LeadsClient({
   initialLeads,
   initialStats,
 }: LeadsClientProps) {
+  const { tags } = useTags()
+  const permissions = usePermissions()
+  const allTags = useMemo(() => tags.map((tag) => tag.name), [tags])
+  const preferenceOwner =
+    permissions.snapshot.subject.userId ??
+    permissions.snapshot.subject.authUserId ??
+    "anonymous"
+  const preferenceKey = `solair:leads:view:${preferenceOwner}:v3`
+  const queryClient = useQueryClient()
   const [newLeadOpen, setNewLeadOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [filters, setFilters] = useState<LeadFilterState>(DEFAULT_FILTERS)
@@ -142,6 +147,10 @@ export function LeadsClient({
   const [visibleCols, setVisibleCols] = useState<LeadColumnId[]>(
     DEFAULT_VISIBLE_COLUMNS,
   )
+  const [columnWidths, setColumnWidths] = useState<
+    Partial<Record<LeadColumnId, number>>
+  >({})
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false)
   const [sortBy, setSortBy] = useState<LeadColumnId | null>("Valutazione")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [density, setDensity] = useState<Density>("normale")
@@ -151,8 +160,73 @@ export function LeadsClient({
     useState<SettingsSectionId>("generali")
 
   const columns = useMemo(
-    () => LEAD_COLUMNS.filter((c) => visibleCols.includes(c.id)),
+    () =>
+      visibleCols
+        .map((id) => LEAD_COLUMNS.find((column) => column.id === id))
+        .filter((column): column is (typeof LEAD_COLUMNS)[number] => Boolean(column)),
     [visibleCols],
+  )
+
+  useEffect(() => {
+    let active = true
+    queueMicrotask(() => {
+      if (!active) return
+      try {
+        const raw = window.localStorage.getItem(preferenceKey)
+        if (raw) {
+          const stored = JSON.parse(raw) as Partial<LeadViewPreferences>
+          const validIds = new Set(LEAD_COLUMNS.map((column) => column.id))
+          const order = (stored.visibleCols ?? []).filter((id) => validIds.has(id))
+          if (order.length) setVisibleCols(order)
+          if (stored.columnWidths) setColumnWidths(stored.columnWidths)
+          if (
+            stored.density === "comoda" ||
+            stored.density === "normale" ||
+            stored.density === "densa"
+          ) {
+            setDensity(stored.density)
+          }
+        }
+      } catch {
+        window.localStorage.removeItem(preferenceKey)
+      } finally {
+        setPreferencesLoaded(true)
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [preferenceKey])
+
+  useEffect(() => {
+    if (!preferencesLoaded) return
+    const preferences: LeadViewPreferences = {
+      version: 3,
+      visibleCols,
+      columnWidths,
+      density,
+    }
+    window.localStorage.setItem(preferenceKey, JSON.stringify(preferences))
+  }, [
+    columnWidths,
+    density,
+    preferenceKey,
+    preferencesLoaded,
+    visibleCols,
+  ])
+
+  const reorderColumns = useCallback(
+    (source: LeadColumnId, target: LeadColumnId) => {
+      setVisibleCols((current) => {
+        const from = current.indexOf(source)
+        const to = current.indexOf(target)
+        if (from < 0 || to < 0 || from === to) return current
+        const next = [...current]
+        next.splice(to, 0, next.splice(from, 1)[0])
+        return next
+      })
+    },
+    [],
   )
 
   // Ricerca con debounce: l'input resta reattivo (filters.search), ma la query
@@ -216,52 +290,17 @@ export function LeadsClient({
   const bulk = useBulkLeads()
 
   // Le righe sono proiezioni selettive; la tabella usa solo i campi inclusi.
-  const pageRows = (data?.rows ?? []) as Lead[]
+  const pageRows = useMemo(
+    () => (data?.rows ?? []) as Lead[],
+    [data?.rows],
+  )
   const total = data?.total ?? 0
-  const headerTotal = stats?.total ?? LEAD_TOTAL
+  const headerTotal = stats?.total ?? 0
 
   const totalPages = Math.max(1, Math.ceil(total / rowsPerPage))
   const start = (page - 1) * rowsPerPage
   const rangeStart = total === 0 ? 0 : start + 1
   const rangeEnd = Math.min(start + rowsPerPage, total)
-
-  // --- Scrollbar orizzontale sempre visibile (ancorata col footer) ---
-  // Il contenitore della tabella nasconde la scrollbar nativa orizzontale; qui
-  // gestiamo una scrollbar sincronizzata e fissa in basso, visibile solo quando
-  // le colonne eccedono la larghezza disponibile (dinamica su resize/colonne).
-  const tableScrollRef = useRef<HTMLDivElement>(null)
-  const hBarRef = useRef<HTMLDivElement>(null)
-  const [hOverflow, setHOverflow] = useState(false)
-  const [hScrollWidth, setHScrollWidth] = useState(0)
-
-  // Sincronizza la barra esterna quando la tabella scrolla orizzontalmente.
-  const syncBarFromTable = useCallback((el: HTMLDivElement) => {
-    const bar = hBarRef.current
-    if (bar && bar.scrollLeft !== el.scrollLeft) bar.scrollLeft = el.scrollLeft
-  }, [])
-
-  // Sincronizza la tabella quando l'utente trascina la barra esterna.
-  const syncTableFromBar = useCallback(() => {
-    const bar = hBarRef.current
-    const el = tableScrollRef.current
-    if (bar && el && el.scrollLeft !== bar.scrollLeft) el.scrollLeft = bar.scrollLeft
-  }, [])
-
-  // Ricalcola overflow/larghezza su mount, cambio colonne/righe/densità e resize.
-  useEffect(() => {
-    const el = tableScrollRef.current
-    if (!el) return
-    const measure = () => {
-      const overflow = el.scrollWidth - el.clientWidth > 1
-      setHOverflow(overflow)
-      setHScrollWidth(el.scrollWidth)
-    }
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    if (el.firstElementChild) ro.observe(el.firstElementChild)
-    return () => ro.disconnect()
-  }, [columns, pageRows, density])
 
   // --- Altezza dinamica della pagina (footer sempre visibile) ---
   // La topbar ha altezza variabile (responsive/breakpoint), quindi un calc fisso
@@ -513,17 +552,16 @@ export function LeadsClient({
     <div
       ref={rootRef}
       style={availH ? { height: availH } : undefined}
-      className="flex h-[calc(100svh-9rem)] flex-col gap-5 lg:h-[calc(100svh-6rem)]"
+      className="flex h-[calc(100svh-9rem)] flex-col gap-4 lg:h-[calc(100svh-6rem)]"
     >
       {/* Header pagina */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-0.5">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
             Lead
           </h1>
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            Gestisci, filtra e assegna i lead del CRM ·{" "}
-            {headerTotal.toLocaleString("it-IT")} totali
+          <p className="mt-1 flex items-center gap-2 text-[15px] text-muted-foreground">
+            {headerTotal.toLocaleString("it-IT")} lead disponibili
             {isFetching ? (
               <Loader2
                 className="size-3.5 animate-spin text-muted-foreground"
@@ -565,7 +603,7 @@ export function LeadsClient({
             selectedCount={selected.size}
             filtered={pageRows}
             selectedRows={selectedRows}
-            tags={ALL_TAGS}
+            tags={allTags}
             onOpenSettings={openSettings}
             onCheckDuplicates={handleCheckDuplicates}
             onImport={() => setImportOpen(true)}
@@ -607,8 +645,39 @@ export function LeadsClient({
         </div>
       </div>
 
-      {/* KPI operativi sopra la tabella */}
-      <LeadKpis stats={stats} />
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        {[
+          { label: "Tutti", stato: "all", commerciale: "all" },
+          { label: "Da contattare", stato: "Non contattato", commerciale: "all" },
+          { label: "Da richiamare", stato: "Tentato di contattare", commerciale: "all" },
+          { label: "Non assegnati", stato: "all", commerciale: "__unassigned__" },
+        ].map((view) => {
+          const active =
+            filters.stato === view.stato && filters.commerciale === view.commerciale
+          return (
+            <motion.button
+              type="button"
+              key={view.label}
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() =>
+                handleFilterChange({
+                  ...DEFAULT_FILTERS,
+                  stato: view.stato,
+                  commerciale: view.commerciale,
+                })
+              }
+              className={
+                active
+                  ? "h-10 shrink-0 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground shadow-sm"
+                  : "h-10 shrink-0 rounded-lg border border-border bg-card px-4 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+              }
+            >
+              {view.label}
+            </motion.button>
+          )
+        })}
+      </div>
 
       {/* Indicatore filtro duplicati attivo */}
       {onlyDuplicates ? (
@@ -628,18 +697,18 @@ export function LeadsClient({
       ) : null}
 
       {/* Barra filtri + pannello filtri avanzati */}
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-2 rounded-lg border border-border bg-card p-2 shadow-sm">
         <AdvancedFilters
           applied={advanced}
           onApply={handleAdvancedApply}
-          tags={ALL_TAGS}
+          tags={allTags}
         />
         <div className="min-w-0 flex-1">
           <LeadFilters
             filters={filters}
             onChange={handleFilterChange}
             onReset={handleReset}
-            tags={ALL_TAGS}
+            tags={allTags}
           />
         </div>
       </div>
@@ -656,17 +725,48 @@ export function LeadsClient({
         <LeadTable
           leads={pageRows}
           columns={columns}
+          columnWidths={columnWidths}
+          onColumnWidthChange={(column, width) =>
+            setColumnWidths((current) => ({ ...current, [column]: width }))
+          }
+          onColumnReorder={reorderColumns}
           selected={selected}
           onToggle={toggle}
           onToggleAll={toggleAll}
           onConvert={(lead) => setConvertTarget(lead)}
           onDelete={(lead) => setDeleteTarget(lead)}
+          onUpdate={(lead, patch) =>
+            updateLead.mutate(
+              { id: lead.id, patch },
+              {
+                onSuccess: () => toast.success("Lead aggiornato"),
+                onError: () => toast.error("Aggiornamento non riuscito"),
+              },
+            )
+          }
+          onDuplicate={(lead) => {
+            const copy = {
+              ...lead,
+              id: crypto.randomUUID(),
+              "Nome Lead": `Copia di ${lead["Nome Lead"]}`,
+              "Badge dell'attività": false,
+              "Badge di nota": false,
+              attivita: [],
+              documenti: [],
+            }
+            createLead.mutate(copy, {
+              onSuccess: () => toast.success("Lead duplicato"),
+              onError: () => toast.error("Duplicazione non riuscita"),
+            })
+          }}
+          onRefresh={() => {
+            void queryClient.invalidateQueries({ queryKey: leadsKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: leadsKeys.stats() })
+          }}
           sortBy={sortBy}
           sortDir={sortDir}
           onSort={handleSort}
           density={density}
-          scrollRef={tableScrollRef}
-          onScrollerScroll={syncBarFromTable}
         />
       </div>
 
@@ -678,27 +778,21 @@ export function LeadsClient({
             {rangeStart}-{rangeEnd} di {total.toLocaleString("it-IT")}
             {selected.size > 0 ? ` · ${selected.size} selezionati` : ""}
           </span>
-          <Select
-            items={ROWS_ITEMS}
+          <select
+            aria-label="Numero di righe per pagina"
             value={String(rowsPerPage)}
-            onValueChange={(v) => {
-              setRowsPerPage(Number(v))
+            onChange={(event) => {
+              setRowsPerPage(Number(event.target.value))
               setPage(1)
             }}
+            className="h-8 rounded-md border border-input bg-card px-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
           >
-            <SelectTrigger className="h-8 w-[120px] bg-card">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {Object.entries(ROWS_ITEMS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+            {Object.entries(ROWS_ITEMS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="flex items-center gap-2">

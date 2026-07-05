@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Building2,
   Plus,
@@ -30,8 +30,11 @@ import {
 import { SectionHeader } from "@/components/impostazioni/settings-ui"
 import { sediIniziali, type SystemSede } from "@/lib/system-settings-data"
 import { usePersistentSystemSetting } from "@/lib/crm-settings/use-persistent-system-setting"
+import { usePermissions } from "@/lib/permissions/provider"
 
 export default function SediPage() {
+  const permissions = usePermissions()
+  const canEdit = permissions.canAction("company.sites.manage")
   const [sedi, setSedi, store] = usePersistentSystemSetting<SystemSede[]>(
     "system.sedi",
     sediIniziali,
@@ -40,6 +43,39 @@ export default function SediPage() {
   const [editing, setEditing] = useState<SystemSede | null>(null)
   const [nome, setNome] = useState("")
   const [indirizzo, setIndirizzo] = useState("")
+  const [userSites, setUserSites] = useState<string[]>([])
+
+  useEffect(() => {
+    let active = true
+    fetch("/api/crm-settings/company/sites/counts", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then((payload) => {
+        if (!active) return
+        const counts =
+          payload?.counts && typeof payload.counts === "object"
+            ? (payload.counts as Record<string, number>)
+            : {}
+        setUserSites(
+          Object.entries(counts).flatMap(([site, count]) =>
+            Array.from({ length: count }, () => site),
+          ),
+        )
+      })
+      .catch(() => {
+        if (active) setUserSites([])
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const siteUserCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const site of userSites) {
+      counts.set(site, (counts.get(site) ?? 0) + 1)
+    }
+    return counts
+  }, [userSites])
 
   function openNew() {
     setEditing(null)
@@ -91,17 +127,21 @@ export default function SediPage() {
   return (
     <div className="flex flex-col gap-5">
       <SectionHeader
-        title="Sedi"
+        title="Sedi e territori"
         description={
           store.saving
             ? "Salvataggio configurazione..."
-            : "Gestisci le sedi operative di Solair Group. Le sedi sono attributi assegnabili agli utenti."
+            : canEdit
+              ? "Gestisci le sedi operative usate da account, assegnazioni e dashboard."
+              : "Sedi operative e territori disponibili in sola lettura."
         }
         action={
-          <Button onClick={openNew} className="bg-teal text-teal-foreground hover:bg-teal/90">
-            <Plus className="size-4" />
-            Aggiungi sede
-          </Button>
+          canEdit ? (
+            <Button onClick={openNew} className="bg-teal text-teal-foreground hover:bg-teal/90">
+              <Plus className="size-4" />
+              Aggiungi sede
+            </Button>
+          ) : undefined
         }
       />
 
@@ -112,6 +152,15 @@ export default function SediPage() {
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2">
+        {!store.loading && sedi.length === 0 ? (
+          <div className="col-span-full rounded-lg border border-dashed border-border px-6 py-10 text-center">
+            <Building2 className="mx-auto mb-3 size-6 text-muted-foreground" />
+            <p className="font-medium text-foreground">Nessuna sede configurata</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Aggiungi la prima sede operativa per renderla disponibile nel CRM.
+            </p>
+          </div>
+        ) : null}
         {sedi.map((sede) => (
           <div
             key={sede.id}
@@ -130,17 +179,19 @@ export default function SediPage() {
                 </span>
                 <span className="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                   <Users className="size-3" />
-                  {sede.utenti} {sede.utenti === 1 ? "utente" : "utenti"}
+                  {siteUserCounts.get(sede.nome) ?? 0}{" "}
+                  {(siteUserCounts.get(sede.nome) ?? 0) === 1 ? "utente" : "utenti"}
                 </span>
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <Switch
                 checked={sede.attiva}
+                disabled={!canEdit}
                 onCheckedChange={() => toggleAttiva(sede.id)}
                 aria-label={`Sede ${sede.nome} attiva`}
               />
-              <DropdownMenu>
+              {canEdit ? <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
                     <button
@@ -165,7 +216,7 @@ export default function SediPage() {
                     Elimina
                   </DropdownMenuItem>
                 </DropdownMenuContent>
-              </DropdownMenu>
+              </DropdownMenu> : null}
             </div>
           </div>
         ))}

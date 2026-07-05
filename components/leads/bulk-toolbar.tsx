@@ -22,7 +22,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
-import { mockCommerciali, STATO_LEAD_ORDER } from "@/lib/mock-data"
+import { STATO_LEAD_ORDER } from "@/lib/mock-data"
+import { useTags } from "@/lib/tag-store"
 
 const ICON_BTN =
   "flex size-9 items-center justify-center rounded-lg text-navy transition-transform duration-150 hover:scale-110 hover:bg-secondary"
@@ -42,6 +43,7 @@ export function BulkToolbar({
   onDelete: () => void
   onClear: () => void
 }) {
+  const { owners } = useTags()
   if (count === 0) return null
 
   return (
@@ -74,9 +76,12 @@ export function BulkToolbar({
             <DropdownMenuLabel>Assegna a</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              {mockCommerciali.map((c) => (
-                <DropdownMenuItem key={c} onClick={() => onChangeOwner(c)}>
-                  {c}
+              {owners.map((owner) => (
+                <DropdownMenuItem
+                  key={owner.id}
+                  onClick={() => onChangeOwner(owner.id)}
+                >
+                  {owner.nome}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuGroup>

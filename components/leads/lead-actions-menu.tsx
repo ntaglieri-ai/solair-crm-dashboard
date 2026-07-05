@@ -4,12 +4,10 @@ import { useMemo, useState } from "react"
 import {
   IconDotsVertical,
   IconMail,
-  IconFileText,
   IconDownload,
   IconTable,
   IconPrinter,
   IconTags,
-  IconRoute,
   IconCopyCheck,
   IconArrowsExchange,
   IconPencil,
@@ -54,20 +52,17 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
   type Lead,
-  mockCommerciali,
   STATO_LEAD_ORDER,
   SEDE_LABELS,
 } from "@/lib/mock-data"
+import { useTags } from "@/lib/tag-store"
 import type { SettingsSectionId } from "./lead-settings-sheet"
 import { LeadTagSection } from "./lead-tag-section"
-import { RulesSection } from "./assignment-rules"
 
 type Dialogs =
   | "none"
   | "tags"
-  | "rules"
   | "compose"
-  | "drafts"
   | "fullscreen"
   | "transfer"
   | "update"
@@ -76,21 +71,6 @@ type Dialogs =
   | "delete"
 
 type UpdateField = "Stato Lead" | "Sede" | "Tag"
-
-const MOCK_DRAFTS = [
-  {
-    id: "d1",
-    subject: "Promo impianto fotovoltaico 6kW",
-    snippet: "Gentile cliente, le confermiamo la disponibilità dell'offerta…",
-    updated: "Ieri, 17:42",
-  },
-  {
-    id: "d2",
-    subject: "Sollecito preventivo accumulo",
-    snippet: "Buongiorno, torniamo a contattarla riguardo al preventivo…",
-    updated: "12 giu, 09:15",
-  },
-]
 
 function norm(v: string | undefined): string {
   return (v ?? "").trim().toLowerCase()
@@ -129,11 +109,12 @@ export function LeadActionsMenu({
   onBulkDedup: (idsToRemove: string[]) => void
   onBulkDelete: () => void
 }) {
+  const { owners } = useTags()
   const [dialog, setDialog] = useState<Dialogs>("none")
   const hasSelection = selectedCount > 0
 
   // Form state
-  const [owner, setOwner] = useState(mockCommerciali[0])
+  const [owner, setOwner] = useState("")
   const [updField, setUpdField] = useState<UpdateField>("Stato Lead")
   const [updValue, setUpdValue] = useState("")
   const [subject, setSubject] = useState("")
@@ -283,10 +264,6 @@ export function LeadActionsMenu({
                   <IconTags size={16} stroke={1.8} data-icon="inline-start" />
                   Gestisci tag
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setDialog("rules")}>
-                  <IconRoute size={16} stroke={1.8} data-icon="inline-start" />
-                  Regole di assegnazione
-                </DropdownMenuItem>
                 <DropdownMenuItem onClick={onCheckDuplicates}>
                   <IconCopyCheck size={16} stroke={1.8} data-icon="inline-start" />
                   Controlla duplicati
@@ -298,13 +275,6 @@ export function LeadActionsMenu({
                 <DropdownMenuItem onClick={openCompose}>
                   <IconMail size={16} stroke={1.8} data-icon="inline-start" />
                   Invia Email
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setDialog("drafts")}>
-                  <IconFileText size={16} stroke={1.8} data-icon="inline-start" />
-                  Bozze
-                  <span className="ml-auto rounded-full bg-secondary px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground">
-                    {MOCK_DRAFTS.length}
-                  </span>
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
@@ -366,25 +336,6 @@ export function LeadActionsMenu({
         </DialogContent>
       </Dialog>
 
-      {/* -------------------- Dialog: Regole di assegnazione -------------------- */}
-      <Dialog
-        open={dialog === "rules"}
-        onOpenChange={(o) => !o && setDialog("none")}
-      >
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Regole di assegnazione</DialogTitle>
-            <DialogDescription>
-              Assegna automaticamente i nuovi lead ai commerciali in base a
-              criteri.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="max-h-[70vh] overflow-auto py-1">
-            <RulesSection />
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* -------------------- Dialog: Invia Email -------------------- */}
       <Dialog
         open={dialog === "compose"}
@@ -437,62 +388,6 @@ export function LeadActionsMenu({
             >
               <IconMail size={16} stroke={1.8} data-icon="inline-start" />
               Invia a {filtered.length}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* -------------------- Dialog: Bozze -------------------- */}
-      <Dialog
-        open={dialog === "drafts"}
-        onOpenChange={(o) => !o && setDialog("none")}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Bozze email</DialogTitle>
-            <DialogDescription>
-              Riprendi una bozza salvata per continuare la composizione.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-2 py-1">
-            {MOCK_DRAFTS.map((d) => (
-              <div
-                key={d.id}
-                className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5"
-              >
-                <IconFileText
-                  size={18}
-                  stroke={1.8}
-                  className="shrink-0 text-muted-foreground"
-                />
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate text-sm font-medium text-foreground">
-                    {d.subject}
-                  </span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {d.snippet}
-                  </span>
-                </div>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {d.updated}
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setSubject(d.subject)
-                    setBody(d.snippet)
-                    setDialog("compose")
-                  }}
-                >
-                  Riprendi
-                </Button>
-              </div>
-            ))}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialog("none")}>
-              Chiudi
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -578,9 +473,9 @@ export function LeadActionsMenu({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {mockCommerciali.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
+                  {owners.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.nome}
                     </SelectItem>
                   ))}
                 </SelectGroup>

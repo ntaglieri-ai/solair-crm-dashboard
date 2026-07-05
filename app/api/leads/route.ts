@@ -8,16 +8,19 @@ export async function GET(request: Request) {
   const guard = await requireApiRecord("lead", "view")
   if (guard.response) return guard.response
 
-  const { searchParams } = new URL(request.url)
-  const params = parseLeadsSearchParams(searchParams)
-  const result = await queryLeads(params)
-
-  return NextResponse.json(result, {
-    headers: {
-      // Cache Vercel Edge: 30 secondi fresh, 60 secondi stale-while-revalidate
-      "Cache-Control": "s-maxage=30, stale-while-revalidate=60",
-    },
-  })
+  try {
+    const { searchParams } = new URL(request.url)
+    const params = parseLeadsSearchParams(searchParams)
+    const result = await queryLeads(params)
+    return NextResponse.json(result, {
+      headers: { "Cache-Control": "private, no-store" },
+    })
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Errore caricamento Lead"
+    console.error("[api/leads]", message)
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
 }
 
 export async function POST(request: Request) {

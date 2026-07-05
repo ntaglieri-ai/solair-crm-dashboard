@@ -37,44 +37,13 @@ const SORT_COLUMN: Record<string, string> = {
   "Proprietario del compito": "proprietario_id",
 }
 
-// Mapping DB → UI per il campo priorita.
-const PRIORITA_MAP: Record<string, PrioritaCompito> = {
-  Alta: "Alto",
-  Media: "Medio",
-  Bassa: "Basso",
-  // Tolleranza se il DB salva già i valori UI
-  Alto: "Alto",
-  Medio: "Medio",
-  Basso: "Basso",
-}
-
-// Mapping UI → DB per il campo priorita in inserimento/aggiornamento.
-const PRIORITA_DB: Record<PrioritaCompito, string> = {
-  Alto: "Alta",
-  Medio: "Media",
-  Basso: "Bassa",
-}
-
-// Mapping DB → UI per il campo stato.
-const STATO_MAP: Record<string, StatoCompito> = {
-  da_fare: "Da fare",
-  in_corso: "In corso",
-  in_attesa: "In attesa",
-  completato: "Completato",
-  annullato: "Completato", // fallback
-  "Da fare": "Da fare",
-  "In corso": "In corso",
-  "In attesa": "In attesa",
-  Completato: "Completato",
-}
-
-// Mapping UI → DB per il campo stato.
-const STATO_DB: Record<StatoCompito, string> = {
-  "Da fare": "da_fare",
-  "In corso": "in_corso",
-  "In attesa": "in_attesa",
-  Completato: "completato",
-}
+const DB_STATI: StatoCompito[] = [
+  "Non iniziato",
+  "In corso",
+  "Rinviato",
+  "Completato",
+  "In attesa di input",
+]
 
 /** ISO (o YYYY-MM-DD) → DD/MM/YYYY. Restituisce "" se non valido. */
 function isoToDMY(iso: string | null): string {
@@ -100,17 +69,15 @@ function mapRow(row: Record<string, unknown>): Compito {
   return {
     id: row.id as string,
     Oggetto: (row.oggetto as string) ?? "",
-    Stato:
-      STATO_MAP[row.stato as string] ?? "Da fare",
-    Priorità:
-      PRIORITA_MAP[row.priorita as string] ?? "Medio",
+    Stato: (row.stato as StatoCompito) ?? "Non iniziato",
+    Priorità: (row.priorita as PrioritaCompito) ?? "Medio",
     "Data di scadenza": isoToDMY(row.scadenza as string | null),
     "Proprietario del compito": (row.proprietario_id as string) ?? "",
     Sede: (row.sede as SedeLabel) ?? ("" as SedeLabel),
     "Correlato a":
       correlato_id && correlato_tipo
         ? {
-            tipo: correlato_tipo === "Lead" ? "Lead" : "Cliente",
+            tipo: correlato_tipo === "lead" ? "Lead" : "Cliente",
             id: correlato_id,
             nome: correlato_id, // nome non in DB — fallback all'id
           }
@@ -147,7 +114,7 @@ export async function queryCompiti(
     .from("compiti")
     .select("id", { count: "exact", head: true })
     .lt("scadenza", now)
-    .not("stato", "in", '("completato","annullato")')
+    .neq("stato", "Completato")
 
   if (params.search.trim()) {
     const p = `%${params.search.trim()}%`
@@ -157,16 +124,15 @@ export async function queryCompiti(
     scadutiQ = scadutiQ.or(f)
   }
   if (params.stati.length > 0) {
-    const dbStati = params.stati.map((s) => STATO_DB[s] ?? s)
+    const dbStati = params.stati.filter((stato) => DB_STATI.includes(stato))
     listQ = listQ.in("stato", dbStati)
     countQ = countQ.in("stato", dbStati)
     scadutiQ = scadutiQ.in("stato", dbStati)
   }
   if (params.priorita !== "all") {
-    const dbPriorita = PRIORITA_DB[params.priorita as PrioritaCompito] ?? params.priorita
-    listQ = listQ.eq("priorita", dbPriorita)
-    countQ = countQ.eq("priorita", dbPriorita)
-    scadutiQ = scadutiQ.eq("priorita", dbPriorita)
+    listQ = listQ.eq("priorita", params.priorita)
+    countQ = countQ.eq("priorita", params.priorita)
+    scadutiQ = scadutiQ.eq("priorita", params.priorita)
   }
   if (params.proprietario !== "all") {
     listQ = listQ.eq("proprietario_id", params.proprietario)
@@ -225,8 +191,8 @@ export async function createCompitoRecord(
     .from("compiti")
     .insert({
       oggetto: body.Oggetto || null,
-      stato: body.Stato ? (STATO_DB[body.Stato] ?? body.Stato) : "da_fare",
-      priorita: body.Priorità ? (PRIORITA_DB[body.Priorità] ?? body.Priorità) : "Media",
+      stato: body.Stato || "Non iniziato",
+      priorita: body.Priorità || "Medio",
       scadenza: body["Data di scadenza"]
         ? dmyToISO(body["Data di scadenza"])
         : null,
@@ -234,7 +200,7 @@ export async function createCompitoRecord(
       sede: body.Sede || null,
       descrizione: body.Descrizione || null,
       correlato_id: body["Correlato a"]?.id || null,
-      correlato_tipo: body["Correlato a"]?.tipo || null,
+      correlato_tipo: body["Correlato a"]?.tipo.toLowerCase() || null,
     })
     .select(LIST_COLUMNS)
     .single()
@@ -251,9 +217,8 @@ export async function updateCompitoRecord(
     updated_at: new Date().toISOString(),
   }
   if (patch.Oggetto !== undefined) row.oggetto = patch.Oggetto
-  if (patch.Stato !== undefined) row.stato = STATO_DB[patch.Stato] ?? patch.Stato
-  if (patch.Priorità !== undefined)
-    row.priorita = PRIORITA_DB[patch.Priorità] ?? patch.Priorità
+  if (patch.Stato !== undefined) row.stato = patch.Stato
+  if (patch.Priorità !== undefined) row.priorita = patch.Priorità
   if (patch["Data di scadenza"] !== undefined)
     row.scadenza = dmyToISO(patch["Data di scadenza"])
   if (patch["Proprietario del compito"] !== undefined)
@@ -262,7 +227,7 @@ export async function updateCompitoRecord(
   if (patch.Descrizione !== undefined) row.descrizione = patch.Descrizione
   if (patch["Correlato a"] !== undefined) {
     row.correlato_id = patch["Correlato a"]?.id ?? null
-    row.correlato_tipo = patch["Correlato a"]?.tipo ?? null
+    row.correlato_tipo = patch["Correlato a"]?.tipo.toLowerCase() ?? null
   }
 
   const { data, error } = await supabase

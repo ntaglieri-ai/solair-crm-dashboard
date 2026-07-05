@@ -22,7 +22,9 @@ export const PAGE_KEYS = [
   "crm_settings.account.audit",
   "crm_settings.account.session",
   "crm_settings.system",
+  "crm_settings.system.azienda",
   "crm_settings.system.sedi",
+  "crm_settings.system.aspetto",
   "crm_settings.system.attributi",
   "crm_settings.system.valori",
   "crm_settings.system.regole",
@@ -30,6 +32,9 @@ export const PAGE_KEYS = [
   "crm_settings.system.import_export",
   "crm_settings.system.make",
   "crm_settings.system.backup",
+  "crm_settings.maintenance",
+  "crm_settings.maintenance.health",
+  "crm_settings.file_manager",
 ] as const
 
 export const ROUTE_PAGE_MAP: Record<string, string> = {
@@ -47,7 +52,9 @@ export const ROUTE_PAGE_MAP: Record<string, string> = {
   "/crm-settings/account/audit": "crm_settings.account.audit",
   "/crm-settings/account/session": "crm_settings.account.session",
   "/crm-settings/system": "crm_settings.system",
+  "/crm-settings/system/azienda": "crm_settings.system.azienda",
   "/crm-settings/system/sedi": "crm_settings.system.sedi",
+  "/crm-settings/system/aspetto": "crm_settings.system.aspetto",
   "/crm-settings/system/attributi": "crm_settings.system.attributi",
   "/crm-settings/system/valori": "crm_settings.system.valori",
   "/crm-settings/system/regole": "crm_settings.system.regole",
@@ -55,6 +62,13 @@ export const ROUTE_PAGE_MAP: Record<string, string> = {
   "/crm-settings/system/import-export": "crm_settings.system.import_export",
   "/crm-settings/system/make": "crm_settings.system.make",
   "/crm-settings/system/backup": "crm_settings.system.backup",
+  "/crm-settings/maintenance": "crm_settings.maintenance",
+  "/crm-settings/maintenance/health": "crm_settings.maintenance.health",
+  "/crm-settings/maintenance/make": "crm_settings.system.make",
+  "/crm-settings/maintenance/backup": "crm_settings.system.backup",
+  "/crm-settings/maintenance/file-manager": "crm_settings.file_manager",
+  "/crm-settings/maintenance/storage": "crm_settings.file_manager",
+  "/crm-settings/file-manager": "crm_settings.file_manager",
 }
 
 export const MODULE_KEYS = [
@@ -87,9 +101,16 @@ export const ACTION_KEYS = [
   "crm_settings.system.maintenance.run",
   "crm_settings.system.schema.manage",
   "crm_settings.system.default_values.manage",
+  "company.profile.view",
+  "company.profile.edit",
+  "company.sites.view",
+  "company.sites.manage",
+  "appearance.personal.manage",
   "lead.columns.customize_own",
   "lead.tags.edit",
   "lead.default_values.manage",
+  "lead.assignment_rules.manage",
+  "lead.workflows.manage",
   "lead.fields.view",
   "lead.fields.create",
   "lead.fields.edit",
@@ -101,18 +122,30 @@ export const ACTION_KEYS = [
   "clienti.fields.create",
   "clienti.fields.edit",
   "clienti.fields.delete",
+  "clienti.default_values.manage",
+  "clienti.assignment_rules.manage",
+  "clienti.workflows.manage",
   "compiti.fields.view",
   "compiti.fields.create",
   "compiti.fields.edit",
   "compiti.fields.delete",
+  "compiti.default_values.manage",
+  "compiti.assignment_rules.manage",
+  "compiti.workflows.manage",
   "scadenze.fields.view",
   "scadenze.fields.create",
   "scadenze.fields.edit",
   "scadenze.fields.delete",
+  "scadenze.default_values.manage",
+  "scadenze.assignment_rules.manage",
+  "scadenze.workflows.manage",
   "installatori.fields.view",
   "installatori.fields.create",
   "installatori.fields.edit",
   "installatori.fields.delete",
+  "installatori.default_values.manage",
+  "installatori.assignment_rules.manage",
+  "installatori.workflows.manage",
 ] as const
 
 export function normalizeRoleCode(value: string | null | undefined): RoleCode {
@@ -218,13 +251,14 @@ export function buildDefaultPermissionSnapshot(params?: {
       "crm_settings.account.utenti",
       "crm_settings.account.permessi",
       "crm_settings.system",
+      "crm_settings.system.azienda",
       "crm_settings.system.sedi",
+      "crm_settings.system.aspetto",
       "crm_settings.system.attributi",
       "crm_settings.system.valori",
       "crm_settings.system.regole",
       "crm_settings.system.flussi",
       "crm_settings.system.import_export",
-      "crm_settings.system.make",
     ])
     grantRecords([...MODULE_KEYS], ["view", "create", "edit", "delete", "export", "assign"])
     grantActions([
@@ -235,22 +269,32 @@ export function buildDefaultPermissionSnapshot(params?: {
       "lead.default_values.manage",
       "crm_settings.system.schema.manage",
       "crm_settings.system.default_values.manage",
+      "company.profile.view",
+      "company.profile.edit",
+      "company.sites.view",
+      "company.sites.manage",
+      "appearance.personal.manage",
     ])
     grantFieldManagement([...MODULE_KEYS])
     for (const moduleKey of MODULE_KEYS) {
+      records[moduleKey].import = true
+      actions[`${moduleKey}.default_values.manage`] = true
+      actions[`${moduleKey}.assignment_rules.manage`] = true
+      actions[`${moduleKey}.workflows.manage`] = true
       fields[moduleKey] = { "*": "editable" }
       scopes[moduleKey] = "all"
     }
   } else if (roleCode === "AGENT") {
-    grantPages("r", ["dashboard", "lead", "clienti", "compiti", "scadenze", "documenti"])
+    grantPages("r", ["dashboard", "lead", "clienti", "compiti", "scadenze", "documenti", "crm_settings", "crm_settings.system", "crm_settings.system.azienda", "crm_settings.system.sedi", "crm_settings.system.aspetto"])
     grantRecords(["lead", "clienti", "compiti", "scadenze"], ["view", "create", "edit"])
-    grantActions(["lead.columns.customize_own", "lead.tags.edit"])
+    grantActions(["lead.columns.customize_own", "lead.tags.edit", "company.profile.view", "company.sites.view", "appearance.personal.manage"])
     for (const moduleKey of ["lead", "clienti", "compiti", "scadenze"]) {
       fields[moduleKey] = { "*": "editable" }
       scopes[moduleKey] = "assigned"
     }
   } else if (roleCode === "DIRECTOR") {
     grantPages("rw", ["dashboard", "lead", "clienti", "compiti", "scadenze", "documenti"])
+    grantPages("r", ["crm_settings", "crm_settings.system", "crm_settings.system.azienda", "crm_settings.system.sedi", "crm_settings.system.aspetto"])
     grantRecords(["lead", "clienti", "compiti", "scadenze"], [
       "view",
       "create",
@@ -258,15 +302,15 @@ export function buildDefaultPermissionSnapshot(params?: {
       "export",
       "assign",
     ])
-    grantActions(["lead.columns.customize_own", "lead.tags.edit"])
+    grantActions(["lead.columns.customize_own", "lead.tags.edit", "company.profile.view", "company.sites.view", "appearance.personal.manage"])
     for (const moduleKey of ["lead", "clienti", "compiti", "scadenze"]) {
       fields[moduleKey] = { "*": "editable" }
       scopes[moduleKey] = "own_sede"
     }
   } else {
-    grantPages("r", ["dashboard", "lead", "clienti", "compiti", "scadenze"])
+    grantPages("r", ["dashboard", "lead", "clienti", "compiti", "scadenze", "crm_settings", "crm_settings.system", "crm_settings.system.azienda", "crm_settings.system.sedi", "crm_settings.system.aspetto"])
     grantRecords(["lead", "clienti", "compiti", "scadenze"], ["view"])
-    grantActions(["lead.columns.customize_own"])
+    grantActions(["lead.columns.customize_own", "company.profile.view", "company.sites.view", "appearance.personal.manage"])
     for (const moduleKey of ["lead", "clienti", "compiti", "scadenze"]) {
       fields[moduleKey] = { "*": "readonly" }
       scopes[moduleKey] = "own"

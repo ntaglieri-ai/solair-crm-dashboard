@@ -18,30 +18,16 @@ import {
   CrmSettingsRouteProgress,
   useCrmSettingsNavigation,
 } from "@/components/dashboard/crm-settings-navigation"
+import {
+  CRM_SETTINGS_PAGE_TITLES,
+  crmSettingsItemForPath,
+} from "@/lib/crm-settings/catalog"
 
 const SECTIONS: Record<string, { label: string; layer: CrmSettingsLayer }> = {
   account: { label: "Account & Security", layer: "account-security" },
-  "file-manager": { label: "File Manager", layer: "file-manager" },
+  maintenance: { label: "Manutenzione", layer: "maintenance" },
+  "file-manager": { label: "Manutenzione", layer: "maintenance" },
   system: { label: "System Settings", layer: "system" },
-}
-
-const PAGE_TITLES: Record<string, string> = {
-  "/crm-settings/account/utenti": "Account Management",
-  "/crm-settings/account/permessi": "Permission Management",
-  "/crm-settings/account/audit": "Audit & Log",
-  "/crm-settings/account/session": "Session & Access",
-  "/crm-settings/file-manager/nextcloud": "Configurazione Nextcloud",
-  "/crm-settings/file-manager/struttura": "Struttura cartelle",
-  "/crm-settings/file-manager/permessi": "Permessi storage",
-  "/crm-settings/file-manager/condivise": "Cartelle condivise",
-  "/crm-settings/system/sedi": "Sedi",
-  "/crm-settings/system/attributi": "Campi personalizzati",
-  "/crm-settings/system/valori": "Valori predefiniti",
-  "/crm-settings/system/regole": "Regole di assegnazione",
-  "/crm-settings/system/flussi": "Flussi di lavoro",
-  "/crm-settings/system/import-export": "Import / Export",
-  "/crm-settings/system/make": "Integrazione Make",
-  "/crm-settings/system/backup": "Backup",
 }
 
 function CrmSettingsHeader() {
@@ -51,15 +37,21 @@ function CrmSettingsHeader() {
 
   const sectionKey = pathname.split("/").filter(Boolean)[1] ?? ""
   const section = SECTIONS[sectionKey]
-  const pageTitle = PAGE_TITLES[pathname]
+  const pageTitle = CRM_SETTINGS_PAGE_TITLES[pathname]
+  const catalogItem = crmSettingsItemForPath(pathname)
 
   const items: CrmBreadcrumbItem[] = [
-    { label: "CRM Settings", action: openCrmSettings },
+    { label: "CRM Settings & Admin", action: openCrmSettings },
   ]
   if (section) {
     if (pageTitle) {
       items.push({
-        label: section.label,
+        label:
+          catalogItem?.section === "organization"
+            ? "Azienda e sistema"
+            : catalogItem?.section === "maintenance"
+              ? "Manutenzione"
+              : section.label,
         action: () => openCrmSettingsLayer(section.layer),
       })
       items.push({ label: pageTitle })

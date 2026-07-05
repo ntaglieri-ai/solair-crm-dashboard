@@ -30,9 +30,8 @@ import {
   STATO_LEAD_ORDER,
   ORIGINE_LEAD_VALUES,
   SEDE_LABELS,
-  mockCommerciali,
-  mockInstallatori,
 } from "@/lib/mock-data"
+import { useTags } from "@/lib/tag-store"
 
 // ----------------------------------------------------------------------------
 // Tipi filtro — logica pura condivisa con il repository server-side
@@ -59,14 +58,21 @@ interface FieldDef {
   id: keyof Lead
   label: string
   type: FieldType
-  options?: string[]
+  options?: Array<{ value: string; label: string }>
 }
 
 const STATO_EMAIL_VALUES = ["Recapitata", "Aperta", "Non recapitata", "—"]
 const MOBILE_FISSO_VALUES = ["Mobile", "Fisso"]
 
 // Definizione dei campi del modello Lead in ordine alfabetico (italiano)
-function buildFields(tags: string[]): FieldDef[] {
+const options = (values: readonly string[]) =>
+  values.map((value) => ({ value, label: value }))
+
+function buildFields(
+  tags: string[],
+  owners: Array<{ id: string; nome: string }>,
+  installers: Array<{ id: string; nome: string }>,
+): FieldDef[] {
   return [
     { id: "Account convertito", label: "Account convertito", type: "text" },
     { id: "campaign name", label: "campaign name", type: "text" },
@@ -85,7 +91,7 @@ function buildFields(tags: string[]): FieldDef[] {
       id: "Installatore - Incaricato sopralluogo",
       label: "Installatore - Incaricato sopralluogo",
       type: "enum",
-      options: mockInstallatori,
+      options: installers.map((item) => ({ value: item.id, label: item.nome })),
     },
     { id: "kWh", label: "kWh", type: "number" },
     { id: "kWp", label: "kWp", type: "number" },
@@ -93,13 +99,13 @@ function buildFields(tags: string[]): FieldDef[] {
       id: "Lead Proprietario",
       label: "Lead Proprietario",
       type: "enum",
-      options: mockCommerciali,
+      options: owners.map((item) => ({ value: item.id, label: item.nome })),
     },
     {
       id: "Mobile/Fisso",
       label: "Mobile/Fisso",
       type: "enum",
-      options: MOBILE_FISSO_VALUES,
+      options: options(MOBILE_FISSO_VALUES),
     },
     {
       id: "Modalità iscrizione annullata",
@@ -120,7 +126,7 @@ function buildFields(tags: string[]): FieldDef[] {
       id: "Origine Lead",
       label: "Origine Lead",
       type: "enum",
-      options: [...ORIGINE_LEAD_VALUES],
+      options: options(ORIGINE_LEAD_VALUES),
     },
     { id: "Paese", label: "Paese", type: "text" },
     { id: "Provincia", label: "Provincia", type: "text" },
@@ -129,21 +135,21 @@ function buildFields(tags: string[]): FieldDef[] {
       label: "Residente in Sicilia",
       type: "boolean",
     },
-    { id: "Sede", label: "Sede", type: "enum", options: [...SEDE_LABELS] },
+    { id: "Sede", label: "Sede", type: "enum", options: options(SEDE_LABELS) },
     { id: "Social Lead ID", label: "Social Lead ID", type: "text" },
     {
       id: "Stato",
       label: "Stato",
       type: "enum",
-      options: STATO_EMAIL_VALUES,
+      options: options(STATO_EMAIL_VALUES),
     },
     {
       id: "Stato Lead",
       label: "Stato Lead",
       type: "enum",
-      options: [...STATO_LEAD_ORDER],
+      options: options(STATO_LEAD_ORDER),
     },
-    { id: "Tag", label: "Tag", type: "enum", options: tags },
+    { id: "Tag", label: "Tag", type: "enum", options: options(tags) },
     { id: "Telefono", label: "Telefono", type: "text" },
     {
       id: "Tempo di conversione Lead",
@@ -162,7 +168,13 @@ function fieldPillLabel(def: FieldDef, v: FieldValue): string {
     case "text":
       return `${def.label}: "${v.contains.trim()}"`
     case "enum":
-      return `${def.label}: ${v.selected.join(", ")}`
+      return `${def.label}: ${v.selected
+        .map(
+          (selected) =>
+            def.options?.find((option) => option.value === selected)?.label ??
+            selected,
+        )
+        .join(", ")}`
     case "number": {
       if (v.min !== "" && v.max !== "")
         return `${def.label}: ${v.min}–${v.max}`
@@ -199,12 +211,16 @@ export function AdvancedFilters({
   onApply: (state: AdvancedFilterState) => void
   tags: string[]
 }) {
+  const { owners, installers } = useTags()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<AdvancedFilterState>(applied)
   const [fieldQuery, setFieldQuery] = useState("")
   const [expanded, setExpanded] = useState<string | null>(null)
 
-  const allFields = useMemo(() => buildFields(tags), [tags])
+  const allFields = useMemo(
+    () => buildFields(tags, owners, installers),
+    [installers, owners, tags],
+  )
   const fieldsById = useMemo(
     () => new Map(allFields.map((f) => [f.id as string, f])),
     [allFields],
@@ -498,22 +514,22 @@ function FieldEditor({
       <div className="flex flex-col gap-2">
         {(def.options ?? []).map((opt) => (
           <label
-            key={opt}
+            key={opt.value}
             className="flex cursor-pointer items-center gap-2 text-sm text-foreground"
           >
             <Checkbox
-              checked={selected.includes(opt)}
+              checked={selected.includes(opt.value)}
               onCheckedChange={(c) =>
                 onChange({
                   type: "enum",
                   selected:
                     c === true
-                      ? [...selected, opt]
-                      : selected.filter((s) => s !== opt),
+                      ? [...selected, opt.value]
+                      : selected.filter((s) => s !== opt.value),
                 })
               }
             />
-            <span className="truncate">{opt}</span>
+            <span className="truncate">{opt.label}</span>
           </label>
         ))}
         {(def.options ?? []).length === 0 ? (

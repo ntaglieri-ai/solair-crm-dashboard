@@ -32,6 +32,8 @@ function project(lead: Lead, fields: string[]): LeadListItem {
   for (const k of keys) {
     if (k in lead) out[k] = lead[k as keyof Lead]
   }
+  out.noteItems = lead.noteItems ?? []
+  out.taskItems = lead.taskItems ?? []
   return out as LeadListItem
 }
 

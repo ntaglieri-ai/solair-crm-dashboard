@@ -4,6 +4,9 @@ export const SYSTEM_SETTING_KEYS = [
   "system.valori",
   "system.regole",
   "system.flussi",
+  "company.profile",
+  "company.integrations.make",
+  "maintenance.nextcloud",
 ] as const
 
 export type SystemSettingKey = (typeof SYSTEM_SETTING_KEYS)[number]

@@ -39,7 +39,7 @@ export const PAGINE: { id: PaginaId; label: string }[] = [
   { id: "scadenze", label: "Scadenze" },
   { id: "documenti", label: "Documenti" },
   { id: "installatori", label: "Installatori" },
-  { id: "crm_settings", label: "CRM Settings" },
+  { id: "crm_settings", label: "CRM Settings & Admin" },
 ]
 
 /** Moduli su cui si configurano i permessi di record. */
@@ -203,7 +203,7 @@ export function permessiHighlights(p: RuoloPermessi): string[] {
   )
   out.push(puoEsportare ? "Può esportare" : "No export")
   out.push(
-    p.pagine.crm_settings ? "Accesso CRM Settings" : "No CRM Settings",
+    p.pagine.crm_settings ? "Accesso CRM Settings & Admin" : "No CRM Settings & Admin",
   )
   return out
 }

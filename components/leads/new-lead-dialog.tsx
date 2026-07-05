@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -26,12 +26,12 @@ import {
   STATO_LEAD_ORDER,
   ORIGINE_LEAD_VALUES,
   SEDE_LABELS,
-  mockCommerciali,
   type Lead,
   type StatoLead,
   type OrigineLead,
   type SedeLabel,
 } from "@/lib/mock-data"
+import { useTags } from "@/lib/tag-store"
 
 interface NewLeadDialogProps {
   open: boolean
@@ -42,7 +42,6 @@ interface NewLeadDialogProps {
 const STATO_ITEMS = Object.fromEntries(STATO_LEAD_ORDER.map((s) => [s, s]))
 const ORIGINE_ITEMS = Object.fromEntries(ORIGINE_LEAD_VALUES.map((o) => [o, o]))
 const SEDE_ITEMS = Object.fromEntries(SEDE_LABELS.map((s) => [s, s]))
-const COMM_ITEMS = Object.fromEntries(mockCommerciali.map((c) => [c, c]))
 
 interface FormState {
   nome: string
@@ -68,7 +67,7 @@ const EMPTY_FORM: FormState = {
   stato: "Non contattato",
   origine: "Manuale",
   sede: SEDE_LABELS[0],
-  proprietario: mockCommerciali[0],
+  proprietario: "",
   descrizione: "",
 }
 
@@ -91,6 +90,11 @@ export function NewLeadDialog({
   onOpenChange,
   onCreate,
 }: NewLeadDialogProps) {
+  const { owners } = useTags()
+  const ownerItems = useMemo(
+    () => Object.fromEntries(owners.map((owner) => [owner.id, owner.nome])),
+    [owners],
+  )
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
@@ -114,7 +118,7 @@ export function NewLeadDialog({
       "Badge di nota": false,
       Tag: [],
       "Nome Lead": nomeCompleto,
-      "Lead Proprietario": form.proprietario,
+      "Lead Proprietario": form.proprietario || owners[0]?.id || "",
       "Città": form.citta || "—",
       Provincia: form.provincia || "—",
       "Stato Lead": form.stato,
@@ -303,8 +307,8 @@ export function NewLeadDialog({
           <div className="flex flex-col gap-1.5">
             <Label>Proprietario</Label>
             <Select
-              items={COMM_ITEMS}
-              value={form.proprietario}
+              items={ownerItems}
+              value={form.proprietario || owners[0]?.id || ""}
               onValueChange={(v) => set("proprietario", v ?? "")}
             >
               <SelectTrigger className="bg-card">
@@ -312,9 +316,9 @@ export function NewLeadDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {mockCommerciali.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
+                  {owners.map((owner) => (
+                    <SelectItem key={owner.id} value={owner.id}>
+                      {owner.nome}
                     </SelectItem>
                   ))}
                 </SelectGroup>

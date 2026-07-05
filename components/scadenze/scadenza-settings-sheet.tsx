@@ -7,6 +7,7 @@ import {
   IconColumns3,
   IconAdjustmentsHorizontal,
   IconRoute,
+  IconDatabaseCog,
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -29,6 +30,7 @@ import {
 import { GeneralSection } from "@/components/leads/lead-settings-sheet"
 import { RulesSection } from "@/components/leads/assignment-rules"
 import { ClienteTagSection } from "@/components/clienti/cliente-tag-section"
+import { ModuleGovernanceSection } from "@/components/crm-settings/module-governance-section"
 
 /* -------------------------------------------------------------------------- */
 /*                          Sezione: Vista colonne                            */
@@ -128,7 +130,12 @@ function ColumnsSection({
 /*                        Sheet impostazioni Scadenze                         */
 /* -------------------------------------------------------------------------- */
 
-export type ScadenzaSettingsSectionId = "tag" | "regole" | "colonne" | "generali"
+export type ScadenzaSettingsSectionId =
+  | "tag"
+  | "regole"
+  | "colonne"
+  | "generali"
+  | "amministrazione"
 
 const SECTIONS: {
   id: ScadenzaSettingsSectionId
@@ -160,6 +167,12 @@ const SECTIONS: {
     description:
       "Assegna automaticamente le nuove scadenze ai commerciali in base a criteri.",
     icon: IconRoute,
+  },
+  {
+    id: "amministrazione",
+    label: "Amministrazione",
+    description: "Campi, valori, automazioni e trasferimenti delle Scadenze.",
+    icon: IconDatabaseCog,
   },
 ]
 
@@ -246,6 +259,9 @@ export function ScadenzaSettingsSheet({
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               {section === "tag" && <ClienteTagSection />}
               {section === "regole" && <RulesSection />}
+              {section === "amministrazione" && (
+                <ModuleGovernanceSection module="scadenze" label="Scadenze" />
+              )}
               {section === "colonne" && (
                 <ColumnsSection
                   visible={visibleCols}

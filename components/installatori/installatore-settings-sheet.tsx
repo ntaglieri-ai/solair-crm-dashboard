@@ -7,6 +7,7 @@ import {
   IconColumns3,
   IconAdjustmentsHorizontal,
   IconRoute,
+  IconDatabaseCog,
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -30,6 +31,7 @@ import type { Density } from "./installatore-table"
 import { GeneralSection } from "@/components/leads/lead-settings-sheet"
 import { RulesSection } from "@/components/leads/assignment-rules"
 import { InstallatoreTagSection } from "./installatore-tag-section"
+import { ModuleGovernanceSection } from "@/components/crm-settings/module-governance-section"
 
 function ColumnsSection({
   visible,
@@ -128,6 +130,7 @@ export type InstallatoreSettingsSectionId =
   | "regole"
   | "colonne"
   | "generali"
+  | "amministrazione"
 
 const SECTIONS: {
   id: InstallatoreSettingsSectionId
@@ -159,6 +162,12 @@ const SECTIONS: {
     description:
       "Assegna automaticamente i nuovi installatori ai proprietari in base a criteri.",
     icon: IconRoute,
+  },
+  {
+    id: "amministrazione",
+    label: "Amministrazione",
+    description: "Campi, valori, automazioni e trasferimenti degli Installatori.",
+    icon: IconDatabaseCog,
   },
 ]
 
@@ -243,6 +252,12 @@ export function InstallatoreSettingsSheet({
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               {section === "tag" && <InstallatoreTagSection />}
               {section === "regole" && <RulesSection />}
+              {section === "amministrazione" && (
+                <ModuleGovernanceSection
+                  module="installatori"
+                  label="Installatori"
+                />
+              )}
               {section === "colonne" && (
                 <ColumnsSection
                   visible={visibleCols}

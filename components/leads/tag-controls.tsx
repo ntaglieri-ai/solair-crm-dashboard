@@ -12,9 +12,12 @@ import { useTags, TAG_PALETTE, type Tag } from "@/lib/tag-store"
 
 /** Converte un hex in stile badge con fondo tenue + testo pieno */
 function tagStyle(color: string): React.CSSProperties {
+  const resolved = color || "#64748B"
   return {
-    backgroundColor: `${color}1A`, // ~10% alpha
-    color,
+    backgroundColor: `${resolved}20`,
+    borderColor: `${resolved}55`,
+    color: resolved,
+    boxShadow: `inset 0 0 0 1px ${resolved}12`,
   }
 }
 
@@ -44,7 +47,7 @@ export function TagBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap",
+        "inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-[11px] font-semibold",
         className,
       )}
       style={tagStyle(tag.color)}

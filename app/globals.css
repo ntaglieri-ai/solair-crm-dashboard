@@ -60,7 +60,7 @@
 
 :root {
   color-scheme: light;
-  --background: #f7f8fa;
+  --background: #f4f7fb;
   --foreground: #1f2937;
   --card: #ffffff;
   --card-foreground: #1f2937;
@@ -83,7 +83,7 @@
   --chart-3: #f59e0b;
   --chart-4: #3b82f6;
   --chart-5: #94a3b8;
-  --radius: 0.75rem;
+  --radius: 0.625rem;
   --navy: #1e3a5f;
   --navy-foreground: #ffffff;
   --teal: #2e8b72;
@@ -102,6 +102,28 @@
   --sidebar-accent-foreground: #1e3a5f;
   --sidebar-border: #e5e7eb;
   --sidebar-ring: #1e3a5f;
+}
+
+:root[data-accent='teal'] {
+  --primary: #247b67;
+  --ring: #247b67;
+  --sidebar-primary: #247b67;
+  --sidebar-ring: #247b67;
+}
+
+:root[data-accent='blue'] {
+  --primary: #2563eb;
+  --ring: #2563eb;
+  --sidebar-primary: #2563eb;
+  --sidebar-ring: #2563eb;
+}
+
+:root[data-density='compact'] {
+  font-size: 14px;
+}
+
+:root[data-radius='compact'] {
+  --radius: 0.45rem;
 }
 
 .dark {
@@ -176,15 +198,147 @@
   }
 }
 
+:root.dark[data-accent='navy'] {
+  --primary: #7da3d4;
+  --primary-foreground: #101923;
+  --ring: #7da3d4;
+  --sidebar-primary: #7da3d4;
+  --sidebar-primary-foreground: #101923;
+}
+
+:root.dark[data-accent='teal'] {
+  --primary: #55c2a4;
+  --primary-foreground: #0f211c;
+  --ring: #55c2a4;
+  --sidebar-primary: #55c2a4;
+  --sidebar-primary-foreground: #0f211c;
+}
+
+:root.dark[data-accent='blue'] {
+  --primary: #60a5fa;
+  --primary-foreground: #0f172a;
+  --ring: #60a5fa;
+  --sidebar-primary: #60a5fa;
+  --sidebar-primary-foreground: #0f172a;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(circle at 85% 8%, rgb(79 124 255 / 0.055), transparent 24rem),
+      radial-gradient(circle at 22% 92%, rgb(46 139 114 / 0.045), transparent 28rem);
   }
   html {
     @apply font-sans;
+  }
+}
+
+@layer components {
+  .dashboard-noticeboard {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: clamp(1.25rem, 2.4vw, 2rem);
+    background: var(--card);
+    box-shadow: 0 18px 45px rgb(31 41 55 / 0.07);
+  }
+
+  .dashboard-noticeboard::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 5px;
+    background: #f2b84b;
+  }
+
+  .dashboard-noticeboard--compact {
+    min-height: 330px;
+    max-height: 330px;
+    padding: 1.25rem;
+  }
+
+  .dashboard-noticeboard--compact .noticeboard-scroll {
+    max-height: 220px;
+    scrollbar-width: thin;
+    scrollbar-color: #d8bb72 transparent;
+  }
+
+  .dashboard-signal {
+    display: flex;
+    min-height: 104px;
+    align-items: center;
+    gap: 1rem;
+    border-width: 1px;
+    border-radius: 8px;
+    padding: 1.25rem;
+    transition: transform 180ms ease, box-shadow 180ms ease;
+  }
+
+  .map-control {
+    display: flex;
+    width: 2rem;
+    height: 2rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    color: #40566f;
+    transition: background 150ms ease, color 150ms ease;
+  }
+
+  .map-control:hover {
+    background: #edf3fb;
+    color: #245da8;
+  }
+
+  .map-control svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .dashboard-signal:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 16px 38px rgb(31 41 55 / 0.09);
+  }
+
+  .dashboard-signal strong {
+    display: block;
+    font-size: 1.75rem;
+    line-height: 1;
+    font-weight: 800;
+    color: var(--foreground);
+  }
+
+  .dashboard-signal small {
+    display: block;
+    margin-top: 0.4rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--muted-foreground);
+  }
+
+  .dashboard-primary-action {
+    display: inline-flex;
+    min-height: 3rem;
+    align-items: center;
+    gap: 0.75rem;
+    border-radius: 8px;
+    background: #1e3a5f;
+    padding: 0 1.25rem;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: white;
+    box-shadow: 0 12px 30px rgb(30 58 95 / 0.18);
+    transition: transform 180ms ease, background 180ms ease;
+  }
+
+  .dashboard-primary-action:hover {
+    transform: translateY(-2px);
+    background: #294d79;
   }
 }
 

@@ -10,7 +10,6 @@ import {
   FolderOpen,
   type LucideIcon,
 } from "lucide-react"
-import { CURRENT_USER } from "@/lib/mock-data"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
 import {
   CrmSettingsNavLink,
@@ -21,6 +20,7 @@ import {
   CrmSectionBackLink,
 } from "@/components/dashboard/crm-settings-nav"
 import { cn } from "@/lib/utils"
+import { usePermissions } from "@/lib/permissions/provider"
 
 interface SectionLink {
   href: string
@@ -50,7 +50,8 @@ export default function FileManagerLayout({
   const pathname = usePathname()
   const { openCrmSettings, openCrmSettingsLayer } = useCrmSettingsLauncher()
   const { navigate } = useCrmSettingsNavigation()
-  const isAdmin = CURRENT_USER.ruoloKey === "admin"
+  const role = usePermissions().snapshot.subject.ruoloCode.toUpperCase()
+  const isAdmin = role === "ADMIN" || role === "SUPERADMIN"
 
   // Accesso riservato agli Admin / Superadmin.
   useEffect(() => {
@@ -66,10 +67,10 @@ export default function FileManagerLayout({
       <CrmBreadcrumb
         items={[
           { label: "Solair CRM", action: () => navigate("/") },
-          { label: "CRM Settings", action: openCrmSettings },
+          { label: "CRM Settings & Admin", action: openCrmSettings },
           {
             label: "File Manager",
-            action: () => openCrmSettingsLayer("file-manager"),
+            action: () => openCrmSettingsLayer("maintenance"),
           },
           { label: currentTitle },
         ]}
@@ -80,7 +81,7 @@ export default function FileManagerLayout({
         <aside className="lg:w-60 lg:shrink-0">
           <CrmSectionBackLink
             label="File Manager"
-            onClick={() => openCrmSettingsLayer("file-manager")}
+            onClick={() => openCrmSettingsLayer("maintenance")}
           />
           <nav className="flex flex-col gap-1" aria-label="Sezioni File Manager">
             {SECTION_LINKS.map((link) => {

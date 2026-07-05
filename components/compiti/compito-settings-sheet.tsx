@@ -6,6 +6,7 @@ import {
   IconFlag,
   IconBellRinging,
   IconAdjustmentsHorizontal,
+  IconDatabaseCog,
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -25,12 +26,14 @@ import {
   STATO_COMPITO_TONE,
   PRIORITA_COMPITO_TONE,
 } from "@/lib/mock-data"
+import { ModuleGovernanceSection } from "@/components/crm-settings/module-governance-section"
 
 export type CompitoSettingsSectionId =
   | "stati"
   | "priorita"
   | "promemoria"
   | "generali"
+  | "amministrazione"
 
 const SECTIONS: {
   id: CompitoSettingsSectionId
@@ -61,6 +64,12 @@ const SECTIONS: {
     label: "Generali",
     description: "Preferenze di visualizzazione dell'elenco compiti.",
     icon: IconAdjustmentsHorizontal,
+  },
+  {
+    id: "amministrazione",
+    label: "Amministrazione",
+    description: "Campi, valori, automazioni e trasferimenti dei Compiti.",
+    icon: IconDatabaseCog,
   },
 ]
 
@@ -263,6 +272,9 @@ export function CompitoSettingsSheet({
               {section === "priorita" && <PrioritaSection />}
               {section === "promemoria" && <PromemoriaSection />}
               {section === "generali" && <GeneraliSection />}
+              {section === "amministrazione" && (
+                <ModuleGovernanceSection module="compiti" label="Compiti" />
+              )}
             </div>
           </div>
         </div>

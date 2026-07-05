@@ -4,7 +4,6 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { SunMedium, User, Settings, LogOut, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,11 +16,19 @@ import {
   NAV_GESTIONE,
   NAV_ADMIN,
   type NavItem,
-} from "@/lib/mock-data"
+} from "@/lib/navigation"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
 import { pageKeyFromPath } from "@/lib/permissions/constants"
 import { usePermissions } from "@/lib/permissions/provider"
 import { NAV_ICONS } from "./icons"
+import { motion } from "framer-motion"
+
+const OGGI = new Intl.DateTimeFormat("it-IT", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+}).format(new Date())
 
 function isActive(href: string, pathname: string) {
   if (href === "/") return pathname === "/"
@@ -33,11 +40,12 @@ function NavLink({ item }: { item: NavItem }) {
   const pathname = usePathname()
   const active = isActive(item.href, pathname)
   return (
+    <motion.div whileHover={{ x: 3 }} transition={{ duration: 0.18 }}>
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+        "relative flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-[15px] font-semibold transition-colors",
         active
           ? "bg-sidebar-accent text-sidebar-accent-foreground"
           : "text-sidebar-foreground hover:bg-muted hover:text-foreground",
@@ -45,19 +53,8 @@ function NavLink({ item }: { item: NavItem }) {
     >
       <Icon className="size-[18px] shrink-0" />
       <span className="flex-1 truncate">{item.label}</span>
-      {item.badge ? (
-        <Badge
-          className={cn(
-            "h-5 min-w-5 justify-center rounded-full px-1.5 text-[11px] tabular-nums",
-            item.badge.tone === "destructive"
-              ? "bg-destructive text-white"
-              : "bg-muted text-muted-foreground",
-          )}
-        >
-          {item.badge.count}
-        </Badge>
-      ) : null}
     </Link>
+    </motion.div>
   )
 }
 
@@ -164,19 +161,26 @@ export function Sidebar() {
     const page = pageKeyFromPath(item.href)
     return page ? permissions.canPage(page) : true
   })
-  const canOpenCrmSettings = permissions.canPage("crm_settings")
+  const canOpenCrmSettings =
+    permissions.canPage("crm_settings") ||
+    permissions.canAction("company.profile.view")
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-[228px] flex-col border-r border-sidebar-border bg-sidebar lg:flex">
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-sidebar-border bg-sidebar lg:flex">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 border-b border-sidebar-border px-5 py-4">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-navy text-navy-foreground">
-          <SunMedium className="size-5" />
+      <div className="border-b border-sidebar-border px-5 py-5">
+        <div className="flex items-center gap-3">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-navy text-navy-foreground shadow-[0_8px_24px_rgba(30,58,95,.2)]">
+            <SunMedium className="size-6" />
+          </div>
+          <div className="flex min-w-0 flex-col leading-tight">
+            <span className="text-[17px] font-extrabold text-foreground">Solair CRM</span>
+            <span className="text-xs text-muted-foreground">solairgroup.it</span>
+          </div>
         </div>
-        <div className="flex flex-col leading-tight">
-          <span className="text-[15px] font-bold text-foreground">Solair CRM</span>
-          <span className="text-xs text-muted-foreground">solairgroup.it</span>
-        </div>
+        <p className="mt-3 text-[15px] font-bold capitalize leading-5 text-primary">
+          {OGGI}
+        </p>
       </div>
 
       {/* Nav */}

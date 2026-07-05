@@ -520,6 +520,29 @@ export interface LeadActivity {
   autore?: string
 }
 
+export interface LeadTask {
+  id: string
+  oggetto: string
+  scadenza: string
+  priorita: string
+  assegnato: string
+  completato: boolean
+}
+
+export interface LeadListNote {
+  id: string
+  text: string
+  createdAt: string
+}
+
+export interface LeadListTask {
+  id: string
+  title: string
+  dueDate: string
+  priority: string
+  status: string
+}
+
 export interface LeadDoc {
   id: string
   nome: string
@@ -576,6 +599,9 @@ export interface Lead {
   leadCaldo: boolean
   possibileDuplicato: boolean
   attivita: LeadActivity[]
+  compiti?: LeadTask[]
+  noteItems?: LeadListNote[]
+  taskItems?: LeadListTask[]
   documenti: LeadDoc[]
 }
 
@@ -587,6 +613,9 @@ export type LeadColumnId = Exclude<
   | "leadCaldo"
   | "possibileDuplicato"
   | "attivita"
+  | "compiti"
+  | "noteItems"
+  | "taskItems"
   | "documenti"
 >
 
@@ -599,8 +628,8 @@ export interface LeadColumn {
 // Registro colonne nell'ordine Zoho. `defaultVisible` = colonne mostrate
 // inizialmente in tabella (usate dal pannello "Gestisci colonne").
 export const LEAD_COLUMNS: LeadColumn[] = [
-  { id: "Badge dell'attività", label: "Badge dell'attività", defaultVisible: true },
-  { id: "Badge di nota", label: "Badge di nota", defaultVisible: true },
+  { id: "Badge dell'attività", label: "Attività", defaultVisible: true },
+  { id: "Badge di nota", label: "Note", defaultVisible: true },
   { id: "Tag", label: "Tag", defaultVisible: true },
   { id: "Nome Lead", label: "Nome Lead", defaultVisible: true },
   { id: "Lead Proprietario", label: "Lead Proprietario", defaultVisible: true },
@@ -2379,7 +2408,14 @@ export function getClienteById(id: string): ClienteRecord | undefined {
 // MODULO COMPITI (Tasks)
 // ============================================================================
 
-export type StatoCompito = "Da fare" | "In corso" | "In attesa" | "Completato"
+export type StatoCompito =
+  | "Non iniziato"
+  | "In corso"
+  | "Rinviato"
+  | "Completato"
+  | "In attesa di input"
+  | "Da fare"
+  | "In attesa"
 
 export type PrioritaCompito = "Alto" | "Medio" | "Basso"
 
@@ -2407,15 +2443,19 @@ export interface Compito {
 }
 
 export const STATO_COMPITO_ORDER: StatoCompito[] = [
-  "Da fare",
+  "Non iniziato",
   "In corso",
-  "In attesa",
+  "Rinviato",
+  "In attesa di input",
   "Completato",
 ]
 
 export const STATO_COMPITO_TONE: Record<StatoCompito, string> = {
+  "Non iniziato": "bg-secondary text-secondary-foreground",
   "Da fare": "bg-secondary text-secondary-foreground",
   "In corso": "bg-info/15 text-info",
+  Rinviato: "bg-warning/15 text-warning",
+  "In attesa di input": "bg-warning/15 text-warning",
   "In attesa": "bg-warning/15 text-warning",
   Completato: "bg-success/15 text-success",
 }

@@ -27,6 +27,11 @@ export default function SystemSettingsLayout({
   const { navigate } = useCrmSettingsNavigation()
   const permissions = usePermissions()
   const currentPage = pageKeyFromPath(pathname)
+  const legacyMaintenanceRoutes: Record<string, string> = {
+    "/crm-settings/system/make": "/crm-settings/maintenance/make",
+    "/crm-settings/system/backup": "/crm-settings/maintenance/backup",
+  }
+  const maintenanceDestination = legacyMaintenanceRoutes[pathname]
   const canAccessCurrentPage = currentPage ? permissions.canPage(currentPage) : false
   const visibleLinks = SYSTEM_SECTION_LINKS.filter((link) => {
     const page = pageKeyFromPath(link.href)
@@ -34,22 +39,26 @@ export default function SystemSettingsLayout({
   })
 
   useEffect(() => {
-    if (!canAccessCurrentPage) navigate("/", { replace: true })
-  }, [canAccessCurrentPage, navigate])
+    if (maintenanceDestination) {
+      navigate(maintenanceDestination, { replace: true })
+    } else if (!canAccessCurrentPage) {
+      navigate("/", { replace: true })
+    }
+  }, [canAccessCurrentPage, maintenanceDestination, navigate])
 
-  if (!canAccessCurrentPage) return null
+  if (!canAccessCurrentPage || maintenanceDestination) return null
 
   const current = SYSTEM_SECTION_LINKS.find((l) => l.href === pathname)
-  const currentTitle = current?.label ?? "System Settings"
+  const currentTitle = current?.label ?? "Azienda e sistema"
 
   return (
     <div className="flex flex-col gap-5">
       <CrmBreadcrumb
         items={[
           { label: "Solair CRM", action: () => navigate("/") },
-          { label: "CRM Settings", action: openCrmSettings },
+          { label: "CRM Settings & Admin", action: openCrmSettings },
           {
-            label: "System Settings",
+            label: "Azienda e sistema",
             action: () => openCrmSettingsLayer("system"),
           },
           { label: currentTitle },
@@ -60,12 +69,12 @@ export default function SystemSettingsLayout({
         {/* Sidebar di sezione */}
         <aside className="lg:w-60 lg:shrink-0">
           <CrmSectionBackLink
-            label="System Settings"
+            label="Azienda e sistema"
             onClick={() => openCrmSettingsLayer("system")}
           />
           <nav
             className="flex flex-col gap-1"
-            aria-label="Sezioni System Settings"
+            aria-label="Azienda e sistema"
           >
             {visibleLinks.map((link) => {
               const active = pathname === link.href

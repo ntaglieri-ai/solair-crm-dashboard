@@ -1,150 +1,91 @@
 "use client"
 
-import { useState } from "react"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { useEffect, useState } from "react"
+import { Cloud, Loader2, Save } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SectionHeader } from "@/components/impostazioni/settings-ui"
-import { CheckCircle, Loader2, Pencil } from "lucide-react"
-import { NEXTCLOUD_CONFIG } from "@/lib/file-manager-data"
+import { usePersistentSystemSetting } from "@/lib/crm-settings/use-persistent-system-setting"
+
+type NextcloudSettings = {
+  url: string
+  serviceUsername: string
+}
 
 export default function NextcloudPage() {
-  const [url, setUrl] = useState(NEXTCLOUD_CONFIG.url)
-  const [editingUrl, setEditingUrl] = useState(false)
-  const [testing, setTesting] = useState(false)
-  const [lastTest, setLastTest] = useState(NEXTCLOUD_CONFIG.ultimoTest)
+  const [stored, setStored, store] =
+    usePersistentSystemSetting<NextcloudSettings>("maintenance.nextcloud", {
+      url: "",
+      serviceUsername: "",
+    })
+  const [settings, setSettings] = useState(stored)
 
-  function handleTest() {
-    setTesting(true)
-    window.setTimeout(() => {
-      setTesting(false)
-      setLastTest("Adesso")
-    }, 1400)
+  useEffect(() => {
+    queueMicrotask(() => setSettings(stored))
+  }, [stored])
+
+  function update(key: keyof NextcloudSettings, value: string) {
+    setSettings((current) => ({ ...current, [key]: value }))
+  }
+
+  function save() {
+    setStored(settings)
+    toast.success("Configurazione salvata")
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <SectionHeader
-        title="Configurazione Nextcloud"
-        description="Configura la connessione all'istanza Nextcloud usata come storage documenti del CRM."
+        title="File Manager"
+        description="Configurazione dell'istanza Nextcloud usata dal CRM."
       />
-
-      {/* Card connessione */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Connessione</CardTitle>
-          <CardDescription>
-            Istanza Nextcloud collegata al CRM per la gestione dei documenti.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-5">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="nc-url">URL istanza</Label>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Input
-                id="nc-url"
-                value={url}
-                readOnly={!editingUrl}
-                onChange={(e) => setUrl(e.target.value)}
-                className={!editingUrl ? "bg-muted/50" : undefined}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setEditingUrl((v) => !v)}
-                className="shrink-0"
-              >
-                <Pencil className="size-4" />
-                {editingUrl ? "Fatto" : "Modifica"}
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                Stato connessione
-              </span>
-              {testing ? (
-                <Badge className="gap-1 bg-muted text-muted-foreground">
-                  <Loader2 className="size-3 animate-spin" />
-                  Verifica…
-                </Badge>
-              ) : (
-                <Badge className="gap-1 bg-success text-success-foreground">
-                  <CheckCircle className="size-3" />
-                  Connesso
-                </Badge>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Ultimo test</span>
-              <span className="text-sm font-medium text-foreground">
-                {lastTest}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleTest}
-              disabled={testing}
-              className="border-teal text-teal hover:bg-teal/10"
-            >
-              {testing ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <CheckCircle className="size-4" />
-              )}
-              Testa connessione
-            </Button>
-            <Button type="button" className="bg-teal text-teal-foreground hover:bg-teal/90">
-              Salva
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Card service account */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Account di servizio</CardTitle>
-          <CardDescription>
-            Account Nextcloud usato dal CRM per operazioni automatiche (lettura
-            lista file, verifica cartelle).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-5">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="nc-user">Username</Label>
-            <Input
-              id="nc-user"
-              value={NEXTCLOUD_CONFIG.serviceUsername}
-              readOnly
-              className="bg-muted/50"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Stato</span>
-            <Badge className="bg-success text-success-foreground">Attivo</Badge>
-          </div>
+      {store.error ? (
+        <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {store.error}
+        </p>
+      ) : null}
+      <section className="flex max-w-3xl flex-col gap-5 rounded-lg border border-border bg-card p-5">
+        <div className="flex items-center gap-3">
+          <span className="flex size-10 items-center justify-center rounded-lg bg-teal/10 text-teal">
+            <Cloud />
+          </span>
           <div>
-            <Button type="button" variant="outline">
-              Modifica credenziali
-            </Button>
+            <h2 className="font-semibold">Connessione Nextcloud</h2>
+            <p className="text-sm text-muted-foreground">
+              Le credenziali sensibili restano nelle variabili server.
+            </p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="nextcloud-url">URL istanza</Label>
+          <Input
+            id="nextcloud-url"
+            type="url"
+            value={settings.url}
+            onChange={(event) => update("url", event.target.value)}
+            placeholder="https://cloud.example.it"
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="nextcloud-user">Account di servizio</Label>
+          <Input
+            id="nextcloud-user"
+            value={settings.serviceUsername}
+            onChange={(event) => update("serviceUsername", event.target.value)}
+          />
+        </div>
+        <div>
+          <Button
+            onClick={save}
+            disabled={store.saving}
+          >
+            {store.saving ? <Loader2 className="animate-spin" /> : <Save />}
+            Salva
+          </Button>
+        </div>
+      </section>
     </div>
   )
 }

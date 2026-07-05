@@ -572,16 +572,22 @@ export function LeadTable({
           syncBarFromContainer(e.currentTarget)
         }}
         onWheel={(e) => {
-          // Trackpad orizzontale / Shift+rotella: la scrollbar nativa orizzontale
-          // è nascosta, quindi pilotiamo scrollLeft manualmente (sync via onScroll).
+          // I trackpad emettono spesso piccoli delta diagonali anche durante uno
+          // scroll verticale. Ignoriamo quella deriva per evitare che la griglia
+          // "balli" lateralmente a ogni movimento della rotella.
           const el = e.currentTarget
           if (el.scrollWidth <= el.clientWidth) return
-          const horizontal =
-            e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)
-          if (!horizontal) return
-          el.scrollLeft += e.deltaX !== 0 ? e.deltaX : e.deltaY
+          const absX = Math.abs(e.deltaX)
+          const absY = Math.abs(e.deltaY)
+          const shiftedWheel = e.shiftKey && absY >= 4
+          const intentionalTrackpadX = absX >= 10 && absX > absY * 1.35
+          if (!shiftedWheel && !intentionalTrackpadX) return
+
+          e.preventDefault()
+          const delta = shiftedWheel ? e.deltaY : e.deltaX
+          el.scrollLeft += delta * 0.72
         }}
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-card outline-none focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--color-muted-foreground)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:w-2.5"
+        className="min-h-0 flex-1 touch-pan-y overscroll-contain overflow-y-auto overflow-x-hidden bg-card outline-none [scroll-behavior:auto] focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--color-muted-foreground)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:w-2.5"
       >
         {/* table semplice (no wrapper shadcn): un solo contenitore di scroll,
             così l'header sticky e la barra orizzontale dedicata funzionano. */}
@@ -759,8 +765,16 @@ export function LeadTable({
         <div
           ref={hScrollRef}
           onScroll={syncContainerFromBar}
+          onWheel={(event) => {
+            // La barra inferiore gestisce solo l'asse X: una rotella verticale
+            // sopra di essa non deve trascinare l'intera pagina.
+            if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
+            event.preventDefault()
+            const el = scrollRef.current
+            if (el) el.scrollTop += event.deltaY
+          }}
           aria-hidden
-          className="shrink-0 overflow-x-auto overflow-y-hidden border-t border-border bg-card [scrollbar-color:var(--color-muted-foreground)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5"
+          className="shrink-0 overscroll-contain overflow-x-auto overflow-y-hidden border-t border-border bg-card [scroll-behavior:auto] [scrollbar-color:var(--color-muted-foreground)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5"
         >
           <div style={{ width: contentWidth }} className="h-px" />
         </div>

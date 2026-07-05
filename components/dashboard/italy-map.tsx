@@ -63,6 +63,10 @@ export function ItalyMap({
             center={center}
             minZoom={1}
             maxZoom={2.2}
+            filterZoomEvent={(event) => {
+              const input = event as unknown as { type?: string; button?: number }
+              return input.type !== "wheel" && !input.button
+            }}
             onMoveEnd={({ coordinates, zoom: nextZoom }) => {
               setCenter(coordinates as [number, number])
               setZoom(nextZoom)

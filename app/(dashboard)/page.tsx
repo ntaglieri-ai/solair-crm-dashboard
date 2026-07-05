@@ -216,7 +216,7 @@ export default async function DashboardPage() {
         />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(360px,.85fr)]">
+      <div className="grid gap-5 xl:grid-cols-2">
         <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
             <div>

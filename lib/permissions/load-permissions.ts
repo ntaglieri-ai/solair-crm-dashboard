@@ -240,6 +240,71 @@ async function loadCurrentUser() {
 }
 
 async function loadCurrentPermissionSnapshotUncached(): Promise<PermissionSnapshot> {
+  const fastSupabase = await createClient()
+  const { data: claimsData } = await fastSupabase.auth.getClaims()
+  const claims = claimsData?.claims
+  const fastAuthUser: AuthIdentity | null =
+    typeof claims?.sub === "string"
+      ? {
+          id: claims.sub,
+          email: typeof claims.email === "string" ? claims.email : null,
+        }
+      : null
+
+  if (!fastAuthUser) {
+    return buildDefaultPermissionSnapshot({
+      ruoloCode: "STANDARD",
+      ruoloNome: "Non autenticato",
+    })
+  }
+
+  const { data: fastData, error: fastError } =
+    await fastSupabase.rpc("get_permission_snapshot")
+  if (!fastError && fastData && typeof fastData === "object") {
+    const payload = fastData as {
+      utente?: UtenteRow
+      ruolo?: RuoloRow
+      pages?: PermessoPaginaRow[]
+      records?: PermessoRecordRow[]
+      ui?: PermessoUiRow[]
+      actions?: PermessoAzioneRow[]
+      fields?: PermessoCampoRow[]
+      scopes?: PermessoScopeRow[]
+    }
+    const utente = payload.utente
+    const ruolo = payload.ruolo
+    const ruoloCode = normalizeRoleCode(ruolo?.code ?? utente?.ruolo)
+    const snapshot = buildDefaultPermissionSnapshot({
+      authUserId: fastAuthUser.id,
+      userId: utente?.id ?? null,
+      email: utente?.email ?? fastAuthUser.email,
+      nome: utente?.nome ?? fastAuthUser.email ?? "Utente",
+      ruoloId: ruolo?.id ?? utente?.ruolo_id ?? null,
+      ruoloCode,
+      ruoloNome: ruolo?.nome ?? ruoloCode,
+      sede: utente?.sede ?? null,
+    })
+
+    for (const row of payload.pages ?? [])
+      snapshot.pages[row.pagina] = normalizePageAccess(row.accesso)
+    for (const row of payload.records ?? []) {
+      snapshot.records[row.modulo] ??= {}
+      snapshot.records[row.modulo][row.azione] = row.abilitato === true
+    }
+    for (const row of payload.ui ?? []) applyUiPermission(snapshot, row)
+    for (const row of payload.actions ?? [])
+      snapshot.actions[row.azione] = row.abilitato === true
+    for (const row of payload.fields ?? []) {
+      snapshot.fields[row.modulo] ??= {}
+      snapshot.fields[row.modulo][row.campo] = row.accesso ?? "hidden"
+    }
+    for (const row of payload.scopes ?? [])
+      snapshot.scopes[row.risorsa] = row.scope ?? "none"
+
+    return snapshot
+  }
+
+  // Fallback compatibile finché la migration RPC non è stata applicata.
   const { supabase, authUser, utente } = await loadCurrentUser()
 
   if (!authUser) {

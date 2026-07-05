@@ -55,6 +55,7 @@ interface TagContextValue extends ReferencePayload {
   loading: boolean
   tagEvents: Record<string, TagEvent[]>
   getLeadTags: (leadId: string) => Tag[]
+  hydrateLeadTagIds: (assignments: Record<string, string[]>) => void
   usageCount: (tagId: string) => number
   toggleLeadTag: (leadId: string, tagId: string) => void
   createTags: (names: string, color: string) => void
@@ -144,6 +145,16 @@ export function TagProvider({
         .filter((tag): tag is Tag => Boolean(tag))
     },
     [data.leadTagIds, data.tags],
+  )
+
+  const hydrateLeadTagIds = useCallback(
+    (assignments: Record<string, string[]>) => {
+      setData((previous) => ({
+        ...previous,
+        leadTagIds: { ...previous.leadTagIds, ...assignments },
+      }))
+    },
+    [],
   )
 
   const usageCount = useCallback(
@@ -268,6 +279,7 @@ export function TagProvider({
       loading,
       tagEvents,
       getLeadTags,
+      hydrateLeadTagIds,
       usageCount,
       toggleLeadTag,
       createTags,
@@ -281,6 +293,7 @@ export function TagProvider({
       loading,
       tagEvents,
       getLeadTags,
+      hydrateLeadTagIds,
       usageCount,
       toggleLeadTag,
       createTags,

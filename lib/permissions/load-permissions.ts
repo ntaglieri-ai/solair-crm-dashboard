@@ -20,6 +20,11 @@ type RuoloRow = {
   nome: string | null
 }
 
+type AuthIdentity = {
+  id: string
+  email: string | null
+}
+
 type PermessoPaginaRow = {
   pagina: string
   accesso: PageAccess | boolean | null
@@ -127,7 +132,7 @@ async function loadRolePermissionRows(
   const cached = rolePermissionCache.get(roleId)
   if (cached && cached.expiresAt > Date.now()) return cached
 
-  const [pagesRes, recordsRes, uiRes] = await Promise.all([
+  const [pagesRes, recordsRes, uiRes, actions, fields, scopes] = await Promise.all([
     supabase
       .from("permessi_pagina")
       .select("pagina, accesso")
@@ -140,9 +145,6 @@ async function loadRolePermissionRows(
       .from("permessi_ui")
       .select("chiave, abilitato")
       .eq("ruolo_id", roleId),
-  ])
-
-  const [actions, fields, scopes] = await Promise.all([
     selectOptionalPermissionRows<PermessoAzioneRow>(
       supabase,
       "permessi_azione",
@@ -206,9 +208,15 @@ function applyUiPermission(snapshot: PermissionSnapshot, row: PermessoUiRow) {
 
 async function loadCurrentUser() {
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data } = await supabase.auth.getClaims()
+  const claims = data?.claims
+  const user: AuthIdentity | null =
+    typeof claims?.sub === "string"
+      ? {
+          id: claims.sub,
+          email: typeof claims.email === "string" ? claims.email : null,
+        }
+      : null
 
   if (!user) {
     return { supabase, authUser: null, utente: null as UtenteRow | null }

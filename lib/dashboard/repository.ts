@@ -64,22 +64,6 @@ function coordinatesFor(sede: Pick<SystemSede, "nome" | "indirizzo">) {
   )?.coordinates
 }
 
-function countValues(
-  rows: Array<Record<string, unknown>>,
-  key: string,
-  emptyLabel: string,
-) {
-  const counts = new Map<string, number>()
-  for (const row of rows) {
-    const value = typeof row[key] === "string" ? row[key].trim() : ""
-    const label = value || emptyLabel
-    counts.set(label, (counts.get(label) ?? 0) + 1)
-  }
-  return Array.from(counts, ([label, count]) => ({ label, count })).sort(
-    (a, b) => b.count - a.count,
-  )
-}
-
 function mapLead(row: Record<string, unknown>): DashboardLead {
   const fullName = [row.nome, row.cognome].filter(Boolean).join(" ")
   return {
@@ -89,6 +73,96 @@ function mapLead(row: Record<string, unknown>): DashboardLead {
     valutazione: typeof row.valutazione === "number" ? row.valutazione : 0,
     sede: typeof row.sede === "string" ? row.sede : null,
     createdAt: typeof row.created_at === "string" ? row.created_at : null,
+  }
+}
+
+type AggregateCount = { label: string; count: number }
+type AggregateLocation = {
+  sede: string | null
+  provincia: string | null
+  count: number
+}
+type AggregateTrend = { key: string; count: number }
+
+function groupedCounts(
+  rows: Array<Record<string, unknown>>,
+  key: string,
+  emptyLabel = "Senza stato",
+) {
+  const counts = new Map<string, number>()
+  for (const row of rows) {
+    const raw = row[key]
+    const label = typeof raw === "string" && raw.trim() ? raw.trim() : emptyLabel
+    counts.set(label, (counts.get(label) ?? 0) + 1)
+  }
+  return Array.from(counts, ([label, count]) => ({ label, count })).sort(
+    (a, b) => b.count - a.count,
+  )
+}
+
+async function loadDashboardAggregateFallback(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+) {
+  const [leads, clienti, tasks, deadlines] = await Promise.all([
+    supabase.from("leads").select("stato_lead,sede,provincia,created_at").limit(10000),
+    supabase.from("clienti").select("stato").limit(10000),
+    supabase.from("compiti").select("stato,scadenza").limit(10000),
+    supabase.from("scadenze").select("data_scadenza").limit(10000),
+  ])
+  const error = leads.error ?? clienti.error ?? tasks.error ?? deadlines.error
+  if (error) throw new Error(`Dashboard Supabase: ${error.message}`)
+
+  const leadRows = (leads.data ?? []) as Array<Record<string, unknown>>
+  const taskRows = (tasks.data ?? []) as Array<Record<string, unknown>>
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const nextWeek = new Date(today)
+  nextWeek.setDate(nextWeek.getDate() + 7)
+  const locations = new Map<string, AggregateLocation>()
+  const trend = new Map<string, number>()
+
+  for (const row of leadRows) {
+    const sede = typeof row.sede === "string" ? row.sede : null
+    const provincia = typeof row.provincia === "string" ? row.provincia : null
+    const locationKey = `${sede ?? ""}\u0000${provincia ?? ""}`
+    const current = locations.get(locationKey)
+    locations.set(locationKey, {
+      sede,
+      provincia,
+      count: (current?.count ?? 0) + 1,
+    })
+    if (typeof row.created_at === "string") {
+      const date = new Date(row.created_at)
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+      trend.set(key, (trend.get(key) ?? 0) + 1)
+    }
+  }
+
+  const deadlineBuckets = { overdue: 0, next7Days: 0, later: 0 }
+  for (const row of deadlines.data ?? []) {
+    if (typeof row.data_scadenza !== "string") continue
+    const date = new Date(row.data_scadenza)
+    if (date < today) deadlineBuckets.overdue += 1
+    else if (date < nextWeek) deadlineBuckets.next7Days += 1
+    else deadlineBuckets.later += 1
+  }
+
+  return {
+    leadsByStatus: groupedCounts(leadRows, "stato_lead"),
+    leadLocations: Array.from(locations.values()),
+    leadTrend: Array.from(trend, ([key, count]) => ({ key, count })),
+    clientiByStatus: groupedCounts(
+      (clienti.data ?? []) as Array<Record<string, unknown>>,
+      "stato",
+    ),
+    tasksByStatus: groupedCounts(taskRows, "stato"),
+    overdueTasks: taskRows.filter(
+      (row) =>
+        row.stato !== "Completato" &&
+        typeof row.scadenza === "string" &&
+        new Date(row.scadenza) < today,
+    ).length,
+    deadlines: deadlineBuckets,
   }
 }
 
@@ -102,11 +176,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     installatoriCount,
     hotLeadsResult,
     recentLeadsResult,
-    leadDistributionResult,
-    clientiStatusResult,
+    aggregatesResult,
     settingsResult,
-    tasksResult,
-    deadlinesResult,
     usersResult,
     noticeboardResult,
   ] = await Promise.all([
@@ -126,15 +197,12 @@ export async function getDashboardData(): Promise<DashboardData> {
       .select("id,nome_lead,nome,cognome,stato_lead,valutazione,sede,created_at")
       .order("created_at", { ascending: false })
       .limit(6),
-    supabase.from("leads").select("stato_lead,sede,provincia,created_at").limit(10000),
-    supabase.from("clienti").select("stato").limit(10000),
+    supabase.rpc("get_dashboard_aggregates"),
     supabase
       .from("crm_settings")
       .select("valore")
       .eq("chiave", "system.sedi")
       .maybeSingle(),
-    supabase.from("compiti").select("stato,scadenza").limit(10000),
-    supabase.from("scadenze").select("data_scadenza").limit(10000),
     supabase.from("utenti").select("sede").not("sede", "is", null),
     supabase
       .from("crm_settings")
@@ -151,27 +219,32 @@ export async function getDashboardData(): Promise<DashboardData> {
     installatoriCount.error,
     hotLeadsResult.error,
     recentLeadsResult.error,
-    leadDistributionResult.error,
-    clientiStatusResult.error,
-    tasksResult.error,
-    deadlinesResult.error,
     usersResult.error,
   ].filter(Boolean)
   if (requiredErrors.length > 0) {
     throw new Error(`Dashboard Supabase: ${requiredErrors[0]?.message}`)
   }
 
-  const leadRows = (leadDistributionResult.data ?? []) as Array<Record<string, unknown>>
+  const aggregates =
+    !aggregatesResult.error &&
+    aggregatesResult.data &&
+    typeof aggregatesResult.data === "object"
+      ? (aggregatesResult.data as Record<string, unknown>)
+      : await loadDashboardAggregateFallback(supabase)
+  const leadLocations = Array.isArray(aggregates.leadLocations)
+    ? (aggregates.leadLocations as AggregateLocation[])
+    : []
   const leadSedeCounts = new Map<string, number>()
   const regionCounts = new Map<string, number>()
   let unmappedLeadLocations = 0
-  for (const row of leadRows) {
+  for (const row of leadLocations) {
+    const count = Number(row.count ?? 0)
     if (typeof row.sede === "string" && row.sede.trim()) {
-      leadSedeCounts.set(row.sede, (leadSedeCounts.get(row.sede) ?? 0) + 1)
+      leadSedeCounts.set(row.sede, (leadSedeCounts.get(row.sede) ?? 0) + count)
     }
     const region = regionFromProvince(row.provincia)
-    if (region) regionCounts.set(region, (regionCounts.get(region) ?? 0) + 1)
-    else unmappedLeadLocations += 1
+    if (region) regionCounts.set(region, (regionCounts.get(region) ?? 0) + count)
+    else unmappedLeadLocations += count
   }
 
   const configuredSedi = Array.isArray(settingsResult.data?.valore)
@@ -204,24 +277,6 @@ export async function getDashboardData(): Promise<DashboardData> {
   })
 
   const now = new Date()
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const inSevenDays = new Date(startOfToday)
-  inSevenDays.setDate(inSevenDays.getDate() + 7)
-  const taskRows = (tasksResult.data ?? []) as Array<Record<string, unknown>>
-  const deadlineRows = (deadlinesResult.data ?? []) as Array<Record<string, unknown>>
-  const overdueTasks = taskRows.filter((row) => {
-    if (row.stato === "Completato" || typeof row.scadenza !== "string") return false
-    return new Date(row.scadenza) < startOfToday
-  }).length
-  const deadlineBuckets = { overdue: 0, next7Days: 0, later: 0 }
-  for (const row of deadlineRows) {
-    if (typeof row.data_scadenza !== "string") continue
-    const date = new Date(row.data_scadenza)
-    if (date < startOfToday) deadlineBuckets.overdue += 1
-    else if (date < inSevenDays) deadlineBuckets.next7Days += 1
-    else deadlineBuckets.later += 1
-  }
-
   const monthBuckets = Array.from({ length: 6 }, (_, index) => {
     const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1)
     return {
@@ -231,13 +286,17 @@ export async function getDashboardData(): Promise<DashboardData> {
     }
   })
   const monthMap = new Map(monthBuckets.map((bucket) => [bucket.key, bucket]))
-  for (const row of leadRows) {
-    if (typeof row.created_at !== "string") continue
-    const date = new Date(row.created_at)
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
-    const bucket = monthMap.get(key)
-    if (bucket) bucket.count += 1
+  const aggregateTrend = Array.isArray(aggregates.leadTrend)
+    ? (aggregates.leadTrend as AggregateTrend[])
+    : []
+  for (const row of aggregateTrend) {
+    const bucket = monthMap.get(row.key)
+    if (bucket) bucket.count = Number(row.count ?? 0)
   }
+  const deadlines =
+    aggregates.deadlines && typeof aggregates.deadlines === "object"
+      ? (aggregates.deadlines as Record<string, unknown>)
+      : {}
 
   return {
     counts: {
@@ -249,12 +308,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     },
     hotLeads: ((hotLeadsResult.data ?? []) as Array<Record<string, unknown>>).map(mapLead),
     recentLeads: ((recentLeadsResult.data ?? []) as Array<Record<string, unknown>>).map(mapLead),
-    leadsByStatus: countValues(leadRows, "stato_lead", "Senza stato"),
-    clientiByStatus: countValues(
-      (clientiStatusResult.data ?? []) as Array<Record<string, unknown>>,
-      "stato",
-      "Senza stato",
-    ),
+    leadsByStatus: (aggregates.leadsByStatus ?? []) as AggregateCount[],
+    clientiByStatus: (aggregates.clientiByStatus ?? []) as AggregateCount[],
     mapMarkers,
     noticeboard: Array.isArray(noticeboardResult.data?.valore)
       ? (noticeboardResult.data.valore as NoticeboardItem[])
@@ -263,8 +318,12 @@ export async function getDashboardData(): Promise<DashboardData> {
       .sort((a, b) => b.count - a.count),
     unmappedLeadLocations,
     leadTrend: monthBuckets.map(({ label, count }) => ({ label, count })),
-    tasksByStatus: countValues(taskRows, "stato", "Senza stato"),
-    overdueTasks,
-    deadlines: deadlineBuckets,
+    tasksByStatus: (aggregates.tasksByStatus ?? []) as AggregateCount[],
+    overdueTasks: Number(aggregates.overdueTasks ?? 0),
+    deadlines: {
+      overdue: Number(deadlines.overdue ?? 0),
+      next7Days: Number(deadlines.next7Days ?? 0),
+      later: Number(deadlines.later ?? 0),
+    },
   }
 }

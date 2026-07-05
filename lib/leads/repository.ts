@@ -34,6 +34,7 @@ function project(lead: Lead, fields: string[]): LeadListItem {
   }
   out.noteItems = lead.noteItems ?? []
   out.taskItems = lead.taskItems ?? []
+  out.tagIds = lead.tagIds ?? []
   return out as LeadListItem
 }
 
@@ -68,8 +69,25 @@ export async function queryLeads(params: LeadListParams): Promise<LeadListRespon
 // computeStats — query SQL aggregata, nessun full scan
 export async function computeStats(): Promise<LeadStats> {
   const supabase = await createClient()
+  const { data: aggregate, error: aggregateError } =
+    await supabase.rpc("get_lead_stats")
 
-  // Mezzanotte locale di oggi -> ISO, per il conteggio "Nuovi oggi".
+  if (!aggregateError && aggregate && typeof aggregate === "object") {
+    const value = aggregate as Record<string, unknown>
+    return {
+      total: Number(value.total ?? 0),
+      byStato:
+        value.byStato && typeof value.byStato === "object"
+          ? (value.byStato as Record<string, number>)
+          : {},
+      caldi: Number(value.caldi ?? 0),
+      duplicati: Number(value.duplicati ?? 0),
+      nonAssegnati: Number(value.nonAssegnati ?? 0),
+      nuoviOggi: Number(value.nuoviOggi ?? 0),
+    }
+  }
+
+  // Compatibilità temporanea finché la migration RPC non viene applicata.
   const startOfToday = new Date()
   startOfToday.setHours(0, 0, 0, 0)
 

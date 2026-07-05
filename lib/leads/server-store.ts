@@ -53,6 +53,7 @@ function mapRow(row: Record<string, unknown>): Lead {
     attivita: [],
     noteItems: [],
     taskItems: [],
+    tagIds: [],
     documenti: [],
   }
 }
@@ -249,7 +250,7 @@ export async function getAllLeads(filters?: {
   const ids = rows.map((row) => row.id)
   if (ids.length === 0) return rows
 
-  const [activities, tasks] = await Promise.all([
+  const [activities, tasks, tagAssignments] = await Promise.all([
     supabase
       .from("attivita")
       .select("id,record_id,tipo,testo,created_at")
@@ -261,12 +262,19 @@ export async function getAllLeads(filters?: {
       .eq("correlato_tipo", "lead")
       .in("correlato_id", ids)
       .neq("stato", "Completato"),
+    supabase
+      .from("lead_tags")
+      .select("lead_id,tag_id")
+      .in("lead_id", ids),
   ])
   if (activities.error) {
     console.error("[server-store] lead activities:", activities.error.message)
   }
   if (tasks.error) {
     console.error("[server-store] lead tasks:", tasks.error.message)
+  }
+  if (tagAssignments.error) {
+    console.error("[server-store] lead tags:", tagAssignments.error.message)
   }
   const noteIds = new Set(
     (activities.data ?? [])
@@ -295,6 +303,9 @@ export async function getAllLeads(filters?: {
         priority: item.priorita ?? "Medio",
         status: item.stato ?? "Non iniziato",
       })),
+    tagIds: (tagAssignments.data ?? [])
+      .filter((item) => item.lead_id === row.id)
+      .map((item) => item.tag_id),
   }))
 }
 

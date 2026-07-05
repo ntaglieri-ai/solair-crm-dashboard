@@ -13,7 +13,7 @@ import {
 } from "lucide-react"
 import { requirePage } from "@/lib/permissions/server"
 import { getDashboardData, type DashboardLead } from "@/lib/dashboard/repository"
-import { ItalyMap } from "@/components/dashboard/italy-map"
+import { LazyItalyMap } from "@/components/dashboard/lazy-italy-map"
 import { Noticeboard } from "@/components/dashboard/noticeboard"
 
 const ROLE_MANAGERS = new Set(["SUPERADMIN", "ADMIN", "DIRECTOR"])
@@ -237,7 +237,7 @@ export default async function DashboardPage() {
             </div>
           </div>
           <div className="h-[520px]">
-            <ItalyMap markers={data.mapMarkers} regionData={data.leadsByRegion} />
+            <LazyItalyMap markers={data.mapMarkers} regionData={data.leadsByRegion} />
           </div>
         </section>
 

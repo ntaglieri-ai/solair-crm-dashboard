@@ -32,8 +32,10 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Refresh sessione — necessario per mantenere la sessione aggiornata
-  const { data: { user } } = await supabase.auth.getUser()
+  // Verifica il JWT tramite JWKS in cache. Con chiavi asimmetriche evita il
+  // roundtrip a Supabase Auth che getUser() esegue a ogni navigazione.
+  const { data: claimsData } = await supabase.auth.getClaims()
+  const isAuthenticated = Boolean(claimsData?.claims?.sub)
 
   // Route pubbliche (non protette)
   const publicRoutes = ["/login"]
@@ -42,14 +44,14 @@ export async function middleware(request: NextRequest) {
   )
 
   // Se non autenticato e non su route pubblica → redirect a /login
-  if (!user && !isPublicRoute) {
+  if (!isAuthenticated && !isPublicRoute) {
     const url = request.nextUrl.clone()
     url.pathname = "/login"
     return NextResponse.redirect(url)
   }
 
   // Se autenticato e su /login → redirect a /dashboard
-  if (user && request.nextUrl.pathname === "/login") {
+  if (isAuthenticated && request.nextUrl.pathname === "/login") {
     const url = request.nextUrl.clone()
     url.pathname = "/"
     return NextResponse.redirect(url)

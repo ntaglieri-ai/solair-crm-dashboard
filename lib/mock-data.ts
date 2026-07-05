@@ -602,6 +602,7 @@ export interface Lead {
   compiti?: LeadTask[]
   noteItems?: LeadListNote[]
   taskItems?: LeadListTask[]
+  tagIds?: string[]
   documenti: LeadDoc[]
 }
 
@@ -616,6 +617,7 @@ export type LeadColumnId = Exclude<
   | "compiti"
   | "noteItems"
   | "taskItems"
+  | "tagIds"
   | "documenti"
 >
 

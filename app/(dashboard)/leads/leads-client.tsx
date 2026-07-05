@@ -125,7 +125,7 @@ export function LeadsClient({
   initialLeads,
   initialStats,
 }: LeadsClientProps) {
-  const { tags } = useTags()
+  const { tags, hydrateLeadTagIds } = useTags()
   const permissions = usePermissions()
   const allTags = useMemo(() => tags.map((tag) => tag.name), [tags])
   const preferenceOwner =
@@ -294,6 +294,12 @@ export function LeadsClient({
     () => (data?.rows ?? []) as Lead[],
     [data?.rows],
   )
+  useEffect(() => {
+    const assignments = Object.fromEntries(
+      pageRows.map((lead) => [lead.id, lead.tagIds ?? []]),
+    )
+    hydrateLeadTagIds(assignments)
+  }, [hydrateLeadTagIds, pageRows])
   const total = data?.total ?? 0
   const headerTotal = stats?.total ?? 0
 

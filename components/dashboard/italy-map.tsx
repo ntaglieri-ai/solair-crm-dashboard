@@ -15,7 +15,7 @@ export type DashboardMapMarker = {
 
 type RegionDatum = { region: string; count: number }
 
-const COLOR_STOPS = ["#e9eff8", "#c8daf3", "#91b8eb", "#4f8fda", "#245da8"]
+const COLOR_STOPS = ["#edf2f8", "#ffe2a8", "#ffb25c", "#ef6a47", "#b8273d"]
 
 export function ItalyMap({
   markers = [],
@@ -84,7 +84,7 @@ export function ItalyMap({
                       onMouseLeave={() => setHovered(null)}
                       style={{
                         default: { outline: "none", transition: "fill 160ms ease" },
-                        hover: { outline: "none", fill: "#f2b84b", cursor: "pointer" },
+                        hover: { outline: "none", fill: "#7c2035", cursor: "pointer" },
                         pressed: { outline: "none" },
                       }}
                     />

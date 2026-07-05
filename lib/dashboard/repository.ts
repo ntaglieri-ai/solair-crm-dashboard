@@ -29,6 +29,14 @@ export type DashboardData = {
   noticeboard: NoticeboardItem[]
   leadsByRegion: Array<{ region: string; count: number }>
   unmappedLeadLocations: number
+  leadTrend: Array<{ label: string; count: number }>
+  tasksByStatus: Array<{ label: string; count: number }>
+  overdueTasks: number
+  deadlines: {
+    overdue: number
+    next7Days: number
+    later: number
+  }
 }
 
 const CITY_COORDINATES: Array<{
@@ -97,6 +105,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     leadDistributionResult,
     clientiStatusResult,
     settingsResult,
+    tasksResult,
+    deadlinesResult,
     usersResult,
     noticeboardResult,
   ] = await Promise.all([
@@ -116,13 +126,15 @@ export async function getDashboardData(): Promise<DashboardData> {
       .select("id,nome_lead,nome,cognome,stato_lead,valutazione,sede,created_at")
       .order("created_at", { ascending: false })
       .limit(6),
-    supabase.from("leads").select("stato_lead,sede,provincia").limit(10000),
+    supabase.from("leads").select("stato_lead,sede,provincia,created_at").limit(10000),
     supabase.from("clienti").select("stato").limit(10000),
     supabase
       .from("crm_settings")
       .select("valore")
       .eq("chiave", "system.sedi")
       .maybeSingle(),
+    supabase.from("compiti").select("stato,scadenza").limit(10000),
+    supabase.from("scadenze").select("data_scadenza").limit(10000),
     supabase.from("utenti").select("sede").not("sede", "is", null),
     supabase
       .from("crm_settings")
@@ -141,6 +153,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     recentLeadsResult.error,
     leadDistributionResult.error,
     clientiStatusResult.error,
+    tasksResult.error,
+    deadlinesResult.error,
     usersResult.error,
   ].filter(Boolean)
   if (requiredErrors.length > 0) {
@@ -189,6 +203,42 @@ export async function getDashboardData(): Promise<DashboardData> {
       : []
   })
 
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const inSevenDays = new Date(startOfToday)
+  inSevenDays.setDate(inSevenDays.getDate() + 7)
+  const taskRows = (tasksResult.data ?? []) as Array<Record<string, unknown>>
+  const deadlineRows = (deadlinesResult.data ?? []) as Array<Record<string, unknown>>
+  const overdueTasks = taskRows.filter((row) => {
+    if (row.stato === "Completato" || typeof row.scadenza !== "string") return false
+    return new Date(row.scadenza) < startOfToday
+  }).length
+  const deadlineBuckets = { overdue: 0, next7Days: 0, later: 0 }
+  for (const row of deadlineRows) {
+    if (typeof row.data_scadenza !== "string") continue
+    const date = new Date(row.data_scadenza)
+    if (date < startOfToday) deadlineBuckets.overdue += 1
+    else if (date < inSevenDays) deadlineBuckets.next7Days += 1
+    else deadlineBuckets.later += 1
+  }
+
+  const monthBuckets = Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1)
+    return {
+      key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
+      label: new Intl.DateTimeFormat("it-IT", { month: "short" }).format(date),
+      count: 0,
+    }
+  })
+  const monthMap = new Map(monthBuckets.map((bucket) => [bucket.key, bucket]))
+  for (const row of leadRows) {
+    if (typeof row.created_at !== "string") continue
+    const date = new Date(row.created_at)
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+    const bucket = monthMap.get(key)
+    if (bucket) bucket.count += 1
+  }
+
   return {
     counts: {
       leads: leadsCount.count ?? 0,
@@ -212,5 +262,9 @@ export async function getDashboardData(): Promise<DashboardData> {
     leadsByRegion: Array.from(regionCounts, ([region, count]) => ({ region, count }))
       .sort((a, b) => b.count - a.count),
     unmappedLeadLocations,
+    leadTrend: monthBuckets.map(({ label, count }) => ({ label, count })),
+    tasksByStatus: countValues(taskRows, "stato", "Senza stato"),
+    overdueTasks,
+    deadlines: deadlineBuckets,
   }
 }

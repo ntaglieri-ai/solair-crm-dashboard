@@ -29,10 +29,12 @@ export function Noticeboard({
   initialItems,
   canManage,
   author,
+  compact = false,
 }: {
   initialItems: NoticeboardItem[]
   canManage: boolean
   author: string
+  compact?: boolean
 }) {
   const [items, setItems] = useState(initialItems)
   const [editing, setEditing] = useState<NoticeboardItem | null>(null)
@@ -89,23 +91,23 @@ export function Noticeboard({
   }
 
   return (
-    <section className="dashboard-noticeboard">
+    <section className={compact ? "dashboard-noticeboard dashboard-noticeboard--compact" : "dashboard-noticeboard"}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="flex size-12 items-center justify-center rounded-xl bg-[#fff1d6] text-[#a85e00]">
+          <div className={compact ? "flex size-10 items-center justify-center rounded-lg bg-[#fff1d6] text-[#a85e00]" : "flex size-12 items-center justify-center rounded-xl bg-[#fff1d6] text-[#a85e00]"}>
             <Megaphone className="size-6" />
           </div>
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#a85e00]">
               Comunicazioni
             </p>
-            <h2 className="mt-1 text-2xl font-bold text-foreground">Bacheca aziendale</h2>
+            <h2 className={compact ? "mt-1 text-xl font-bold text-foreground" : "mt-1 text-2xl font-bold text-foreground"}>Bacheca aziendale</h2>
           </div>
         </div>
         {canManage && !editing ? (
-          <Button size="lg" onClick={startNew} className="shadow-sm">
+          <Button size={compact ? "default" : "lg"} onClick={startNew} className="shadow-sm">
             <Plus data-icon="inline-start" />
-            Nuova comunicazione
+            {compact ? "Nuova nota" : "Nuova comunicazione"}
           </Button>
         ) : null}
       </div>
@@ -160,7 +162,7 @@ export function Noticeboard({
         ) : null}
       </AnimatePresence>
 
-      <div className="mt-6 grid gap-3">
+      <div className={compact ? "noticeboard-scroll mt-4 grid gap-3 overflow-y-auto pr-1" : "mt-6 grid gap-3"}>
         {orderedItems.length === 0 ? (
           <div className="rounded-lg border border-dashed border-[#d9b66f] bg-white/50 px-6 py-10 text-center">
             <p className="text-lg font-semibold text-foreground">Nessuna comunicazione</p>
@@ -176,7 +178,10 @@ export function Noticeboard({
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: index * 0.04 }}
-              className="group flex gap-4 rounded-lg border border-black/8 bg-white/75 p-5 transition-colors hover:bg-white"
+              className={compact
+                ? "group flex gap-3 rounded-lg border border-[#ead8a7] bg-[#fffaf0] p-4 transition-colors hover:bg-[#fff7e6]"
+                : "group flex gap-4 rounded-lg border border-black/8 bg-white/75 p-5 transition-colors hover:bg-white"
+              }
             >
               <div className="pt-1">
                 {item.pinned ? (
@@ -186,8 +191,8 @@ export function Noticeboard({
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="text-lg font-bold text-foreground">{item.title}</h3>
-                <p className="mt-2 whitespace-pre-wrap text-[15px] leading-6 text-foreground/75">
+                <h3 className={compact ? "text-base font-bold text-foreground" : "text-lg font-bold text-foreground"}>{item.title}</h3>
+                <p className={compact ? "mt-1.5 whitespace-pre-wrap text-sm leading-5 text-foreground/75" : "mt-2 whitespace-pre-wrap text-[15px] leading-6 text-foreground/75"}>
                   {item.body}
                 </p>
                 <p className="mt-3 text-xs font-medium text-muted-foreground">

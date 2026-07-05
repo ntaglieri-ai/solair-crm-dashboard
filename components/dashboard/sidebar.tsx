@@ -38,11 +38,14 @@ function isActive(href: string, pathname: string) {
 function NavLink({ item }: { item: NavItem }) {
   const Icon = NAV_ICONS[item.icon]
   const pathname = usePathname()
+  const router = useRouter()
   const active = isActive(item.href, pathname)
   return (
     <motion.div whileHover={{ x: 3 }} transition={{ duration: 0.18 }}>
     <Link
       href={item.href}
+      onMouseEnter={() => router.prefetch(item.href)}
+      onFocus={() => router.prefetch(item.href)}
       aria-current={active ? "page" : undefined}
       className={cn(
         "relative flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-[15px] font-semibold transition-colors",

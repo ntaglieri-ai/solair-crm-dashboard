@@ -118,7 +118,7 @@ export function LeadTable({
     const widths = {} as Record<LeadColumnId, number>
     for (const column of columns) {
       if (column.id === "Badge dell'attività" || column.id === "Badge di nota") {
-        widths[column.id] = 112
+        widths[column.id] = 176
         continue
       }
       if (column.id === "Tag") {

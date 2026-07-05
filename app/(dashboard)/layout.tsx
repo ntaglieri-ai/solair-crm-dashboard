@@ -1,6 +1,5 @@
 import type { ReactNode } from "react"
 import { Sidebar } from "@/components/dashboard/sidebar"
-import { Topbar } from "@/components/dashboard/topbar"
 import { CrmSettingsSidebar } from "@/components/dashboard/crm-settings-sidebar"
 import { CrmSettingsLauncherProvider } from "@/lib/crm-settings-launcher"
 import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permissions"
@@ -16,7 +15,6 @@ export default async function DashboardLayout({ children }: { children: ReactNod
         <div className="min-h-screen bg-background">
           <Sidebar />
           <div className="flex min-h-screen flex-col lg:pl-[248px]">
-            <Topbar />
             <main className="flex-1 px-5 py-6 lg:px-8 lg:py-7">
               <PageTransition>{children}</PageTransition>
             </main>

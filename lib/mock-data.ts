@@ -529,6 +529,20 @@ export interface LeadTask {
   completato: boolean
 }
 
+export interface LeadListNote {
+  id: string
+  text: string
+  createdAt: string
+}
+
+export interface LeadListTask {
+  id: string
+  title: string
+  dueDate: string
+  priority: string
+  status: string
+}
+
 export interface LeadDoc {
   id: string
   nome: string
@@ -586,6 +600,8 @@ export interface Lead {
   possibileDuplicato: boolean
   attivita: LeadActivity[]
   compiti?: LeadTask[]
+  noteItems?: LeadListNote[]
+  taskItems?: LeadListTask[]
   documenti: LeadDoc[]
 }
 
@@ -598,6 +614,8 @@ export type LeadColumnId = Exclude<
   | "possibileDuplicato"
   | "attivita"
   | "compiti"
+  | "noteItems"
+  | "taskItems"
   | "documenti"
 >
 

@@ -23,6 +23,13 @@ import { usePermissions } from "@/lib/permissions/provider"
 import { NAV_ICONS } from "./icons"
 import { motion } from "framer-motion"
 
+const OGGI = new Intl.DateTimeFormat("it-IT", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+}).format(new Date())
+
 function isActive(href: string, pathname: string) {
   if (href === "/") return pathname === "/"
   return pathname === href || pathname.startsWith(`${href}/`)
@@ -161,14 +168,19 @@ export function Sidebar() {
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-sidebar-border bg-sidebar lg:flex">
       {/* Logo */}
-      <div className="flex items-center gap-3 border-b border-sidebar-border px-5 py-5">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-navy text-navy-foreground shadow-[0_8px_24px_rgba(30,58,95,.2)]">
-          <SunMedium className="size-6" />
+      <div className="border-b border-sidebar-border px-5 py-5">
+        <div className="flex items-center gap-3">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-navy text-navy-foreground shadow-[0_8px_24px_rgba(30,58,95,.2)]">
+            <SunMedium className="size-6" />
+          </div>
+          <div className="flex min-w-0 flex-col leading-tight">
+            <span className="text-[17px] font-extrabold text-foreground">Solair CRM</span>
+            <span className="text-xs text-muted-foreground">solairgroup.it</span>
+          </div>
         </div>
-        <div className="flex flex-col leading-tight">
-          <span className="text-[17px] font-extrabold text-foreground">Solair CRM</span>
-          <span className="text-xs text-muted-foreground">solairgroup.it</span>
-        </div>
+        <p className="mt-3 text-[15px] font-bold capitalize leading-5 text-primary">
+          {OGGI}
+        </p>
       </div>
 
       {/* Nav */}

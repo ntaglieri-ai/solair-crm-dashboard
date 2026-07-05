@@ -73,7 +73,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { leadsKeys } from "@/lib/leads/hooks"
 
 type LeadViewPreferences = {
-  version: 2
+  version: 3
   visibleCols: LeadColumnId[]
   columnWidths: Partial<Record<LeadColumnId, number>>
   density: Density
@@ -132,7 +132,7 @@ export function LeadsClient({
     permissions.snapshot.subject.userId ??
     permissions.snapshot.subject.authUserId ??
     "anonymous"
-  const preferenceKey = `solair:leads:view:${preferenceOwner}:v2`
+  const preferenceKey = `solair:leads:view:${preferenceOwner}:v3`
   const queryClient = useQueryClient()
   const [newLeadOpen, setNewLeadOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
@@ -201,7 +201,7 @@ export function LeadsClient({
   useEffect(() => {
     if (!preferencesLoaded) return
     const preferences: LeadViewPreferences = {
-      version: 2,
+      version: 3,
       visibleCols,
       columnWidths,
       density,

@@ -12,11 +12,20 @@ export type DashboardMapMarker = {
   leads: number
 }
 
-export function ItalyMap({ markers = [] }: { markers?: DashboardMapMarker[] }) {
+export function ItalyMap({
+  markers = [],
+  dark = false,
+}: {
+  markers?: DashboardMapMarker[]
+  dark?: boolean
+}) {
   const maxLeads = Math.max(...markers.map((marker) => marker.leads), 1)
   return (
     <div className="flex h-full flex-col gap-3">
-      <div className="relative flex-1 overflow-hidden rounded-lg border border-border bg-secondary/40">
+      <div className={dark
+        ? "relative flex-1 overflow-hidden rounded-lg border border-white/10 bg-[#112f50]"
+        : "relative flex-1 overflow-hidden rounded-lg border border-border bg-secondary/40"
+      }>
         <ComposableMap
           projection="geoMercator"
           projectionConfig={{ scale: 1600, center: [12.5, 42] }}
@@ -29,12 +38,12 @@ export function ItalyMap({ markers = [] }: { markers?: DashboardMapMarker[] }) {
                 <Geography
                   key={geo.rsmKey}
                   geography={geo}
-                  fill="var(--secondary)"
-                  stroke="var(--primary)"
+                  fill={dark ? "#dce8f7" : "var(--secondary)"}
+                  stroke={dark ? "#6485aa" : "var(--primary)"}
                   strokeWidth={0.6}
                   style={{
                     default: { outline: "none" },
-                    hover: { outline: "none", fill: "var(--accent)" },
+                    hover: { outline: "none", fill: dark ? "#ffffff" : "var(--accent)" },
                     pressed: { outline: "none" },
                   }}
                 />
@@ -48,19 +57,19 @@ export function ItalyMap({ markers = [] }: { markers?: DashboardMapMarker[] }) {
               <Marker key={marker.id} coordinates={marker.coordinates}>
                 <circle
                   r={radius + 5}
-                  fill="var(--teal)"
+                  fill={dark ? "#55d6b0" : "var(--teal)"}
                   opacity={0.18}
                 />
                 <circle
                   r={radius}
-                  fill="var(--teal)"
+                  fill={dark ? "#55d6b0" : "var(--teal)"}
                   stroke="var(--card)"
                   strokeWidth={1.5}
                 />
                 <text
                   textAnchor="middle"
                   y={-radius - 6}
-                  className="fill-foreground text-[9px] font-semibold"
+                  className={dark ? "fill-white text-[9px] font-semibold" : "fill-foreground text-[9px] font-semibold"}
                 >
                   {marker.nome}
                 </text>
@@ -75,9 +84,9 @@ export function ItalyMap({ markers = [] }: { markers?: DashboardMapMarker[] }) {
         ) : null}
       </div>
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 px-1">
         <span className="size-2.5 rounded-full bg-teal" />
-        <span className="text-xs text-muted-foreground">Sedi operative</span>
+        <span className={dark ? "text-xs text-white/65" : "text-xs text-muted-foreground"}>Sedi operative</span>
       </div>
     </div>
   )

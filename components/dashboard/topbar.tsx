@@ -2,7 +2,6 @@
 
 import { ChevronRight } from "lucide-react"
 import { usePathname } from "next/navigation"
-import { usePermissions } from "@/lib/permissions/provider"
 
 const OGGI = new Date().toLocaleDateString("it-IT", {
   weekday: "long",
@@ -28,7 +27,6 @@ function getSectionTitle(pathname: string) {
 
 export function Topbar() {
   const pathname = usePathname()
-  const subject = usePermissions().snapshot.subject
   const title = getSectionTitle(pathname)
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/70">
@@ -51,11 +49,6 @@ export function Topbar() {
           </div>
         </div>
 
-        <div className="flex items-center">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-semibold text-navy-foreground">
-            {subject.iniziali}
-          </div>
-        </div>
       </div>
     </header>
   )

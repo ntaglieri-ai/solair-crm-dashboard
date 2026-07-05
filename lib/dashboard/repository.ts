@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import type { DashboardMapMarker } from "@/components/dashboard/italy-map"
 import type { SystemSede } from "@/lib/system-settings-data"
+import type { NoticeboardItem } from "@/components/dashboard/noticeboard"
 
 export type DashboardLead = {
   id: string
@@ -24,6 +25,7 @@ export type DashboardData = {
   leadsByStatus: Array<{ label: string; count: number }>
   clientiByStatus: Array<{ label: string; count: number }>
   mapMarkers: DashboardMapMarker[]
+  noticeboard: NoticeboardItem[]
 }
 
 const CITY_COORDINATES: Array<{
@@ -93,6 +95,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     clientiStatusResult,
     settingsResult,
     usersResult,
+    noticeboardResult,
   ] = await Promise.all([
     supabase.from("leads").select("id", { count: "exact", head: true }),
     supabase.from("clienti").select("id", { count: "exact", head: true }),
@@ -118,6 +121,11 @@ export async function getDashboardData(): Promise<DashboardData> {
       .eq("chiave", "system.sedi")
       .maybeSingle(),
     supabase.from("utenti").select("sede").not("sede", "is", null),
+    supabase
+      .from("crm_settings")
+      .select("valore")
+      .eq("chiave", "dashboard.noticeboard")
+      .maybeSingle(),
   ])
 
   const requiredErrors = [
@@ -190,5 +198,8 @@ export async function getDashboardData(): Promise<DashboardData> {
       "Senza stato",
     ),
     mapMarkers,
+    noticeboard: Array.isArray(noticeboardResult.data?.valore)
+      ? (noticeboardResult.data.valore as NoticeboardItem[])
+      : [],
   }
 }

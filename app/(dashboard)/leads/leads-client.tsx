@@ -38,7 +38,6 @@ import {
   type Density,
 } from "@/components/leads/lead-table"
 import { BulkToolbar } from "@/components/leads/bulk-toolbar"
-import { LeadKpis } from "@/components/leads/lead-kpis"
 import { NewLeadDialog } from "@/components/leads/new-lead-dialog"
 import {
   LeadSettingsSheet,
@@ -69,6 +68,7 @@ import {
 } from "@/lib/leads/hooks"
 import { useTags } from "@/lib/tag-store"
 import { usePermissions } from "@/lib/permissions/provider"
+import { motion } from "framer-motion"
 
 type LeadViewPreferences = {
   version: 1
@@ -549,17 +549,16 @@ export function LeadsClient({
     <div
       ref={rootRef}
       style={availH ? { height: availH } : undefined}
-      className="flex h-[calc(100svh-9rem)] flex-col gap-5 lg:h-[calc(100svh-6rem)]"
+      className="flex h-[calc(100svh-9rem)] flex-col gap-4 lg:h-[calc(100svh-6rem)]"
     >
       {/* Header pagina */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-0.5">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
             Lead
           </h1>
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            Gestisci, filtra e assegna i lead del CRM ·{" "}
-            {headerTotal.toLocaleString("it-IT")} totali
+          <p className="mt-1 flex items-center gap-2 text-[15px] text-muted-foreground">
+            {headerTotal.toLocaleString("it-IT")} lead disponibili
             {isFetching ? (
               <Loader2
                 className="size-3.5 animate-spin text-muted-foreground"
@@ -643,8 +642,39 @@ export function LeadsClient({
         </div>
       </div>
 
-      {/* KPI operativi sopra la tabella */}
-      <LeadKpis stats={stats} />
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        {[
+          { label: "Tutti", stato: "all", commerciale: "all" },
+          { label: "Da contattare", stato: "Non contattato", commerciale: "all" },
+          { label: "Da richiamare", stato: "Tentato di contattare", commerciale: "all" },
+          { label: "Non assegnati", stato: "all", commerciale: "__unassigned__" },
+        ].map((view) => {
+          const active =
+            filters.stato === view.stato && filters.commerciale === view.commerciale
+          return (
+            <motion.button
+              type="button"
+              key={view.label}
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() =>
+                handleFilterChange({
+                  ...DEFAULT_FILTERS,
+                  stato: view.stato,
+                  commerciale: view.commerciale,
+                })
+              }
+              className={
+                active
+                  ? "h-10 shrink-0 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground shadow-sm"
+                  : "h-10 shrink-0 rounded-lg border border-border bg-card px-4 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+              }
+            >
+              {view.label}
+            </motion.button>
+          )
+        })}
+      </div>
 
       {/* Indicatore filtro duplicati attivo */}
       {onlyDuplicates ? (
@@ -664,7 +694,7 @@ export function LeadsClient({
       ) : null}
 
       {/* Barra filtri + pannello filtri avanzati */}
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-2 rounded-lg border border-border bg-card p-2 shadow-sm">
         <AdvancedFilters
           applied={advanced}
           onApply={handleAdvancedApply}

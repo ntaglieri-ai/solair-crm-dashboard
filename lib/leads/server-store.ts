@@ -207,8 +207,11 @@ export async function getAllLeads(filters?: {
     query = query.eq("stato_lead", filters.stato)
   if (filters?.sede && filters.sede !== "all")
     query = query.eq("sede", filters.sede)
-  if (filters?.commerciale && filters.commerciale !== "all")
+  if (filters?.commerciale === "__unassigned__") {
+    query = query.is("lead_proprietario_id", null)
+  } else if (filters?.commerciale && filters.commerciale !== "all") {
     query = query.eq("lead_proprietario_id", filters.commerciale)
+  }
   if (filters?.origine && filters.origine !== "all")
     query = query.eq("origine_lead", filters.origine)
   if (filters?.score && filters.score !== "all") {
@@ -262,8 +265,11 @@ export async function getTotalCount(filters?: {
     query = query.eq("stato_lead", filters.stato)
   if (filters?.sede && filters.sede !== "all")
     query = query.eq("sede", filters.sede)
-  if (filters?.commerciale && filters.commerciale !== "all")
+  if (filters?.commerciale === "__unassigned__") {
+    query = query.is("lead_proprietario_id", null)
+  } else if (filters?.commerciale && filters.commerciale !== "all") {
     query = query.eq("lead_proprietario_id", filters.commerciale)
+  }
   if (filters?.origine && filters.origine !== "all")
     query = query.eq("origine_lead", filters.origine)
   if (filters?.score && filters.score !== "all") {

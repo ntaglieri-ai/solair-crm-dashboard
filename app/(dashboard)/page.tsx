@@ -1,178 +1,188 @@
 import Link from "next/link"
 import {
+  ArrowRight,
   BriefcaseBusiness,
   CalendarClock,
-  CheckSquare,
   Flame,
-  HardHat,
+  MapPinned,
+  Sparkles,
   Users,
 } from "lucide-react"
 import { requirePage } from "@/lib/permissions/server"
 import { getDashboardData, type DashboardLead } from "@/lib/dashboard/repository"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { ItalyMap } from "@/components/dashboard/italy-map"
+import { Noticeboard } from "@/components/dashboard/noticeboard"
 
-const KPI_CONFIG = [
-  { key: "leads", label: "Lead", href: "/leads", icon: Users },
-  { key: "clienti", label: "Clienti", href: "/clienti", icon: BriefcaseBusiness },
-  { key: "compiti", label: "Compiti", href: "/compiti", icon: CheckSquare },
-  { key: "scadenze", label: "Scadenze", href: "/scadenze", icon: CalendarClock },
-  { key: "installatori", label: "Installatori", href: "/installatori", icon: HardHat },
-] as const
-
-function LeadList({
+function LeadQueue({
   leads,
   empty,
-  showScore = false,
 }: {
   leads: DashboardLead[]
   empty: string
-  showScore?: boolean
 }) {
   if (leads.length === 0) {
-    return <p className="py-10 text-center text-sm text-muted-foreground">{empty}</p>
+    return (
+      <div className="flex min-h-44 items-center justify-center rounded-lg border border-dashed border-border bg-muted/25 px-6 text-center">
+        <p className="text-sm text-muted-foreground">{empty}</p>
+      </div>
+    )
   }
 
   return (
-    <div className="divide-y divide-border">
-      {leads.map((lead) => (
+    <div className="grid gap-2">
+      {leads.slice(0, 5).map((lead) => (
         <Link
           key={lead.id}
           href={`/leads/${lead.id}`}
-          className="flex items-center justify-between gap-4 px-1 py-3 transition-colors hover:bg-muted/40"
+          className="group flex min-h-16 items-center justify-between gap-4 rounded-lg border border-transparent px-4 py-3 transition-all hover:border-border hover:bg-card hover:shadow-sm"
         >
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-foreground">{lead.nome}</p>
-            <p className="truncate text-xs text-muted-foreground">
+            <p className="truncate text-[15px] font-bold text-foreground">{lead.nome}</p>
+            <p className="mt-0.5 truncate text-sm text-muted-foreground">
               {[lead.stato, lead.sede].filter(Boolean).join(" · ") || "Dati da completare"}
             </p>
           </div>
-          {showScore ? <Badge variant="secondary">{lead.valutazione}</Badge> : null}
+          <div className="flex items-center gap-3">
+            {lead.valutazione > 0 ? (
+              <span className="rounded-md bg-[#fff1d6] px-2.5 py-1 text-xs font-bold text-[#9a5b00]">
+                {lead.valutazione}
+              </span>
+            ) : null}
+            <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-1" />
+          </div>
         </Link>
       ))}
     </div>
   )
 }
 
-function Distribution({
-  items,
-  total,
-  empty,
-}: {
-  items: Array<{ label: string; count: number }>
-  total: number
-  empty: string
-}) {
-  if (items.length === 0) {
-    return <p className="py-10 text-center text-sm text-muted-foreground">{empty}</p>
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      {items.slice(0, 6).map((item) => {
-        const percentage = total > 0 ? Math.round((item.count / total) * 100) : 0
-        return (
-          <div key={item.label}>
-            <div className="mb-1 flex justify-between gap-3 text-sm">
-              <span className="truncate text-foreground">{item.label}</span>
-              <span className="tabular-nums text-muted-foreground">{item.count}</span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-              <div className="h-full rounded-full bg-teal" style={{ width: `${percentage}%` }} />
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
+const ROLE_MANAGERS = new Set(["SUPERADMIN", "ADMIN", "DIRECTOR"])
 
 export default async function DashboardPage() {
-  await requirePage("dashboard")
+  const permissions = await requirePage("dashboard")
   const data = await getDashboardData()
+  const subject = permissions.snapshot.subject
 
   return (
-    <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
-      <header>
-        <h1 className="text-2xl font-bold text-foreground">Panoramica</h1>
-        <p className="text-sm text-muted-foreground">Stato operativo del CRM in tempo reale</p>
+    <div className="mx-auto flex max-w-[1520px] flex-col gap-7">
+      <header className="flex flex-wrap items-end justify-between gap-5">
+        <div>
+          <div className="mb-2 flex items-center gap-2 text-sm font-bold text-primary">
+            <Sparkles className="size-4" />
+            Il tuo spazio di lavoro
+          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground md:text-4xl">
+            Buongiorno, {subject.nome.split(" ")[0]}
+          </h1>
+          <p className="mt-2 text-base text-muted-foreground">
+            Comunicazioni, priorità e territorio in un’unica vista.
+          </p>
+        </div>
+        <Link
+          href="/leads"
+          className="group flex min-h-12 items-center gap-3 rounded-lg bg-[#1e3a5f] px-5 text-[15px] font-bold text-white shadow-[0_12px_30px_rgba(30,58,95,.2)] transition-all hover:-translate-y-0.5 hover:bg-[#294d79]"
+        >
+          Apri area Lead
+          <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+        </Link>
       </header>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        {KPI_CONFIG.map(({ key, label, href, icon: Icon }) => (
-          <Link key={key} href={href}>
-            <Card className="h-full transition-colors hover:border-foreground/25">
-              <CardContent className="flex items-center justify-between gap-4 p-5">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">{label}</p>
-                  <p className="mt-1 text-3xl font-bold tabular-nums text-foreground">
-                    {data.counts[key]}
-                  </p>
-                </div>
-                <Icon className="size-5 text-muted-foreground" />
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
+      <div className="grid gap-5 xl:grid-cols-[1.15fr_.85fr]">
+        <Noticeboard
+          initialItems={data.noticeboard}
+          canManage={ROLE_MANAGERS.has(subject.ruoloCode)}
+          author={subject.nome}
+        />
+
+        <section className="overflow-hidden rounded-lg border border-border bg-[#0f2945] text-white shadow-[0_20px_55px_rgba(15,41,69,.18)]">
+          <div className="flex items-start justify-between gap-4 px-6 pb-2 pt-6">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-bold text-[#72d5b8]">
+                <MapPinned className="size-5" />
+                Presenza sul territorio
+              </div>
+              <h2 className="mt-2 text-2xl font-bold">Sedi Solair</h2>
+              <p className="mt-1 text-sm text-white/65">Sedi operative configurate nel CRM</p>
+            </div>
+            <span className="rounded-md bg-white/10 px-3 py-1.5 text-sm font-bold">
+              {data.mapMarkers.length} sedi
+            </span>
+          </div>
+          <div className="h-[390px] px-4 pb-4">
+            <ItalyMap markers={data.mapMarkers} dark />
+          </div>
+        </section>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-5">
-        <Card className="xl:col-span-3">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Flame className="size-[18px] text-destructive" />
-              Lead con valutazione alta
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <LeadList
-              leads={data.hotLeads}
-              empty="Nessun lead con valutazione superiore a 80."
-              showScore
-            />
-          </CardContent>
-        </Card>
+      <section className="grid gap-4 md:grid-cols-3">
+        <Link href="/leads" className="dashboard-signal group border-[#cbd8ff] bg-[#eef3ff]">
+          <span className="flex size-12 items-center justify-center rounded-lg bg-[#4f7cff] text-white">
+            <Users className="size-6" />
+          </span>
+          <span>
+            <strong>{data.counts.leads.toLocaleString("it-IT")}</strong>
+            <small>Lead attivi nel CRM</small>
+          </span>
+          <ArrowRight className="ml-auto size-5 transition-transform group-hover:translate-x-1" />
+        </Link>
+        <Link href="/clienti" className="dashboard-signal group border-[#bfe7da] bg-[#e9f8f2]">
+          <span className="flex size-12 items-center justify-center rounded-lg bg-[#2e9f7b] text-white">
+            <BriefcaseBusiness className="size-6" />
+          </span>
+          <span>
+            <strong>{data.counts.clienti.toLocaleString("it-IT")}</strong>
+            <small>Clienti registrati</small>
+          </span>
+          <ArrowRight className="ml-auto size-5 transition-transform group-hover:translate-x-1" />
+        </Link>
+        <Link href="/scadenze" className="dashboard-signal group border-[#ffd9ba] bg-[#fff3e8]">
+          <span className="flex size-12 items-center justify-center rounded-lg bg-[#f28b39] text-white">
+            <CalendarClock className="size-6" />
+          </span>
+          <span>
+            <strong>{data.counts.scadenze.toLocaleString("it-IT")}</strong>
+            <small>Scadenze da gestire</small>
+          </span>
+          <ArrowRight className="ml-auto size-5 transition-transform group-hover:translate-x-1" />
+        </Link>
+      </section>
 
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle>Distribuzione territoriale</CardTitle>
-          </CardHeader>
-          <CardContent className="h-[340px]">
-            <ItalyMap markers={data.mapMarkers} />
-          </CardContent>
-        </Card>
-      </div>
+      <div className="grid gap-5 xl:grid-cols-2">
+        <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <div>
+              <h2 className="flex items-center gap-2 text-xl font-bold">
+                <Flame className="size-5 text-[#f05b50]" />
+                Lead da seguire
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Priorità calcolate sui dati correnti
+              </p>
+            </div>
+            <Link href="/leads" className="text-sm font-bold text-primary hover:underline">
+              Vedi tutti
+            </Link>
+          </div>
+          <LeadQueue
+            leads={data.hotLeads}
+            empty="Non ci sono lead con valutazione superiore a 80."
+          />
+        </section>
 
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card>
-          <CardHeader><CardTitle>Lead per stato</CardTitle></CardHeader>
-          <CardContent>
-            <Distribution
-              items={data.leadsByStatus}
-              total={data.counts.leads}
-              empty="Nessun lead registrato."
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle>Lead recenti</CardTitle></CardHeader>
-          <CardContent>
-            <LeadList leads={data.recentLeads} empty="Nessun lead recente." />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle>Pipeline clienti</CardTitle></CardHeader>
-          <CardContent>
-            <Distribution
-              items={data.clientiByStatus}
-              total={data.counts.clienti}
-              empty="La pipeline apparirà con il primo cliente."
-            />
-          </CardContent>
-        </Card>
+        <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold">Ultimi ingressi</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                I lead acquisiti più recentemente
+              </p>
+            </div>
+            <Link href="/leads" className="text-sm font-bold text-primary hover:underline">
+              Apri elenco
+            </Link>
+          </div>
+          <LeadQueue leads={data.recentLeads} empty="Nessun lead recente." />
+        </section>
       </div>
     </div>
   )

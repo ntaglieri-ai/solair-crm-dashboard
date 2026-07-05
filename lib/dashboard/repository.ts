@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import type { DashboardMapMarker } from "@/components/dashboard/italy-map"
 import type { SystemSede } from "@/lib/system-settings-data"
 import type { NoticeboardItem } from "@/components/dashboard/noticeboard"
+import { regionFromProvince } from "@/lib/dashboard/italy-regions"
 
 export type DashboardLead = {
   id: string
@@ -26,6 +27,8 @@ export type DashboardData = {
   clientiByStatus: Array<{ label: string; count: number }>
   mapMarkers: DashboardMapMarker[]
   noticeboard: NoticeboardItem[]
+  leadsByRegion: Array<{ region: string; count: number }>
+  unmappedLeadLocations: number
 }
 
 const CITY_COORDINATES: Array<{
@@ -113,7 +116,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       .select("id,nome_lead,nome,cognome,stato_lead,valutazione,sede,created_at")
       .order("created_at", { ascending: false })
       .limit(6),
-    supabase.from("leads").select("stato_lead,sede").limit(10000),
+    supabase.from("leads").select("stato_lead,sede,provincia").limit(10000),
     supabase.from("clienti").select("stato").limit(10000),
     supabase
       .from("crm_settings")
@@ -146,10 +149,15 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const leadRows = (leadDistributionResult.data ?? []) as Array<Record<string, unknown>>
   const leadSedeCounts = new Map<string, number>()
+  const regionCounts = new Map<string, number>()
+  let unmappedLeadLocations = 0
   for (const row of leadRows) {
     if (typeof row.sede === "string" && row.sede.trim()) {
       leadSedeCounts.set(row.sede, (leadSedeCounts.get(row.sede) ?? 0) + 1)
     }
+    const region = regionFromProvince(row.provincia)
+    if (region) regionCounts.set(region, (regionCounts.get(region) ?? 0) + 1)
+    else unmappedLeadLocations += 1
   }
 
   const configuredSedi = Array.isArray(settingsResult.data?.valore)
@@ -201,5 +209,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     noticeboard: Array.isArray(noticeboardResult.data?.valore)
       ? (noticeboardResult.data.valore as NoticeboardItem[])
       : [],
+    leadsByRegion: Array.from(regionCounts, ([region, count]) => ({ region, count }))
+      .sort((a, b) => b.count - a.count),
+    unmappedLeadLocations,
   }
 }

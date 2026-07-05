@@ -1,8 +1,9 @@
 "use client"
 
-import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps"
+import { useMemo, useState } from "react"
+import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from "react-simple-maps"
+import { Minus, Plus, RotateCcw } from "lucide-react"
 
-// TopoJSON delle regioni italiane servito localmente (nessuna fetch esterna a runtime)
 const ITALY_GEO = "/italy-regions.json"
 
 export type DashboardMapMarker = {
@@ -12,81 +13,130 @@ export type DashboardMapMarker = {
   leads: number
 }
 
+type RegionDatum = { region: string; count: number }
+
+const COLOR_STOPS = ["#e9eff8", "#c8daf3", "#91b8eb", "#4f8fda", "#245da8"]
+
 export function ItalyMap({
   markers = [],
-  dark = false,
+  regionData = [],
 }: {
   markers?: DashboardMapMarker[]
-  dark?: boolean
+  regionData?: RegionDatum[]
 }) {
-  const maxLeads = Math.max(...markers.map((marker) => marker.leads), 1)
+  const [zoom, setZoom] = useState(1)
+  const [center, setCenter] = useState<[number, number]>([12.5, 42])
+  const [hovered, setHovered] = useState<{ name: string; count: number } | null>(null)
+  const counts = useMemo(
+    () => new Map(regionData.map((item) => [item.region, item.count])),
+    [regionData],
+  )
+  const max = Math.max(...regionData.map((item) => item.count), 1)
+  const total = regionData.reduce((sum, item) => sum + item.count, 0)
+
+  function colorFor(count: number) {
+    if (count === 0) return COLOR_STOPS[0]
+    const ratio = count / max
+    return COLOR_STOPS[Math.min(COLOR_STOPS.length - 1, Math.ceil(ratio * 4))]
+  }
+
+  function changeZoom(next: number) {
+    setZoom(Math.max(1, Math.min(2.2, next)))
+  }
+
+  function reset() {
+    setZoom(1)
+    setCenter([12.5, 42])
+  }
+
   return (
-    <div className="flex h-full flex-col gap-3">
-      <div className={dark
-        ? "relative flex-1 overflow-hidden rounded-lg border border-white/10 bg-[#112f50]"
-        : "relative flex-1 overflow-hidden rounded-lg border border-border bg-secondary/40"
-      }>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-[#d9e2ef] bg-[#f8fbff]">
         <ComposableMap
           projection="geoMercator"
           projectionConfig={{ scale: 1600, center: [12.5, 42] }}
           className="h-full w-full"
           style={{ width: "100%", height: "100%" }}
         >
-          <Geographies geography={ITALY_GEO}>
-            {({ geographies }) =>
-              geographies.map((geo) => (
-                <Geography
-                  key={geo.rsmKey}
-                  geography={geo}
-                  fill={dark ? "#dce8f7" : "var(--secondary)"}
-                  stroke={dark ? "#6485aa" : "var(--primary)"}
-                  strokeWidth={0.6}
-                  style={{
-                    default: { outline: "none" },
-                    hover: { outline: "none", fill: dark ? "#ffffff" : "var(--accent)" },
-                    pressed: { outline: "none" },
-                  }}
-                />
-              ))
-            }
-          </Geographies>
-
-          {markers.map((marker) => {
-            const radius = 6 + Math.round((marker.leads / maxLeads) * 5)
-            return (
+          <ZoomableGroup
+            zoom={zoom}
+            center={center}
+            minZoom={1}
+            maxZoom={2.2}
+            onMoveEnd={({ coordinates, zoom: nextZoom }) => {
+              setCenter(coordinates as [number, number])
+              setZoom(nextZoom)
+            }}
+          >
+            <Geographies geography={ITALY_GEO}>
+              {({ geographies }) =>
+                geographies.map((geo) => {
+                  const name = String(geo.properties?.reg_name ?? "")
+                  const count = counts.get(name) ?? 0
+                  return (
+                    <Geography
+                      key={geo.rsmKey}
+                      geography={geo}
+                      fill={colorFor(count)}
+                      stroke="#ffffff"
+                      strokeWidth={0.85 / zoom}
+                      onMouseEnter={() => setHovered({ name, count })}
+                      onMouseLeave={() => setHovered(null)}
+                      style={{
+                        default: { outline: "none", transition: "fill 160ms ease" },
+                        hover: { outline: "none", fill: "#f2b84b", cursor: "pointer" },
+                        pressed: { outline: "none" },
+                      }}
+                    />
+                  )
+                })
+              }
+            </Geographies>
+            {markers.map((marker) => (
               <Marker key={marker.id} coordinates={marker.coordinates}>
-                <circle
-                  r={radius + 5}
-                  fill={dark ? "#55d6b0" : "var(--teal)"}
-                  opacity={0.18}
-                />
-                <circle
-                  r={radius}
-                  fill={dark ? "#55d6b0" : "var(--teal)"}
-                  stroke="var(--card)"
-                  strokeWidth={1.5}
-                />
-                <text
-                  textAnchor="middle"
-                  y={-radius - 6}
-                  className={dark ? "fill-white text-[9px] font-semibold" : "fill-foreground text-[9px] font-semibold"}
-                >
-                  {marker.nome}
-                </text>
+                <circle r={5 / zoom} fill="#20a47a" stroke="#fff" strokeWidth={1.5 / zoom} />
               </Marker>
-            )
-          })}
+            ))}
+          </ZoomableGroup>
         </ComposableMap>
-        {markers.length === 0 ? (
-          <div className="pointer-events-none absolute inset-x-4 bottom-4 rounded-md bg-card/90 px-3 py-2 text-center text-xs text-muted-foreground shadow-sm">
-            Configura le sedi in CRM Settings & Admin per visualizzarle sulla mappa.
+
+        <div className="absolute right-3 top-3 flex flex-col gap-1 rounded-lg border border-border bg-white p-1 shadow-md">
+          <button type="button" aria-label="Aumenta zoom" onClick={() => changeZoom(zoom + 0.35)} className="map-control">
+            <Plus />
+          </button>
+          <button type="button" aria-label="Riduci zoom" onClick={() => changeZoom(zoom - 0.35)} className="map-control">
+            <Minus />
+          </button>
+          <button type="button" aria-label="Reimposta mappa" onClick={reset} className="map-control">
+            <RotateCcw />
+          </button>
+        </div>
+
+        {hovered ? (
+          <div className="pointer-events-none absolute bottom-4 left-4 rounded-lg border border-border bg-white px-4 py-3 shadow-lg">
+            <p className="text-sm font-bold text-foreground">{hovered.name}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {hovered.count.toLocaleString("it-IT")} lead
+              {total > 0 ? ` · ${Math.round((hovered.count / total) * 100)}%` : ""}
+            </p>
           </div>
         ) : null}
       </div>
 
-      <div className="flex items-center gap-1.5 px-1">
-        <span className="size-2.5 rounded-full bg-teal" />
-        <span className={dark ? "text-xs text-white/65" : "text-xs text-muted-foreground"}>Sedi operative</span>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground">Distribuzione lead</p>
+          <div className="mt-1 flex items-center gap-1">
+            {COLOR_STOPS.map((color) => (
+              <span key={color} className="h-2.5 w-8 rounded-sm" style={{ background: color }} />
+            ))}
+            <span className="ml-1 text-[11px] text-muted-foreground">più intensa</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+          <span className="size-2.5 rounded-full bg-[#20a47a]" />
+          Sedi operative
+        </div>
       </div>
     </div>
   )

@@ -94,28 +94,28 @@ export default async function DashboardPage() {
           author={subject.nome}
         />
 
-        <section className="overflow-hidden rounded-lg border border-border bg-[#0f2945] text-white shadow-[0_20px_55px_rgba(15,41,69,.18)]">
+        <section className="overflow-hidden rounded-lg border border-border bg-card shadow-[0_18px_45px_rgba(31,41,55,.08)]">
           <div className="flex items-start justify-between gap-4 px-6 pb-2 pt-6">
             <div>
-              <div className="flex items-center gap-2 text-sm font-bold text-[#72d5b8]">
+              <div className="flex items-center gap-2 text-sm font-bold text-[#245da8]">
                 <MapPinned className="size-5" />
                 Presenza sul territorio
               </div>
               <h2 className="mt-2 text-2xl font-bold">Sedi Solair</h2>
-              <p className="mt-1 text-sm text-white/65">Sedi operative configurate nel CRM</p>
+              <p className="mt-1 text-sm text-muted-foreground">Distribuzione regionale e sedi operative</p>
             </div>
-            <span className="rounded-md bg-white/10 px-3 py-1.5 text-sm font-bold">
+            <span className="rounded-md bg-[#edf3fb] px-3 py-1.5 text-sm font-bold text-[#245da8]">
               {data.mapMarkers.length} sedi
             </span>
           </div>
           <div className="h-[390px] px-4 pb-4">
-            <ItalyMap markers={data.mapMarkers} dark />
+            <ItalyMap markers={data.mapMarkers} regionData={data.leadsByRegion} />
           </div>
         </section>
       </div>
 
       <section className="grid gap-4 md:grid-cols-3">
-        <Link href="/leads" className="dashboard-signal group border-[#cbd8ff] bg-[#eef3ff]">
+        <Link href="/leads" className="dashboard-signal group border-border bg-card">
           <span className="flex size-12 items-center justify-center rounded-lg bg-[#4f7cff] text-white">
             <Users className="size-6" />
           </span>
@@ -125,7 +125,7 @@ export default async function DashboardPage() {
           </span>
           <ArrowRight className="ml-auto size-5 transition-transform group-hover:translate-x-1" />
         </Link>
-        <Link href="/clienti" className="dashboard-signal group border-[#bfe7da] bg-[#e9f8f2]">
+        <Link href="/clienti" className="dashboard-signal group border-border bg-card">
           <span className="flex size-12 items-center justify-center rounded-lg bg-[#2e9f7b] text-white">
             <BriefcaseBusiness className="size-6" />
           </span>
@@ -135,7 +135,7 @@ export default async function DashboardPage() {
           </span>
           <ArrowRight className="ml-auto size-5 transition-transform group-hover:translate-x-1" />
         </Link>
-        <Link href="/scadenze" className="dashboard-signal group border-[#ffd9ba] bg-[#fff3e8]">
+        <Link href="/scadenze" className="dashboard-signal group border-border bg-card">
           <span className="flex size-12 items-center justify-center rounded-lg bg-[#f28b39] text-white">
             <CalendarClock className="size-6" />
           </span>

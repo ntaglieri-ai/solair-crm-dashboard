@@ -28,7 +28,7 @@ export function LeadCell({
   column: LeadColumnId
   density?: "comoda" | "normale" | "densa"
 }) {
-  const { owners } = useTags()
+  const { owners, loading } = useTags()
   const value = lead[column]
 
   switch (column) {
@@ -80,9 +80,17 @@ export function LeadCell({
       )
 
     case "Lead Proprietario":
+      if (loading) {
+        return (
+          <span
+            aria-label="Caricamento proprietario"
+            className="block h-4 w-28 animate-pulse rounded bg-muted"
+          />
+        )
+      }
       return (
         <span className="text-foreground">
-          {owners.find((owner) => owner.id === value)?.nome || String(value || "—")}
+          {owners.find((owner) => owner.id === value)?.nome || "—"}
         </span>
       )
 

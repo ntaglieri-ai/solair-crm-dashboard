@@ -29,7 +29,7 @@ export interface TagEvent {
   ora: string
 }
 
-type ReferencePayload = {
+export type ReferencePayload = {
   tags: Tag[]
   leadTagIds: Record<string, string[]>
   owners: ReferenceOption[]
@@ -86,13 +86,20 @@ async function mutate(body: Record<string, unknown>) {
   return response.json()
 }
 
-export function TagProvider({ children }: { children: ReactNode }) {
+export function TagProvider({
+  children,
+  initialData,
+}: {
+  children: ReactNode
+  initialData?: ReferencePayload
+}) {
   const pathname = usePathname()
-  const [data, setData] = useState<ReferencePayload>(EMPTY)
-  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState<ReferencePayload>(initialData ?? EMPTY)
+  const [loading, setLoading] = useState(!initialData)
   const [tagEvents, setTagEvents] = useState<Record<string, TagEvent[]>>({})
 
   useEffect(() => {
+    if (initialData) return
     if (!pathname.startsWith("/leads")) {
       return
     }
@@ -112,7 +119,7 @@ export function TagProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false
     }
-  }, [pathname])
+  }, [initialData, pathname])
 
   const pushEvent = useCallback((leadId: string, testo: string) => {
     setTagEvents((previous) => ({

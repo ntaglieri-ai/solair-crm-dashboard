@@ -34,14 +34,20 @@ export function LeadCell({
   switch (column) {
     case "Badge dell'attività":
       return lead["Badge dell'attività"] ? (
-        <Bell className="size-4 text-warning" aria-label="Attività in sospeso" />
+        <span className="inline-flex items-center gap-1.5 font-semibold text-[#315fc5]">
+          <Bell className="size-4" aria-hidden="true" />
+          Aperte
+        </span>
       ) : (
         <span className="text-muted-foreground">—</span>
       )
 
     case "Badge di nota":
       return lead["Badge di nota"] ? (
-        <StickyNote className="size-4 text-info" aria-label="Nota presente" />
+        <span className="inline-flex items-center gap-1.5 font-semibold text-[#a86a00]">
+          <StickyNote className="size-4" aria-hidden="true" />
+          Presenti
+        </span>
       ) : (
         <span className="text-muted-foreground">—</span>
       )

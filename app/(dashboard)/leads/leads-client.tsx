@@ -69,9 +69,11 @@ import {
 import { useTags } from "@/lib/tag-store"
 import { usePermissions } from "@/lib/permissions/provider"
 import { motion } from "framer-motion"
+import { useQueryClient } from "@tanstack/react-query"
+import { leadsKeys } from "@/lib/leads/hooks"
 
 type LeadViewPreferences = {
-  version: 1
+  version: 2
   visibleCols: LeadColumnId[]
   columnWidths: Partial<Record<LeadColumnId, number>>
   density: Density
@@ -130,7 +132,8 @@ export function LeadsClient({
     permissions.snapshot.subject.userId ??
     permissions.snapshot.subject.authUserId ??
     "anonymous"
-  const preferenceKey = `solair:leads:view:${preferenceOwner}:v1`
+  const preferenceKey = `solair:leads:view:${preferenceOwner}:v2`
+  const queryClient = useQueryClient()
   const [newLeadOpen, setNewLeadOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [filters, setFilters] = useState<LeadFilterState>(DEFAULT_FILTERS)
@@ -198,7 +201,7 @@ export function LeadsClient({
   useEffect(() => {
     if (!preferencesLoaded) return
     const preferences: LeadViewPreferences = {
-      version: 1,
+      version: 2,
       visibleCols,
       columnWidths,
       density,
@@ -732,6 +735,34 @@ export function LeadsClient({
           onToggleAll={toggleAll}
           onConvert={(lead) => setConvertTarget(lead)}
           onDelete={(lead) => setDeleteTarget(lead)}
+          onUpdate={(lead, patch) =>
+            updateLead.mutate(
+              { id: lead.id, patch },
+              {
+                onSuccess: () => toast.success("Lead aggiornato"),
+                onError: () => toast.error("Aggiornamento non riuscito"),
+              },
+            )
+          }
+          onDuplicate={(lead) => {
+            const copy = {
+              ...lead,
+              id: crypto.randomUUID(),
+              "Nome Lead": `Copia di ${lead["Nome Lead"]}`,
+              "Badge dell'attività": false,
+              "Badge di nota": false,
+              attivita: [],
+              documenti: [],
+            }
+            createLead.mutate(copy, {
+              onSuccess: () => toast.success("Lead duplicato"),
+              onError: () => toast.error("Duplicazione non riuscita"),
+            })
+          }}
+          onRefresh={() => {
+            void queryClient.invalidateQueries({ queryKey: leadsKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: leadsKeys.stats() })
+          }}
           sortBy={sortBy}
           sortDir={sortDir}
           onSort={handleSort}

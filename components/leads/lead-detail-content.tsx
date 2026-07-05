@@ -550,27 +550,39 @@ function Sopralluogo({ lead }: { lead: Lead }) {
 /* ---------- Sezione Note ---------- */
 
 function NoteSection({ lead }: { lead: Lead }) {
-  const [note, setNote] = useState<Nota[]>([
-    {
-      id: "n1",
-      autore: "Ivan Lo Faro",
-      quando: "3 ore fa",
-      testo: "preventivo 9 + 20 eps",
-    },
-  ])
+  const [note, setNote] = useState<Nota[]>(
+    () => (lead.attivita ?? [])
+      .filter((item) => item.tipo === "nota")
+      .map((item) => ({
+        id: item.id,
+        autore: item.autore ?? "Utente CRM",
+        quando: item.timestamp
+          ? new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeStyle: "short" })
+              .format(new Date(item.timestamp))
+          : "",
+        testo: item.descrizione,
+      })),
+  )
   const [nuova, setNuova] = useState("")
 
-  const aggiungi = () => {
+  const aggiungi = async () => {
     if (nuova.trim() === "") return
-    setNote((prev) => [
-      {
-        id: `n${Date.now()}`,
-        autore: lead["Lead Proprietario"],
-        quando: "adesso",
-        testo: nuova.trim(),
-      },
-      ...prev,
-    ])
+    const response = await fetch(`/api/leads/${lead.id}/notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: nuova }),
+    })
+    if (!response.ok) {
+      toast.error("Creazione nota non riuscita")
+      return
+    }
+    const created = (await response.json()) as { id: string; testo: string; created_at: string }
+    setNote((prev) => [{
+      id: created.id,
+      autore: lead["Lead Proprietario"],
+      quando: "adesso",
+      testo: created.testo,
+    }, ...prev])
     setNuova("")
     toast.success("Nota aggiunta")
   }
@@ -726,31 +738,20 @@ function TaskRow({
 }
 
 function AttivitaAperte({ lead }: { lead: Lead }) {
-  const [tasks, setTasks] = useState<Task[]>(() => {
-    const base: Task[] = [
-      {
-        id: "ta1",
-        oggetto: "Richiamare per conferma preventivo",
-        scadenza: "18 Giu",
-        priorita: "Alta",
-        assegnato: lead["Lead Proprietario"],
-        completato: false,
-      },
-    ]
-    if (lead.leadCaldo)
-      base.push({
-        id: "ta2",
-        oggetto: "Inviare scheda tecnica impianto",
-        scadenza: "20 Giu",
-        priorita: "Media",
-        assegnato: lead["Lead Proprietario"],
-        completato: false,
-      })
-    return base
-  })
+  const [tasks, setTasks] = useState<Task[]>(() =>
+    (lead.compiti ?? []).filter((task) => !task.completato).map((task) => ({
+      ...task,
+      priorita: task.priorita === "Alto" ? "Alta" : task.priorita === "Basso" ? "Bassa" : "Media",
+    } as Task)),
+  )
 
   return (
     <ul className="flex flex-col gap-2">
+      {tasks.length === 0 ? (
+        <li className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
+          Nessuna attività aperta.
+        </li>
+      ) : null}
       {tasks.map((t) => (
         <TaskRow
           key={t.id}
@@ -769,18 +770,19 @@ function AttivitaAperte({ lead }: { lead: Lead }) {
 }
 
 function AttivitaChiuse({ lead }: { lead: Lead }) {
-  const tasks: Task[] = [
-    {
-      id: "tc1",
-      oggetto: "Primo contatto telefonico",
-      scadenza: "completato 12 Giu",
-      priorita: "Media",
-      assegnato: lead["Lead Proprietario"],
-      completato: true,
-    },
-  ]
+  const tasks: Task[] = (lead.compiti ?? [])
+    .filter((task) => task.completato)
+    .map((task) => ({
+      ...task,
+      priorita: task.priorita === "Alto" ? "Alta" : task.priorita === "Basso" ? "Bassa" : "Media",
+    } as Task))
   return (
     <ul className="flex flex-col gap-2">
+      {tasks.length === 0 ? (
+        <li className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
+          Nessuna attività chiusa.
+        </li>
+      ) : null}
       {tasks.map((t) => (
         <TaskRow key={t.id} task={t} readOnly />
       ))}

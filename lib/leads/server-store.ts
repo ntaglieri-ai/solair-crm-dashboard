@@ -243,7 +243,41 @@ export async function getAllLeads(filters?: {
     console.error("[server-store] getAllLeads error:", error.message)
     return []
   }
-  return (data as unknown as Record<string, unknown>[]).map(mapRow)
+  const rows = (data as unknown as Record<string, unknown>[]).map(mapRow)
+  const ids = rows.map((row) => row.id)
+  if (ids.length === 0) return rows
+
+  const [activities, tasks] = await Promise.all([
+    supabase
+      .from("attivita")
+      .select("record_id,tipo")
+      .eq("record_tipo", "lead")
+      .in("record_id", ids),
+    supabase
+      .from("compiti")
+      .select("correlato_id,stato")
+      .eq("correlato_tipo", "lead")
+      .in("correlato_id", ids)
+      .neq("stato", "Completato"),
+  ])
+  if (activities.error) {
+    console.error("[server-store] lead activities:", activities.error.message)
+  }
+  if (tasks.error) {
+    console.error("[server-store] lead tasks:", tasks.error.message)
+  }
+  const noteIds = new Set(
+    (activities.data ?? [])
+      .filter((item) => item.tipo === "nota")
+      .map((item) => item.record_id),
+  )
+  const taskIds = new Set((tasks.data ?? []).map((item) => item.correlato_id))
+
+  return rows.map((row) => ({
+    ...row,
+    "Badge di nota": noteIds.has(row.id),
+    "Badge dell'attività": taskIds.has(row.id),
+  }))
 }
 
 export async function getTotalCount(filters?: {
@@ -300,13 +334,54 @@ export async function getTotalCount(filters?: {
 
 export async function getLeadById(id: string): Promise<Lead | undefined> {
   const supabase = await createClient()
-  const { data, error } = await supabase
-    .from("leads")
-    .select("*")
-    .eq("id", id)
-    .single()
-  if (error || !data) return undefined
-  return mapRow(data as Record<string, unknown>)
+  const [leadResult, activityResult, taskResult] = await Promise.all([
+    supabase.from("leads").select("*").eq("id", id).single(),
+    supabase
+      .from("attivita")
+      .select("id,tipo,testo,created_at,utente_id")
+      .eq("record_tipo", "lead")
+      .eq("record_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("compiti")
+      .select("id,oggetto,scadenza,priorita,stato,proprietario_id")
+      .eq("correlato_tipo", "lead")
+      .eq("correlato_id", id)
+      .order("scadenza", { ascending: true }),
+  ])
+  if (leadResult.error || !leadResult.data) return undefined
+
+  const userIds = [
+    ...new Set([
+      ...(activityResult.data ?? []).map((item) => item.utente_id),
+      ...(taskResult.data ?? []).map((item) => item.proprietario_id),
+    ].filter((value): value is string => Boolean(value))),
+  ]
+  const usersResult = userIds.length
+    ? await supabase.from("utenti").select("id,nome").in("id", userIds)
+    : { data: [], error: null }
+  const names = new Map((usersResult.data ?? []).map((user) => [user.id, user.nome]))
+  const lead = mapRow(leadResult.data as Record<string, unknown>)
+  lead.attivita = (activityResult.data ?? []).map((item) => ({
+    id: item.id,
+    tipo: item.tipo === "nota" ? "nota" : "cambio-stato",
+    descrizione: item.testo ?? "",
+    timestamp: item.created_at ?? "",
+    autore: item.utente_id ? names.get(item.utente_id) ?? "Utente CRM" : "Sistema",
+  }))
+  lead.compiti = (taskResult.data ?? []).map((item) => ({
+    id: item.id,
+    oggetto: item.oggetto ?? "",
+    scadenza: item.scadenza ?? "",
+    priorita: item.priorita ?? "Medio",
+    assegnato: item.proprietario_id
+      ? names.get(item.proprietario_id) ?? "Non assegnato"
+      : "Non assegnato",
+    completato: item.stato === "Completato",
+  }))
+  lead["Badge di nota"] = lead.attivita.some((item) => item.tipo === "nota")
+  lead["Badge dell'attività"] = lead.compiti.some((item) => !item.completato)
+  return lead
 }
 
 export async function getLeadsByIds(ids: Iterable<string>): Promise<Lead[]> {

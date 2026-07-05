@@ -520,6 +520,15 @@ export interface LeadActivity {
   autore?: string
 }
 
+export interface LeadTask {
+  id: string
+  oggetto: string
+  scadenza: string
+  priorita: string
+  assegnato: string
+  completato: boolean
+}
+
 export interface LeadDoc {
   id: string
   nome: string
@@ -576,6 +585,7 @@ export interface Lead {
   leadCaldo: boolean
   possibileDuplicato: boolean
   attivita: LeadActivity[]
+  compiti?: LeadTask[]
   documenti: LeadDoc[]
 }
 
@@ -587,6 +597,7 @@ export type LeadColumnId = Exclude<
   | "leadCaldo"
   | "possibileDuplicato"
   | "attivita"
+  | "compiti"
   | "documenti"
 >
 
@@ -599,8 +610,8 @@ export interface LeadColumn {
 // Registro colonne nell'ordine Zoho. `defaultVisible` = colonne mostrate
 // inizialmente in tabella (usate dal pannello "Gestisci colonne").
 export const LEAD_COLUMNS: LeadColumn[] = [
-  { id: "Badge dell'attività", label: "Badge dell'attività", defaultVisible: true },
-  { id: "Badge di nota", label: "Badge di nota", defaultVisible: true },
+  { id: "Badge dell'attività", label: "Attività", defaultVisible: true },
+  { id: "Badge di nota", label: "Note", defaultVisible: true },
   { id: "Tag", label: "Tag", defaultVisible: true },
   { id: "Nome Lead", label: "Nome Lead", defaultVisible: true },
   { id: "Lead Proprietario", label: "Lead Proprietario", defaultVisible: true },

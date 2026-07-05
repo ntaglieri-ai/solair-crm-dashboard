@@ -72,6 +72,9 @@ export function LeadTable({
   onToggleAll,
   onConvert,
   onDelete,
+  onUpdate,
+  onDuplicate,
+  onRefresh,
   sortBy,
   sortDir,
   onSort,
@@ -89,6 +92,9 @@ export function LeadTable({
   onToggleAll: () => void
   onConvert: (lead: Lead) => void
   onDelete: (lead: Lead) => void
+  onUpdate: (lead: Lead, patch: Partial<Lead>) => void
+  onDuplicate: (lead: Lead) => void
+  onRefresh: () => void
   sortBy: LeadColumnId | null
   sortDir: SortDir
   onSort: (col: LeadColumnId) => void
@@ -112,7 +118,7 @@ export function LeadTable({
     const widths = {} as Record<LeadColumnId, number>
     for (const column of columns) {
       if (column.id === "Badge dell'attività" || column.id === "Badge di nota") {
-        widths[column.id] = 74
+        widths[column.id] = 112
         continue
       }
       if (column.id === "Tag") {
@@ -341,7 +347,14 @@ export function LeadTable({
     const leftAligned = (id: LeadColumnId) =>
       id === "Nome Lead" || id === "E-mail"
     return (
-      <LeadRowContextMenu key={`row-${lead.id}`} lead={lead} onDelete={onDelete}>
+      <LeadRowContextMenu
+        key={`row-${lead.id}`}
+        lead={lead}
+        onDelete={onDelete}
+        onUpdate={onUpdate}
+        onDuplicate={onDuplicate}
+        onRefresh={onRefresh}
+      >
         <TableRow
           data-index={vIndex}
           onClick={() => router.push(`/leads/${lead.id}`)}

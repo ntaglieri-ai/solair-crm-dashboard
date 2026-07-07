@@ -2,7 +2,16 @@
 
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
-import { ChevronLeft, ChevronRight, Plus, Pencil } from "lucide-react"
+import {
+  AlertTriangle,
+  CalendarClock,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Pencil,
+  Sparkles,
+} from "lucide-react"
 import {
   IconSettings,
   IconList,
@@ -90,7 +99,7 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
 
   // --- UI state ---
-  const [view, setView] = useState<ViewMode>("lista")
+  const [view, setView] = useState<ViewMode>("kanban")
   const [savedView, setSavedView] = useState("tasks-by-status")
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [newOpen, setNewOpen] = useState(false)
@@ -129,6 +138,9 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
   const totalPages = Math.max(1, Math.ceil(total / rowsPerPage))
   const rangeStart = total === 0 ? 0 : (page - 1) * rowsPerPage + 1
   const rangeEnd = Math.min(page * rowsPerPage, total)
+  const pageCompleted = pageRows.filter((item) => item.Stato === "Completato").length
+  const pageHighPriority = pageRows.filter((item) => item.Priorità === "Alto").length
+  const pageOpen = pageRows.length - pageCompleted
 
   // --- Mutations ---
   const createCompito = useCreateCompito()
@@ -380,6 +392,65 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
             <Plus data-icon="inline-start" />
             Crea Compito
           </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-4">
+        <div className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">
+              Carico operativo
+            </span>
+            <Sparkles className="size-5 text-blue-600" />
+          </div>
+          <p className="mt-4 text-4xl font-black tabular-nums text-slate-950">
+            {total.toLocaleString("it-IT")}
+          </p>
+          <p className="mt-1 text-sm font-medium text-slate-600">
+            compiti importati dal CRM
+          </p>
+        </div>
+        <div className="rounded-2xl border border-red-200 bg-gradient-to-br from-red-50 to-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-[0.16em] text-red-700">
+              Attenzione
+            </span>
+            <AlertTriangle className="size-5 text-red-600" />
+          </div>
+          <p className="mt-4 text-4xl font-black tabular-nums text-red-700">
+            {scadutiTotal.toLocaleString("it-IT")}
+          </p>
+          <p className="mt-1 text-sm font-medium text-slate-600">
+            scaduti non completati
+          </p>
+        </div>
+        <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">
+              Pagina corrente
+            </span>
+            <CalendarClock className="size-5 text-amber-600" />
+          </div>
+          <p className="mt-4 text-4xl font-black tabular-nums text-amber-700">
+            {pageHighPriority.toLocaleString("it-IT")}
+          </p>
+          <p className="mt-1 text-sm font-medium text-slate-600">
+            priorità alta visibili
+          </p>
+        </div>
+        <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
+              Avanzamento
+            </span>
+            <CheckCircle2 className="size-5 text-emerald-600" />
+          </div>
+          <p className="mt-4 text-4xl font-black tabular-nums text-emerald-700">
+            {pageOpen.toLocaleString("it-IT")}
+          </p>
+          <p className="mt-1 text-sm font-medium text-slate-600">
+            aperti in questa vista
+          </p>
         </div>
       </div>
 

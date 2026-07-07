@@ -2430,17 +2430,31 @@ export interface CompitoNota {
 
 export interface Compito {
   id: string
+  "ID record"?: string
   Oggetto: string
   Stato: StatoCompito
   Priorità: PrioritaCompito
   "Data di scadenza": string // DD/MM/YYYY
+  "Proprietario del compito.id"?: string
   "Proprietario del compito": string
   Sede: SedeLabel
+  "Nome contatto.id"?: string
+  "Nome contatto"?: string
+  "Correlato a.id"?: string
   "Correlato a": { tipo: "Lead" | "Cliente"; id: string; nome: string } | null
   Descrizione: string
   Promemoria: string | null
+  Ripeti?: string
+  "Creato da.id"?: string
+  "Creato da"?: string
+  "Modificato da.id"?: string
+  "Modificato da"?: string
   "Data di creazione": string
+  "Ora modifica"?: string
   "Orario di chiusura": string | null
+  Tag?: string
+  Locked?: boolean
+  "Ora ultima attività"?: string
   Note: CompitoNota[]
 }
 

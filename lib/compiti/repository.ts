@@ -15,6 +15,40 @@ import type {
 // Colonne proiettate in lettura — mai SELECT *.
 const LIST_COLUMNS = [
   "id",
+  "zoho_record_id",
+  "oggetto",
+  "priorita",
+  "stato",
+  "scadenza",
+  "proprietario_id",
+  "proprietario_zoho_id",
+  "proprietario_nome",
+  "nome_contatto_zoho_id",
+  "nome_contatto",
+  "correlato_id",
+  "correlato_tipo",
+  "correlato_zoho_id",
+  "correlato_nome",
+  "descrizione",
+  "ripeti",
+  "promemoria",
+  "creato_da_zoho_id",
+  "creato_da_nome",
+  "modificato_da_zoho_id",
+  "modificato_da_nome",
+  "ora_creazione",
+  "ora_modifica",
+  "orario_chiusura",
+  "tag",
+  "locked",
+  "ora_ultima_attivita",
+  "sede",
+  "created_at",
+  "updated_at",
+].join(",")
+
+const LEGACY_LIST_COLUMNS = [
+  "id",
   "oggetto",
   "priorita",
   "stato",
@@ -30,6 +64,16 @@ const LIST_COLUMNS = [
 
 // Whitelist ordinamento: campo UI → colonna DB.
 const SORT_COLUMN: Record<string, string> = {
+  Oggetto: "oggetto",
+  Stato: "stato",
+  Priorità: "priorita",
+  "Data di scadenza": "scadenza",
+  "Proprietario del compito": "proprietario_nome",
+  "Nome contatto": "nome_contatto",
+  Tag: "tag",
+}
+
+const LEGACY_SORT_COLUMN: Record<string, string> = {
   Oggetto: "oggetto",
   Stato: "stato",
   Priorità: "priorita",
@@ -63,29 +107,50 @@ function dmyToISO(dmy: string): string | null {
 }
 
 function mapRow(row: Record<string, unknown>): Compito {
-  const correlato_id = row.correlato_id as string | null
-  const correlato_tipo = row.correlato_tipo as string | null
+  const correlatoId =
+    (row.correlato_id as string | null) || (row.correlato_zoho_id as string | null)
+  const correlatoNome = (row.correlato_nome as string | null) || correlatoId
+  const correlatoTipo = row.correlato_tipo as string | null
 
   return {
     id: row.id as string,
+    "ID record": (row.zoho_record_id as string) ?? "",
     Oggetto: (row.oggetto as string) ?? "",
     Stato: (row.stato as StatoCompito) ?? "Non iniziato",
     Priorità: (row.priorita as PrioritaCompito) ?? "Medio",
     "Data di scadenza": isoToDMY(row.scadenza as string | null),
-    "Proprietario del compito": (row.proprietario_id as string) ?? "",
+    "Proprietario del compito.id": (row.proprietario_zoho_id as string) ?? "",
+    "Proprietario del compito":
+      (row.proprietario_nome as string) ?? (row.proprietario_id as string) ?? "",
+    "Nome contatto.id": (row.nome_contatto_zoho_id as string) ?? "",
+    "Nome contatto": (row.nome_contatto as string) ?? "",
+    "Correlato a.id": (row.correlato_zoho_id as string) ?? "",
     Sede: (row.sede as SedeLabel) ?? ("" as SedeLabel),
     "Correlato a":
-      correlato_id && correlato_tipo
+      correlatoId
         ? {
-            tipo: correlato_tipo === "lead" ? "Lead" : "Cliente",
-            id: correlato_id,
-            nome: correlato_id, // nome non in DB — fallback all'id
+            tipo: correlatoTipo === "lead" ? "Lead" : "Cliente",
+            id: correlatoId,
+            nome: correlatoNome ?? correlatoId,
           }
         : null,
     Descrizione: (row.descrizione as string) ?? "",
-    Promemoria: null,
-    "Data di creazione": isoToDMY(row.created_at as string | null),
-    "Orario di chiusura": null,
+    Ripeti: (row.ripeti as string) ?? "",
+    Promemoria: (row.promemoria as string | null) ?? null,
+    "Creato da.id": (row.creato_da_zoho_id as string) ?? "",
+    "Creato da": (row.creato_da_nome as string) ?? "",
+    "Modificato da.id": (row.modificato_da_zoho_id as string) ?? "",
+    "Modificato da": (row.modificato_da_nome as string) ?? "",
+    "Data di creazione": isoToDMY(
+      (row.ora_creazione as string | null) ?? (row.created_at as string | null),
+    ),
+    "Ora modifica": isoToDMY(
+      (row.ora_modifica as string | null) ?? (row.updated_at as string | null),
+    ),
+    "Orario di chiusura": (row.orario_chiusura as string | null) ?? null,
+    Tag: (row.tag as string) ?? "",
+    Locked: Boolean(row.locked),
+    "Ora ultima attività": (row.ora_ultima_attivita as string) ?? "",
     Note: [],
   }
 }
@@ -94,91 +159,122 @@ export async function queryCompiti(
   params: CompitiListParams,
 ): Promise<CompitiListResponse> {
   const supabase = await createClient()
-  const sortCol = (params.sortBy && SORT_COLUMN[params.sortBy]) || "scadenza"
-  const ascending = params.sortDir === "asc"
-  const from = (params.page - 1) * params.pageSize
-  const to = from + params.pageSize - 1
-  const now = new Date().toISOString()
+  const run = async (extended: boolean) => {
+    const sortMap = extended ? SORT_COLUMN : LEGACY_SORT_COLUMN
+    const sortCol = (params.sortBy && sortMap[params.sortBy]) || "scadenza"
+    const ascending = params.sortDir === "asc"
+    const from = (params.page - 1) * params.pageSize
+    const to = from + params.pageSize - 1
+    const now = new Date().toISOString()
 
-  let listQ = supabase
-    .from("compiti")
-    .select(LIST_COLUMNS)
-    .order(sortCol, { ascending, nullsFirst: false })
-    .range(from, to)
+    let listQ = supabase
+      .from("compiti")
+      .select(extended ? LIST_COLUMNS : LEGACY_LIST_COLUMNS)
+      .order(sortCol, { ascending, nullsFirst: false })
+      .range(from, to)
 
-  let countQ = supabase
-    .from("compiti")
-    .select("id", { count: "exact", head: true })
+    let countQ = supabase
+      .from("compiti")
+      .select("id", { count: "exact", head: true })
 
-  let scadutiQ = supabase
-    .from("compiti")
-    .select("id", { count: "exact", head: true })
-    .lt("scadenza", now)
-    .neq("stato", "Completato")
+    let scadutiQ = supabase
+      .from("compiti")
+      .select("id", { count: "exact", head: true })
+      .lt("scadenza", now)
+      .neq("stato", "Completato")
 
-  if (params.search.trim()) {
-    const p = `%${params.search.trim()}%`
-    const f = `oggetto.ilike.${p},descrizione.ilike.${p}`
-    listQ = listQ.or(f)
-    countQ = countQ.or(f)
-    scadutiQ = scadutiQ.or(f)
-  }
-  if (params.stati.length > 0) {
-    const dbStati = params.stati.filter((stato) => DB_STATI.includes(stato))
-    listQ = listQ.in("stato", dbStati)
-    countQ = countQ.in("stato", dbStati)
-    scadutiQ = scadutiQ.in("stato", dbStati)
-  }
-  if (params.priorita !== "all") {
-    listQ = listQ.eq("priorita", params.priorita)
-    countQ = countQ.eq("priorita", params.priorita)
-    scadutiQ = scadutiQ.eq("priorita", params.priorita)
-  }
-  if (params.proprietario !== "all") {
-    listQ = listQ.eq("proprietario_id", params.proprietario)
-    countQ = countQ.eq("proprietario_id", params.proprietario)
-    scadutiQ = scadutiQ.eq("proprietario_id", params.proprietario)
-  }
-  if (params.sede !== "all") {
-    listQ = listQ.eq("sede", params.sede)
-    countQ = countQ.eq("sede", params.sede)
-    scadutiQ = scadutiQ.eq("sede", params.sede)
-  }
-  if (params.scadenzaDa) {
-    listQ = listQ.gte("scadenza", params.scadenzaDa)
-    countQ = countQ.gte("scadenza", params.scadenzaDa)
-  }
-  if (params.scadenzaA) {
-    listQ = listQ.lte("scadenza", params.scadenzaA + "T23:59:59Z")
-    countQ = countQ.lte("scadenza", params.scadenzaA + "T23:59:59Z")
+    if (params.search.trim()) {
+      const p = `%${params.search.trim()}%`
+      const f = extended
+        ? `oggetto.ilike.${p},descrizione.ilike.${p},proprietario_nome.ilike.${p},nome_contatto.ilike.${p},correlato_nome.ilike.${p},tag.ilike.${p}`
+        : `oggetto.ilike.${p},descrizione.ilike.${p}`
+      listQ = listQ.or(f)
+      countQ = countQ.or(f)
+      scadutiQ = scadutiQ.or(f)
+    }
+    if (params.stati.length > 0) {
+      const dbStati = params.stati.filter((stato) => DB_STATI.includes(stato))
+      listQ = listQ.in("stato", dbStati)
+      countQ = countQ.in("stato", dbStati)
+      scadutiQ = scadutiQ.in("stato", dbStati)
+    }
+    if (params.priorita !== "all") {
+      listQ = listQ.eq("priorita", params.priorita)
+      countQ = countQ.eq("priorita", params.priorita)
+      scadutiQ = scadutiQ.eq("priorita", params.priorita)
+    }
+    if (params.proprietario !== "all") {
+      const ownerColumn = extended ? "proprietario_nome" : "proprietario_id"
+      listQ = listQ.eq(ownerColumn, params.proprietario)
+      countQ = countQ.eq(ownerColumn, params.proprietario)
+      scadutiQ = scadutiQ.eq(ownerColumn, params.proprietario)
+    }
+    if (params.sede !== "all") {
+      listQ = listQ.eq("sede", params.sede)
+      countQ = countQ.eq("sede", params.sede)
+      scadutiQ = scadutiQ.eq("sede", params.sede)
+    }
+    if (params.scadenzaDa) {
+      listQ = listQ.gte("scadenza", params.scadenzaDa)
+      countQ = countQ.gte("scadenza", params.scadenzaDa)
+    }
+    if (params.scadenzaA) {
+      listQ = listQ.lte("scadenza", params.scadenzaA + "T23:59:59Z")
+      countQ = countQ.lte("scadenza", params.scadenzaA + "T23:59:59Z")
+    }
+
+    const [
+      { data, error },
+      { count, error: countError },
+      { count: scadutiCount, error: scadutiError },
+    ] = await Promise.all([listQ, countQ, scadutiQ])
+
+    return { data, error, count, countError, scadutiCount, scadutiError }
   }
 
-  const [
-    { data, error },
-    { count, error: countError },
-    { count: scadutiCount, error: scadutiError },
-  ] = await Promise.all([listQ, countQ, scadutiQ])
+  let result = await run(true)
+  if (result.error) {
+    console.warn(
+      "[compiti/repository] schema esteso non disponibile, fallback legacy:",
+      result.error.message,
+    )
+    result = await run(false)
+  }
 
-  if (error) console.error("[compiti/repository] queryCompiti:", error.message)
-  if (countError) console.error("[compiti/repository] count:", countError.message)
-  if (scadutiError) console.error("[compiti/repository] scaduti:", scadutiError.message)
+  if (result.error)
+    console.error("[compiti/repository] queryCompiti:", result.error.message)
+  if (result.countError)
+    console.error("[compiti/repository] count:", result.countError.message)
+  if (result.scadutiError)
+    console.error("[compiti/repository] scaduti:", result.scadutiError.message)
 
   return {
-    rows: (data ?? []).map((r) => mapRow(r as unknown as Record<string, unknown>)),
-    total: count ?? 0,
+    rows: (result.data ?? []).map((r) =>
+      mapRow(r as unknown as Record<string, unknown>),
+    ),
+    total: result.count ?? 0,
     page: params.page,
     pageSize: params.pageSize,
-    scadutiTotal: scadutiCount ?? 0,
+    scadutiTotal: result.scadutiCount ?? 0,
   }
 }
 
 export async function getCompitoById(id: string): Promise<Compito | null> {
   const supabase = await createClient()
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("compiti")
     .select(LIST_COLUMNS)
     .eq("id", id)
     .single()
+  if (error) {
+    const fallback = await supabase
+      .from("compiti")
+      .select(LEGACY_LIST_COLUMNS)
+      .eq("id", id)
+      .single()
+    data = fallback.data
+    error = fallback.error
+  }
   if (error || !data) return null
   return mapRow(data as unknown as Record<string, unknown>)
 }
@@ -196,11 +292,19 @@ export async function createCompitoRecord(
       scadenza: body["Data di scadenza"]
         ? dmyToISO(body["Data di scadenza"])
         : null,
-      proprietario_id: body["Proprietario del compito"] || null,
+      proprietario_zoho_id: body["Proprietario del compito.id"] || null,
+      proprietario_nome: body["Proprietario del compito"] || null,
       sede: body.Sede || null,
       descrizione: body.Descrizione || null,
-      correlato_id: body["Correlato a"]?.id || null,
+      nome_contatto_zoho_id: body["Nome contatto.id"] || null,
+      nome_contatto: body["Nome contatto"] || null,
+      correlato_zoho_id: body["Correlato a.id"] || body["Correlato a"]?.id || null,
+      correlato_nome: body["Correlato a"]?.nome || null,
       correlato_tipo: body["Correlato a"]?.tipo.toLowerCase() || null,
+      ripeti: body.Ripeti || null,
+      promemoria: body.Promemoria || null,
+      tag: body.Tag || null,
+      locked: body.Locked ?? false,
     })
     .select(LIST_COLUMNS)
     .single()
@@ -222,11 +326,21 @@ export async function updateCompitoRecord(
   if (patch["Data di scadenza"] !== undefined)
     row.scadenza = dmyToISO(patch["Data di scadenza"])
   if (patch["Proprietario del compito"] !== undefined)
-    row.proprietario_id = patch["Proprietario del compito"]
+    row.proprietario_nome = patch["Proprietario del compito"]
+  if (patch["Proprietario del compito.id"] !== undefined)
+    row.proprietario_zoho_id = patch["Proprietario del compito.id"]
   if (patch.Sede !== undefined) row.sede = patch.Sede
   if (patch.Descrizione !== undefined) row.descrizione = patch.Descrizione
+  if (patch["Nome contatto.id"] !== undefined)
+    row.nome_contatto_zoho_id = patch["Nome contatto.id"]
+  if (patch["Nome contatto"] !== undefined) row.nome_contatto = patch["Nome contatto"]
+  if (patch.Ripeti !== undefined) row.ripeti = patch.Ripeti
+  if (patch.Promemoria !== undefined) row.promemoria = patch.Promemoria
+  if (patch.Tag !== undefined) row.tag = patch.Tag
+  if (patch.Locked !== undefined) row.locked = patch.Locked
   if (patch["Correlato a"] !== undefined) {
-    row.correlato_id = patch["Correlato a"]?.id ?? null
+    row.correlato_zoho_id = patch["Correlato a"]?.id ?? null
+    row.correlato_nome = patch["Correlato a"]?.nome ?? null
     row.correlato_tipo = patch["Correlato a"]?.tipo.toLowerCase() ?? null
   }
 

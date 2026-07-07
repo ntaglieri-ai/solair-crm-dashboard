@@ -33,10 +33,14 @@ export type CompitoSortKey =
   | "Priorità"
   | "Data di scadenza"
   | "Proprietario del compito"
+  | "Nome contatto"
+  | "Tag"
 
 const COLUMNS: { key: CompitoSortKey; label: string; sortable: boolean }[] = [
   { key: "Oggetto", label: "Oggetto", sortable: true },
   { key: "Proprietario del compito", label: "Proprietario", sortable: true },
+  { key: "Nome contatto", label: "Contatto", sortable: true },
+  { key: "Tag", label: "Tag", sortable: true },
   { key: "Data di scadenza", label: "Scadenza", sortable: true },
   { key: "Stato", label: "Stato", sortable: true },
   { key: "Priorità", label: "Priorità", sortable: true },
@@ -45,6 +49,8 @@ const COLUMNS: { key: CompitoSortKey; label: string; sortable: boolean }[] = [
 const COLUMN_WIDTH: Record<CompitoSortKey, number> = {
   Oggetto: 360,
   "Proprietario del compito": 250,
+  "Nome contatto": 240,
+  Tag: 220,
   "Data di scadenza": 190,
   Stato: 170,
   Priorità: 150,
@@ -237,6 +243,36 @@ export function CompitoTable({
                         {c["Proprietario del compito"]}
                       </span>
                     </div>
+                  </TableCell>
+
+                  <TableCell
+                    className="border-r border-border/70"
+                    style={{
+                      width: COLUMN_WIDTH["Nome contatto"],
+                      minWidth: COLUMN_WIDTH["Nome contatto"],
+                      maxWidth: COLUMN_WIDTH["Nome contatto"],
+                    }}
+                  >
+                    <span className="block truncate text-sm font-medium text-foreground">
+                      {c["Nome contatto"] || "—"}
+                    </span>
+                  </TableCell>
+
+                  <TableCell
+                    className="border-r border-border/70"
+                    style={{
+                      width: COLUMN_WIDTH.Tag,
+                      minWidth: COLUMN_WIDTH.Tag,
+                      maxWidth: COLUMN_WIDTH.Tag,
+                    }}
+                  >
+                    {c.Tag ? (
+                      <span className="inline-flex max-w-full items-center rounded-full bg-teal/10 px-2.5 py-1 text-xs font-bold text-teal">
+                        <span className="truncate">{c.Tag}</span>
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </TableCell>
 
                   {/* Scadenza */}

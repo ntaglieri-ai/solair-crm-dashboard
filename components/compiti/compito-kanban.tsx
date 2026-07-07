@@ -36,11 +36,21 @@ function CompitoCard({
       >
         {compito.Oggetto}
       </p>
-      {compito["Correlato a"] && (
-        <p className="truncate text-xs text-info">
-          {compito["Correlato a"].nome}
-        </p>
-      )}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {compito["Nome contatto"] ? (
+          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700">
+            {compito["Nome contatto"]}
+          </span>
+        ) : null}
+        {compito.Tag ? (
+          <span className="rounded-full bg-teal/10 px-2 py-0.5 text-[11px] font-bold text-teal">
+            {compito.Tag}
+          </span>
+        ) : null}
+      </div>
+      {compito["Correlato a"]?.nome ? (
+        <p className="truncate text-xs text-info">{compito["Correlato a"].nome}</p>
+      ) : null}
       <div className="flex items-center justify-between gap-2">
         <PrioritaBadge priorita={compito.Priorità} />
         <span
@@ -80,7 +90,7 @@ export function CompitoKanban({
   }
 
   return (
-    <div className="flex gap-3 overflow-x-auto pb-2">
+    <div className="flex gap-4 overflow-x-auto pb-3 [scrollbar-color:var(--color-muted-foreground)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5">
       {STATO_COMPITO_ORDER.map((stato) => {
         const cards = compiti.filter((c) => c.Stato === stato)
         return (
@@ -93,7 +103,7 @@ export function CompitoKanban({
             onDragLeave={() => setOverCol((s) => (s === stato ? null : s))}
             onDrop={() => handleDrop(stato)}
             className={cn(
-              "flex w-72 shrink-0 flex-col rounded-xl border border-border bg-secondary/40 transition-colors",
+              "flex h-[calc(100svh-26rem)] min-h-[420px] w-80 shrink-0 flex-col rounded-2xl border border-border bg-secondary/40 transition-colors",
               overCol === stato && "border-navy bg-navy/5",
             )}
           >
@@ -105,7 +115,7 @@ export function CompitoKanban({
                 {cards.length}
               </span>
             </header>
-            <div className="flex min-h-24 flex-1 flex-col gap-2 p-2">
+            <div className="flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto p-2.5 [scrollbar-color:var(--color-muted-foreground)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:w-2">
               {cards.map((c) => (
                 <CompitoCard key={c.id} compito={c} onDragStart={setDragId} />
               ))}

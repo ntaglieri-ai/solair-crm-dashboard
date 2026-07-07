@@ -105,6 +105,14 @@ function clean(value) {
   return trimmed ? trimmed : null
 }
 
+function normalizePriority(value) {
+  const priority = clean(value)
+  if (priority === "Altissimo") return "Alto"
+  if (priority === "Normale") return "Medio"
+  if (priority === "Bassissimo") return "Basso"
+  return priority ?? "Medio"
+}
+
 function mapRow(row) {
   return {
     zoho_record_id: clean(row["ID record"]),
@@ -118,7 +126,7 @@ function mapRow(row) {
     correlato_nome: clean(row["Correlato a"]),
     correlato_tipo: clean(row["Correlato a"]) ? "cliente" : null,
     stato: clean(row.Stato) ?? "Non iniziato",
-    priorita: clean(row["Priorità"]) ?? "Medio",
+    priorita: normalizePriority(row["Priorità"]),
     ripeti: clean(row.Ripeti),
     promemoria: toTimestamp(row.Promemoria),
     creato_da_zoho_id: clean(row["Creato da.id"]),
@@ -149,16 +157,23 @@ const supabase = createClient(supabaseUrl, serviceKey, {
 const csv = unzipCsv(zipPath)
 const rows = parseCsv(csv).map(mapRow).filter((row) => row.zoho_record_id)
 const chunkSize = 500
-let imported = 0
+let replaced = 0
 
 for (let i = 0; i < rows.length; i += chunkSize) {
   const chunk = rows.slice(i, i + chunkSize)
-  const { error } = await supabase
+  const ids = chunk.map((row) => row.zoho_record_id)
+  const deleteResult = await supabase
     .from("compiti")
-    .upsert(chunk, { onConflict: "zoho_record_id" })
-  if (error) throw new Error(error.message)
-  imported += chunk.length
-  process.stdout.write(`Importati ${imported}/${rows.length}\r`)
+    .delete()
+    .in("zoho_record_id", ids)
+  if (deleteResult.error) throw new Error(deleteResult.error.message)
+
+  const insertResult = await supabase
+    .from("compiti")
+    .insert(chunk)
+  if (insertResult.error) throw new Error(insertResult.error.message)
+  replaced += chunk.length
+  process.stdout.write(`Importati ${replaced}/${rows.length}\r`)
 }
 
-process.stdout.write(`\nCompiti importati/allineati: ${imported}\n`)
+process.stdout.write(`\nCompiti importati/allineati: ${replaced}\n`)

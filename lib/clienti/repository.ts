@@ -6,6 +6,7 @@ import type {
   ClientiListParams,
   ClientiListResponse,
 } from "@/lib/clienti/api-types"
+import { CLIENTI_ZOHO_COLUMNS, CLIENTI_ZOHO_FIELDS } from "@/lib/clienti/zoho-fields"
 
 // Colonne proiettate in lettura — mai SELECT *.
 const LIST_COLUMNS = [
@@ -22,6 +23,10 @@ const LIST_COLUMNS = [
   "clienti_proprietario_id",
   "created_at",
   "updated_at",
+].join(",")
+
+const DETAIL_COLUMNS = [
+  ...new Set(["id", "created_at", "updated_at", ...CLIENTI_ZOHO_COLUMNS]),
 ].join(",")
 
 // Whitelist ordinamento: campo UI → colonna DB. Fallback su updated_at.
@@ -41,13 +46,17 @@ const SORT_COLUMN: Record<string, string> = {
 }
 
 function mapRow(row: Record<string, unknown>): ClienteRecord {
-  return {
+  const record: ClienteRecord = {
     id: row.id as string,
     "Badge dell'attività": false,
     "Badge di nota": false,
     "Nome Clienti": (row.nome_clienti as string) ?? "",
     "E-mail": (row.email as string) ?? "",
-    "Ora modifica": (row.updated_at as string) ?? (row.created_at as string) ?? "",
+    "Ora modifica":
+      (row.ora_modifica as string) ??
+      (row.updated_at as string) ??
+      (row.created_at as string) ??
+      "",
     Tag: [],
     Sede: (row.sede as SedeLabel) ?? ("" as SedeLabel),
     Cognome: (row.cognome as string) ?? "",
@@ -55,10 +64,29 @@ function mapRow(row: Record<string, unknown>): ClienteRecord {
     Nome: (row.nome as string) || undefined,
     Cellulare: (row.cellulare as string) || undefined,
     "Codice fiscale": (row.codice_fiscale as string) || undefined,
-    "Clienti Proprietario": (row.clienti_proprietario_id as string) || undefined,
-    Installatore: (row.installatore_id as string) || undefined,
-    "Ora creazione": (row.created_at as string) || undefined,
+    "Clienti Proprietario":
+      (row.clienti_proprietario as string) ||
+      (row.clienti_proprietario_id as string) ||
+      undefined,
+    Installatore:
+      (row.installatore as string) || (row.installatore_id as string) || undefined,
+    "Ora creazione":
+      (row.ora_creazione as string) || (row.created_at as string) || undefined,
   }
+
+  for (const field of CLIENTI_ZOHO_FIELDS) {
+    const value = row[field.column]
+    if (
+      value !== null &&
+      value !== undefined &&
+      value !== "" &&
+      !(field.appField in record)
+    ) {
+      ;(record as unknown as Record<string, unknown>)[field.appField] = value
+    }
+  }
+
+  return record
 }
 
 export async function queryClienti(
@@ -124,6 +152,16 @@ export async function getClienteById(
   id: string,
 ): Promise<ClienteRecord | null> {
   const supabase = await createClient()
+  const detailResult = await supabase
+    .from("clienti")
+    .select(DETAIL_COLUMNS)
+    .eq("id", id)
+    .single()
+
+  if (!detailResult.error && detailResult.data) {
+    return mapRow(detailResult.data as unknown as Record<string, unknown>)
+  }
+
   const { data, error } = await supabase
     .from("clienti")
     .select(LIST_COLUMNS)

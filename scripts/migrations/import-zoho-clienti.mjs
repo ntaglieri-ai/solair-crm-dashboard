@@ -121,6 +121,21 @@ async function chunks(values, size, callback) {
   }
 }
 
+async function fetchExistingClientiIds(zohoIds) {
+  const existing = new Map()
+  await chunks(zohoIds, 500, async (batch) => {
+    const { data, error } = await supabase
+      .from("clienti")
+      .select("id,zoho_record_id")
+      .in("zoho_record_id", batch)
+    if (error) throw new Error(`fetch clienti esistenti: ${error.message}`)
+    for (const row of data ?? []) {
+      if (row.zoho_record_id) existing.set(row.zoho_record_id, row.id)
+    }
+  })
+  return existing
+}
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 if (!supabaseUrl || !serviceRoleKey) {
@@ -142,11 +157,39 @@ if (!apply) {
   process.exit(0)
 }
 
-await chunks(rows, 300, async (batch) => {
-  const { error } = await supabase
-    .from("clienti")
-    .upsert(batch, { onConflict: "zoho_record_id" })
-  if (error) throw new Error(`upsert clienti: ${error.message}`)
+const existingByZohoId = await fetchExistingClientiIds(
+  rows.map((row) => row.zoho_record_id),
+)
+const toInsert = []
+const toUpdate = []
+
+for (const row of rows) {
+  const id = existingByZohoId.get(row.zoho_record_id)
+  if (id) {
+    toUpdate.push({ id, row })
+  } else {
+    toInsert.push(row)
+  }
+}
+
+await chunks(toInsert, 300, async (batch) => {
+  if (batch.length === 0) return
+  const { error } = await supabase.from("clienti").insert(batch)
+  if (error) throw new Error(`insert clienti: ${error.message}`)
 })
 
-console.log(`Import completato: ${rows.length} clienti.`)
+await chunks(toUpdate, 100, async (batch) => {
+  await Promise.all(
+    batch.map(async ({ id, row }) => {
+      const { error } = await supabase
+        .from("clienti")
+        .update(row)
+        .eq("id", id)
+      if (error) throw new Error(`update cliente ${id}: ${error.message}`)
+    }),
+  )
+})
+
+console.log(
+  `Import completato: ${rows.length} clienti (${toInsert.length} nuovi, ${toUpdate.length} aggiornati).`,
+)

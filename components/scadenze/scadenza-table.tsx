@@ -1,18 +1,18 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { MoreHorizontal, ExternalLink, Trash2, Pencil } from "lucide-react"
 import { IconArrowUp, IconNote, IconPaperclip } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { DataTableShell } from "@/components/ui/data-table-shell"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import {
@@ -56,6 +56,13 @@ const DENSITY_CELL: Record<Density, string> = {
   densa: "py-1 text-xs",
 }
 
+const COLUMN_WIDTH: Record<ScadenzaColumnId, number> = {
+  "Nome Scadenze": 360,
+  "Data scadenza": 190,
+  "Proprietario di Scadenze": 260,
+  "Ora modifica": 190,
+}
+
 export function ScadenzaTable({
   scadenze,
   visibleCols = DEFAULT_SCADENZA_COLUMNS,
@@ -83,7 +90,6 @@ export function ScadenzaTable({
 }) {
   const router = useRouter()
   const [stuck, setStuck] = useState(false)
-  const scrollRef = useRef<HTMLDivElement>(null)
   const allSelected =
     scadenze.length > 0 && scadenze.every((s) => selected.has(s.id))
 
@@ -91,14 +97,22 @@ export function ScadenzaTable({
   const columns = SCADENZA_COLUMNS.filter((c) => visibleCols.includes(c.id))
   const cellPad = DENSITY_CELL[density]
   const show = (id: ScadenzaColumnId) => visibleCols.includes(id)
+  const tableWidth =
+    44 + columns.reduce((sum, col) => sum + COLUMN_WIDTH[col.id], 0) + 64
 
   return (
-    <div
-      ref={scrollRef}
-      onScroll={(e) => setStuck(e.currentTarget.scrollTop > 0)}
-      className="max-h-[calc(100vh-16rem)] overflow-auto rounded-xl border border-border bg-card"
+    <DataTableShell
+      ariaLabel="Tabella scadenze"
+      minTableWidth={tableWidth}
+      onScroll={(el) => setStuck(el.scrollTop > 0)}
     >
-      <Table>
+      <colgroup>
+        <col style={{ width: 44 }} />
+        {columns.map((column) => (
+          <col key={column.id} style={{ width: COLUMN_WIDTH[column.id] }} />
+        ))}
+        <col style={{ width: 64 }} />
+      </colgroup>
         <TableHeader
           className={cn(
             "sticky top-0 z-20 bg-muted/95 backdrop-blur transition-shadow duration-150",
@@ -106,7 +120,7 @@ export function ScadenzaTable({
           )}
         >
           <TableRow className="hover:bg-transparent">
-            <TableHead className="w-10">
+            <TableHead className="sticky left-0 z-30 w-11 border-r border-foreground/30 bg-muted/95">
               <Checkbox
                 checked={allSelected}
                 onCheckedChange={onToggleAll}
@@ -116,11 +130,16 @@ export function ScadenzaTable({
             {columns.map((col) => (
               <TableHead
                 key={col.id}
-                className="cursor-pointer select-none whitespace-nowrap font-semibold text-muted-foreground"
+                className="cursor-pointer select-none overflow-hidden whitespace-nowrap border-r border-foreground/30 font-semibold text-muted-foreground"
+                style={{
+                  width: COLUMN_WIDTH[col.id],
+                  minWidth: COLUMN_WIDTH[col.id],
+                  maxWidth: COLUMN_WIDTH[col.id],
+                }}
                 onClick={() => onSort(col.id)}
               >
-                <span className="inline-flex items-center gap-1">
-                  {col.label}
+                <span className="inline-flex max-w-full items-center gap-1">
+                  <span className="truncate">{col.label}</span>
                   {sortBy === col.id && (
                     <IconArrowUp
                       size={14}
@@ -134,7 +153,7 @@ export function ScadenzaTable({
                 </span>
               </TableHead>
             ))}
-            <TableHead className="w-12 text-right" />
+            <TableHead className="sticky right-0 z-30 w-16 border-l border-foreground/30 bg-muted/95 text-right" />
           </TableRow>
         </TableHeader>
 
@@ -158,7 +177,11 @@ export function ScadenzaTable({
                   className="group cursor-pointer"
                   onClick={() => router.push(`/scadenze/${s.id}`)}
                 >
-                  <TableCell onClick={(e) => e.stopPropagation()}>
+                  <TableCell
+                    onClick={(e) => e.stopPropagation()}
+                    className="sticky left-0 z-10 border-r border-border/70 bg-card"
+                    style={{ width: 44, minWidth: 44, maxWidth: 44 }}
+                  >
                     <Checkbox
                       checked={selected.has(s.id)}
                       onCheckedChange={() => onToggle(s.id)}
@@ -167,7 +190,14 @@ export function ScadenzaTable({
                   </TableCell>
 
                   {/* Nome Scadenze */}
-                  <TableCell className={cn("max-w-[360px]", cellPad)}>
+                  <TableCell
+                    className={cn("border-r border-border/70", cellPad)}
+                    style={{
+                      width: COLUMN_WIDTH["Nome Scadenze"],
+                      minWidth: COLUMN_WIDTH["Nome Scadenze"],
+                      maxWidth: COLUMN_WIDTH["Nome Scadenze"],
+                    }}
+                  >
                     <div className="flex items-center gap-2">
                       <span className="truncate font-medium text-info hover:underline">
                         {s["Nome Scadenze"]}
@@ -196,7 +226,14 @@ export function ScadenzaTable({
 
                   {/* Data scadenza */}
                   {show("Data scadenza") && (
-                    <TableCell className={cellPad}>
+                    <TableCell
+                      className={cn("border-r border-border/70", cellPad)}
+                      style={{
+                        width: COLUMN_WIDTH["Data scadenza"],
+                        minWidth: COLUMN_WIDTH["Data scadenza"],
+                        maxWidth: COLUMN_WIDTH["Data scadenza"],
+                      }}
+                    >
                       <div className="flex items-center gap-2">
                         <span
                           className={cn(
@@ -215,7 +252,14 @@ export function ScadenzaTable({
 
                   {/* Proprietario */}
                   {show("Proprietario di Scadenze") && (
-                    <TableCell className={cellPad}>
+                    <TableCell
+                      className={cn("border-r border-border/70", cellPad)}
+                      style={{
+                        width: COLUMN_WIDTH["Proprietario di Scadenze"],
+                        minWidth: COLUMN_WIDTH["Proprietario di Scadenze"],
+                        maxWidth: COLUMN_WIDTH["Proprietario di Scadenze"],
+                      }}
+                    >
                       <div className="flex items-center gap-2">
                         <ScadenzaAvatar
                           nome={s["Proprietario di Scadenze"]}
@@ -230,7 +274,14 @@ export function ScadenzaTable({
 
                   {/* Ora modifica */}
                   {show("Ora modifica") && (
-                    <TableCell className={cellPad}>
+                    <TableCell
+                      className={cn("border-r border-border/70", cellPad)}
+                      style={{
+                        width: COLUMN_WIDTH["Ora modifica"],
+                        minWidth: COLUMN_WIDTH["Ora modifica"],
+                        maxWidth: COLUMN_WIDTH["Ora modifica"],
+                      }}
+                    >
                       <span className="whitespace-nowrap tabular-nums text-muted-foreground">
                         {s["Ora modifica"]}
                       </span>
@@ -239,7 +290,11 @@ export function ScadenzaTable({
 
                   {/* Azioni */}
                   <TableCell
-                    className="text-right"
+                    className={cn(
+                      "sticky right-0 z-10 border-l border-border/70 bg-card text-right",
+                      cellPad,
+                    )}
+                    style={{ width: 64, minWidth: 64, maxWidth: 64 }}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <DropdownMenu>
@@ -282,7 +337,6 @@ export function ScadenzaTable({
             })
           )}
         </TableBody>
-      </Table>
-    </div>
+    </DataTableShell>
   )
 }

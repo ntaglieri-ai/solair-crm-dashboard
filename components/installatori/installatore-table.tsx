@@ -1,18 +1,18 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { MoreHorizontal, ExternalLink, Trash2 } from "lucide-react"
 import { IconArrowUp } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { DataTableShell } from "@/components/ui/data-table-shell"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import {
@@ -44,6 +44,16 @@ function isLeftAligned(id: InstallatoreColumnId) {
   return id === "Nome Installatore" || id === "E-mail" || id === "Tag"
 }
 
+function columnWidth(id: InstallatoreColumnId) {
+  if (id === "Badge dell'attività" || id === "Badge di nota") return 124
+  if (id === "Tag") return 300
+  if (id === "Nome Installatore") return 250
+  if (id === "E-mail") return 250
+  if (id === "Stato") return 170
+  if (id === "Ora modifica" || id === "Ora creazione") return 190
+  return 170
+}
+
 export function InstallatoreTable({
   installatori,
   columns,
@@ -69,19 +79,26 @@ export function InstallatoreTable({
 }) {
   const router = useRouter()
   const [stuck, setStuck] = useState(false)
-  const scrollRef = useRef<HTMLDivElement>(null)
   const allSelected =
     installatori.length > 0 && installatori.every((i) => selected.has(i.id))
   const colSpan = columns.length + 2
   const cellPad = DENSITY_CELL[density]
+  const tableWidth =
+    44 + columns.reduce((sum, col) => sum + columnWidth(col.id), 0) + 64
 
   return (
-    <div
-      ref={scrollRef}
-      onScroll={(e) => setStuck(e.currentTarget.scrollTop > 0)}
-      className="max-h-[calc(100vh-15rem)] overflow-auto rounded-xl border border-border bg-card"
+    <DataTableShell
+      ariaLabel="Tabella installatori"
+      minTableWidth={tableWidth}
+      onScroll={(el) => setStuck(el.scrollTop > 0)}
     >
-      <Table>
+      <colgroup>
+        <col style={{ width: 44 }} />
+        {columns.map((column) => (
+          <col key={column.id} style={{ width: columnWidth(column.id) }} />
+        ))}
+        <col style={{ width: 64 }} />
+      </colgroup>
         <TableHeader
           className={cn(
             "sticky top-0 z-20 bg-muted/95 backdrop-blur transition-shadow duration-150",
@@ -89,7 +106,7 @@ export function InstallatoreTable({
           )}
         >
           <TableRow className="hover:bg-transparent">
-            <TableHead className="sticky left-0 z-10 w-10 border-r border-foreground/30 bg-muted/95">
+            <TableHead className="sticky left-0 z-30 w-11 border-r border-foreground/30 bg-muted/95">
               <Checkbox
                 checked={allSelected}
                 onCheckedChange={onToggleAll}
@@ -103,9 +120,14 @@ export function InstallatoreTable({
                 <TableHead
                   key={col.id}
                   className={cn(
-                    "whitespace-nowrap border-r border-foreground/30",
+                    "overflow-hidden whitespace-nowrap border-r border-foreground/30",
                     left ? "text-left" : "text-center",
                   )}
+                  style={{
+                    width: columnWidth(col.id),
+                    minWidth: columnWidth(col.id),
+                    maxWidth: columnWidth(col.id),
+                  }}
                 >
                   <button
                     type="button"
@@ -116,7 +138,7 @@ export function InstallatoreTable({
                       left ? "justify-start" : "justify-center",
                     )}
                   >
-                    {col.label}
+                    <span className="truncate">{col.label}</span>
                     <IconArrowUp
                       size={14}
                       stroke={2}
@@ -132,7 +154,9 @@ export function InstallatoreTable({
                 </TableHead>
               )
             })}
-            <TableHead className="w-10 text-right">Azioni</TableHead>
+            <TableHead className="sticky right-0 z-30 w-16 border-l border-foreground/30 bg-muted/95 text-right">
+              Azioni
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -151,6 +175,7 @@ export function InstallatoreTable({
                   "sticky left-0 z-10 border-r border-border/70 bg-card",
                   cellPad,
                 )}
+                style={{ width: 44, minWidth: 44, maxWidth: 44 }}
               >
                 <Checkbox
                   checked={selected.has(installatore.id)}
@@ -169,10 +194,15 @@ export function InstallatoreTable({
                       cellPad,
                       left ? "text-left" : "text-center",
                     )}
+                    style={{
+                      width: columnWidth(col.id),
+                      minWidth: columnWidth(col.id),
+                      maxWidth: columnWidth(col.id),
+                    }}
                   >
                     <div
                       className={cn(
-                        "flex items-center",
+                        "flex min-w-0 items-center overflow-hidden",
                         left ? "justify-start" : "justify-center",
                       )}
                     >
@@ -188,7 +218,11 @@ export function InstallatoreTable({
 
               <TableCell
                 onClick={(e) => e.stopPropagation()}
-                className={cn("text-right", cellPad)}
+                className={cn(
+                  "sticky right-0 z-10 border-l border-border/70 bg-card text-right",
+                  cellPad,
+                )}
+                style={{ width: 64, minWidth: 64, maxWidth: 64 }}
               >
                 <DropdownMenu>
                   <DropdownMenuTrigger
@@ -234,7 +268,6 @@ export function InstallatoreTable({
             </TableRow>
           ) : null}
         </TableBody>
-      </Table>
-    </div>
+    </DataTableShell>
   )
 }

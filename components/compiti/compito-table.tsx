@@ -1,19 +1,19 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { MoreHorizontal, ExternalLink, Trash2, Check } from "lucide-react"
 import { IconArrowUp, IconNote, IconBellRinging } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { DataTableShell } from "@/components/ui/data-table-shell"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import {
@@ -42,6 +42,14 @@ const COLUMNS: { key: CompitoSortKey; label: string; sortable: boolean }[] = [
   { key: "Priorità", label: "Priorità", sortable: true },
 ]
 
+const COLUMN_WIDTH: Record<CompitoSortKey, number> = {
+  Oggetto: 360,
+  "Proprietario del compito": 250,
+  "Data di scadenza": 190,
+  Stato: 170,
+  Priorità: 150,
+}
+
 export function CompitoTable({
   compiti,
   selected,
@@ -65,17 +73,24 @@ export function CompitoTable({
 }) {
   const router = useRouter()
   const [stuck, setStuck] = useState(false)
-  const scrollRef = useRef<HTMLDivElement>(null)
   const allSelected =
     compiti.length > 0 && compiti.every((c) => selected.has(c.id))
+  const tableWidth =
+    44 + COLUMNS.reduce((sum, col) => sum + COLUMN_WIDTH[col.key], 0) + 64
 
   return (
-    <div
-      ref={scrollRef}
-      onScroll={(e) => setStuck(e.currentTarget.scrollTop > 0)}
-      className="max-h-[calc(100vh-16rem)] overflow-auto rounded-xl border border-border bg-card"
+    <DataTableShell
+      ariaLabel="Tabella compiti"
+      minTableWidth={tableWidth}
+      onScroll={(el) => setStuck(el.scrollTop > 0)}
     >
-      <Table>
+      <colgroup>
+        <col style={{ width: 44 }} />
+        {COLUMNS.map((column) => (
+          <col key={column.key} style={{ width: COLUMN_WIDTH[column.key] }} />
+        ))}
+        <col style={{ width: 64 }} />
+      </colgroup>
         <TableHeader
           className={cn(
             "sticky top-0 z-20 bg-muted/95 backdrop-blur transition-shadow duration-150",
@@ -83,7 +98,7 @@ export function CompitoTable({
           )}
         >
           <TableRow className="hover:bg-transparent">
-            <TableHead className="w-10">
+            <TableHead className="sticky left-0 z-30 w-11 border-r border-foreground/30 bg-muted/95">
               <Checkbox
                 checked={allSelected}
                 onCheckedChange={onToggleAll}
@@ -94,13 +109,18 @@ export function CompitoTable({
               <TableHead
                 key={col.key}
                 className={cn(
-                  "whitespace-nowrap font-semibold text-muted-foreground",
+                  "overflow-hidden whitespace-nowrap border-r border-foreground/30 font-semibold text-muted-foreground",
                   col.sortable && "cursor-pointer select-none",
                 )}
+                style={{
+                  width: COLUMN_WIDTH[col.key],
+                  minWidth: COLUMN_WIDTH[col.key],
+                  maxWidth: COLUMN_WIDTH[col.key],
+                }}
                 onClick={() => col.sortable && onSort(col.key)}
               >
-                <span className="inline-flex items-center gap-1">
-                  {col.label}
+                <span className="inline-flex max-w-full items-center gap-1">
+                  <span className="truncate">{col.label}</span>
                   {col.sortable && sortBy === col.key && (
                     <IconArrowUp
                       size={14}
@@ -114,7 +134,7 @@ export function CompitoTable({
                 </span>
               </TableHead>
             ))}
-            <TableHead className="w-12 text-right" />
+            <TableHead className="sticky right-0 z-30 w-16 border-l border-foreground/30 bg-muted/95 text-right" />
           </TableRow>
         </TableHeader>
 
@@ -139,7 +159,11 @@ export function CompitoTable({
                   className="group cursor-pointer"
                   onClick={() => router.push(`/compiti/${c.id}`)}
                 >
-                  <TableCell onClick={(e) => e.stopPropagation()}>
+                  <TableCell
+                    onClick={(e) => e.stopPropagation()}
+                    className="sticky left-0 z-10 border-r border-border/70 bg-card"
+                    style={{ width: 44, minWidth: 44, maxWidth: 44 }}
+                  >
                     <Checkbox
                       checked={selected.has(c.id)}
                       onCheckedChange={() => onToggle(c.id)}
@@ -148,7 +172,14 @@ export function CompitoTable({
                   </TableCell>
 
                   {/* Oggetto */}
-                  <TableCell className="max-w-[360px]">
+                  <TableCell
+                    className="border-r border-border/70"
+                    style={{
+                      width: COLUMN_WIDTH.Oggetto,
+                      minWidth: COLUMN_WIDTH.Oggetto,
+                      maxWidth: COLUMN_WIDTH.Oggetto,
+                    }}
+                  >
                     <div className="flex items-center gap-2">
                       <span
                         className={cn(
@@ -189,7 +220,14 @@ export function CompitoTable({
                   </TableCell>
 
                   {/* Proprietario */}
-                  <TableCell>
+                  <TableCell
+                    className="border-r border-border/70"
+                    style={{
+                      width: COLUMN_WIDTH["Proprietario del compito"],
+                      minWidth: COLUMN_WIDTH["Proprietario del compito"],
+                      maxWidth: COLUMN_WIDTH["Proprietario del compito"],
+                    }}
+                  >
                     <div className="flex items-center gap-2">
                       <CompitoAvatar
                         nome={c["Proprietario del compito"]}
@@ -202,7 +240,14 @@ export function CompitoTable({
                   </TableCell>
 
                   {/* Scadenza */}
-                  <TableCell>
+                  <TableCell
+                    className="border-r border-border/70"
+                    style={{
+                      width: COLUMN_WIDTH["Data di scadenza"],
+                      minWidth: COLUMN_WIDTH["Data di scadenza"],
+                      maxWidth: COLUMN_WIDTH["Data di scadenza"],
+                    }}
+                  >
                     <span
                       className={cn(
                         "whitespace-nowrap text-sm tabular-nums",
@@ -216,18 +261,33 @@ export function CompitoTable({
                   </TableCell>
 
                   {/* Stato */}
-                  <TableCell>
+                  <TableCell
+                    className="border-r border-border/70"
+                    style={{
+                      width: COLUMN_WIDTH.Stato,
+                      minWidth: COLUMN_WIDTH.Stato,
+                      maxWidth: COLUMN_WIDTH.Stato,
+                    }}
+                  >
                     <StatoBadge stato={c.Stato} />
                   </TableCell>
 
                   {/* Priorità */}
-                  <TableCell>
+                  <TableCell
+                    className="border-r border-border/70"
+                    style={{
+                      width: COLUMN_WIDTH.Priorità,
+                      minWidth: COLUMN_WIDTH.Priorità,
+                      maxWidth: COLUMN_WIDTH.Priorità,
+                    }}
+                  >
                     <PrioritaBadge priorita={c.Priorità} />
                   </TableCell>
 
                   {/* Azioni */}
                   <TableCell
-                    className="text-right"
+                    className="sticky right-0 z-10 border-l border-border/70 bg-card text-right"
+                    style={{ width: 64, minWidth: 64, maxWidth: 64 }}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <DropdownMenu>
@@ -272,7 +332,6 @@ export function CompitoTable({
             })
           )}
         </TableBody>
-      </Table>
-    </div>
+    </DataTableShell>
   )
 }

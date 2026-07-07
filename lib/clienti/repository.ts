@@ -17,6 +17,7 @@ const LIST_COLUMNS = [
   "email",
   "cellulare",
   "codice_fiscale",
+  "tag",
   "stato",
   "sede",
   "installatore_id",
@@ -45,6 +46,17 @@ const SORT_COLUMN: Record<string, string> = {
   "Ora creazione": "created_at",
 }
 
+function parseTags(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((tag) => String(tag).trim()).filter(Boolean)
+  }
+
+  return String(value ?? "")
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+}
+
 function mapRow(row: Record<string, unknown>): ClienteRecord {
   const record: ClienteRecord = {
     id: row.id as string,
@@ -57,7 +69,7 @@ function mapRow(row: Record<string, unknown>): ClienteRecord {
       (row.updated_at as string) ??
       (row.created_at as string) ??
       "",
-    Tag: [],
+    Tag: parseTags(row.tag),
     Sede: (row.sede as SedeLabel) ?? ("" as SedeLabel),
     Cognome: (row.cognome as string) ?? "",
     Stato: (row.stato as StatoCliente) ?? "Attesa cliente",

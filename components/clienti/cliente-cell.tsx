@@ -3,7 +3,28 @@
 import { Bell, StickyNote } from "lucide-react"
 import { type ClienteRecord, type ClienteColumnId } from "@/lib/mock-data"
 import { BoolDot } from "@/components/leads/lead-utils"
+import { clienteTagColor, isLightColor } from "@/lib/cliente-tag-store"
 import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
+
+function ClienteTagPill({ name }: { name: string }) {
+  const color = clienteTagColor(name)
+  const light = isLightColor(color)
+
+  return (
+    <span
+      className="inline-flex max-w-[180px] min-w-0 items-center py-1 pl-2.5 pr-4 text-xs font-semibold leading-none shadow-sm"
+      style={{
+        backgroundColor: color,
+        color: light ? "#172033" : "#ffffff",
+        clipPath:
+          "polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%)",
+      }}
+      title={name}
+    >
+      <span className="truncate">{name}</span>
+    </span>
+  )
+}
 
 export function ClienteCell({
   cliente,
@@ -32,8 +53,23 @@ export function ClienteCell({
       )
 
     case "Tag":
-      // Placeholder: la gestione Tag verrà aggiunta in un prompt dedicato.
-      return <span className="text-muted-foreground">—</span>
+      return cliente.Tag.length > 0 ? (
+        <span className="flex max-w-[460px] flex-wrap items-center justify-center gap-1.5">
+          {cliente.Tag.slice(0, 3).map((tag) => (
+            <ClienteTagPill key={tag} name={tag} />
+          ))}
+          {cliente.Tag.length > 3 ? (
+            <span
+              className="inline-flex h-6 items-center rounded-full bg-slate-100 px-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-200"
+              title={cliente.Tag.slice(3).join(", ")}
+            >
+              +{cliente.Tag.length - 3}
+            </span>
+          ) : null}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      )
 
     case "Nome Clienti":
       return density === "comoda" ? (

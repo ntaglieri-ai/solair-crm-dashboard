@@ -59,6 +59,14 @@ export const CLIENTE_TAG_PALETTE = [
 
 export const MAX_CLIENTE_TAGS = 100
 
+export function clienteTagColor(name: string): string {
+  let hash = 0
+  for (let i = 0; i < name.length; i += 1) {
+    hash = (hash * 31 + name.charCodeAt(i)) >>> 0
+  }
+  return CLIENTE_TAG_PALETTE[hash % CLIENTE_TAG_PALETTE.length]
+}
+
 /**
  * Tag reali presenti nell'elenco Clienti (estratti dal CRM).
  * Sono 68 → corrisponde al contatore "Tag utilizzati: 68 / 100".

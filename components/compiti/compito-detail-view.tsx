@@ -1,11 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
-  IconChevronUp,
-  IconChevronDown,
   IconClock,
   IconCalendarEvent,
   IconBellRinging,
@@ -49,16 +46,7 @@ function InfoRow({
   )
 }
 
-export function CompitoDetailView({
-  compito,
-  prevId,
-  nextId,
-}: {
-  compito: Compito
-  prevId: string | null
-  nextId: string | null
-}) {
-  const router = useRouter()
+export function CompitoDetailView({ compito }: { compito: Compito }) {
   const [note, setNote] = useState<CompitoNota[]>(compito.Note)
   const [draft, setDraft] = useState("")
   const [notaSaving, setNotaSaving] = useState(false)
@@ -136,31 +124,7 @@ export function CompitoDetailView({
 
   return (
     <div className="flex flex-col">
-      {/* Navigazione prev/next */}
-      <div className="flex items-center justify-end gap-1.5 px-6 pt-4">
-        <Button
-          variant="outline"
-          size="icon"
-          className="size-8 bg-card"
-          aria-label="Compito precedente"
-          disabled={!prevId}
-          onClick={() => prevId && router.push(`/compiti/${prevId}`)}
-        >
-          <IconChevronUp size={16} stroke={1.8} />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          className="size-8 bg-card"
-          aria-label="Compito successivo"
-          disabled={!nextId}
-          onClick={() => nextId && router.push(`/compiti/${nextId}`)}
-        >
-          <IconChevronDown size={16} stroke={1.8} />
-        </Button>
-      </div>
-
-      <div className="px-6 pt-3">
+      <div className="px-6 pt-4">
         <div className="overflow-hidden rounded-xl border border-border">
           <CompitoDetailHeader compito={compito} />
         </div>

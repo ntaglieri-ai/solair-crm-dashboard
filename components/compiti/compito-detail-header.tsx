@@ -17,18 +17,54 @@ import {
   IconTrash,
 } from "@tabler/icons-react"
 import { StatoBadge, PrioritaBadge, CompitoAvatar } from "./compito-utils"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { CompitoFormDialog } from "./new-compito-dialog"
 
 export function CompitoDetailHeader({ compito }: { compito: Compito }) {
   const router = useRouter()
   const [stato, setStato] = useState<StatoCompito>(compito.Stato)
   const [statoPending, setStatoPending] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  // Dopo una modifica salvata router.refresh() riconsegna il compito
+  // aggiornato: riallinea il badge di stato locale al valore del server.
+  const [statoServer, setStatoServer] = useState<StatoCompito>(compito.Stato)
+  if (statoServer !== compito.Stato) {
+    setStatoServer(compito.Stato)
+    setStato(compito.Stato)
+  }
+
+  const handleDelete = async () => {
+    if (deleting) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/compiti/${compito.id}`, {
+        method: "DELETE",
+      })
+      if (!res.ok) throw new Error("Eliminazione non riuscita")
+      toast.success("Compito eliminato", { description: compito.Oggetto })
+      router.push("/compiti")
+    } catch {
+      toast.error("Errore nell'eliminazione")
+      setDeleting(false)
+    }
+  }
 
   const changeStato = async (s: StatoCompito) => {
     if (s === stato || statoPending) return
@@ -62,7 +98,10 @@ export function CompitoDetailHeader({ compito }: { compito: Compito }) {
           Compiti
         </button>
         <div className="flex items-center gap-2">
-          <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+          <button
+            onClick={() => setEditOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+          >
             <IconPencil size={15} stroke={1.8} />
             Modifica
           </button>
@@ -78,10 +117,10 @@ export function CompitoDetailHeader({ compito }: { compito: Compito }) {
               }
             />
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem>Duplica compito</DropdownMenuItem>
-              <DropdownMenuItem>Crea follow-up</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive focus:text-destructive">
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => setDeleteOpen(true)}
+              >
                 <IconTrash size={15} stroke={1.8} />
                 Elimina
               </DropdownMenuItem>
@@ -162,6 +201,39 @@ export function CompitoDetailHeader({ compito }: { compito: Compito }) {
           </DropdownMenu>
         </div>
       </div>
+
+      <CompitoFormDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        compito={compito}
+      />
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Elimina compito</DialogTitle>
+            <DialogDescription>
+              Sei sicuro di voler eliminare{" "}
+              <span className="font-semibold text-foreground">
+                {compito.Oggetto}
+              </span>
+              ? L&apos;azione non può essere annullata.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+              Annulla
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleting}
+              onClick={handleDelete}
+            >
+              Elimina
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </header>
   )
 }

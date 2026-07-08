@@ -64,11 +64,13 @@ function countFailures(results: PromiseSettledResult<Response>[]): number {
 export function useCompitiQuery(
   params: CompitiListParams,
   initial?: { sp: string; data: CompitiListResponse },
+  options?: { enabled?: boolean },
 ) {
   const sp = buildCompitiSearchParams(params).toString()
   const hasInitial = !!initial && initial.sp === sp
   return useQuery({
     queryKey: compitiKeys.list(sp),
+    enabled: options?.enabled ?? true,
     queryFn: async ({ signal }) => {
       const res = await fetch(`/api/compiti?${sp}`, { signal })
       if (!res.ok) throw new Error("Errore nel caricamento dei compiti")

@@ -1,17 +1,11 @@
 "use client"
 
-import { useState } from "react"
 import {
   IconProgress,
   IconFlag,
-  IconBellRinging,
-  IconAdjustmentsHorizontal,
   IconDatabaseCog,
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
 import {
   Sheet,
   SheetContent,
@@ -31,8 +25,6 @@ import { ModuleGovernanceSection } from "@/components/crm-settings/module-govern
 export type CompitoSettingsSectionId =
   | "stati"
   | "priorita"
-  | "promemoria"
-  | "generali"
   | "amministrazione"
 
 const SECTIONS: {
@@ -44,26 +36,14 @@ const SECTIONS: {
   {
     id: "stati",
     label: "Stati",
-    description: "Gestisci gli stati del flusso di lavoro dei compiti.",
+    description: "Stati del flusso di lavoro dei compiti.",
     icon: IconProgress,
   },
   {
     id: "priorita",
     label: "Priorità",
-    description: "Definisci i livelli di priorità disponibili.",
+    description: "Livelli di priorità disponibili per i compiti.",
     icon: IconFlag,
-  },
-  {
-    id: "promemoria",
-    label: "Promemoria",
-    description: "Configura notifiche e promemoria automatici.",
-    icon: IconBellRinging,
-  },
-  {
-    id: "generali",
-    label: "Generali",
-    description: "Preferenze di visualizzazione dell'elenco compiti.",
-    icon: IconAdjustmentsHorizontal,
   },
   {
     id: "amministrazione",
@@ -73,13 +53,15 @@ const SECTIONS: {
   },
 ]
 
+// Elenchi di riferimento in sola lettura: stati e priorità sono valori
+// canonici sincronizzati da Zoho, non modificabili da qui.
 function StatiSection() {
   return (
     <div className="flex flex-col gap-2">
       {STATO_COMPITO_ORDER.map((s) => (
         <div
           key={s}
-          className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2.5"
+          className="flex items-center rounded-lg border border-border bg-card px-3 py-2.5"
         >
           <span
             className={cn(
@@ -89,9 +71,6 @@ function StatiSection() {
           >
             {s}
           </span>
-          <Button variant="ghost" size="sm" className="text-muted-foreground">
-            Rinomina
-          </Button>
         </div>
       ))}
     </div>
@@ -104,7 +83,7 @@ function PrioritaSection() {
       {PRIORITA_COMPITO_ORDER.map((p) => (
         <div
           key={p}
-          className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2.5"
+          className="flex items-center rounded-lg border border-border bg-card px-3 py-2.5"
         >
           <span
             className={cn(
@@ -114,90 +93,8 @@ function PrioritaSection() {
           >
             {p}
           </span>
-          <Button variant="ghost" size="sm" className="text-muted-foreground">
-            Modifica colore
-          </Button>
         </div>
       ))}
-    </div>
-  )
-}
-
-function PromemoriaSection() {
-  const [email, setEmail] = useState(true)
-  const [push, setPush] = useState(false)
-  const [anticipo, setAnticipo] = useState("30")
-  return (
-    <div className="flex flex-col gap-4">
-      <label className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-3">
-        <span className="flex flex-col">
-          <span className="text-sm font-medium text-foreground">
-            Notifiche email
-          </span>
-          <span className="text-xs text-muted-foreground">
-            Ricevi un&apos;email all&apos;avvicinarsi della scadenza.
-          </span>
-        </span>
-        <Switch checked={email} onCheckedChange={setEmail} />
-      </label>
-      <label className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-3">
-        <span className="flex flex-col">
-          <span className="text-sm font-medium text-foreground">
-            Notifiche push
-          </span>
-          <span className="text-xs text-muted-foreground">
-            Avvisi nel browser per i compiti in scadenza.
-          </span>
-        </span>
-        <Switch checked={push} onCheckedChange={setPush} />
-      </label>
-      <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-3">
-        <span className="flex flex-col">
-          <span className="text-sm font-medium text-foreground">
-            Anticipo promemoria
-          </span>
-          <span className="text-xs text-muted-foreground">
-            Minuti prima della scadenza.
-          </span>
-        </span>
-        <Input
-          type="number"
-          value={anticipo}
-          onChange={(e) => setAnticipo(e.target.value)}
-          className="w-24 bg-card"
-        />
-      </div>
-    </div>
-  )
-}
-
-function GeneraliSection() {
-  const [raggruppa, setRaggruppa] = useState(true)
-  const [scaduti, setScaduti] = useState(true)
-  return (
-    <div className="flex flex-col gap-4">
-      <label className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-3">
-        <span className="flex flex-col">
-          <span className="text-sm font-medium text-foreground">
-            Raggruppa per stato
-          </span>
-          <span className="text-xs text-muted-foreground">
-            Nella vista lista, raggruppa i compiti per stato.
-          </span>
-        </span>
-        <Switch checked={raggruppa} onCheckedChange={setRaggruppa} />
-      </label>
-      <label className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-3">
-        <span className="flex flex-col">
-          <span className="text-sm font-medium text-foreground">
-            Evidenzia scaduti
-          </span>
-          <span className="text-xs text-muted-foreground">
-            Mostra in rosso i compiti oltre la data di scadenza.
-          </span>
-        </span>
-        <Switch checked={scaduti} onCheckedChange={setScaduti} />
-      </label>
     </div>
   )
 }
@@ -227,7 +124,7 @@ export function CompitoSettingsSheet({
         <SheetHeader className="border-b border-border">
           <SheetTitle>Impostazioni Compiti</SheetTitle>
           <SheetDescription>
-            Personalizza stati, priorità e promemoria dei compiti.
+            Stati e priorità dei compiti e amministrazione del modulo.
           </SheetDescription>
         </SheetHeader>
 
@@ -270,8 +167,6 @@ export function CompitoSettingsSheet({
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               {section === "stati" && <StatiSection />}
               {section === "priorita" && <PrioritaSection />}
-              {section === "promemoria" && <PromemoriaSection />}
-              {section === "generali" && <GeneraliSection />}
               {section === "amministrazione" && (
                 <ModuleGovernanceSection module="compiti" label="Compiti" />
               )}

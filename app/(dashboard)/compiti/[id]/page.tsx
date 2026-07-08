@@ -15,6 +15,5 @@ export default async function CompitoDetailPage({
 
   if (!compito) notFound()
 
-  // Navigazione prev/next non disponibile senza query aggiuntive sul DB.
-  return <CompitoDetailView compito={compito} prevId={null} nextId={null} />
+  return <CompitoDetailView compito={compito} />
 }

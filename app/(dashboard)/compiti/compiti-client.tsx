@@ -9,7 +9,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
-  Pencil,
   Sparkles,
 } from "lucide-react"
 import {
@@ -77,12 +76,6 @@ const ROWS_ITEMS: Record<string, string> = {
   "50": "50 righe",
 }
 
-const SAVED_VIEWS: Record<string, string> = {
-  "tasks-by-status": "Tasks by Status",
-  "my-tasks": "I miei compiti",
-  overdue: "Compiti scaduti",
-}
-
 const OPEN_TASK_STATI: StatoCompito[] = [
   "Non iniziato",
   "In corso",
@@ -120,7 +113,6 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
 
   // --- UI state ---
   const [view, setView] = useState<ViewMode>("kanban")
-  const [savedView, setSavedView] = useState("tasks-by-status")
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [newOpen, setNewOpen] = useState(false)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
@@ -153,6 +145,58 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
     sp: initialSp,
     data: initialData,
   })
+
+  // --- Query dedicate alla kanban, indipendenti dalla paginazione della lista.
+  // La board mostra sempre i compiti aperti più urgenti (fino a 200) e le
+  // chiusure più recenti, applicando i filtri della barra (ricerca, priorità,
+  // proprietario, sede, date). Gli stati sono fissati per colonna.
+  const KANBAN_OPEN_PAGE_SIZE = 200
+  const kanbanOpenParams = useMemo<CompitiListParams>(
+    () => ({
+      page: 1,
+      pageSize: KANBAN_OPEN_PAGE_SIZE,
+      sortBy: "Data di scadenza",
+      sortDir: "asc",
+      search: debouncedSearch,
+      stati: OPEN_TASK_STATI,
+      priorita: filters.priorita,
+      proprietario: filters.proprietario,
+      sede: filters.sede,
+      scadenzaDa: filters.scadenzaDa,
+      scadenzaA: filters.scadenzaA,
+      overdue: filters.overdue,
+    }),
+    [debouncedSearch, filters],
+  )
+  const kanbanDoneParams = useMemo<CompitiListParams>(
+    () => ({
+      page: 1,
+      pageSize: 25,
+      sortBy: "Data di scadenza",
+      sortDir: "desc",
+      search: debouncedSearch,
+      stati: ["Completato"],
+      priorita: filters.priorita,
+      proprietario: filters.proprietario,
+      sede: filters.sede,
+      scadenzaDa: filters.scadenzaDa,
+      scadenzaA: filters.scadenzaA,
+      overdue: false,
+    }),
+    [debouncedSearch, filters],
+  )
+  const { data: kanbanOpenData } = useCompitiQuery(kanbanOpenParams, undefined, {
+    enabled: view === "kanban",
+  })
+  const { data: kanbanDoneData } = useCompitiQuery(kanbanDoneParams, undefined, {
+    enabled: view === "kanban",
+  })
+  const kanbanRows = useMemo(
+    () => [...(kanbanOpenData?.rows ?? []), ...(kanbanDoneData?.rows ?? [])],
+    [kanbanOpenData, kanbanDoneData],
+  )
+  const kanbanOpenTruncated =
+    (kanbanOpenData?.total ?? 0) > KANBAN_OPEN_PAGE_SIZE
 
   const pageRows = data?.rows ?? initialData.rows
   const absoluteTotal =
@@ -371,46 +415,6 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Vista salvata (solo kanban) */}
-          {view === "kanban" ? (
-            <div className="flex items-center gap-1.5">
-              <Select
-                items={SAVED_VIEWS}
-                value={savedView}
-                onValueChange={(v) => setSavedView(v ?? "")}
-              >
-                <SelectTrigger
-                  className="h-9 w-[180px] bg-card"
-                  aria-label="Vista salvata"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {Object.entries(SAVED_VIEWS).map(([v, label]) => (
-                      <SelectItem key={v} value={v}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <Button
-                variant="outline"
-                size="icon"
-                className="bg-card"
-                aria-label="Modifica vista"
-                onClick={() =>
-                  toast.info("Modifica vista", {
-                    description: "Configura colonne e filtri della vista.",
-                  })
-                }
-              >
-                <Pencil className="size-4" />
-              </Button>
-            </div>
-          ) : null}
-
           {/* Toggle Lista / Kanban */}
           <div className="flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
             <button
@@ -679,7 +683,15 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
           </div>
         </>
       ) : total > 0 && view === "kanban" ? (
-        <CompitoKanban compiti={pageRows} onMove={handleMove} />
+        <>
+          {kanbanOpenTruncated && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              Mostrati i 200 compiti aperti più urgenti — usa la vista Lista o
+              i filtri per vedere tutto.
+            </div>
+          )}
+          <CompitoKanban compiti={kanbanRows} onMove={handleMove} />
+        </>
       ) : null}
 
       {/* Dialog elimina singolo */}

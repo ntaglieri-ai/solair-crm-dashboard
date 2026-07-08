@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import {
   Dialog,
   DialogContent,
@@ -30,7 +32,7 @@ import {
   PRIORITA_COMPITO_ORDER,
   SEDE_LABELS,
 } from "@/lib/mock-data"
-import { useCompitiReferenceData } from "@/lib/compiti/hooks"
+import { useCompitiReferenceData, useUpdateCompito } from "@/lib/compiti/hooks"
 
 function formatDMY(iso: string): string {
   if (!iso) return ""
@@ -39,23 +41,43 @@ function formatDMY(iso: string): string {
   return `${d}/${m}/${y}`
 }
 
+// Inverso di formatDMY: "dd/mm/yyyy" → "yyyy-mm-dd" per l'input type=date.
+function dmyToInputValue(dmy: string): string {
+  if (!dmy) return ""
+  const [d, m, y] = dmy.split("/")
+  if (!d || !m || !y) return ""
+  return `${y}-${m}-${d}`
+}
+
 function stampNow(): string {
   const now = new Date()
   const p = (n: number) => String(n).padStart(2, "0")
   return `${p(now.getDate())}/${p(now.getMonth() + 1)}/${now.getFullYear()} ${p(now.getHours())}:${p(now.getMinutes())}`
 }
 
-export function NewCompitoDialog({
+// Form compito in due modalità: creazione (onCreate) e modifica (compito).
+// In modifica invia una PATCH con i soli campi cambiati e fa router.refresh().
+export function CompitoFormDialog({
   open,
   onOpenChange,
+  compito,
   onCreate,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
-  onCreate: (compito: Compito) => void
+  /** Se presente, il dialog lavora in modalità modifica su questo compito. */
+  compito?: Compito
+  /** Callback di creazione — richiesto solo in modalità creazione. */
+  onCreate?: (compito: Compito) => void
 }) {
+  const router = useRouter()
   const { data: referenceData } = useCompitiReferenceData()
-  const proprietari = referenceData?.proprietari ?? []
+  const proprietari = useMemo(
+    () => referenceData?.proprietari ?? [],
+    [referenceData],
+  )
+  const updateCompito = useUpdateCompito()
+  const isEdit = !!compito
 
   const [oggetto, setOggetto] = useState("")
   const [stato, setStato] = useState<StatoCompito>("Non iniziato")
@@ -65,8 +87,16 @@ export function NewCompitoDialog({
   const [sede, setSede] = useState<SedeLabel>(SEDE_LABELS[0])
   const [descrizione, setDescrizione] = useState("")
 
+  // In modifica il fallback è il proprietario attuale del compito (i
+  // riferimenti arrivano in async): finché l'utente non riseleziona, la PATCH
+  // non cambia mai l'assegnatario. In creazione il fallback è il primo utente.
   const proprietario =
-    proprietari.find((p) => p.id === proprietarioId) ?? proprietari[0] ?? null
+    proprietari.find((p) => p.id === proprietarioId) ??
+    (isEdit
+      ? (proprietari.find(
+          (p) => p.zoho_id === compito["Proprietario del compito.id"],
+        ) ?? null)
+      : (proprietari[0] ?? null))
 
   const reset = () => {
     setOggetto("")
@@ -78,9 +108,24 @@ export function NewCompitoDialog({
     setDescrizione("")
   }
 
-  const submit = () => {
-    if (!oggetto.trim() || !scadenza || !proprietario) return
-    const compito: Compito = {
+  // Precompila i campi ad ogni apertura in modalità modifica.
+  const wasOpen = useRef(false)
+  useEffect(() => {
+    if (open && !wasOpen.current && compito) {
+      setOggetto(compito.Oggetto)
+      setStato(compito.Stato)
+      setPriorita(compito.Priorità)
+      setScadenza(dmyToInputValue(compito["Data di scadenza"]))
+      setSede(compito.Sede)
+      setDescrizione(compito.Descrizione)
+      setProprietarioId("")
+    }
+    wasOpen.current = open
+  }, [open, compito])
+
+  const submitCreate = () => {
+    if (!oggetto.trim() || !scadenza || !proprietario || !onCreate) return
+    const nuovo: Compito = {
       id: `task-${Date.now()}`,
       Oggetto: oggetto.trim(),
       Stato: stato,
@@ -96,19 +141,69 @@ export function NewCompitoDialog({
       "Orario di chiusura": null,
       Note: [],
     }
-    onCreate(compito)
+    onCreate(nuovo)
     reset()
     onOpenChange(false)
   }
 
+  const submitEdit = () => {
+    if (!compito || !oggetto.trim() || !scadenza) return
+    const patch: Partial<Compito> = {}
+    if (oggetto.trim() !== compito.Oggetto) patch.Oggetto = oggetto.trim()
+    if (stato !== compito.Stato) patch.Stato = stato
+    if (priorita !== compito.Priorità) patch.Priorità = priorita
+    const scadenzaDMY = formatDMY(scadenza)
+    if (scadenzaDMY && scadenzaDMY !== compito["Data di scadenza"])
+      patch["Data di scadenza"] = scadenzaDMY
+    if (
+      proprietario &&
+      proprietario.zoho_id !== compito["Proprietario del compito.id"]
+    ) {
+      patch["Proprietario del compito"] = proprietario.nome
+      patch["Proprietario del compito.id"] = proprietario.zoho_id
+    }
+    if (sede !== compito.Sede) patch.Sede = sede
+    if (descrizione.trim() !== compito.Descrizione)
+      patch.Descrizione = descrizione.trim()
+
+    if (Object.keys(patch).length === 0) {
+      onOpenChange(false)
+      return
+    }
+    updateCompito.mutate(
+      { id: compito.id, patch },
+      {
+        onSuccess: () => {
+          toast.success("Compito aggiornato", { description: oggetto.trim() })
+          onOpenChange(false)
+          router.refresh()
+        },
+        onError: () => toast.error("Errore nell'aggiornamento del compito"),
+      },
+    )
+  }
+
+  const submitDisabled =
+    !oggetto.trim() ||
+    !scadenza ||
+    (isEdit ? updateCompito.isPending : !proprietario)
+
   return (
-    <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(o) : (reset(), onOpenChange(false)))}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (o) return onOpenChange(o)
+        if (!isEdit) reset()
+        onOpenChange(false)
+      }}
+    >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Crea compito</DialogTitle>
+          <DialogTitle>{isEdit ? "Modifica compito" : "Crea compito"}</DialogTitle>
           <DialogDescription>
-            Aggiungi un nuovo compito assegnandolo a un proprietario e una
-            scadenza.
+            {isEdit
+              ? "Aggiorna i dettagli del compito. Vengono salvati solo i campi modificati."
+              : "Aggiungi un nuovo compito assegnandolo a un proprietario e una scadenza."}
           </DialogDescription>
         </DialogHeader>
 
@@ -232,13 +327,28 @@ export function NewCompitoDialog({
           </Button>
           <Button
             className="bg-teal text-teal-foreground hover:bg-teal/90"
-            disabled={!oggetto.trim() || !scadenza || !proprietario}
-            onClick={submit}
+            disabled={submitDisabled}
+            onClick={isEdit ? submitEdit : submitCreate}
           >
-            Crea Compito
+            {isEdit ? "Salva modifiche" : "Crea Compito"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// Wrapper di creazione: mantiene l'API dei call-site esistenti.
+export function NewCompitoDialog({
+  open,
+  onOpenChange,
+  onCreate,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  onCreate: (compito: Compito) => void
+}) {
+  return (
+    <CompitoFormDialog open={open} onOpenChange={onOpenChange} onCreate={onCreate} />
   )
 }

@@ -24,9 +24,9 @@ import {
   STATO_COMPITO_ORDER,
   PRIORITA_COMPITO_ORDER,
   SEDE_LABELS,
-  mockProprietariCompito,
   type StatoCompito,
 } from "@/lib/mock-data"
+import { useCompitiReferenceData } from "@/lib/compiti/hooks"
 
 export interface CompitoFilterState {
   search: string
@@ -36,6 +36,8 @@ export interface CompitoFilterState {
   sede: string
   scadenzaDa: string
   scadenzaA: string
+  /** Quick-filter KPI: solo scaduti (scadenza < adesso, stato ≠ Completato). */
+  overdue: boolean
 }
 
 export const DEFAULT_COMPITO_FILTERS: CompitoFilterState = {
@@ -46,6 +48,7 @@ export const DEFAULT_COMPITO_FILTERS: CompitoFilterState = {
   sede: "all",
   scadenzaDa: "",
   scadenzaA: "",
+  overdue: false,
 }
 
 function toItems(entries: [string, string][]): Record<string, string> {
@@ -104,6 +107,9 @@ export function CompitoFilters({
   onChange: (next: CompitoFilterState) => void
   onReset: () => void
 }) {
+  const { data: referenceData } = useCompitiReferenceData()
+  const proprietari = referenceData?.proprietari ?? []
+
   const set = <K extends keyof CompitoFilterState>(
     key: K,
     value: CompitoFilterState[K],
@@ -123,7 +129,8 @@ export function CompitoFilters({
     filters.proprietario !== "all" ||
     filters.sede !== "all" ||
     filters.scadenzaDa !== "" ||
-    filters.scadenzaA !== ""
+    filters.scadenzaA !== "" ||
+    filters.overdue
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -189,7 +196,7 @@ export function CompitoFilters({
         placeholder="Proprietario"
         options={[
           ["all", "Tutti i proprietari"],
-          ...mockProprietariCompito.map((c) => [c, c] as [string, string]),
+          ...proprietari.map((p) => [p.nome, p.nome] as [string, string]),
         ]}
       />
 

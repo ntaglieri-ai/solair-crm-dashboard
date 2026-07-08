@@ -38,11 +38,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { STATO_COMPITO_ORDER, type StatoCompito } from "@/lib/mock-data"
 import {
-  mockProprietariCompito,
-  STATO_COMPITO_ORDER,
-  type StatoCompito,
-} from "@/lib/mock-data"
+  useCompitiReferenceData,
+  type CompitoProprietario,
+} from "@/lib/compiti/hooks"
 
 export function CompitoActionsMenu({
   selectedCount,
@@ -52,14 +52,18 @@ export function CompitoActionsMenu({
   onBulkDelete,
 }: {
   selectedCount: number
-  onBulkTransfer: (owner: string) => void
+  onBulkTransfer: (owner: CompitoProprietario) => void
   onBulkStato: (stato: StatoCompito) => void
   onBulkComplete: () => void
   onBulkDelete: () => void
 }) {
   const hasSelection = selectedCount > 0
   const [transferOpen, setTransferOpen] = useState(false)
-  const [owner, setOwner] = useState(mockProprietariCompito[0])
+  const { data: referenceData } = useCompitiReferenceData()
+  const proprietari = referenceData?.proprietari ?? []
+  const [ownerId, setOwnerId] = useState("")
+  const selectedOwner =
+    proprietari.find((p) => p.id === ownerId) ?? proprietari[0] ?? null
 
   return (
     <>
@@ -140,15 +144,19 @@ export function CompitoActionsMenu({
           </DialogHeader>
           <div className="flex flex-col gap-1.5 py-1">
             <Label>Nuovo proprietario del compito</Label>
-            <Select value={owner} onValueChange={(v) => setOwner(v ?? "")}>
+            <Select
+              items={Object.fromEntries(proprietari.map((p) => [p.id, p.nome]))}
+              value={selectedOwner?.id ?? ""}
+              onValueChange={(v) => setOwnerId(v ?? "")}
+            >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue placeholder="Seleziona proprietario" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {mockProprietariCompito.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
+                  {proprietari.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.nome}
                     </SelectItem>
                   ))}
                 </SelectGroup>
@@ -160,8 +168,10 @@ export function CompitoActionsMenu({
               Annulla
             </Button>
             <Button
+              disabled={!selectedOwner}
               onClick={() => {
-                onBulkTransfer(owner)
+                if (!selectedOwner) return
+                onBulkTransfer(selectedOwner)
                 setTransferOpen(false)
               }}
             >

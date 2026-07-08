@@ -19,6 +19,8 @@ export interface CompitiListParams {
   sede: string
   scadenzaDa: string
   scadenzaA: string
+  /** Solo compiti scaduti (scadenza < adesso, stato ≠ Completato) — coerente con il KPI. */
+  overdue: boolean
 }
 
 export interface CompitiListResponse {
@@ -50,6 +52,7 @@ export const DEFAULT_COMPITI_PARAMS: CompitiListParams = {
   sede: "all",
   scadenzaDa: "",
   scadenzaA: "",
+  overdue: false,
 }
 
 export function buildCompitiSearchParams(p: CompitiListParams): URLSearchParams {
@@ -65,6 +68,7 @@ export function buildCompitiSearchParams(p: CompitiListParams): URLSearchParams 
   if (p.sede !== "all") sp.set("sede", p.sede)
   if (p.scadenzaDa) sp.set("scadenzaDa", p.scadenzaDa)
   if (p.scadenzaA) sp.set("scadenzaA", p.scadenzaA)
+  if (p.overdue) sp.set("overdue", "true")
   return sp
 }
 
@@ -82,5 +86,6 @@ export function parseCompitiSearchParams(sp: URLSearchParams): CompitiListParams
     sede: sp.get("sede") ?? "all",
     scadenzaDa: sp.get("scadenzaDa") ?? "",
     scadenzaA: sp.get("scadenzaA") ?? "",
+    overdue: sp.get("overdue") === "true",
   }
 }

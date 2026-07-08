@@ -29,8 +29,8 @@ import {
   STATO_COMPITO_ORDER,
   PRIORITA_COMPITO_ORDER,
   SEDE_LABELS,
-  mockProprietariCompito,
 } from "@/lib/mock-data"
+import { useCompitiReferenceData } from "@/lib/compiti/hooks"
 
 function formatDMY(iso: string): string {
   if (!iso) return ""
@@ -54,33 +54,40 @@ export function NewCompitoDialog({
   onOpenChange: (o: boolean) => void
   onCreate: (compito: Compito) => void
 }) {
+  const { data: referenceData } = useCompitiReferenceData()
+  const proprietari = referenceData?.proprietari ?? []
+
   const [oggetto, setOggetto] = useState("")
   const [stato, setStato] = useState<StatoCompito>("Non iniziato")
   const [priorita, setPriorita] = useState<PrioritaCompito>("Medio")
   const [scadenza, setScadenza] = useState("")
-  const [proprietario, setProprietario] = useState(mockProprietariCompito[0])
+  const [proprietarioId, setProprietarioId] = useState("")
   const [sede, setSede] = useState<SedeLabel>(SEDE_LABELS[0])
   const [descrizione, setDescrizione] = useState("")
+
+  const proprietario =
+    proprietari.find((p) => p.id === proprietarioId) ?? proprietari[0] ?? null
 
   const reset = () => {
     setOggetto("")
     setStato("Non iniziato")
     setPriorita("Medio")
     setScadenza("")
-    setProprietario(mockProprietariCompito[0])
+    setProprietarioId("")
     setSede(SEDE_LABELS[0])
     setDescrizione("")
   }
 
   const submit = () => {
-    if (!oggetto.trim() || !scadenza) return
+    if (!oggetto.trim() || !scadenza || !proprietario) return
     const compito: Compito = {
       id: `task-${Date.now()}`,
       Oggetto: oggetto.trim(),
       Stato: stato,
       Priorità: priorita,
       "Data di scadenza": formatDMY(scadenza),
-      "Proprietario del compito": proprietario,
+      "Proprietario del compito": proprietario.nome,
+      "Proprietario del compito.id": proprietario.zoho_id,
       Sede: sede,
       "Correlato a": null,
       Descrizione: descrizione.trim(),
@@ -188,17 +195,18 @@ export function NewCompitoDialog({
           <div className="flex flex-col gap-1.5">
             <Label>Proprietario del compito</Label>
             <Select
-              value={proprietario}
-              onValueChange={(v) => setProprietario(v ?? "")}
+              items={Object.fromEntries(proprietari.map((p) => [p.id, p.nome]))}
+              value={proprietario?.id ?? ""}
+              onValueChange={(v) => setProprietarioId(v ?? "")}
             >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue placeholder="Seleziona proprietario" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {mockProprietariCompito.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
+                  {proprietari.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.nome}
                     </SelectItem>
                   ))}
                 </SelectGroup>
@@ -224,7 +232,7 @@ export function NewCompitoDialog({
           </Button>
           <Button
             className="bg-teal text-teal-foreground hover:bg-teal/90"
-            disabled={!oggetto.trim() || !scadenza}
+            disabled={!oggetto.trim() || !scadenza || !proprietario}
             onClick={submit}
           >
             Crea Compito

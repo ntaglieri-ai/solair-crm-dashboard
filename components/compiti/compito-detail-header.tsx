@@ -3,8 +3,10 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
+import { toast } from "sonner"
 import type { Compito, StatoCompito } from "@/lib/mock-data"
 import { STATO_COMPITO_ORDER } from "@/lib/mock-data"
+import { cn } from "@/lib/utils"
 import {
   IconArrowLeft,
   IconCheck,
@@ -26,6 +28,28 @@ import {
 export function CompitoDetailHeader({ compito }: { compito: Compito }) {
   const router = useRouter()
   const [stato, setStato] = useState<StatoCompito>(compito.Stato)
+  const [statoPending, setStatoPending] = useState(false)
+
+  const changeStato = async (s: StatoCompito) => {
+    if (s === stato || statoPending) return
+    const prev = stato
+    setStato(s)
+    setStatoPending(true)
+    try {
+      const res = await fetch(`/api/compiti/${compito.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ Stato: s }),
+      })
+      if (!res.ok) throw new Error("Aggiornamento non riuscito")
+      router.refresh()
+    } catch {
+      setStato(prev)
+      toast.error("Errore nell'aggiornamento dello stato")
+    } finally {
+      setStatoPending(false)
+    }
+  }
 
   return (
     <header className="border-b border-border bg-card">
@@ -103,7 +127,13 @@ export function CompitoDetailHeader({ compito }: { compito: Compito }) {
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
-                <button className="inline-flex items-center gap-1.5 rounded-full">
+                <button
+                  aria-busy={statoPending}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full transition-opacity",
+                    statoPending && "pointer-events-none opacity-60",
+                  )}
+                >
                   <StatoBadge stato={stato} />
                   <IconChevronDown
                     size={14}
@@ -115,7 +145,7 @@ export function CompitoDetailHeader({ compito }: { compito: Compito }) {
             />
             <DropdownMenuContent align="end" className="w-48">
               {STATO_COMPITO_ORDER.map((s) => (
-                <DropdownMenuItem key={s} onClick={() => setStato(s)}>
+                <DropdownMenuItem key={s} onClick={() => changeStato(s)}>
                   <span className="flex w-4 items-center">
                     {s === stato && <IconCheck size={15} stroke={2} />}
                   </span>

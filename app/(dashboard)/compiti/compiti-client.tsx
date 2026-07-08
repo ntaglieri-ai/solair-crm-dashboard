@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import {
   AlertTriangle,
@@ -67,6 +67,8 @@ import {
   useDeleteCompiti,
   useUpdateCompito,
   bulkUpdateCompiti,
+  BulkOperationError,
+  type CompitoProprietario,
 } from "@/lib/compiti/hooks"
 
 const ROWS_ITEMS: Record<string, string> = {
@@ -89,6 +91,17 @@ const OPEN_TASK_STATI: StatoCompito[] = [
 ]
 
 type ViewMode = "lista" | "kanban"
+
+// Ritarda la propagazione del valore: l'input resta controllato e immediato,
+// la query parte solo dopo 300ms di pausa nella digitazione.
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delayMs)
+    return () => clearTimeout(t)
+  }, [value, delayMs])
+  return debounced
+}
 
 interface CompitiClientProps {
   initialSp: string
@@ -117,21 +130,23 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
     useState<CompitoSettingsSectionId>("stati")
 
   // --- Build server-side query params ---
+  const debouncedSearch = useDebouncedValue(filters.search, 300)
   const params = useMemo<CompitiListParams>(
     () => ({
       page,
       pageSize: rowsPerPage,
       sortBy: sortBy ?? null,
       sortDir,
-      search: filters.search,
+      search: debouncedSearch,
       stati: filters.stati,
       priorita: filters.priorita,
       proprietario: filters.proprietario,
       sede: filters.sede,
       scadenzaDa: filters.scadenzaDa,
       scadenzaA: filters.scadenzaA,
+      overdue: filters.overdue,
     }),
-    [page, rowsPerPage, sortBy, sortDir, filters],
+    [page, rowsPerPage, sortBy, sortDir, filters, debouncedSearch],
   )
 
   const { data, isFetching } = useCompitiQuery(params, {
@@ -154,9 +169,9 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
   const hasOpenStateFilter =
     filters.stati.length === OPEN_TASK_STATI.length &&
     OPEN_TASK_STATI.every((stato) => filters.stati.includes(stato))
-  const isOverdueFilterActive = hasOpenStateFilter && Boolean(filters.scadenzaA)
+  const isOverdueFilterActive = hasOpenStateFilter && filters.overdue
   const isHighPriorityFilterActive = filters.priorita === "Alto"
-  const isOpenFilterActive = hasOpenStateFilter && !filters.scadenzaA
+  const isOpenFilterActive = hasOpenStateFilter && !filters.overdue
   const hasActiveFilters =
     filters.search.trim().length > 0 ||
     filters.stati.length > 0 ||
@@ -164,7 +179,8 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
     filters.proprietario !== "all" ||
     filters.sede !== "all" ||
     Boolean(filters.scadenzaDa) ||
-    Boolean(filters.scadenzaA)
+    Boolean(filters.scadenzaA) ||
+    filters.overdue
 
   // --- Mutations ---
   const createCompito = useCreateCompito()
@@ -191,18 +207,10 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
     setSelected(new Set())
   }
 
-  const todayIso = () => {
-    const now = new Date()
-    const year = now.getFullYear()
-    const month = String(now.getMonth() + 1).padStart(2, "0")
-    const day = String(now.getDate()).padStart(2, "0")
-    return `${year}-${month}-${day}`
-  }
-
   const showOverdueTasks = () => {
     applyQuickFilter({
       stati: OPEN_TASK_STATI,
-      scadenzaA: todayIso(),
+      overdue: true,
     })
   }
 
@@ -270,18 +278,30 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
     )
   }
 
-  const handleBulkTransfer = async (owner: string) => {
+  // Fallimento parziale: invalida comunque (alcune righe sono cambiate) e
+  // mostra il conteggio degli errori.
+  const handleBulkError = (error: unknown, fallback: string) => {
+    qc.invalidateQueries({ queryKey: compitiKeys.lists() })
+    toast.error(
+      error instanceof BulkOperationError ? error.message : fallback,
+    )
+  }
+
+  const handleBulkTransfer = async (owner: CompitoProprietario) => {
     const ids = Array.from(selected)
     const n = ids.length
     try {
-      await bulkUpdateCompiti(ids, { "Proprietario del compito": owner })
+      await bulkUpdateCompiti(ids, {
+        "Proprietario del compito": owner.nome,
+        "Proprietario del compito.id": owner.zoho_id,
+      })
       qc.invalidateQueries({ queryKey: compitiKeys.lists() })
       toast.success("Proprietario aggiornato", {
-        description: `${n} compiti assegnati a ${owner}.`,
+        description: `${n} compiti assegnati a ${owner.nome}.`,
       })
       setSelected(new Set())
-    } catch {
-      toast.error("Errore nell'aggiornamento del proprietario")
+    } catch (error) {
+      handleBulkError(error, "Errore nell'aggiornamento del proprietario")
     }
   }
 
@@ -295,8 +315,8 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
         description: `${n} compiti impostati su "${stato}".`,
       })
       setSelected(new Set())
-    } catch {
-      toast.error("Errore nell'aggiornamento dello stato")
+    } catch (error) {
+      handleBulkError(error, "Errore nell'aggiornamento dello stato")
     }
   }
 
@@ -308,8 +328,8 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
       qc.invalidateQueries({ queryKey: compitiKeys.lists() })
       toast.success("Compiti completati", { description: `${n} compiti chiusi.` })
       setSelected(new Set())
-    } catch {
-      toast.error("Errore nel completamento")
+    } catch (error) {
+      handleBulkError(error, "Errore nel completamento")
     }
   }
 
@@ -322,7 +342,13 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
         setBulkDeleteOpen(false)
         setSelected(new Set())
       },
-      onError: () => toast.error("Errore nell'eliminazione"),
+      // Le query vengono già invalidate da onSettled del hook.
+      onError: (error) =>
+        toast.error(
+          error instanceof BulkOperationError
+            ? error.message
+            : "Errore nell'eliminazione",
+        ),
     })
   }
 

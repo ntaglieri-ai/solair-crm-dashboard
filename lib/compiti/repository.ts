@@ -229,6 +229,10 @@ export async function queryCompiti(
       listQ = listQ.lte("scadenza", params.scadenzaA + "T23:59:59Z")
       countQ = countQ.lte("scadenza", params.scadenzaA + "T23:59:59Z")
     }
+    if (params.overdue) {
+      listQ = listQ.lt("scadenza", now).neq("stato", "Completato")
+      countQ = countQ.lt("scadenza", now).neq("stato", "Completato")
+    }
 
     const [
       { data, error },
@@ -386,8 +390,20 @@ export async function updateCompitoRecord(
     row.scadenza = dmyToISO(patch["Data di scadenza"])
   if (patch["Proprietario del compito"] !== undefined)
     row.proprietario_nome = patch["Proprietario del compito"]
-  if (patch["Proprietario del compito.id"] !== undefined)
-    row.proprietario_zoho_id = patch["Proprietario del compito.id"]
+  if (patch["Proprietario del compito.id"] !== undefined) {
+    const zohoId = patch["Proprietario del compito.id"] || null
+    row.proprietario_zoho_id = zohoId
+    if (zohoId) {
+      const { data: utente } = await supabase
+        .from("utenti")
+        .select("id")
+        .eq("zoho_id", zohoId)
+        .maybeSingle()
+      row.proprietario_id = utente?.id ?? null
+    } else {
+      row.proprietario_id = null
+    }
+  }
   if (patch.Sede !== undefined) row.sede = patch.Sede
   if (patch.Descrizione !== undefined) row.descrizione = patch.Descrizione
   if (patch["Nome contatto.id"] !== undefined)

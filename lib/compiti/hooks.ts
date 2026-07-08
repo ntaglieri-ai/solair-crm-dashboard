@@ -18,6 +18,46 @@ export const compitiKeys = {
   all: ["compiti"] as const,
   lists: () => [...compitiKeys.all, "list"] as const,
   list: (sp: string) => [...compitiKeys.lists(), sp] as const,
+  referenceData: () => [...compitiKeys.all, "reference-data"] as const,
+}
+
+export interface CompitoProprietario {
+  id: string
+  zoho_id: string
+  nome: string
+}
+
+export interface CompitiReferenceData {
+  proprietari: CompitoProprietario[]
+}
+
+// Dati di riferimento (proprietari reali da `utenti`).
+export function useCompitiReferenceData() {
+  return useQuery({
+    queryKey: compitiKeys.referenceData(),
+    queryFn: async ({ signal }) => {
+      const res = await fetch("/api/compiti/reference-data", { signal })
+      if (!res.ok) throw new Error("Errore nel caricamento dei riferimenti")
+      return (await res.json()) as CompitiReferenceData
+    },
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  })
+}
+
+// Errore bulk con conteggio dei fallimenti: il messaggio è pronto per il toast.
+export class BulkOperationError extends Error {
+  constructor(
+    public failed: number,
+    public total: number,
+  ) {
+    super(`${failed} di ${total} operazioni non riuscite`)
+    this.name = "BulkOperationError"
+  }
+}
+
+function countFailures(results: PromiseSettledResult<Response>[]): number {
+  return results.filter((r) => r.status === "rejected" || !r.value.ok).length
 }
 
 // Lista paginata — keepPreviousData per transizioni fluide tra pagine/filtri.
@@ -131,9 +171,11 @@ export function useDeleteCompiti() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (ids: string[]) => {
-      await Promise.all(
+      const results = await Promise.allSettled(
         ids.map((id) => fetch(`/api/compiti/${id}`, { method: "DELETE" })),
       )
+      const failed = countFailures(results)
+      if (failed > 0) throw new BulkOperationError(failed, ids.length)
       return { removed: ids.length }
     },
     onMutate: async (ids) => {
@@ -171,7 +213,7 @@ export async function bulkUpdateCompiti(
   ids: string[],
   patch: Partial<Compito>,
 ): Promise<void> {
-  await Promise.all(
+  const results = await Promise.allSettled(
     ids.map((id) =>
       fetch(`/api/compiti/${id}`, {
         method: "PATCH",
@@ -180,4 +222,6 @@ export async function bulkUpdateCompiti(
       }),
     ),
   )
+  const failed = countFailures(results)
+  if (failed > 0) throw new BulkOperationError(failed, ids.length)
 }

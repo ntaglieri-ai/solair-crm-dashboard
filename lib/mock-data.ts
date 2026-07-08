@@ -2484,15 +2484,6 @@ export const PRIORITA_COMPITO_TONE: Record<PrioritaCompito, string> = {
   Basso: "bg-secondary text-muted-foreground",
 }
 
-export const mockProprietariCompito: string[] = [
-  "Marco Rossi",
-  "Giulia Bianchi",
-  "Luca Ferrari",
-  "Sara Esposto",
-  "Andrea Greco",
-  "Elena Conti",
-]
-
 export const COMPITI_TOTAL = 1247
 
 export function compitoInitials(nome: string): string {
@@ -2512,14 +2503,17 @@ function parseDMY(d: string): Date | null {
   return new Date(Number(y), Number(m) - 1, Number(day))
 }
 
-/** "Oggi" coerente con la data di sistema dell'app (20/06/2026). */
-const COMPITI_TODAY = new Date(2026, 5, 20)
+/** Data corrente a mezzanotte locale: un compito è scaduto solo dal giorno successivo. */
+function compitiToday(): Date {
+  const now = new Date()
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+}
 
 export function isCompitoScaduto(c: Compito): boolean {
   if (c.Stato === "Completato") return false
   const due = parseDMY(c["Data di scadenza"])
   if (!due) return false
-  return due.getTime() < COMPITI_TODAY.getTime()
+  return due.getTime() < compitiToday().getTime()
 }
 
 export const mockCompiti: Compito[] = [

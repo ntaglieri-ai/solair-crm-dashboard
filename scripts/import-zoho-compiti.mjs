@@ -113,6 +113,33 @@ function normalizePriority(value) {
   return priority ?? "Medio"
 }
 
+// Set canonico usato da UI e kanban (vedi scripts/migrations/normalize-compiti-stati.mjs).
+const STATO_CANONICO = new Map([
+  ["non iniziato", "Non iniziato"],
+  ["da fare", "Non iniziato"],
+  ["in corso", "In corso"],
+  ["rinviato", "Rinviato"],
+  ["differito", "Rinviato"],
+  ["posticipato", "Rinviato"],
+  ["in attesa di input", "In attesa di input"],
+  ["in attesa", "In attesa di input"],
+  ["completato", "Completato"],
+  ["completata", "Completato"],
+])
+
+const statiNonMappati = new Set()
+
+function normalizeStato(value) {
+  const stato = clean(value)
+  if (!stato) return "Non iniziato"
+  const canonical = STATO_CANONICO.get(stato.toLowerCase())
+  if (!canonical) {
+    statiNonMappati.add(stato)
+    return stato
+  }
+  return canonical
+}
+
 function mapRow(row) {
   return {
     zoho_record_id: clean(row["ID record"]),
@@ -124,8 +151,10 @@ function mapRow(row) {
     nome_contatto: clean(row["Nome contatto"]),
     correlato_zoho_id: clean(row["Correlato a.id"]),
     correlato_nome: clean(row["Correlato a"]),
-    correlato_tipo: clean(row["Correlato a"]) ? "cliente" : null,
-    stato: clean(row.Stato) ?? "Non iniziato",
+    // Il tipo non è nel CSV: lo risolve backfill-compiti-relations.mjs
+    // confrontando l'id Zoho con leads/clienti (non indovinare "cliente").
+    correlato_tipo: null,
+    stato: normalizeStato(row.Stato),
     priorita: normalizePriority(row["Priorità"]),
     ripeti: clean(row.Ripeti),
     promemoria: toTimestamp(row.Promemoria),
@@ -177,3 +206,11 @@ for (let i = 0; i < rows.length; i += chunkSize) {
 }
 
 process.stdout.write(`\nCompiti importati/allineati: ${replaced}\n`)
+if (statiNonMappati.size > 0) {
+  process.stdout.write(
+    `ATTENZIONE — stati non mappati (importati invariati): ${[...statiNonMappati].join(", ")}\n`,
+  )
+}
+process.stdout.write(
+  "Ricordarsi di rilanciare scripts/migrations/backfill-compiti-relations.mjs dopo l'import.\n",
+)

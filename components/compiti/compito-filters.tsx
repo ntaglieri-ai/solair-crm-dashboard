@@ -15,6 +15,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -161,18 +162,20 @@ export function CompitoFilters({
           }
         />
         <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuLabel>Filtra per stato</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          {STATO_COMPITO_ORDER.map((s) => (
-            <DropdownMenuCheckboxItem
-              key={s}
-              checked={filters.stati.includes(s)}
-              onCheckedChange={() => toggleStato(s)}
-              onSelect={(e) => e.preventDefault()}
-            >
-              {s}
-            </DropdownMenuCheckboxItem>
-          ))}
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Filtra per stato</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {STATO_COMPITO_ORDER.map((s) => (
+              <DropdownMenuCheckboxItem
+                key={s}
+                checked={filters.stati.includes(s)}
+                onCheckedChange={() => toggleStato(s)}
+                onSelect={(e) => e.preventDefault()}
+              >
+                {s}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
 

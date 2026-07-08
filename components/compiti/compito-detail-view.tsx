@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   type Compito,
   type CompitoNota,
+  formatCompitoNotaData,
   isCompitoScaduto,
 } from "@/lib/mock-data"
 import { CompitoDetailHeader } from "./compito-detail-header"
@@ -60,21 +61,40 @@ export function CompitoDetailView({
   const router = useRouter()
   const [note, setNote] = useState<CompitoNota[]>(compito.Note)
   const [draft, setDraft] = useState("")
+  const [notaSaving, setNotaSaving] = useState(false)
   const scaduto = isCompitoScaduto(compito)
 
-  const addNota = () => {
-    if (!draft.trim()) return
-    const now = new Date()
-    const p = (n: number) => String(n).padStart(2, "0")
-    const nota: CompitoNota = {
-      id: `n-${Date.now()}`,
-      testo: draft.trim(),
-      autore: compito["Proprietario del compito"],
-      data: `${p(now.getDate())}/${p(now.getMonth() + 1)}/${now.getFullYear()} ${p(now.getHours())}:${p(now.getMinutes())}`,
+  const addNota = async () => {
+    const testo = draft.trim()
+    if (!testo || notaSaving) return
+    setNotaSaving(true)
+    try {
+      const res = await fetch(`/api/compiti/${compito.id}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: testo }),
+      })
+      if (!res.ok) throw new Error("Salvataggio non riuscito")
+      const saved = (await res.json()) as {
+        id: string
+        testo: string | null
+        created_at: string | null
+        autore: string | null
+      }
+      const nota: CompitoNota = {
+        id: saved.id,
+        testo: saved.testo ?? testo,
+        autore: saved.autore ?? "Utente CRM",
+        data: formatCompitoNotaData(saved.created_at ?? ""),
+      }
+      setNote((prev) => [nota, ...prev])
+      setDraft("")
+      toast.success("Nota aggiunta")
+    } catch {
+      toast.error("Errore nel salvataggio della nota")
+    } finally {
+      setNotaSaving(false)
     }
-    setNote((prev) => [nota, ...prev])
-    setDraft("")
-    toast.success("Nota aggiunta")
   }
 
   // Timeline derivata dagli eventi del compito
@@ -185,7 +205,7 @@ export function CompitoDetailView({
                     <div className="flex justify-end">
                       <Button
                         size="sm"
-                        disabled={!draft.trim()}
+                        disabled={!draft.trim() || notaSaving}
                         onClick={addNota}
                       >
                         <IconMessagePlus size={15} stroke={1.8} data-icon="inline-start" />
@@ -298,16 +318,22 @@ export function CompitoDetailView({
               </InfoRow>
               {compito["Correlato a"] && (
                 <InfoRow icon={IconLink} label="Correlato a">
-                  <Link
-                    href={
-                      compito["Correlato a"].tipo === "Lead"
-                        ? `/leads/${compito["Correlato a"].id}`
-                        : `/clienti/${compito["Correlato a"].id}`
-                    }
-                    className="font-medium text-info hover:underline"
-                  >
-                    {compito["Correlato a"].nome}
-                  </Link>
+                  {compito["Correlato a"].linkable ? (
+                    <Link
+                      href={
+                        compito["Correlato a"].tipo === "Lead"
+                          ? `/leads/${compito["Correlato a"].id}`
+                          : `/clienti/${compito["Correlato a"].id}`
+                      }
+                      className="font-medium text-info hover:underline"
+                    >
+                      {compito["Correlato a"].nome}
+                    </Link>
+                  ) : (
+                    <span className="font-medium">
+                      {compito["Correlato a"].nome}
+                    </span>
+                  )}
                   <span className="ml-1 text-xs text-muted-foreground">
                     ({compito["Correlato a"].tipo})
                   </span>

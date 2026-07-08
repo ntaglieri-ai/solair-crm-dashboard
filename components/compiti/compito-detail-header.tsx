@@ -105,16 +105,22 @@ export function CompitoDetailHeader({ compito }: { compito: Compito }) {
               {compito["Correlato a"] && (
                 <span>
                   Correlato a{" "}
-                  <Link
-                    href={
-                      compito["Correlato a"].tipo === "Lead"
-                        ? `/leads/${compito["Correlato a"].id}`
-                        : `/clienti/${compito["Correlato a"].id}`
-                    }
-                    className="font-medium text-info hover:underline"
-                  >
-                    {compito["Correlato a"].nome}
-                  </Link>
+                  {compito["Correlato a"].linkable ? (
+                    <Link
+                      href={
+                        compito["Correlato a"].tipo === "Lead"
+                          ? `/leads/${compito["Correlato a"].id}`
+                          : `/clienti/${compito["Correlato a"].id}`
+                      }
+                      className="font-medium text-info hover:underline"
+                    >
+                      {compito["Correlato a"].nome}
+                    </Link>
+                  ) : (
+                    <span className="font-medium text-foreground">
+                      {compito["Correlato a"].nome}
+                    </span>
+                  )}
                 </span>
               )}
               <span>Proprietario {compito["Proprietario del compito"]}</span>

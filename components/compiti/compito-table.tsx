@@ -210,19 +210,24 @@ export function CompitoTable({
                         />
                       )}
                     </div>
-                    {c["Correlato a"] && (
-                      <Link
-                        href={
-                          c["Correlato a"].tipo === "Lead"
-                            ? `/leads/${c["Correlato a"].id}`
-                            : `/clienti/${c["Correlato a"].id}`
-                        }
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-xs text-info hover:underline"
-                      >
-                        {c["Correlato a"].nome}
-                      </Link>
-                    )}
+                    {c["Correlato a"] &&
+                      (c["Correlato a"].linkable ? (
+                        <Link
+                          href={
+                            c["Correlato a"].tipo === "Lead"
+                              ? `/leads/${c["Correlato a"].id}`
+                              : `/clienti/${c["Correlato a"].id}`
+                          }
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-xs text-info hover:underline"
+                        >
+                          {c["Correlato a"].nome}
+                        </Link>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          {c["Correlato a"].nome}
+                        </span>
+                      ))}
                   </TableCell>
 
                   {/* Proprietario */}

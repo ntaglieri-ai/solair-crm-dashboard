@@ -2428,6 +2428,25 @@ export interface CompitoNota {
   data: string
 }
 
+/**
+ * ISO → "DD/MM/YYYY HH:mm" in Europe/Rome: stesso risultato su server e
+ * client, così le note non cambiano formato dopo il reload.
+ */
+export function formatCompitoNotaData(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ""
+  return new Intl.DateTimeFormat("it-IT", {
+    timeZone: "Europe/Rome",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+    .format(d)
+    .replace(",", "")
+}
+
 export interface Compito {
   id: string
   "ID record"?: string
@@ -2441,7 +2460,16 @@ export interface Compito {
   "Nome contatto.id"?: string
   "Nome contatto"?: string
   "Correlato a.id"?: string
-  "Correlato a": { tipo: "Lead" | "Cliente"; id: string; nome: string } | null
+  /**
+   * `linkable` è true solo quando `id` è lo uuid interno (correlato_id):
+   * con il solo id Zoho il link a /leads/{id} o /clienti/{id} darebbe 404.
+   */
+  "Correlato a": {
+    tipo: "Lead" | "Cliente"
+    id: string
+    nome: string
+    linkable?: boolean
+  } | null
   Descrizione: string
   Promemoria: string | null
   Ripeti?: string

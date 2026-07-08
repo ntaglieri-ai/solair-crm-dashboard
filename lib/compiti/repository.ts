@@ -1,11 +1,12 @@
 // Repository server-side del modulo Compiti — pattern identico a Lead/Clienti.
 // Nessun mock: tutte le query vanno su Supabase con proiezione selettiva.
 import { createClient } from "@/lib/supabase/server"
-import type {
-  Compito,
-  StatoCompito,
-  PrioritaCompito,
-  SedeLabel,
+import {
+  formatCompitoNotaData,
+  type Compito,
+  type StatoCompito,
+  type PrioritaCompito,
+  type SedeLabel,
 } from "@/lib/mock-data"
 import type {
   CompitiListParams,
@@ -114,9 +115,10 @@ function dmyToISO(dmy: string): string | null {
 }
 
 function mapRow(row: Record<string, unknown>): Compito {
-  const correlatoId =
-    (row.correlato_id as string | null) || (row.correlato_zoho_id as string | null)
-  const correlatoNome = (row.correlato_nome as string | null) || correlatoId
+  // Linkabile solo con lo uuid interno: l'id Zoho produrrebbe link 404.
+  const correlatoUuid = (row.correlato_id as string | null) || null
+  const correlatoRef = correlatoUuid || (row.correlato_zoho_id as string | null)
+  const correlatoNome = (row.correlato_nome as string | null) || correlatoRef
   const correlatoTipo = row.correlato_tipo as string | null
 
   return {
@@ -134,11 +136,12 @@ function mapRow(row: Record<string, unknown>): Compito {
     "Correlato a.id": (row.correlato_zoho_id as string) ?? "",
     Sede: (row.sede as SedeLabel) ?? ("" as SedeLabel),
     "Correlato a":
-      correlatoId
+      correlatoRef
         ? {
             tipo: correlatoTipo === "lead" ? "Lead" : "Cliente",
-            id: correlatoId,
-            nome: correlatoNome ?? correlatoId,
+            id: correlatoUuid ?? "",
+            nome: correlatoNome ?? correlatoRef,
+            linkable: Boolean(correlatoUuid),
           }
         : null,
     Descrizione: (row.descrizione as string) ?? "",
@@ -339,7 +342,40 @@ export async function getCompitoById(id: string): Promise<Compito | null> {
     error = fallback.error
   }
   if (error || !data) return null
-  return mapRow(data as unknown as Record<string, unknown>)
+  const compito = mapRow(data as unknown as Record<string, unknown>)
+
+  // Note persistite in `attivita` (stesso pattern dei Lead).
+  const notes = await supabase
+    .from("attivita")
+    .select("id,testo,created_at,utente_id")
+    .eq("record_tipo", "compito")
+    .eq("record_id", id)
+    .eq("tipo", "nota")
+    .order("created_at", { ascending: false })
+  if (notes.error) {
+    console.error("[compiti/repository] note:", notes.error.message)
+    return compito
+  }
+  const userIds = [
+    ...new Set(
+      (notes.data ?? [])
+        .map((row) => row.utente_id)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ]
+  const users = userIds.length
+    ? await supabase.from("utenti").select("id,nome").in("id", userIds)
+    : { data: [], error: null }
+  const names = new Map((users.data ?? []).map((user) => [user.id, user.nome]))
+  compito.Note = (notes.data ?? []).map((row) => ({
+    id: row.id as string,
+    testo: (row.testo as string) ?? "",
+    autore: row.utente_id
+      ? names.get(row.utente_id) ?? "Utente CRM"
+      : "Sistema",
+    data: formatCompitoNotaData((row.created_at as string) ?? ""),
+  }))
+  return compito
 }
 
 export async function createCompitoRecord(

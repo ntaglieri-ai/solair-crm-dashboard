@@ -89,6 +89,13 @@ const DB_STATI: StatoCompito[] = [
   "In attesa di input",
 ]
 
+const OPEN_STATI: StatoCompito[] = [
+  "Non iniziato",
+  "In corso",
+  "Rinviato",
+  "In attesa di input",
+]
+
 /** ISO (o YYYY-MM-DD) → DD/MM/YYYY. Restituisce "" se non valido. */
 function isoToDMY(iso: string | null): string {
   if (!iso) return ""
@@ -227,9 +234,46 @@ export async function queryCompiti(
       { data, error },
       { count, error: countError },
       { count: scadutiCount, error: scadutiError },
-    ] = await Promise.all([listQ, countQ, scadutiQ])
+      { count: absoluteTotal, error: absoluteTotalError },
+      { count: overdueTotal, error: overdueTotalError },
+      { count: highPriorityTotal, error: highPriorityTotalError },
+      { count: openTotal, error: openTotalError },
+    ] = await Promise.all([
+      listQ,
+      countQ,
+      scadutiQ,
+      supabase.from("compiti").select("id", { count: "exact", head: true }),
+      supabase
+        .from("compiti")
+        .select("id", { count: "exact", head: true })
+        .lt("scadenza", now)
+        .neq("stato", "Completato"),
+      supabase
+        .from("compiti")
+        .select("id", { count: "exact", head: true })
+        .eq("priorita", "Alto"),
+      supabase
+        .from("compiti")
+        .select("id", { count: "exact", head: true })
+        .in("stato", OPEN_STATI),
+    ])
 
-    return { data, error, count, countError, scadutiCount, scadutiError }
+    return {
+      data,
+      error,
+      count,
+      countError,
+      scadutiCount,
+      scadutiError,
+      absoluteTotal,
+      absoluteTotalError,
+      overdueTotal,
+      overdueTotalError,
+      highPriorityTotal,
+      highPriorityTotalError,
+      openTotal,
+      openTotalError,
+    }
   }
 
   let result = await run(true)
@@ -247,15 +291,30 @@ export async function queryCompiti(
     console.error("[compiti/repository] count:", result.countError.message)
   if (result.scadutiError)
     console.error("[compiti/repository] scaduti:", result.scadutiError.message)
+  if (result.absoluteTotalError)
+    console.error("[compiti/repository] absoluteTotal:", result.absoluteTotalError.message)
+  if (result.overdueTotalError)
+    console.error("[compiti/repository] overdueTotal:", result.overdueTotalError.message)
+  if (result.highPriorityTotalError)
+    console.error(
+      "[compiti/repository] highPriorityTotal:",
+      result.highPriorityTotalError.message,
+    )
+  if (result.openTotalError)
+    console.error("[compiti/repository] openTotal:", result.openTotalError.message)
 
   return {
     rows: (result.data ?? []).map((r) =>
       mapRow(r as unknown as Record<string, unknown>),
     ),
+    absoluteTotal: result.absoluteTotal ?? result.count ?? 0,
     total: result.count ?? 0,
     page: params.page,
     pageSize: params.pageSize,
     scadutiTotal: result.scadutiCount ?? 0,
+    overdueTotal: result.overdueTotal ?? result.scadutiCount ?? 0,
+    highPriorityTotal: result.highPriorityTotal ?? 0,
+    openTotal: result.openTotal ?? 0,
   }
 }
 

@@ -23,11 +23,17 @@ export interface CompitiListParams {
 
 export interface CompitiListResponse {
   rows: CompitiListItem[]
+  /** Totale assoluto dei compiti, indipendente dai filtri della vista. */
+  absoluteTotal: number
   total: number
   page: number
   pageSize: number
   /** Compiti scaduti nella query corrente (non paginati). */
   scadutiTotal: number
+  /** KPI assoluti, indipendenti dai filtri della vista. */
+  overdueTotal: number
+  highPriorityTotal: number
+  openTotal: number
 }
 
 export const INITIAL_PAGE_SIZE = 50

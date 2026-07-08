@@ -140,14 +140,31 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
   })
 
   const pageRows = data?.rows ?? initialData.rows
+  const absoluteTotal =
+    data?.absoluteTotal ?? initialData.absoluteTotal ?? data?.total ?? initialData.total
   const total = data?.total ?? initialData.total
   const scadutiTotal = data?.scadutiTotal ?? initialData.scadutiTotal
+  const overdueTotal = data?.overdueTotal ?? initialData.overdueTotal ?? scadutiTotal
+  const highPriorityTotal =
+    data?.highPriorityTotal ?? initialData.highPriorityTotal ?? 0
+  const openTotal = data?.openTotal ?? initialData.openTotal ?? 0
   const totalPages = Math.max(1, Math.ceil(total / rowsPerPage))
   const rangeStart = total === 0 ? 0 : (page - 1) * rowsPerPage + 1
   const rangeEnd = Math.min(page * rowsPerPage, total)
-  const pageCompleted = pageRows.filter((item) => item.Stato === "Completato").length
-  const pageHighPriority = pageRows.filter((item) => item.Priorità === "Alto").length
-  const pageOpen = pageRows.length - pageCompleted
+  const hasOpenStateFilter =
+    filters.stati.length === OPEN_TASK_STATI.length &&
+    OPEN_TASK_STATI.every((stato) => filters.stati.includes(stato))
+  const isOverdueFilterActive = hasOpenStateFilter && Boolean(filters.scadenzaA)
+  const isHighPriorityFilterActive = filters.priorita === "Alto"
+  const isOpenFilterActive = hasOpenStateFilter && !filters.scadenzaA
+  const hasActiveFilters =
+    filters.search.trim().length > 0 ||
+    filters.stati.length > 0 ||
+    filters.priorita !== "all" ||
+    filters.proprietario !== "all" ||
+    filters.sede !== "all" ||
+    Boolean(filters.scadenzaDa) ||
+    Boolean(filters.scadenzaA)
 
   // --- Mutations ---
   const createCompito = useCreateCompito()
@@ -436,7 +453,19 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
       </div>
 
       <div className="grid gap-3 xl:grid-cols-4">
-        <div className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white p-5 shadow-sm">
+        <button
+          type="button"
+          onClick={() => {
+            if (hasActiveFilters) handleReset()
+          }}
+          aria-disabled={!hasActiveFilters}
+          className={cn(
+            "rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white p-5 text-left shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400",
+            hasActiveFilters
+              ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-md ring-2 ring-blue-200"
+              : "cursor-default",
+          )}
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">
               Carico operativo
@@ -444,18 +473,18 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
             <Sparkles className="size-5 text-blue-600" />
           </div>
           <p className="mt-4 text-4xl font-black tabular-nums text-slate-950">
-            {total.toLocaleString("it-IT")}
+            {absoluteTotal.toLocaleString("it-IT")}
           </p>
           <p className="mt-1 text-sm font-medium text-slate-600">
             task totali
           </p>
-        </div>
+        </button>
         <button
           type="button"
           onClick={showOverdueTasks}
           className={cn(
             "rounded-2xl border border-red-200 bg-gradient-to-br from-red-50 to-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400",
-            filters.scadenzaA && filters.stati.length > 0 && "ring-2 ring-red-300",
+            isOverdueFilterActive && "ring-2 ring-red-300",
           )}
         >
           <div className="flex items-center justify-between">
@@ -465,7 +494,7 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
             <AlertTriangle className="size-5 text-red-600" />
           </div>
           <p className="mt-4 text-4xl font-black tabular-nums text-red-700">
-            {scadutiTotal.toLocaleString("it-IT")}
+            {overdueTotal.toLocaleString("it-IT")}
           </p>
           <p className="mt-1 text-sm font-medium text-slate-600">
             scaduti non completati
@@ -476,7 +505,7 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
           onClick={showHighPriorityTasks}
           className={cn(
             "rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400",
-            filters.priorita === "Alto" && "ring-2 ring-amber-300",
+            isHighPriorityFilterActive && "ring-2 ring-amber-300",
           )}
         >
           <div className="flex items-center justify-between">
@@ -486,7 +515,7 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
             <CalendarClock className="size-5 text-amber-600" />
           </div>
           <p className="mt-4 text-4xl font-black tabular-nums text-amber-700">
-            {pageHighPriority.toLocaleString("it-IT")}
+            {highPriorityTotal.toLocaleString("it-IT")}
           </p>
           <p className="mt-1 text-sm font-medium text-slate-600">
             mostra priorità alta
@@ -497,10 +526,7 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
           onClick={showOpenTasks}
           className={cn(
             "rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400",
-            filters.stati.length === OPEN_TASK_STATI.length &&
-              OPEN_TASK_STATI.every((stato) => filters.stati.includes(stato)) &&
-              !filters.scadenzaA &&
-              "ring-2 ring-emerald-300",
+            isOpenFilterActive && "ring-2 ring-emerald-300",
           )}
         >
           <div className="flex items-center justify-between">
@@ -510,7 +536,7 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
             <CheckCircle2 className="size-5 text-emerald-600" />
           </div>
           <p className="mt-4 text-4xl font-black tabular-nums text-emerald-700">
-            {pageOpen.toLocaleString("it-IT")}
+            {openTotal.toLocaleString("it-IT")}
           </p>
           <p className="mt-1 text-sm font-medium text-slate-600">
             mostra task aperti

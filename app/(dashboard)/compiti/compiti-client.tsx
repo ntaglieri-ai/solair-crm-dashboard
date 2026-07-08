@@ -81,6 +81,13 @@ const SAVED_VIEWS: Record<string, string> = {
   overdue: "Compiti scaduti",
 }
 
+const OPEN_TASK_STATI: StatoCompito[] = [
+  "Non iniziato",
+  "In corso",
+  "Rinviato",
+  "In attesa di input",
+]
+
 type ViewMode = "lista" | "kanban"
 
 interface CompitiClientProps {
@@ -159,6 +166,39 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
     setFilters(DEFAULT_COMPITO_FILTERS)
     setPage(1)
     setSelected(new Set())
+  }
+
+  const applyQuickFilter = (next: Partial<CompitoFilterState>) => {
+    setFilters({ ...DEFAULT_COMPITO_FILTERS, ...next })
+    setPage(1)
+    setSelected(new Set())
+  }
+
+  const todayIso = () => {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, "0")
+    const day = String(now.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
+  }
+
+  const showOverdueTasks = () => {
+    applyQuickFilter({
+      stati: OPEN_TASK_STATI,
+      scadenzaA: todayIso(),
+    })
+  }
+
+  const showHighPriorityTasks = () => {
+    applyQuickFilter({
+      priorita: "Alto",
+    })
+  }
+
+  const showOpenTasks = () => {
+    applyQuickFilter({
+      stati: OPEN_TASK_STATI,
+    })
   }
 
   const handleSort = (col: CompitoSortKey) => {
@@ -407,10 +447,17 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
             {total.toLocaleString("it-IT")}
           </p>
           <p className="mt-1 text-sm font-medium text-slate-600">
-            compiti importati dal CRM
+            task totali
           </p>
         </div>
-        <div className="rounded-2xl border border-red-200 bg-gradient-to-br from-red-50 to-white p-5 shadow-sm">
+        <button
+          type="button"
+          onClick={showOverdueTasks}
+          className={cn(
+            "rounded-2xl border border-red-200 bg-gradient-to-br from-red-50 to-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400",
+            filters.scadenzaA && filters.stati.length > 0 && "ring-2 ring-red-300",
+          )}
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-[0.16em] text-red-700">
               Attenzione
@@ -423,11 +470,18 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
           <p className="mt-1 text-sm font-medium text-slate-600">
             scaduti non completati
           </p>
-        </div>
-        <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm">
+        </button>
+        <button
+          type="button"
+          onClick={showHighPriorityTasks}
+          className={cn(
+            "rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400",
+            filters.priorita === "Alto" && "ring-2 ring-amber-300",
+          )}
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">
-              Pagina corrente
+              Priorità
             </span>
             <CalendarClock className="size-5 text-amber-600" />
           </div>
@@ -435,10 +489,20 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
             {pageHighPriority.toLocaleString("it-IT")}
           </p>
           <p className="mt-1 text-sm font-medium text-slate-600">
-            priorità alta visibili
+            mostra priorità alta
           </p>
-        </div>
-        <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 shadow-sm">
+        </button>
+        <button
+          type="button"
+          onClick={showOpenTasks}
+          className={cn(
+            "rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400",
+            filters.stati.length === OPEN_TASK_STATI.length &&
+              OPEN_TASK_STATI.every((stato) => filters.stati.includes(stato)) &&
+              !filters.scadenzaA &&
+              "ring-2 ring-emerald-300",
+          )}
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
               Avanzamento
@@ -449,9 +513,9 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
             {pageOpen.toLocaleString("it-IT")}
           </p>
           <p className="mt-1 text-sm font-medium text-slate-600">
-            aperti in questa vista
+            mostra task aperti
           </p>
-        </div>
+        </button>
       </div>
 
       {/* Barra filtri */}

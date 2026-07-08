@@ -21,6 +21,7 @@ export function DataTableShell({
   minTableWidth = "100%",
   className,
   tableClassName,
+  alwaysShowVerticalScrollbar = false,
   onScroll,
 }: {
   children: ReactNode
@@ -28,6 +29,7 @@ export function DataTableShell({
   minTableWidth?: number | string
   className?: string
   tableClassName?: string
+  alwaysShowVerticalScrollbar?: boolean
   onScroll?: (el: HTMLDivElement) => void
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -96,7 +98,11 @@ export function DataTableShell({
           const delta = shiftedWheel ? event.deltaY : event.deltaX
           el.scrollLeft += delta * 0.72
         }}
-        className={SCROLLER_CLASS}
+        className={cn(
+          SCROLLER_CLASS,
+          alwaysShowVerticalScrollbar &&
+            "overflow-y-scroll [scrollbar-gutter:stable]",
+        )}
       >
         <table
           data-slot="table"

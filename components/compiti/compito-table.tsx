@@ -88,6 +88,7 @@ export function CompitoTable({
     <DataTableShell
       ariaLabel="Tabella compiti"
       minTableWidth={tableWidth}
+      alwaysShowVerticalScrollbar
       onScroll={(el) => setStuck(el.scrollTop > 0)}
     >
       <colgroup>

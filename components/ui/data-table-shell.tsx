@@ -69,7 +69,7 @@ export function DataTableShell({
   return (
     <div
       className={cn(
-        "flex h-[calc(100svh-17rem)] min-h-[360px] flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card",
+        "flex h-[calc(100svh-17rem)] min-h-[360px] max-h-[720px] flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card",
         className,
       )}
     >

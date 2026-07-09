@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { createClient } from "@supabase/supabase-js"
 
 const DEFAULT_ZIP = "/Users/imacnando/Downloads/Compiti_2026_07_07.zip"
@@ -211,6 +212,16 @@ if (statiNonMappati.size > 0) {
     `ATTENZIONE — stati non mappati (importati invariati): ${[...statiNonMappati].join(", ")}\n`,
   )
 }
-process.stdout.write(
-  "Ricordarsi di rilanciare scripts/migrations/backfill-compiti-relations.mjs dopo l'import.\n",
-)
+
+// Il delete+reinsert azzera correlato_id/proprietario_id ad ogni run: il
+// backfill va quindi rilanciato automaticamente, non solo ricordato a voce.
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const backfillPath = path.join(scriptDir, "migrations", "backfill-compiti-relations.mjs")
+process.stdout.write("\nEsecuzione backfill relazioni compiti…\n")
+const backfill = spawnSync(process.execPath, [backfillPath, "--apply"], {
+  stdio: "inherit",
+  env: { ...process.env, ...env },
+})
+if (backfill.status !== 0) {
+  throw new Error("Backfill relazioni compiti non riuscito dopo l'import")
+}

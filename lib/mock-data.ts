@@ -1826,6 +1826,18 @@ export interface ClienteRecord {
   // --- Provvigioni ---
   "Codice rintracciabilità"?: string
   "Stato Provvigione"?: string
+
+  // --- Compiti collegati (record_tipo/correlato_tipo = "cliente") ---
+  compiti?: ClienteCompito[]
+}
+
+export interface ClienteCompito {
+  id: string
+  oggetto: string
+  scadenza: string
+  priorita: string
+  assegnato: string
+  stato: StatoCompito
 }
 
 export type ClienteColumnId = Exclude<keyof ClienteRecord, "id">
@@ -2465,7 +2477,7 @@ export interface Compito {
    * con il solo id Zoho il link a /leads/{id} o /clienti/{id} darebbe 404.
    */
   "Correlato a": {
-    tipo: "Lead" | "Cliente"
+    tipo: "Lead" | "Cliente" | "Scadenza"
     id: string
     nome: string
     linkable?: boolean
@@ -2492,6 +2504,14 @@ export const STATO_COMPITO_ORDER: StatoCompito[] = [
   "Rinviato",
   "In attesa di input",
   "Completato",
+]
+
+// Stati considerati "aperti" — condiviso tra modulo Compiti, Lead e Clienti.
+export const OPEN_TASK_STATI: StatoCompito[] = [
+  "Non iniziato",
+  "In corso",
+  "Rinviato",
+  "In attesa di input",
 ]
 
 export const STATO_COMPITO_TONE: Record<StatoCompito, string> = {

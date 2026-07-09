@@ -33,8 +33,24 @@ import {
   SEDE_LABELS,
 } from "@/lib/mock-data"
 import { useCompitiReferenceData, useUpdateCompito } from "@/lib/compiti/hooks"
+import {
+  CorrelatoPicker,
+  type CorrelatoTipo,
+  type CorrelatoValue,
+} from "@/components/shared/correlato-picker"
+import { correlatoTipoLabel } from "./compito-utils"
 
-function formatDMY(iso: string): string {
+function correlatoValueFromCompito(compito?: Compito): CorrelatoValue | null {
+  const correlato = compito?.["Correlato a"]
+  if (!correlato) return null
+  return {
+    tipo: correlato.tipo.toLowerCase() as CorrelatoTipo,
+    id: correlato.id,
+    nome: correlato.nome,
+  }
+}
+
+export function formatDMY(iso: string): string {
   if (!iso) return ""
   const [y, m, d] = iso.split("-")
   if (!y || !m || !d) return ""
@@ -86,6 +102,7 @@ export function CompitoFormDialog({
   const [proprietarioId, setProprietarioId] = useState("")
   const [sede, setSede] = useState<SedeLabel>(SEDE_LABELS[0])
   const [descrizione, setDescrizione] = useState("")
+  const [correlato, setCorrelato] = useState<CorrelatoValue | null>(null)
 
   // In modifica il fallback è il proprietario attuale del compito (i
   // riferimenti arrivano in async): finché l'utente non riseleziona, la PATCH
@@ -106,6 +123,7 @@ export function CompitoFormDialog({
     setProprietarioId("")
     setSede(SEDE_LABELS[0])
     setDescrizione("")
+    setCorrelato(null)
   }
 
   // Precompila i campi ad ogni apertura in modalità modifica.
@@ -119,6 +137,7 @@ export function CompitoFormDialog({
       setSede(compito.Sede)
       setDescrizione(compito.Descrizione)
       setProprietarioId("")
+      setCorrelato(correlatoValueFromCompito(compito))
     }
     wasOpen.current = open
   }, [open, compito])
@@ -134,7 +153,14 @@ export function CompitoFormDialog({
       "Proprietario del compito": proprietario.nome,
       "Proprietario del compito.id": proprietario.zoho_id,
       Sede: sede,
-      "Correlato a": null,
+      "Correlato a": correlato
+        ? {
+            tipo: correlatoTipoLabel(correlato.tipo),
+            id: correlato.id,
+            nome: correlato.nome,
+            linkable: true,
+          }
+        : null,
       Descrizione: descrizione.trim(),
       Promemoria: null,
       "Data di creazione": stampNow(),
@@ -165,6 +191,20 @@ export function CompitoFormDialog({
     if (sede !== compito.Sede) patch.Sede = sede
     if (descrizione.trim() !== compito.Descrizione)
       patch.Descrizione = descrizione.trim()
+    const originalCorrelato = correlatoValueFromCompito(compito)
+    const correlatoChanged =
+      (correlato?.id ?? null) !== (originalCorrelato?.id ?? null) ||
+      (correlato?.tipo ?? null) !== (originalCorrelato?.tipo ?? null)
+    if (correlatoChanged) {
+      patch["Correlato a"] = correlato
+        ? {
+            tipo: correlatoTipoLabel(correlato.tipo),
+            id: correlato.id,
+            nome: correlato.nome,
+            linkable: true,
+          }
+        : null
+    }
 
     if (Object.keys(patch).length === 0) {
       onOpenChange(false)
@@ -307,6 +347,11 @@ export function CompitoFormDialog({
                 </SelectGroup>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label>Correlato a</Label>
+            <CorrelatoPicker value={correlato} onSelect={setCorrelato} />
           </div>
 
           <div className="flex flex-col gap-1.5">

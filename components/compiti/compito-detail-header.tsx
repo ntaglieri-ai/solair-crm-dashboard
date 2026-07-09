@@ -16,7 +16,7 @@ import {
   IconPencil,
   IconTrash,
 } from "@tabler/icons-react"
-import { StatoBadge, PrioritaBadge, CompitoAvatar } from "./compito-utils"
+import { StatoBadge, PrioritaBadge, CompitoAvatar, correlatoHref } from "./compito-utils"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -146,11 +146,7 @@ export function CompitoDetailHeader({ compito }: { compito: Compito }) {
                   Correlato a{" "}
                   {compito["Correlato a"].linkable ? (
                     <Link
-                      href={
-                        compito["Correlato a"].tipo === "Lead"
-                          ? `/leads/${compito["Correlato a"].id}`
-                          : `/clienti/${compito["Correlato a"].id}`
-                      }
+                      href={correlatoHref(compito["Correlato a"])}
                       className="font-medium text-info hover:underline"
                     >
                       {compito["Correlato a"].nome}

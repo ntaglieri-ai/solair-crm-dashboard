@@ -53,6 +53,7 @@ import {
 } from "@/lib/mock-data"
 import { TagPicker } from "./tag-controls"
 import { useTags } from "@/lib/tag-store"
+import { formatDMY } from "@/components/compiti/new-compito-dialog"
 
 const STATI: StatoLead[] = [
   "Non contattato",
@@ -148,15 +149,21 @@ export function LeadRowContextMenu({
     if (!taskTitle.trim()) return
     setSaving(true)
     try {
-      const response = await fetch(`/api/leads/${lead.id}/tasks`, {
+      const response = await fetch(`/api/compiti`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: taskTitle,
-          dueDate: taskDueDate || null,
-          priority: taskPriority,
-          ownerId: lead["Lead Proprietario"] || null,
-          sede: lead.Sede || null,
+          Oggetto: taskTitle,
+          Stato: "Non iniziato",
+          Priorità: taskPriority,
+          "Data di scadenza": taskDueDate ? formatDMY(taskDueDate) : "",
+          Sede: lead.Sede || undefined,
+          "Correlato a": {
+            tipo: "Lead",
+            id: lead.id,
+            nome: lead["Nome Lead"],
+            linkable: true,
+          },
         }),
       })
       if (!response.ok) throw new Error()

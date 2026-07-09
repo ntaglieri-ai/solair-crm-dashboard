@@ -24,7 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { type Compito, isCompitoScaduto } from "@/lib/mock-data"
-import { StatoBadge, PrioritaBadge, CompitoAvatar } from "./compito-utils"
+import { StatoBadge, PrioritaBadge, CompitoAvatar, correlatoHref } from "./compito-utils"
 
 export type SortDir = "asc" | "desc"
 export type CompitoSortKey =
@@ -214,11 +214,7 @@ export function CompitoTable({
                     {c["Correlato a"] &&
                       (c["Correlato a"].linkable ? (
                         <Link
-                          href={
-                            c["Correlato a"].tipo === "Lead"
-                              ? `/leads/${c["Correlato a"].id}`
-                              : `/clienti/${c["Correlato a"].id}`
-                          }
+                          href={correlatoHref(c["Correlato a"])}
                           onClick={(e) => e.stopPropagation()}
                           className="text-xs text-info hover:underline"
                         >

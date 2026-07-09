@@ -61,9 +61,11 @@ import {
 import { cn } from "@/lib/utils"
 import {
   type Lead,
+  type Compito,
   STATO_LEAD_ORDER,
 } from "@/lib/mock-data"
 import { LeadAvatar } from "./lead-utils"
+import { QuickCompitoDialog } from "@/components/compiti/quick-compito-dialog"
 
 /* ---------- Sezione collassabile ---------- */
 
@@ -737,14 +739,20 @@ function TaskRow({
   )
 }
 
-function AttivitaAperte({ lead }: { lead: Lead }) {
-  const [tasks, setTasks] = useState<Task[]>(() =>
-    (lead.compiti ?? []).filter((task) => !task.completato).map((task) => ({
-      ...task,
-      priorita: task.priorita === "Alto" ? "Alta" : task.priorita === "Basso" ? "Bassa" : "Media",
-    } as Task)),
-  )
+function taskFromLeadTask(task: NonNullable<Lead["compiti"]>[number]): Task {
+  return {
+    ...task,
+    priorita: task.priorita === "Alto" ? "Alta" : task.priorita === "Basso" ? "Bassa" : "Media",
+  } as Task
+}
 
+function AttivitaAperte({
+  tasks,
+  onToggle,
+}: {
+  tasks: Task[]
+  onToggle: (id: string) => void
+}) {
   return (
     <ul className="flex flex-col gap-2">
       {tasks.length === 0 ? (
@@ -753,17 +761,7 @@ function AttivitaAperte({ lead }: { lead: Lead }) {
         </li>
       ) : null}
       {tasks.map((t) => (
-        <TaskRow
-          key={t.id}
-          task={t}
-          onToggle={() =>
-            setTasks((prev) =>
-              prev.map((x) =>
-                x.id === t.id ? { ...x, completato: !x.completato } : x,
-              ),
-            )
-          }
-        />
+        <TaskRow key={t.id} task={t} onToggle={() => onToggle(t.id)} />
       ))}
     </ul>
   )
@@ -1123,10 +1121,39 @@ function SequenzaTemporale({ lead }: { lead: Lead }) {
 /* ---------- Componente principale ---------- */
 
 export function LeadDetailContent({ lead }: { lead: Lead }) {
+  const [openTasks, setOpenTasks] = useState<Task[]>(() =>
+    (lead.compiti ?? []).filter((task) => !task.completato).map(taskFromLeadTask),
+  )
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false)
+
+  const toggleOpenTask = (id: string) =>
+    setOpenTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, completato: !t.completato } : t)),
+    )
+
+  const handleTaskCreated = (compito: Compito) => {
+    setOpenTasks((prev) => [
+      {
+        id: compito.id,
+        oggetto: compito.Oggetto,
+        scadenza: compito["Data di scadenza"],
+        priorita:
+          compito.Priorità === "Alto"
+            ? "Alta"
+            : compito.Priorità === "Basso"
+              ? "Bassa"
+              : "Media",
+        assegnato: compito["Proprietario del compito"],
+        completato: false,
+      },
+      ...prev,
+    ])
+  }
+
   const counts: Record<string, number> = {
     "section-note": 1,
     "section-allegati": lead.documenti?.length ?? 0,
-    "section-attivita-aperte": lead.leadCaldo ? 2 : 1,
+    "section-attivita-aperte": openTasks.length,
     "section-attivita-chiuse": 1,
     "section-email": 1,
     "section-record": lead["Account convertito"] ? 1 : 0,
@@ -1208,18 +1235,14 @@ export function LeadDetailContent({ lead }: { lead: Lead }) {
             size="sm"
             variant="outline"
             className="h-7 bg-card text-xs"
-            onClick={() =>
-              toast.info("Nuovo compito", {
-                description: "Compila i campi e salva.",
-              })
-            }
+            onClick={() => setTaskDialogOpen(true)}
           >
             <IconPlus size={14} stroke={1.8} data-icon="inline-start" />
             Compito
           </Button>
         }
       >
-        <AttivitaAperte lead={lead} />
+        <AttivitaAperte tasks={openTasks} onToggle={toggleOpenTask} />
       </Section>
 
       <Section
@@ -1246,6 +1269,13 @@ export function LeadDetailContent({ lead }: { lead: Lead }) {
       <Section id="section-timeline" title="Sequenza temporale" icon={IconTimeline}>
         <SequenzaTemporale lead={lead} />
       </Section>
+
+      <QuickCompitoDialog
+        open={taskDialogOpen}
+        onOpenChange={setTaskDialogOpen}
+        correlato={{ tipo: "lead", id: lead.id, nome: lead["Nome Lead"] }}
+        onCreated={handleTaskCreated}
+      />
     </div>
   )
 }

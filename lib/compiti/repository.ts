@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import {
   formatCompitoNotaData,
+  OPEN_TASK_STATI,
   type Compito,
   type StatoCompito,
   type PrioritaCompito,
@@ -90,12 +91,7 @@ const DB_STATI: StatoCompito[] = [
   "In attesa di input",
 ]
 
-const OPEN_STATI: StatoCompito[] = [
-  "Non iniziato",
-  "In corso",
-  "Rinviato",
-  "In attesa di input",
-]
+const OPEN_STATI: StatoCompito[] = OPEN_TASK_STATI
 
 /** ISO (o YYYY-MM-DD) → DD/MM/YYYY. Restituisce "" se non valido. */
 function isoToDMY(iso: string | null): string {
@@ -138,7 +134,12 @@ function mapRow(row: Record<string, unknown>): Compito {
     "Correlato a":
       correlatoRef
         ? {
-            tipo: correlatoTipo === "lead" ? "Lead" : "Cliente",
+            tipo:
+              correlatoTipo === "lead"
+                ? "Lead"
+                : correlatoTipo === "scadenza"
+                  ? "Scadenza"
+                  : "Cliente",
             id: correlatoUuid ?? "",
             nome: correlatoNome ?? correlatoRef,
             linkable: Boolean(correlatoUuid),
@@ -397,7 +398,8 @@ export async function createCompitoRecord(
       descrizione: body.Descrizione || null,
       nome_contatto_zoho_id: body["Nome contatto.id"] || null,
       nome_contatto: body["Nome contatto"] || null,
-      correlato_zoho_id: body["Correlato a.id"] || body["Correlato a"]?.id || null,
+      correlato_id: body["Correlato a"]?.id || null,
+      correlato_zoho_id: body["Correlato a.id"] || null,
       correlato_nome: body["Correlato a"]?.nome || null,
       correlato_tipo: body["Correlato a"]?.tipo.toLowerCase() || null,
       ripeti: body.Ripeti || null,
@@ -450,7 +452,7 @@ export async function updateCompitoRecord(
   if (patch.Tag !== undefined) row.tag = patch.Tag
   if (patch.Locked !== undefined) row.locked = patch.Locked
   if (patch["Correlato a"] !== undefined) {
-    row.correlato_zoho_id = patch["Correlato a"]?.id ?? null
+    row.correlato_id = patch["Correlato a"]?.id ?? null
     row.correlato_nome = patch["Correlato a"]?.nome ?? null
     row.correlato_tipo = patch["Correlato a"]?.tipo.toLowerCase() ?? null
   }

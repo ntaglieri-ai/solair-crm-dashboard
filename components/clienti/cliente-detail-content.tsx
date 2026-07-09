@@ -36,8 +36,9 @@ import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
-import { type ClienteRecord } from "@/lib/mock-data"
+import { type ClienteRecord, type Compito, OPEN_TASK_STATI } from "@/lib/mock-data"
 import { ClienteAvatar } from "./cliente-utils"
+import { QuickCompitoDialog } from "@/components/compiti/quick-compito-dialog"
 
 /* ---------- Helpers ---------- */
 
@@ -937,36 +938,28 @@ function NoteSection({ cliente }: { cliente: ClienteRecord }) {
 
 /* ---------- Attività ---------- */
 
-interface Task {
-  id: string
-  oggetto: string
-  scadenza: string
-  assegnato: string
-  completato: boolean
-}
-
 function Attivita({ cliente }: { cliente: ClienteRecord }) {
   const [tab, setTab] = useState<"aperte" | "chiuse">("aperte")
-  const owner = cliente["Clienti Proprietario"] ?? "Non assegnato"
-  const [aperte, setAperte] = useState<Task[]>([
-    {
-      id: "a1",
-      oggetto: "Verifica avanzamento pratica",
-      scadenza: "Da pianificare",
-      assegnato: owner,
-      completato: false,
-    },
-  ])
-  const chiuse: Task[] = [
-    {
-      id: "c1",
-      oggetto: "Firma contratto digitale",
-      scadenza: "completato",
-      assegnato: owner,
-      completato: true,
-    },
-  ]
+  const [tasks, setTasks] = useState(cliente.compiti ?? [])
+  const [dialogOpen, setDialogOpen] = useState(false)
+
+  const aperte = tasks.filter((t) => OPEN_TASK_STATI.includes(t.stato))
+  const chiuse = tasks.filter((t) => !OPEN_TASK_STATI.includes(t.stato))
   const list = tab === "aperte" ? aperte : chiuse
+
+  const handleCreated = (compito: Compito) => {
+    setTasks((prev) => [
+      {
+        id: compito.id,
+        oggetto: compito.Oggetto,
+        scadenza: compito["Data di scadenza"],
+        priorita: compito.Priorità,
+        assegnato: compito["Proprietario del compito"],
+        stato: compito.Stato,
+      },
+      ...prev,
+    ])
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -992,36 +985,36 @@ function Attivita({ cliente }: { cliente: ClienteRecord }) {
           size="sm"
           variant="outline"
           className="h-7 bg-card text-xs"
-          onClick={() => toast.info("Nuovo compito", { description: "Compila i campi e salva." })}
+          onClick={() => setDialogOpen(true)}
         >
           <IconPlus size={14} stroke={1.8} data-icon="inline-start" />
           Compito
         </Button>
       </div>
       <ul className="flex flex-col gap-2">
+        {list.length === 0 ? (
+          <li className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
+            Nessuna attività {tab === "aperte" ? "aperta" : "chiusa"}.
+          </li>
+        ) : null}
         {list.map((t) => (
           <li
             key={t.id}
             className={cn(
               "flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5",
-              t.completato && "opacity-60",
+              tab === "chiuse" && "opacity-60",
             )}
           >
             <Checkbox
-              checked={t.completato}
-              disabled={tab === "chiuse"}
-              onCheckedChange={() =>
-                setAperte((prev) =>
-                  prev.map((x) => (x.id === t.id ? { ...x, completato: !x.completato } : x)),
-                )
-              }
-              aria-label="Segna completato"
+              checked={tab === "chiuse"}
+              disabled
+              aria-label="Stato compito"
             />
             <div className="flex min-w-0 flex-1 flex-col">
               <span
                 className={cn(
                   "text-[13px] font-medium text-foreground",
-                  t.completato && "line-through",
+                  tab === "chiuse" && "line-through",
                 )}
               >
                 {t.oggetto}
@@ -1029,7 +1022,7 @@ function Attivita({ cliente }: { cliente: ClienteRecord }) {
               <span className="flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
                   <IconCalendarEvent size={13} stroke={1.8} />
-                  {t.scadenza}
+                  {t.scadenza || "Da pianificare"}
                 </span>
                 <span className="text-border">·</span>
                 {t.assegnato}
@@ -1038,6 +1031,12 @@ function Attivita({ cliente }: { cliente: ClienteRecord }) {
           </li>
         ))}
       </ul>
+      <QuickCompitoDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        correlato={{ tipo: "cliente", id: cliente.id, nome: cliente["Nome Clienti"] }}
+        onCreated={handleCreated}
+      />
     </div>
   )
 }

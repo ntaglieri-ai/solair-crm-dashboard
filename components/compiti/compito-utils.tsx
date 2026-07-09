@@ -3,11 +3,41 @@
 import {
   type StatoCompito,
   type PrioritaCompito,
+  type Compito,
   STATO_COMPITO_TONE,
   PRIORITA_COMPITO_TONE,
   compitoInitials,
 } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
+import type { CorrelatoTipo } from "@/components/shared/correlato-picker"
+
+/** Percorso di dettaglio per il record "Correlato a" di un compito. */
+export function correlatoHref(correlato: NonNullable<Compito["Correlato a"]>): string {
+  switch (correlato.tipo) {
+    case "Lead":
+      return `/leads/${correlato.id}`
+    case "Scadenza":
+      return `/scadenze/${correlato.id}`
+    case "Cliente":
+    default:
+      return `/clienti/${correlato.id}`
+  }
+}
+
+/** Converte il tipo minuscolo di CorrelatoPicker/API nel formato del Compito. */
+export function correlatoTipoLabel(
+  tipo: CorrelatoTipo,
+): NonNullable<Compito["Correlato a"]>["tipo"] {
+  switch (tipo) {
+    case "lead":
+      return "Lead"
+    case "scadenza":
+      return "Scadenza"
+    case "cliente":
+    default:
+      return "Cliente"
+  }
+}
 
 /** Badge stato compito con tono colorato da token design. */
 export function StatoBadge({

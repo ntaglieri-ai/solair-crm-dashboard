@@ -1,7 +1,7 @@
 // Repository server-side del modulo Clienti — pattern identico a Lead.
 // Nessun mock: tutte le query vanno su Supabase con proiezione selettiva.
 import { createClient } from "@/lib/supabase/server"
-import type { ClienteRecord, SedeLabel, StatoCliente } from "@/lib/mock-data"
+import type { ClienteRecord, SedeLabel, StatoCliente, StatoCompito } from "@/lib/mock-data"
 import type {
   ClientiListParams,
   ClientiListResponse,
@@ -160,6 +160,43 @@ export async function queryClienti(
   }
 }
 
+async function attachCompiti(
+  cliente: ClienteRecord,
+  id: string,
+): Promise<ClienteRecord> {
+  const supabase = await createClient()
+  const taskResult = await supabase
+    .from("compiti")
+    .select("id,oggetto,scadenza,priorita,stato,proprietario_id")
+    .eq("correlato_tipo", "cliente")
+    .eq("correlato_id", id)
+    .order("scadenza", { ascending: true })
+
+  const ownerIds = [
+    ...new Set(
+      (taskResult.data ?? [])
+        .map((row) => row.proprietario_id)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ]
+  const usersResult = ownerIds.length
+    ? await supabase.from("utenti").select("id,nome").in("id", ownerIds)
+    : { data: [] }
+  const names = new Map((usersResult.data ?? []).map((user) => [user.id, user.nome]))
+
+  cliente.compiti = (taskResult.data ?? []).map((row) => ({
+    id: row.id as string,
+    oggetto: (row.oggetto as string) ?? "",
+    scadenza: (row.scadenza as string) ?? "",
+    priorita: (row.priorita as string) ?? "Medio",
+    assegnato: row.proprietario_id
+      ? names.get(row.proprietario_id as string) ?? "Non assegnato"
+      : "Non assegnato",
+    stato: (row.stato as StatoCompito) ?? "Non iniziato",
+  }))
+  return cliente
+}
+
 export async function getClienteById(
   id: string,
 ): Promise<ClienteRecord | null> {
@@ -171,7 +208,8 @@ export async function getClienteById(
     .single()
 
   if (!detailResult.error && detailResult.data) {
-    return mapRow(detailResult.data as unknown as Record<string, unknown>)
+    const cliente = mapRow(detailResult.data as unknown as Record<string, unknown>)
+    return attachCompiti(cliente, id)
   }
 
   const { data, error } = await supabase
@@ -180,7 +218,8 @@ export async function getClienteById(
     .eq("id", id)
     .single()
   if (error || !data) return null
-  return mapRow(data as unknown as Record<string, unknown>)
+  const cliente = mapRow(data as unknown as Record<string, unknown>)
+  return attachCompiti(cliente, id)
 }
 
 export async function createClienteRecord(

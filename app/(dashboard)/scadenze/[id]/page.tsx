@@ -2,7 +2,8 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { ChevronRight } from "lucide-react"
 import { requirePage } from "@/lib/permissions/server"
-import { getScadenzaById } from "@/lib/scadenze/repository"
+import { getScadenzaById, getScadenzaCompiti } from "@/lib/scadenze/repository"
+import { ScadenzaCompitiSection } from "@/components/scadenze/scadenza-compiti-section"
 
 function value(text: string | null) {
   return text?.trim() || "—"
@@ -23,7 +24,10 @@ export default async function ScadenzaDetailPage({
 }) {
   await requirePage("scadenze")
   const { id } = await params
-  const scadenza = await getScadenzaById(id)
+  const [scadenza, compiti] = await Promise.all([
+    getScadenzaById(id),
+    getScadenzaCompiti(id),
+  ])
   if (!scadenza) notFound()
 
   const connectedHref =
@@ -82,6 +86,12 @@ export default async function ScadenzaDetailPage({
           </div>
         </dl>
       </section>
+
+      <ScadenzaCompitiSection
+        scadenzaId={scadenza.id}
+        scadenzaNome={scadenza.nome}
+        initialCompiti={compiti}
+      />
     </div>
   )
 }

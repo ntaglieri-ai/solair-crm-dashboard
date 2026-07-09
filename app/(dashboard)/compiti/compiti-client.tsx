@@ -35,7 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { type Compito, type StatoCompito } from "@/lib/mock-data"
+import { type Compito, type StatoCompito, OPEN_TASK_STATI } from "@/lib/mock-data"
 import {
   CompitoFilters,
   DEFAULT_COMPITO_FILTERS,
@@ -75,13 +75,6 @@ const ROWS_ITEMS: Record<string, string> = {
   "30": "30 righe",
   "50": "50 righe",
 }
-
-const OPEN_TASK_STATI: StatoCompito[] = [
-  "Non iniziato",
-  "In corso",
-  "Rinviato",
-  "In attesa di input",
-]
 
 type ViewMode = "lista" | "kanban"
 

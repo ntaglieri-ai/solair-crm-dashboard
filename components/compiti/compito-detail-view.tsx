@@ -24,7 +24,7 @@ import {
   isCompitoScaduto,
 } from "@/lib/mock-data"
 import { CompitoDetailHeader } from "./compito-detail-header"
-import { StatoBadge, PrioritaBadge, CompitoAvatar } from "./compito-utils"
+import { StatoBadge, PrioritaBadge, CompitoAvatar, correlatoHref } from "./compito-utils"
 
 function InfoRow({
   icon: Icon,
@@ -284,11 +284,7 @@ export function CompitoDetailView({ compito }: { compito: Compito }) {
                 <InfoRow icon={IconLink} label="Correlato a">
                   {compito["Correlato a"].linkable ? (
                     <Link
-                      href={
-                        compito["Correlato a"].tipo === "Lead"
-                          ? `/leads/${compito["Correlato a"].id}`
-                          : `/clienti/${compito["Correlato a"].id}`
-                      }
+                      href={correlatoHref(compito["Correlato a"])}
                       className="font-medium text-info hover:underline"
                     >
                       {compito["Correlato a"].nome}

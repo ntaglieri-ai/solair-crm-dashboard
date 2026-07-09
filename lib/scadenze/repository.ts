@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import type { ClienteCompito, StatoCompito } from "@/lib/mock-data"
 
 export type ScadenzaRecord = {
   id: string
@@ -72,4 +73,34 @@ export async function getScadenzaById(
   const row = data as ScadenzaRow
   const owners = await ownerNames([row.proprietario_id])
   return withOwner(row, owners)
+}
+
+// Compiti collegati (correlato_tipo/correlato_id = "scadenza"/id) — stesso
+// pattern di lead/server-store.ts e clienti/repository.ts.
+export async function getScadenzaCompiti(id: string): Promise<ClienteCompito[]> {
+  const supabase = await createClient()
+  const taskResult = await supabase
+    .from("compiti")
+    .select("id,oggetto,scadenza,priorita,stato,proprietario_id")
+    .eq("correlato_tipo", "scadenza")
+    .eq("correlato_id", id)
+    .order("scadenza", { ascending: true })
+
+  if (taskResult.error)
+    throw new Error(`Lettura compiti scadenza: ${taskResult.error.message}`)
+
+  const owners = await ownerNames(
+    (taskResult.data ?? []).map((row) => row.proprietario_id),
+  )
+
+  return (taskResult.data ?? []).map((row) => ({
+    id: row.id as string,
+    oggetto: (row.oggetto as string) ?? "",
+    scadenza: (row.scadenza as string) ?? "",
+    priorita: (row.priorita as string) ?? "Medio",
+    assegnato: row.proprietario_id
+      ? owners.get(row.proprietario_id as string) ?? "Non assegnato"
+      : "Non assegnato",
+    stato: (row.stato as StatoCompito) ?? "Non iniziato",
+  }))
 }

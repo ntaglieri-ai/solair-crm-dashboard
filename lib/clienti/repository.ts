@@ -152,12 +152,43 @@ export async function queryClienti(
   if (error) console.error("[clienti/repository] queryClienti:", error.message)
   if (countError) console.error("[clienti/repository] count:", countError.message)
 
+  const rows = (data ?? []).map((r) => mapRow(r as unknown as Record<string, unknown>))
+  const pageIds = rows.map((r) => r.id)
+  const withActivity = await clientiWithOpenCompiti(supabase, pageIds)
+  for (const row of rows) {
+    row["Badge dell'attività"] = withActivity.has(row.id)
+  }
+
   return {
-    rows: (data ?? []).map((r) => mapRow(r as unknown as Record<string, unknown>)),
+    rows,
     total: count ?? 0,
     page: params.page,
     pageSize: params.pageSize,
   }
+}
+
+// Batch singolo per pagina: quali clienti hanno almeno un compito aperto
+// collegato. Evita una query per riga.
+async function clientiWithOpenCompiti(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ids: string[],
+): Promise<Set<string>> {
+  if (ids.length === 0) return new Set()
+  const { data, error } = await supabase
+    .from("compiti")
+    .select("correlato_id")
+    .eq("correlato_tipo", "cliente")
+    .in("correlato_id", ids)
+    .neq("stato", "Completato")
+  if (error) {
+    console.error("[clienti/repository] clientiWithOpenCompiti:", error.message)
+    return new Set()
+  }
+  return new Set(
+    (data ?? [])
+      .map((row) => row.correlato_id as string | null)
+      .filter((value): value is string => Boolean(value)),
+  )
 }
 
 async function attachCompiti(

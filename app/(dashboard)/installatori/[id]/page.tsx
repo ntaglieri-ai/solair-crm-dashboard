@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react"
 import { requirePage } from "@/lib/permissions/server"
 import { getInstallatoreById } from "@/lib/installatori/repository"
 import { Badge } from "@/components/ui/badge"
+import { InstallatoreDetailActions } from "@/components/installatori/installatore-detail-actions"
 
 function value(text: string | null) {
   return text?.trim() || "—"
@@ -37,13 +38,19 @@ export default async function InstallatoreDetailPage({
         <span className="font-medium text-foreground">{installatore.nome}</span>
       </nav>
 
-      <header className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-bold text-foreground">
-          {installatore.nome}
-        </h1>
-        <Badge variant={installatore.attivo ? "secondary" : "outline"}>
-          {installatore.attivo ? "Attivo" : "Non attivo"}
-        </Badge>
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-bold text-foreground">
+            {installatore.nome}
+          </h1>
+          <Badge variant={installatore.attivo ? "secondary" : "outline"}>
+            {installatore.attivo ? "Attivo" : "Non attivo"}
+          </Badge>
+          {installatore.tag ? (
+            <Badge variant="outline">{installatore.tag}</Badge>
+          ) : null}
+        </div>
+        <InstallatoreDetailActions installatore={installatore} />
       </header>
 
       <section className="border-y border-border py-5">
@@ -60,6 +67,12 @@ export default async function InstallatoreDetailPage({
             </dt>
             <dd className="mt-1 text-sm text-foreground">
               {value(installatore.email_secondaria)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-muted-foreground">Telefono</dt>
+            <dd className="mt-1 text-sm text-foreground">
+              {value(installatore.telefono)}
             </dd>
           </div>
           <div>

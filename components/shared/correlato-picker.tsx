@@ -33,12 +33,15 @@ export function CorrelatoPicker({
   locked = false,
   placeholder = "Cerca lead, cliente o scadenza…",
   disabled = false,
+  allowedTipi,
 }: {
   value: CorrelatoValue | null
   onSelect: (value: CorrelatoValue | null) => void
   locked?: boolean
   placeholder?: string
   disabled?: boolean
+  /** Se presente, limita i risultati mostrati/selezionabili a questi tipi. */
+  allowedTipi?: CorrelatoTipo[]
 }) {
   const [query, setQuery] = useState("")
   const [open, setOpen] = useState(false)
@@ -72,12 +75,18 @@ export function CorrelatoPicker({
           if (!res.ok) throw new Error("Ricerca non riuscita")
           return res.json() as Promise<{ results: CorrelatoValue[] }>
         })
-        .then((data) => setResults(data.results))
+        .then((data) =>
+          setResults(
+            allowedTipi
+              ? data.results.filter((r) => allowedTipi.includes(r.tipo))
+              : data.results,
+          ),
+        )
         .catch(() => setResults([]))
         .finally(() => setLoading(false))
     }, 300)
     return () => clearTimeout(t)
-  }, [query, locked])
+  }, [query, locked, allowedTipi])
 
   if (locked) {
     return (

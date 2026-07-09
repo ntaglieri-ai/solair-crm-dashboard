@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { MoreHorizontal, ExternalLink, Trash2 } from "lucide-react"
+import { MoreHorizontal, ExternalLink, Trash2, Pencil } from "lucide-react"
 import { IconArrowUp } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import {
@@ -15,6 +15,7 @@ import {
 import { DataTableShell } from "@/components/ui/data-table-shell"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,230 +24,277 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  type InstallatoreRecord,
-  type InstallatoreColumn,
-  type InstallatoreColumnId,
-} from "@/lib/mock-data"
-import { InstallatoreCell } from "./installatore-cell"
+import type { InstallatoreRecord } from "@/lib/installatori/repository"
+import type { InstallatoreSortKey, SortDir } from "@/lib/installatori/api-types"
 
-export type SortDir = "asc" | "desc"
-export type Density = "comoda" | "normale" | "densa"
-
-const DENSITY_CELL: Record<Density, string> = {
-  comoda: "py-4 text-sm",
-  normale: "py-2.5 text-sm",
-  densa: "py-1 text-xs",
+function formatDate(value: string | null) {
+  if (!value) return "—"
+  return new Intl.DateTimeFormat("it-IT", { dateStyle: "medium" }).format(new Date(value))
 }
 
-// Nome Installatore, E-mail e Tag sono allineati a sinistra; il resto centrato.
-function isLeftAligned(id: InstallatoreColumnId) {
-  return id === "Nome Installatore" || id === "E-mail" || id === "Tag"
+function initials(nome: string): string {
+  return nome
+    .split(" ")
+    .map((p) => p[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase()
 }
 
-function columnWidth(id: InstallatoreColumnId) {
-  if (id === "Badge dell'attività" || id === "Badge di nota") return 124
-  if (id === "Tag") return 300
-  if (id === "Nome Installatore") return 250
-  if (id === "E-mail") return 250
-  if (id === "Stato") return 170
-  if (id === "Ora modifica" || id === "Ora creazione") return 190
-  return 170
+function InstallatoreAvatar({ nome, size = 26 }: { nome: string; size?: number }) {
+  return (
+    <span
+      className="inline-flex shrink-0 items-center justify-center rounded-full bg-secondary font-semibold text-foreground"
+      style={{ width: size, height: size, fontSize: size * 0.36 }}
+      aria-hidden="true"
+    >
+      {initials(nome)}
+    </span>
+  )
+}
+
+const COLUMN_WIDTH: Record<string, number> = {
+  nome: 240,
+  email: 240,
+  stato: 140,
+  proprietario_nome: 210,
+  tag: 180,
+  telefono: 170,
+  updated_at: 190,
 }
 
 export function InstallatoreTable({
   installatori,
-  columns,
   selected,
   onToggle,
   onToggleAll,
+  onEdit,
   onDelete,
   sortBy,
   sortDir,
   onSort,
-  density = "normale",
 }: {
   installatori: InstallatoreRecord[]
-  columns: InstallatoreColumn[]
   selected: Set<string>
   onToggle: (id: string) => void
   onToggleAll: () => void
+  onEdit: (installatore: InstallatoreRecord) => void
   onDelete: (installatore: InstallatoreRecord) => void
-  sortBy: InstallatoreColumnId | null
+  sortBy: InstallatoreSortKey | null
   sortDir: SortDir
-  onSort: (col: InstallatoreColumnId) => void
-  density?: Density
+  onSort: (col: InstallatoreSortKey) => void
 }) {
   const router = useRouter()
   const [stuck, setStuck] = useState(false)
   const allSelected =
     installatori.length > 0 && installatori.every((i) => selected.has(i.id))
-  const colSpan = columns.length + 2
-  const cellPad = DENSITY_CELL[density]
-  const tableWidth =
-    44 + columns.reduce((sum, col) => sum + columnWidth(col.id), 0) + 64
+  const colIds = ["nome", "email", "stato", "proprietario_nome", "tag", "telefono", "updated_at"]
+  const tableWidth = 44 + colIds.reduce((sum, id) => sum + COLUMN_WIDTH[id], 0) + 64
+
+  const HEADERS: { id: string; label: string; sortKey: InstallatoreSortKey | null }[] = [
+    { id: "nome", label: "Nome", sortKey: "nome" },
+    { id: "email", label: "E-mail", sortKey: "email" },
+    { id: "stato", label: "Stato", sortKey: null },
+    { id: "proprietario_nome", label: "Proprietario", sortKey: null },
+    { id: "tag", label: "Tag", sortKey: null },
+    { id: "telefono", label: "Telefono", sortKey: null },
+    { id: "updated_at", label: "Aggiornato", sortKey: "updated_at" },
+  ]
 
   return (
     <DataTableShell
       ariaLabel="Tabella installatori"
       minTableWidth={tableWidth}
+      alwaysShowVerticalScrollbar
       onScroll={(el) => setStuck(el.scrollTop > 0)}
     >
       <colgroup>
         <col style={{ width: 44 }} />
-        {columns.map((column) => (
-          <col key={column.id} style={{ width: columnWidth(column.id) }} />
+        {colIds.map((id) => (
+          <col key={id} style={{ width: COLUMN_WIDTH[id] }} />
         ))}
         <col style={{ width: 64 }} />
       </colgroup>
-        <TableHeader
-          className={cn(
-            "sticky top-0 z-20 bg-muted/95 backdrop-blur transition-shadow duration-150",
-            stuck && "shadow-[0_4px_8px_-4px_rgba(0,0,0,0.15)]",
-          )}
-        >
-          <TableRow className="hover:bg-transparent">
-            <TableHead className="sticky left-0 z-30 w-11 border-r border-foreground/30 bg-muted/95">
-              <Checkbox
-                checked={allSelected}
-                onCheckedChange={onToggleAll}
-                aria-label="Seleziona tutti"
-              />
+      <TableHeader
+        className={cn(
+          "sticky top-0 z-20 bg-muted/95 backdrop-blur transition-shadow duration-150",
+          stuck && "shadow-[0_4px_8px_-4px_rgba(0,0,0,0.15)]",
+        )}
+      >
+        <TableRow className="hover:bg-transparent">
+          <TableHead className="sticky left-0 z-30 w-11 border-r border-foreground/30 bg-muted/95">
+            <Checkbox
+              checked={allSelected}
+              onCheckedChange={onToggleAll}
+              aria-label="Seleziona tutti"
+            />
+          </TableHead>
+          {HEADERS.map((col) => (
+            <TableHead
+              key={col.id}
+              className={cn(
+                "overflow-hidden whitespace-nowrap border-r border-foreground/30 font-semibold text-muted-foreground",
+                col.sortKey && "cursor-pointer select-none",
+              )}
+              style={{
+                width: COLUMN_WIDTH[col.id],
+                minWidth: COLUMN_WIDTH[col.id],
+                maxWidth: COLUMN_WIDTH[col.id],
+              }}
+              onClick={() => col.sortKey && onSort(col.sortKey)}
+            >
+              <span className="inline-flex max-w-full items-center gap-1">
+                <span className="truncate">{col.label}</span>
+                {col.sortKey && sortBy === col.sortKey && (
+                  <IconArrowUp
+                    size={14}
+                    stroke={2}
+                    className={cn("transition-transform", sortDir === "desc" && "rotate-180")}
+                  />
+                )}
+              </span>
             </TableHead>
-            {columns.map((col) => {
-              const left = isLeftAligned(col.id)
-              const active = sortBy === col.id
-              return (
-                <TableHead
-                  key={col.id}
-                  className={cn(
-                    "overflow-hidden whitespace-nowrap border-r border-foreground/30",
-                    left ? "text-left" : "text-center",
-                  )}
-                  style={{
-                    width: columnWidth(col.id),
-                    minWidth: columnWidth(col.id),
-                    maxWidth: columnWidth(col.id),
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => onSort(col.id)}
-                    className={cn(
-                      "inline-flex w-full items-center gap-1 text-xs font-semibold transition-colors hover:text-foreground",
-                      active ? "text-navy" : "text-muted-foreground",
-                      left ? "justify-start" : "justify-center",
-                    )}
-                  >
-                    <span className="truncate">{col.label}</span>
-                    <IconArrowUp
-                      size={14}
-                      stroke={2}
-                      className={cn(
-                        "transition-all duration-150",
-                        active
-                          ? "text-navy opacity-100"
-                          : "text-muted-foreground opacity-30",
-                        active && sortDir === "desc" && "rotate-180",
-                      )}
-                    />
-                  </button>
-                </TableHead>
-              )
-            })}
-            <TableHead className="sticky right-0 z-30 w-16 border-l border-foreground/30 bg-muted/95 text-right">
-              Azioni
-            </TableHead>
+          ))}
+          <TableHead className="sticky right-0 z-30 w-16 border-l border-foreground/30 bg-muted/95 text-right" />
+        </TableRow>
+      </TableHeader>
+
+      <TableBody>
+        {installatori.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={9} className="py-16 text-center text-sm text-muted-foreground">
+              Nessun installatore trovato con i filtri correnti.
+            </TableCell>
           </TableRow>
-        </TableHeader>
-        <TableBody>
-          {installatori.map((installatore) => (
+        ) : (
+          installatori.map((i) => (
             <TableRow
-              key={installatore.id}
-              onClick={() => router.push(`/installatori/${installatore.id}`)}
-              className="cursor-pointer"
-              data-state={
-                selected.has(installatore.id) ? "selected" : undefined
-              }
+              key={i.id}
+              data-state={selected.has(i.id) ? "selected" : undefined}
+              className="group cursor-pointer"
+              onClick={() => router.push(`/installatori/${i.id}`)}
             >
               <TableCell
                 onClick={(e) => e.stopPropagation()}
-                className={cn(
-                  "sticky left-0 z-10 border-r border-border/70 bg-card",
-                  cellPad,
-                )}
+                className="sticky left-0 z-10 border-r border-border/70 bg-card"
                 style={{ width: 44, minWidth: 44, maxWidth: 44 }}
               >
                 <Checkbox
-                  checked={selected.has(installatore.id)}
-                  onCheckedChange={() => onToggle(installatore.id)}
-                  aria-label={`Seleziona ${installatore["Nome Installatore"]}`}
+                  checked={selected.has(i.id)}
+                  onCheckedChange={() => onToggle(i.id)}
+                  aria-label={`Seleziona ${i.nome}`}
                 />
               </TableCell>
 
-              {columns.map((col) => {
-                const left = isLeftAligned(col.id)
-                return (
-                  <TableCell
-                    key={col.id}
-                    className={cn(
-                      "whitespace-nowrap border-r border-border/70",
-                      cellPad,
-                      left ? "text-left" : "text-center",
-                    )}
-                    style={{
-                      width: columnWidth(col.id),
-                      minWidth: columnWidth(col.id),
-                      maxWidth: columnWidth(col.id),
-                    }}
-                  >
-                    <div
-                      className={cn(
-                        "flex min-w-0 items-center overflow-hidden",
-                        left ? "justify-start" : "justify-center",
-                      )}
-                    >
-                      <InstallatoreCell
-                        installatore={installatore}
-                        column={col.id}
-                        density={density}
-                      />
-                    </div>
-                  </TableCell>
-                )
-              })}
+              <TableCell
+                className="border-r border-border/70"
+                style={{ width: COLUMN_WIDTH.nome, minWidth: COLUMN_WIDTH.nome, maxWidth: COLUMN_WIDTH.nome }}
+              >
+                <div className="flex items-center gap-2">
+                  <InstallatoreAvatar nome={i.nome} />
+                  <span className="truncate font-medium text-foreground">{i.nome}</span>
+                </div>
+              </TableCell>
+
+              <TableCell
+                className="border-r border-border/70"
+                style={{ width: COLUMN_WIDTH.email, minWidth: COLUMN_WIDTH.email, maxWidth: COLUMN_WIDTH.email }}
+              >
+                <span className="truncate text-sm text-foreground">{i.email ?? "—"}</span>
+              </TableCell>
+
+              <TableCell
+                className="border-r border-border/70"
+                style={{ width: COLUMN_WIDTH.stato, minWidth: COLUMN_WIDTH.stato, maxWidth: COLUMN_WIDTH.stato }}
+              >
+                <Badge variant={i.attivo ? "secondary" : "outline"}>
+                  {i.attivo ? "Attivo" : "Non attivo"}
+                </Badge>
+              </TableCell>
+
+              <TableCell
+                className="border-r border-border/70"
+                style={{
+                  width: COLUMN_WIDTH.proprietario_nome,
+                  minWidth: COLUMN_WIDTH.proprietario_nome,
+                  maxWidth: COLUMN_WIDTH.proprietario_nome,
+                }}
+              >
+                <span className="whitespace-nowrap text-sm text-foreground">
+                  {i.proprietario_nome ?? "—"}
+                </span>
+              </TableCell>
+
+              <TableCell
+                className="border-r border-border/70"
+                style={{ width: COLUMN_WIDTH.tag, minWidth: COLUMN_WIDTH.tag, maxWidth: COLUMN_WIDTH.tag }}
+              >
+                {i.tag ? (
+                  <span className="inline-flex max-w-full items-center rounded-full bg-teal/10 px-2.5 py-1 text-xs font-bold text-teal">
+                    <span className="truncate">{i.tag}</span>
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </TableCell>
+
+              <TableCell
+                className="border-r border-border/70"
+                style={{
+                  width: COLUMN_WIDTH.telefono,
+                  minWidth: COLUMN_WIDTH.telefono,
+                  maxWidth: COLUMN_WIDTH.telefono,
+                }}
+              >
+                <span className="whitespace-nowrap text-sm text-muted-foreground">
+                  {i.telefono ?? "—"}
+                </span>
+              </TableCell>
+
+              <TableCell
+                className="border-r border-border/70"
+                style={{
+                  width: COLUMN_WIDTH.updated_at,
+                  minWidth: COLUMN_WIDTH.updated_at,
+                  maxWidth: COLUMN_WIDTH.updated_at,
+                }}
+              >
+                <span className="whitespace-nowrap text-sm tabular-nums text-muted-foreground">
+                  {formatDate(i.updated_at)}
+                </span>
+              </TableCell>
 
               <TableCell
                 onClick={(e) => e.stopPropagation()}
-                className={cn(
-                  "sticky right-0 z-10 border-l border-border/70 bg-card text-right",
-                  cellPad,
-                )}
+                className="sticky right-0 z-10 border-l border-border/70 bg-card text-right"
                 style={{ width: 64, minWidth: 64, maxWidth: 64 }}
               >
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     render={
-                      <Button variant="ghost" size="icon" aria-label="Azioni">
-                        <MoreHorizontal />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 opacity-0 transition-opacity group-hover:opacity-100 data-[popup-open]:opacity-100"
+                        aria-label={`Azioni per ${i.nome}`}
+                      >
+                        <MoreHorizontal className="size-4" />
                       </Button>
                     }
                   />
-                  <DropdownMenuContent align="end">
+                  <DropdownMenuContent align="end" className="w-48">
                     <DropdownMenuGroup>
-                      <DropdownMenuItem
-                        onClick={() =>
-                          router.push(`/installatori/${installatore.id}`)
-                        }
-                      >
+                      <DropdownMenuItem onClick={() => router.push(`/installatori/${i.id}`)}>
                         <ExternalLink data-icon="inline-start" />
-                        Apri
+                        Apri installatore
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onEdit(i)}>
+                        <Pencil data-icon="inline-start" />
+                        Modifica
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onClick={() => onDelete(installatore)}
-                      >
+                      <DropdownMenuItem variant="destructive" onClick={() => onDelete(i)}>
                         <Trash2 data-icon="inline-start" />
                         Elimina
                       </DropdownMenuItem>
@@ -255,19 +303,9 @@ export function InstallatoreTable({
                 </DropdownMenu>
               </TableCell>
             </TableRow>
-          ))}
-
-          {installatori.length === 0 ? (
-            <TableRow className="hover:bg-transparent">
-              <TableCell
-                colSpan={colSpan}
-                className="py-12 text-center text-sm text-muted-foreground"
-              >
-                Nessun installatore corrisponde ai filtri selezionati.
-              </TableCell>
-            </TableRow>
-          ) : null}
-        </TableBody>
+          ))
+        )}
+      </TableBody>
     </DataTableShell>
   )
 }

@@ -1,7 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { IconCalendarEvent, IconUpload } from "@tabler/icons-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
+import { IconCalendarEvent } from "@tabler/icons-react"
 import {
   Dialog,
   DialogContent,
@@ -22,267 +24,304 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { type Scadenza, mockProprietariScadenza } from "@/lib/mock-data"
-import { ScadenzaAvatar } from "./scadenza-utils"
+import { useScadenzeReferenceData } from "@/lib/scadenze/hooks"
+import type { ScadenzaRecord } from "@/lib/scadenze/repository"
+import {
+  CorrelatoPicker,
+  type CorrelatoValue,
+} from "@/components/shared/correlato-picker"
 
-/** "DD/MM/YYYY HH:MM" → input value { date: "YYYY-MM-DD", time: "HH:MM" } */
-function toInputs(dt: string): { date: string; time: string } {
-  if (!dt) return { date: "", time: "" }
-  const [datePart, timePart = ""] = dt.split(" ")
-  const [d, m, y] = datePart.split("/")
-  if (!d || !m || !y) return { date: "", time: timePart }
-  return { date: `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`, time: timePart }
-}
-
-/** date "YYYY-MM-DD" + time "HH:MM" → "DD/MM/YYYY HH:MM" */
-function toStored(date: string, time: string): string {
-  if (!date) return ""
-  const [y, m, d] = date.split("-")
-  const t = time || "09:00"
-  return `${d}/${m}/${y} ${t}`
-}
-
-function stampNow(): string {
-  const now = new Date()
+/** ISO → { date: "YYYY-MM-DD", time: "HH:MM" } per gli input nativi. */
+function toInputs(iso: string | null): { date: string; time: string } {
+  if (!iso) return { date: "", time: "" }
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return { date: "", time: "" }
   const p = (n: number) => String(n).padStart(2, "0")
-  return `${p(now.getDate())}/${p(now.getMonth() + 1)}/${now.getFullYear()} ${p(now.getHours())}:${p(now.getMinutes())}`
+  return {
+    date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
+    time: `${p(d.getHours())}:${p(d.getMinutes())}`,
+  }
+}
+
+/** date "YYYY-MM-DD" + time "HH:MM" → ISO (locale del browser). */
+function toIso(date: string, time: string): string | null {
+  if (!date) return null
+  const t = time || "09:00"
+  const d = new Date(`${date}T${t}:00`)
+  return Number.isNaN(d.getTime()) ? null : d.toISOString()
+}
+
+function correlatoValueFromScadenza(
+  scadenza?: ScadenzaRecord,
+): CorrelatoValue | null {
+  if (!scadenza?.connesso_a_id || !scadenza.connesso_a_tipo) return null
+  return {
+    tipo: scadenza.connesso_a_tipo,
+    id: scadenza.connesso_a_id,
+    // Il nome del record collegato non è tracciato su scadenze: mostriamo
+    // l'id come segnaposto finché l'utente non riseleziona.
+    nome: scadenza.connesso_a_id,
+  }
 }
 
 export function ScadenzaFormDialog({
   open,
   onOpenChange,
-  onSave,
   scadenza,
+  onCreated,
 }: {
   open: boolean
-  onOpenChange: (o: boolean) => void
-  onSave: (scadenza: Scadenza, keepOpen: boolean) => void
-  /** se presente, il dialog è in modalità modifica */
-  scadenza?: Scadenza | null
+  onOpenChange: (open: boolean) => void
+  /** Se presente, il dialog lavora in modalità modifica su questa scadenza. */
+  scadenza?: ScadenzaRecord
+  /** Callback di creazione — richiesto solo in modalità creazione. */
+  onCreated?: (scadenza: ScadenzaRecord) => void
 }) {
+  const router = useRouter()
+  const { data: referenceData } = useScadenzeReferenceData()
+  const proprietari = useMemo(
+    () => referenceData?.proprietari ?? [],
+    [referenceData],
+  )
+  const tagSuggestions = referenceData?.tags ?? []
   const isEdit = Boolean(scadenza)
+
   const [nome, setNome] = useState("")
-  const [proprietario, setProprietario] = useState(mockProprietariScadenza[0])
   const [date, setDate] = useState("")
   const [time, setTime] = useState("")
-  const [file, setFile] = useState<string | null>(null)
+  const [proprietarioId, setProprietarioId] = useState("")
   const [descrizione, setDescrizione] = useState("")
+  const [tag, setTag] = useState("")
+  const [correlato, setCorrelato] = useState<CorrelatoValue | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
+  const reset = () => {
+    setNome("")
+    setDate("")
+    setTime("")
+    setProprietarioId("")
+    setDescrizione("")
+    setTag("")
+    setCorrelato(null)
+  }
+
+  const wasOpen = useRef(false)
   useEffect(() => {
-    if (open) {
+    if (open && !wasOpen.current) {
       if (scadenza) {
-        const { date: d, time: t } = toInputs(scadenza["Data scadenza"])
-        setNome(scadenza["Nome Scadenze"])
-        setProprietario(scadenza["Proprietario di Scadenze"])
+        const { date: d, time: t } = toInputs(scadenza.data_scadenza)
+        setNome(scadenza.nome)
         setDate(d)
         setTime(t)
-        setFile(scadenza["Caricamento file 1"])
-        setDescrizione(scadenza.Descrizione ?? "")
+        setProprietarioId(scadenza.proprietario_id ?? "")
+        setDescrizione(scadenza.descrizione ?? "")
+        setTag(scadenza.tag ?? "")
+        setCorrelato(correlatoValueFromScadenza(scadenza))
       } else {
-        setNome("")
-        setProprietario(mockProprietariScadenza[0])
-        setDate("")
-        setTime("")
-        setFile(null)
-        setDescrizione("")
+        reset()
       }
     }
+    wasOpen.current = open
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, scadenza])
-
-  const build = (): Scadenza => {
-    const now = stampNow()
-    return {
-      id: scadenza?.id ?? `scad-${Date.now()}`,
-      "Nome Scadenze": nome.trim(),
-      "Data scadenza": toStored(date, time),
-      "Proprietario di Scadenze": proprietario,
-      "Ora modifica": now,
-      "Ora creazione": scadenza?.["Ora creazione"] ?? now,
-      "Ora ultima attività": now,
-      "Connesso a": scadenza?.["Connesso a"] ?? null,
-      Descrizione: descrizione.trim() || null,
-      "Caricamento file 1": file,
-      Tag: scadenza?.Tag ?? [],
-      "Modalità iscrizione annullata":
-        scadenza?.["Modalità iscrizione annullata"] ?? null,
-      "Ora iscrizione annullata":
-        scadenza?.["Ora iscrizione annullata"] ?? null,
-      Note: scadenza?.Note ?? [],
-    }
-  }
 
   const valid = nome.trim() !== "" && date !== ""
 
-  const submit = (keepOpen: boolean) => {
-    if (!valid) return
-    onSave(build(), keepOpen)
-    if (!keepOpen) onOpenChange(false)
-    else {
-      setNome("")
-      setDate("")
-      setTime("")
-      setFile(null)
-      setDescrizione("")
+  const submit = async () => {
+    if (!valid || submitting) return
+    const dataScadenza = toIso(date, time)
+    if (!dataScadenza) return
+
+    setSubmitting(true)
+    try {
+      if (isEdit && scadenza) {
+        const res = await fetch(`/api/scadenze/${scadenza.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nome: nome.trim(),
+            data_scadenza: dataScadenza,
+            proprietario_id: proprietarioId || null,
+            descrizione: descrizione.trim() || null,
+            connesso_a_id: correlato?.id ?? null,
+            connesso_a_tipo:
+              correlato?.tipo === "lead" || correlato?.tipo === "cliente"
+                ? correlato.tipo
+                : null,
+            tag: tag.trim() || null,
+          }),
+        })
+        if (!res.ok) throw new Error("Aggiornamento non riuscito")
+        toast.success("Scadenza aggiornata", { description: nome.trim() })
+        onOpenChange(false)
+        router.refresh()
+      } else {
+        const res = await fetch("/api/scadenze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nome: nome.trim(),
+            data_scadenza: dataScadenza,
+            proprietario_id: proprietarioId || null,
+            descrizione: descrizione.trim() || null,
+            connesso_a_id: correlato?.id ?? null,
+            connesso_a_tipo:
+              correlato?.tipo === "lead" || correlato?.tipo === "cliente"
+                ? correlato.tipo
+                : null,
+            tag: tag.trim() || null,
+          }),
+        })
+        if (!res.ok) throw new Error("Creazione non riuscita")
+        const created = (await res.json()) as ScadenzaRecord
+        toast.success("Scadenza creata", { description: nome.trim() })
+        onCreated?.(created)
+        reset()
+        onOpenChange(false)
+        router.refresh()
+      }
+    } catch {
+      toast.error(
+        isEdit ? "Errore nell'aggiornamento della scadenza" : "Errore nella creazione della scadenza",
+      )
+    } finally {
+      setSubmitting(false)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (o) return onOpenChange(o)
+        if (!isEdit) reset()
+        onOpenChange(false)
+      }}
+    >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Modifica Scadenze" : "Crea Scadenze"}
-          </DialogTitle>
+          <DialogTitle>{isEdit ? "Modifica scadenza" : "Crea scadenza"}</DialogTitle>
           <DialogDescription>
             {isEdit
-              ? "Aggiorna le informazioni della scadenza."
-              : "Aggiungi una nuova scadenza con proprietario e data."}
+              ? "Aggiorna i dettagli della scadenza."
+              : "Aggiungi una nuova scadenza assegnandole un proprietario e una data."}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-5 py-1">
-          {/* Immagine Scadenze */}
-          <section className="flex items-center gap-3">
-            <ScadenzaAvatar nome={nome || "Scadenza"} size={56} />
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-foreground">
-                Immagine Scadenze
-              </span>
-              <button
-                type="button"
-                className="self-start text-xs font-medium text-info hover:underline"
-              >
-                Carica immagine
-              </button>
-            </div>
-          </section>
+        <div className="flex flex-col gap-3 py-1">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="s-nome">
+              Nome <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="s-nome"
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              placeholder="Es. Inviare pratica PNRR40%"
+            />
+          </div>
 
-          {/* Informazioni su Scadenze */}
-          <section className="flex flex-col gap-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Informazioni su Scadenze
-            </h3>
+          <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="s-nome">
-                Nome Scadenze <span className="text-destructive">*</span>
+              <Label htmlFor="s-date">
+                Data scadenza <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="s-nome"
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-                placeholder="Es. Inviare pratica PNRR40%"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label>Proprietario di Scadenze</Label>
-              <Select
-                value={proprietario}
-                onValueChange={(v) => setProprietario(v ?? "")}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {mockProprietariScadenza.map((p) => (
-                      <SelectItem key={p} value={p}>
-                        {p}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="s-date">
-                  Data scadenza <span className="text-destructive">*</span>
-                </Label>
-                <div className="relative">
-                  <IconCalendarEvent
-                    size={16}
-                    stroke={1.8}
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                  />
-                  <Input
-                    id="s-date"
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="s-time">Ora</Label>
+              <div className="relative">
+                <IconCalendarEvent
+                  size={16}
+                  stroke={1.8}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
                 <Input
-                  id="s-time"
-                  type="time"
-                  value={time}
-                  onChange={(e) => setTime(e.target.value)}
+                  id="s-date"
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="pl-9"
                 />
               </div>
             </div>
-
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="s-file">Caricamento file 1</Label>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="bg-card"
-                  onClick={() => setFile(file ? null : "documento.pdf")}
-                >
-                  <IconUpload size={15} stroke={1.8} data-icon="inline-start" />
-                  {file ? "Rimuovi file" : "Carica file"}
-                </Button>
-                <span className="truncate text-sm text-muted-foreground">
-                  {file ?? "Nessun file selezionato"}
-                </span>
-              </div>
-            </div>
-          </section>
-
-          {/* Nuova sezione 1 */}
-          <section className="flex flex-col gap-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Nuova sezione 1
-            </h3>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="s-descrizione">Descrizione</Label>
-              <Textarea
-                id="s-descrizione"
-                rows={3}
-                value={descrizione}
-                onChange={(e) => setDescrizione(e.target.value)}
-                placeholder="Dettagli della scadenza…"
+              <Label htmlFor="s-time">Ora</Label>
+              <Input
+                id="s-time"
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
               />
             </div>
-          </section>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label>Proprietario</Label>
+            <Select
+              items={Object.fromEntries(proprietari.map((p) => [p.id, p.nome]))}
+              value={proprietarioId}
+              onValueChange={(v) => setProprietarioId(v ?? "")}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Seleziona proprietario" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {proprietari.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.nome}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label>Connesso a</Label>
+            <CorrelatoPicker
+              value={correlato}
+              onSelect={setCorrelato}
+              allowedTipi={["lead", "cliente"]}
+              placeholder="Cerca lead o cliente…"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="s-tag">Tag</Label>
+            <Input
+              id="s-tag"
+              list="s-tag-suggestions"
+              value={tag}
+              onChange={(e) => setTag(e.target.value)}
+              placeholder="Es. PNRR40"
+            />
+            <datalist id="s-tag-suggestions">
+              {tagSuggestions.map((t) => (
+                <option key={t} value={t} />
+              ))}
+            </datalist>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="s-descrizione">Descrizione</Label>
+            <Textarea
+              id="s-descrizione"
+              rows={3}
+              value={descrizione}
+              onChange={(e) => setDescrizione(e.target.value)}
+              placeholder="Dettagli della scadenza…"
+            />
+          </div>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Annulla
           </Button>
-          {!isEdit && (
-            <Button
-              variant="outline"
-              disabled={!valid}
-              onClick={() => submit(true)}
-            >
-              Salva e nuovo
-            </Button>
-          )}
           <Button
             className="bg-teal text-teal-foreground hover:bg-teal/90"
-            disabled={!valid}
-            onClick={() => submit(false)}
+            disabled={!valid || submitting}
+            onClick={submit}
           >
-            Salva
+            {isEdit ? "Salva modifiche" : "Crea scadenza"}
           </Button>
         </DialogFooter>
       </DialogContent>

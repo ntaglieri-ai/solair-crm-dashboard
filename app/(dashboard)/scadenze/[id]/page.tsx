@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react"
 import { requirePage } from "@/lib/permissions/server"
 import { getScadenzaById, getScadenzaCompiti } from "@/lib/scadenze/repository"
 import { ScadenzaCompitiSection } from "@/components/scadenze/scadenza-compiti-section"
+import { ScadenzaDetailActions } from "@/components/scadenze/scadenza-detail-actions"
 
 function value(text: string | null) {
   return text?.trim() || "—"
@@ -45,11 +46,14 @@ export default async function ScadenzaDetailPage({
         <span className="font-medium text-foreground">{scadenza.nome}</span>
       </nav>
 
-      <header>
-        <h1 className="text-2xl font-bold text-foreground">{scadenza.nome}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Scadenza: {formatDate(scadenza.data_scadenza)}
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">{scadenza.nome}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Scadenza: {formatDate(scadenza.data_scadenza)}
+          </p>
+        </div>
+        <ScadenzaDetailActions scadenza={scadenza} />
       </header>
 
       <section className="border-y border-border py-5">

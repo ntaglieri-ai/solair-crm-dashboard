@@ -1,7 +1,6 @@
 "use client"
 
 import { Search, X } from "lucide-react"
-import { IconFilter } from "@tabler/icons-react"
 import {
   Select,
   SelectContent,
@@ -12,49 +11,65 @@ import {
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { mockProprietariScadenza } from "@/lib/mock-data"
+import { useScadenzeReferenceData } from "@/lib/scadenze/hooks"
+import type { ScadenzeListParams } from "@/lib/scadenze/api-types"
 
 export interface ScadenzaFilterState {
   search: string
   proprietario: string
+  tag: string
   scadenzaDa: string
   scadenzaA: string
+  collegamento: ScadenzeListParams["collegamento"]
 }
 
 export const DEFAULT_SCADENZA_FILTERS: ScadenzaFilterState = {
   search: "",
   proprietario: "all",
+  tag: "all",
   scadenzaDa: "",
   scadenzaA: "",
+  collegamento: "all",
 }
-
-/** Campi filtrabili avanzati (pannello funnel, pattern Zoho/Lead). */
-const ADVANCED_FIELDS = [
-  "Connesso a",
-  "Creato da",
-  "Data scadenza",
-  "Modalità iscrizione annullata",
-  "Nome Scadenze",
-  "Ora creazione",
-  "Ora iscrizione annullata",
-  "Ora modifica",
-  "Ora ultima attività",
-  "Proprietario di Scadenze",
-  "Tag",
-]
 
 function toItems(entries: [string, string][]): Record<string, string> {
   return entries.reduce<Record<string, string>>((acc, [k, v]) => {
     acc[k] = v
     return acc
   }, {})
+}
+
+function FilterSelect({
+  value,
+  onValueChange,
+  placeholder,
+  options,
+  className,
+  ariaLabel,
+}: {
+  value: string
+  onValueChange: (v: string) => void
+  placeholder: string
+  options: [string, string][]
+  className?: string
+  ariaLabel: string
+}) {
+  return (
+    <Select items={toItems(options)} value={value} onValueChange={(v) => onValueChange(v ?? "")}>
+      <SelectTrigger className={className ?? "w-[160px] bg-card"} aria-label={ariaLabel}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          {options.map(([val, label]) => (
+            <SelectItem key={val} value={val}>
+              {label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
+  )
 }
 
 export function ScadenzaFilters({
@@ -66,21 +81,20 @@ export function ScadenzaFilters({
   onChange: (next: ScadenzaFilterState) => void
   onReset: () => void
 }) {
-  const set = <K extends keyof ScadenzaFilterState>(
-    key: K,
-    value: ScadenzaFilterState[K],
-  ) => onChange({ ...filters, [key]: value })
+  const { data: referenceData } = useScadenzeReferenceData()
+  const proprietari = referenceData?.proprietari ?? []
+  const tags = referenceData?.tags ?? []
 
-  const proprietarioOptions: [string, string][] = [
-    ["all", "Tutti i proprietari"],
-    ...mockProprietariScadenza.map((p) => [p, p] as [string, string]),
-  ]
+  const set = <K extends keyof ScadenzaFilterState>(key: K, value: ScadenzaFilterState[K]) =>
+    onChange({ ...filters, [key]: value })
 
   const hasActiveFilters =
     filters.search !== "" ||
     filters.proprietario !== "all" ||
+    filters.tag !== "all" ||
     filters.scadenzaDa !== "" ||
-    filters.scadenzaA !== ""
+    filters.scadenzaA !== "" ||
+    filters.collegamento !== "all"
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -95,50 +109,39 @@ export function ScadenzaFilters({
         />
       </div>
 
-      {/* Pannello filtri avanzati (funnel) */}
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button variant="outline" size="icon" aria-label="Filtri avanzati" className="bg-card">
-              <IconFilter size={16} stroke={1.8} />
-            </Button>
-          }
-        />
-        <DropdownMenuContent align="start" className="w-64">
-          <DropdownMenuLabel>Filtri avanzati</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <div className="max-h-72 overflow-auto py-1">
-            {ADVANCED_FIELDS.map((field) => (
-              <button
-                key={field}
-                type="button"
-                className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-secondary"
-              >
-                {field}
-              </button>
-            ))}
-          </div>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <Select
-        items={toItems(proprietarioOptions)}
+      <FilterSelect
+        ariaLabel="Filtra per Proprietario"
+        className="w-[190px] bg-card"
         value={filters.proprietario}
-        onValueChange={(v) => set("proprietario", v ?? "")}
-      >
-        <SelectTrigger className="w-[200px] bg-card" aria-label="Filtra per Proprietario">
-          <SelectValue placeholder="Proprietario" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            {proprietarioOptions.map(([val, label]) => (
-              <SelectItem key={val} value={val}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
+        onValueChange={(v) => set("proprietario", v)}
+        placeholder="Proprietario"
+        options={[
+          ["all", "Tutti i proprietari"],
+          ...proprietari.map((p) => [p.id, p.nome] as [string, string]),
+        ]}
+      />
+
+      <FilterSelect
+        ariaLabel="Filtra per Tag"
+        className="w-[170px] bg-card"
+        value={filters.tag}
+        onValueChange={(v) => set("tag", v)}
+        placeholder="Tag"
+        options={[["all", "Tutti i tag"], ...tags.map((t) => [t, t] as [string, string])]}
+      />
+
+      <FilterSelect
+        ariaLabel="Filtra per Collegamento"
+        className="w-[170px] bg-card"
+        value={filters.collegamento}
+        onValueChange={(v) => set("collegamento", v as ScadenzeListParams["collegamento"])}
+        placeholder="Collegamento"
+        options={[
+          ["all", "Tutti"],
+          ["si", "Con collegamento"],
+          ["no", "Senza collegamento"],
+        ]}
+      />
 
       <div className="flex items-center gap-1.5">
         <Input
@@ -158,12 +161,7 @@ export function ScadenzaFilters({
         />
       </div>
 
-      <Button
-        variant="ghost"
-        onClick={onReset}
-        disabled={!hasActiveFilters}
-        className="text-muted-foreground"
-      >
+      <Button variant="ghost" onClick={onReset} disabled={!hasActiveFilters} className="text-muted-foreground">
         <X data-icon="inline-start" />
         Reset filtri
       </Button>

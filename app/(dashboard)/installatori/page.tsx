@@ -1,85 +1,22 @@
-import Link from "next/link"
-import { HardHat } from "lucide-react"
-import { requirePage } from "@/lib/permissions/server"
-import { getInstallatori } from "@/lib/installatori/repository"
-import { Badge } from "@/components/ui/badge"
+// Server Component: pre-carica la prima pagina di installatori da Supabase
+// e passa i dati a InstallatoriClient come initialData (nessun loading al mount).
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+  DEFAULT_INSTALLATORI_PARAMS,
+  buildInstallatoriSearchParams,
+} from "@/lib/installatori/api-types"
+import { queryInstallatori } from "@/lib/installatori/repository"
+import { InstallatoriClient } from "./installatori-client"
+import { requirePage } from "@/lib/permissions/server"
 
-function formatDate(value: string | null) {
-  if (!value) return "—"
-  return new Intl.DateTimeFormat("it-IT", { dateStyle: "medium" }).format(
-    new Date(value),
-  )
-}
+// Sempre dinamica: i dati dipendono dallo stato corrente del DB.
+export const dynamic = "force-dynamic"
 
 export default async function InstallatoriPage() {
   await requirePage("installatori")
-  const installatori = await getInstallatori()
 
-  return (
-    <div className="flex flex-col gap-5">
-      <header>
-        <h1 className="text-2xl font-bold text-foreground">Installatori</h1>
-        <p className="text-sm text-muted-foreground">
-          {installatori.length}{" "}
-          {installatori.length === 1 ? "installatore" : "installatori"}
-        </p>
-      </header>
+  const initialParams = DEFAULT_INSTALLATORI_PARAMS
+  const initialSp = buildInstallatoriSearchParams(initialParams).toString()
+  const initialData = await queryInstallatori(initialParams)
 
-      {installatori.length === 0 ? (
-        <div className="flex min-h-72 flex-col items-center justify-center gap-3 border-y border-border text-center">
-          <HardHat className="size-8 text-muted-foreground" />
-          <div>
-            <p className="font-medium text-foreground">Nessun installatore</p>
-            <p className="text-sm text-muted-foreground">
-              Gli installatori registrati in Supabase appariranno qui.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Stato</TableHead>
-                <TableHead>Proprietario</TableHead>
-                <TableHead>Aggiornato</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {installatori.map((installatore) => (
-                <TableRow key={installatore.id}>
-                  <TableCell>
-                    <Link
-                      href={`/installatori/${installatore.id}`}
-                      className="font-medium text-foreground hover:underline"
-                    >
-                      {installatore.nome}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{installatore.email ?? "—"}</TableCell>
-                  <TableCell>
-                    <Badge variant={installatore.attivo ? "secondary" : "outline"}>
-                      {installatore.attivo ? "Attivo" : "Non attivo"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{installatore.proprietario_nome ?? "—"}</TableCell>
-                  <TableCell>{formatDate(installatore.updated_at)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-    </div>
-  )
+  return <InstallatoriClient initialSp={initialSp} initialData={initialData} />
 }

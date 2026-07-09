@@ -11,23 +11,21 @@ import {
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import {
-  INSTALLATORE_STATO_VALUES,
-  mockInstallatoreProprietari,
-} from "@/lib/mock-data"
+import { useInstallatoriReferenceData } from "@/lib/installatori/hooks"
+import type { InstallatoriListParams } from "@/lib/installatori/api-types"
 
 export interface InstallatoreFilterState {
   search: string
-  stato: string
   proprietario: string
   tag: string
+  stato: InstallatoriListParams["stato"]
 }
 
 export const DEFAULT_INSTALLATORE_FILTERS: InstallatoreFilterState = {
   search: "",
-  stato: "all",
   proprietario: "all",
   tag: "all",
+  stato: "all",
 }
 
 function toItems(entries: [string, string][]): Record<string, string> {
@@ -44,7 +42,6 @@ function FilterSelect({
   options,
   className,
   ariaLabel,
-  disabled,
 }: {
   value: string
   onValueChange: (v: string) => void
@@ -52,20 +49,10 @@ function FilterSelect({
   options: [string, string][]
   className?: string
   ariaLabel: string
-  disabled?: boolean
 }) {
-  const items = toItems(options)
   return (
-    <Select
-      items={items}
-      value={value}
-      onValueChange={(v) => onValueChange(v ?? "")}
-      disabled={disabled}
-    >
-      <SelectTrigger
-        className={className ?? "w-[160px] bg-card"}
-        aria-label={ariaLabel}
-      >
+    <Select items={toItems(options)} value={value} onValueChange={(v) => onValueChange(v ?? "")}>
+      <SelectTrigger className={className ?? "w-[160px] bg-card"} aria-label={ariaLabel}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
@@ -83,15 +70,17 @@ function FilterSelect({
 
 export function InstallatoreFilters({
   filters,
-  tags,
   onChange,
   onReset,
 }: {
   filters: InstallatoreFilterState
-  tags: string[]
   onChange: (next: InstallatoreFilterState) => void
   onReset: () => void
 }) {
+  const { data: referenceData } = useInstallatoriReferenceData()
+  const proprietari = referenceData?.proprietari ?? []
+  const tags = referenceData?.tags ?? []
+
   const set = <K extends keyof InstallatoreFilterState>(
     key: K,
     value: InstallatoreFilterState[K],
@@ -99,9 +88,9 @@ export function InstallatoreFilters({
 
   const hasActiveFilters =
     filters.search !== "" ||
-    filters.stato !== "all" ||
     filters.proprietario !== "all" ||
-    filters.tag !== "all"
+    filters.tag !== "all" ||
+    filters.stato !== "all"
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -110,7 +99,7 @@ export function InstallatoreFilters({
         <Input
           value={filters.search}
           onChange={(e) => set("search", e.target.value)}
-          placeholder="Cerca nome, email o referente"
+          placeholder="Cerca per nome o e-mail"
           className="bg-card pl-9"
           aria-label="Cerca installatori"
         />
@@ -119,46 +108,37 @@ export function InstallatoreFilters({
       <FilterSelect
         ariaLabel="Filtra per Stato"
         value={filters.stato}
-        onValueChange={(v) => set("stato", v)}
+        onValueChange={(v) => set("stato", v as InstallatoreFilterState["stato"])}
         placeholder="Stato"
         options={[
           ["all", "Tutti gli stati"],
-          ...INSTALLATORE_STATO_VALUES.map((s) => [s, s] as [string, string]),
+          ["attivo", "Attivo"],
+          ["non_attivo", "Non attivo"],
         ]}
       />
 
       <FilterSelect
-        ariaLabel="Filtra per Proprietario di Installatore"
-        className="w-[210px] bg-card"
+        ariaLabel="Filtra per Proprietario"
+        className="w-[190px] bg-card"
         value={filters.proprietario}
         onValueChange={(v) => set("proprietario", v)}
         placeholder="Proprietario"
         options={[
           ["all", "Tutti i proprietari"],
-          ...mockInstallatoreProprietari.map(
-            (c) => [c, c] as [string, string],
-          ),
+          ...proprietari.map((p) => [p.id, p.nome] as [string, string]),
         ]}
       />
 
       <FilterSelect
         ariaLabel="Filtra per Tag"
-        className="w-[180px] bg-card"
+        className="w-[170px] bg-card"
         value={filters.tag}
         onValueChange={(v) => set("tag", v)}
         placeholder="Tag"
-        options={[
-          ["all", "Tutti i tag"],
-          ...tags.map((t) => [t, t] as [string, string]),
-        ]}
+        options={[["all", "Tutti i tag"], ...tags.map((t) => [t, t] as [string, string])]}
       />
 
-      <Button
-        variant="ghost"
-        onClick={onReset}
-        disabled={!hasActiveFilters}
-        className="text-muted-foreground"
-      >
+      <Button variant="ghost" onClick={onReset} disabled={!hasActiveFilters} className="text-muted-foreground">
         <X data-icon="inline-start" />
         Reset filtri
       </Button>

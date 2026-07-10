@@ -26,6 +26,8 @@ import {
 import type { ScadenzaRecord } from "@/lib/scadenze/repository"
 import type { ScadenzaSortKey, SortDir } from "@/lib/scadenze/api-types"
 import { ScadutaBadge, ScadenzaAvatar } from "./scadenza-utils"
+import { ScadenzaTagChip } from "./scadenza-tag-picker"
+import { ScadenzaRowContextMenu } from "./scadenza-row-context-menu"
 
 function formatDateTime(value: string | null) {
   if (!value) return "—"
@@ -154,8 +156,8 @@ export function ScadenzaTable({
           scadenze.map((s) => {
             const scaduta = isScaduta(s)
             return (
+              <ScadenzaRowContextMenu key={s.id} scadenza={s} onEdit={onEdit} onDelete={onDelete}>
               <TableRow
-                key={s.id}
                 data-state={selected.has(s.id) ? "selected" : undefined}
                 className="group cursor-pointer"
                 onClick={() => router.push(`/scadenze/${s.id}`)}
@@ -199,13 +201,7 @@ export function ScadenzaTable({
                   className="border-r border-border/70"
                   style={{ width: COLUMN_WIDTH.tag, minWidth: COLUMN_WIDTH.tag, maxWidth: COLUMN_WIDTH.tag }}
                 >
-                  {s.tag ? (
-                    <span className="inline-flex max-w-full items-center rounded-full bg-teal/10 px-2.5 py-1 text-xs font-bold text-teal">
-                      <span className="truncate">{s.tag}</span>
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
+                  <ScadenzaTagChip tag={s.tag} />
                 </TableCell>
 
                 <TableCell
@@ -295,6 +291,7 @@ export function ScadenzaTable({
                   </DropdownMenu>
                 </TableCell>
               </TableRow>
+              </ScadenzaRowContextMenu>
             )
           })
         )}

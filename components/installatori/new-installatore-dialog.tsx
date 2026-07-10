@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select"
 import { useInstallatoriReferenceData } from "@/lib/installatori/hooks"
 import type { InstallatoreRecord } from "@/lib/installatori/repository"
+import { InstallatoreTagField } from "./installatore-tag-picker"
 
 export function InstallatoreFormDialog({
   open,
@@ -203,19 +204,8 @@ export function InstallatoreFormDialog({
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="inst-tag">Tag</Label>
-            <Input
-              id="inst-tag"
-              list="inst-tag-suggestions"
-              value={tag}
-              onChange={(e) => setTag(e.target.value)}
-              placeholder="Es. SICILIA"
-            />
-            <datalist id="inst-tag-suggestions">
-              {tagSuggestions.map((t) => (
-                <option key={t} value={t} />
-              ))}
-            </datalist>
+            <Label>Tag</Label>
+            <InstallatoreTagField value={tag} onChange={setTag} suggestions={tagSuggestions} />
           </div>
 
           <div className="flex flex-col gap-1.5">

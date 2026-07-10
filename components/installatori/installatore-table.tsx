@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { InstallatoreRecord } from "@/lib/installatori/repository"
 import type { InstallatoreSortKey, SortDir } from "@/lib/installatori/api-types"
+import { InstallatoreTagChip } from "./installatore-tag-picker"
+import { InstallatoreRowContextMenu } from "./installatore-row-context-menu"
 
 function formatDate(value: string | null) {
   if (!value) return "—"
@@ -169,8 +171,8 @@ export function InstallatoreTable({
           </TableRow>
         ) : (
           installatori.map((i) => (
+            <InstallatoreRowContextMenu key={i.id} installatore={i} onEdit={onEdit} onDelete={onDelete}>
             <TableRow
-              key={i.id}
               data-state={selected.has(i.id) ? "selected" : undefined}
               className="group cursor-pointer"
               onClick={() => router.push(`/installatori/${i.id}`)}
@@ -230,13 +232,7 @@ export function InstallatoreTable({
                 className="border-r border-border/70"
                 style={{ width: COLUMN_WIDTH.tag, minWidth: COLUMN_WIDTH.tag, maxWidth: COLUMN_WIDTH.tag }}
               >
-                {i.tag ? (
-                  <span className="inline-flex max-w-full items-center rounded-full bg-teal/10 px-2.5 py-1 text-xs font-bold text-teal">
-                    <span className="truncate">{i.tag}</span>
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
+                <InstallatoreTagChip tag={i.tag} />
               </TableCell>
 
               <TableCell
@@ -303,6 +299,7 @@ export function InstallatoreTable({
                 </DropdownMenu>
               </TableCell>
             </TableRow>
+            </InstallatoreRowContextMenu>
           ))
         )}
       </TableBody>

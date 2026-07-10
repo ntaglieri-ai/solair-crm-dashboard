@@ -30,6 +30,7 @@ import {
   CorrelatoPicker,
   type CorrelatoValue,
 } from "@/components/shared/correlato-picker"
+import { ScadenzaTagField } from "./scadenza-tag-picker"
 
 /** ISO → { date: "YYYY-MM-DD", time: "HH:MM" } per gli input nativi. */
 function toInputs(iso: string | null): { date: string; time: string } {
@@ -285,19 +286,8 @@ export function ScadenzaFormDialog({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="s-tag">Tag</Label>
-            <Input
-              id="s-tag"
-              list="s-tag-suggestions"
-              value={tag}
-              onChange={(e) => setTag(e.target.value)}
-              placeholder="Es. PNRR40"
-            />
-            <datalist id="s-tag-suggestions">
-              {tagSuggestions.map((t) => (
-                <option key={t} value={t} />
-              ))}
-            </datalist>
+            <Label>Tag</Label>
+            <ScadenzaTagField value={tag} onChange={setTag} suggestions={tagSuggestions} />
           </div>
 
           <div className="flex flex-col gap-1.5">

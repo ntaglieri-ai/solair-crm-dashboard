@@ -57,6 +57,28 @@ export async function getNextcloudAppPassword(
   return (data as string | null) ?? null
 }
 
+/**
+ * Ritorna lo userid Nextcloud memorizzato per l'utente, o null se mai
+ * provisionato (nessuna riga). Da chiamare PRIMA di cancellare la riga utenti:
+ * la FK e' `on delete cascade`, quindi dopo la delete la credenziale (e con essa
+ * nc_username) sparisce e non sapremmo piu' quale account NC rimuovere.
+ */
+export async function getNextcloudUsername(
+  utenteId: string,
+): Promise<string | null> {
+  const admin = createAdminClient()
+  if (!admin) return null
+
+  const { data, error } = await admin
+    .from("nextcloud_credentials")
+    .select("nc_username")
+    .eq("utente_id", utenteId)
+    .maybeSingle()
+
+  if (error || !data) return null
+  return (data.nc_username as string | null) ?? null
+}
+
 export type NextcloudCredentialRow = {
   utente_id: string
   nc_username: string

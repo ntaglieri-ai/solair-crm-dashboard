@@ -5,9 +5,15 @@ import {
   accountRoleErrorMessage,
   resolveRole,
 } from "@/lib/crm-settings/roles"
-import { setNextcloudUserEnabled } from "@/lib/nextcloud/provisioning"
+import {
+  deleteNextcloudUser,
+  setNextcloudUserEnabled,
+} from "@/lib/nextcloud/provisioning"
 import { nextcloudUsernameFromEmail } from "@/lib/nextcloud/config"
-import { storeNextcloudCredential } from "@/lib/nextcloud/credentials"
+import {
+  getNextcloudUsername,
+  storeNextcloudCredential,
+} from "@/lib/nextcloud/credentials"
 
 type PatchPayload = {
   nome?: string
@@ -92,10 +98,30 @@ export async function DELETE(
 
   const { id } = await params
   const supabase = await createClient()
+
+  // Recupera lo userid Nextcloud PRIMA di cancellare la riga utenti: la FK di
+  // nextcloud_credentials e' `on delete cascade`, quindi la delete rimuove la
+  // credenziale e con essa nc_username, lasciando l'account NC orfano senza
+  // modo di risalire a quale account rimuovere. null = utente mai provisionato.
+  const ncUsername = await getNextcloudUsername(id)
+
   const { error } = await supabase.from("utenti").delete().eq("id", id)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // Elimina l'account Nextcloud associato. Best-effort e coerente con
+  // l'approccio "loud, not silent" del provisioning: se fallisce (rete, account
+  // gia' rimosso) logghiamo forte per riconciliazione manuale ma NON blocchiamo
+  // la cancellazione CRM, gia' avvenuta. Skip pulito se mai provisionato.
+  if (ncUsername) {
+    const result = await deleteNextcloudUser(ncUsername)
+    if (!result.ok) {
+      console.error(
+        `[nextcloud] delete account fallita per "${ncUsername}" (utente ${id}): ${result.error} — rimuovere manualmente`,
+      )
+    }
   }
 
   return NextResponse.json({ ok: true })

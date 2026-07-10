@@ -31,11 +31,6 @@ import {
   ContextMenuSubContent,
 } from "@/components/ui/context-menu"
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -228,27 +223,11 @@ export function LeadRowContextMenu({
 
             <ContextMenuSeparator />
 
-            {/* Gestisci tag -> apre popover inline sulla riga */}
-            <Popover open={tagOpen} onOpenChange={setTagOpen}>
-              <PopoverTrigger
-                nativeButton={false}
-                render={
-                  <ContextMenuItem
-                    closeOnClick={false}
-                    onClick={(e) => {
-                      e.preventDefault()
-                      setTagOpen(true)
-                    }}
-                  >
-                    <IconTag size={15} stroke={1.8} />
-                    Gestisci tag
-                  </ContextMenuItem>
-                }
-              />
-              <PopoverContent align="start" className="w-72 gap-0 p-2">
-                <TagPicker leadId={lead.id} onDone={() => setTagOpen(false)} />
-              </PopoverContent>
-            </Popover>
+            {/* Gestisci tag -> apre dialog, non popover annidato nel menu item */}
+            <ContextMenuItem onClick={() => setTagOpen(true)}>
+              <IconTag size={15} stroke={1.8} />
+              Gestisci tag
+            </ContextMenuItem>
 
             {/* Cambia proprietario */}
             <ContextMenuSub>
@@ -331,6 +310,15 @@ export function LeadRowContextMenu({
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+
+      <Dialog open={tagOpen} onOpenChange={setTagOpen}>
+        <DialogContent className="gap-3 sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Gestisci tag</DialogTitle>
+          </DialogHeader>
+          <TagPicker leadId={lead.id} onDone={() => setTagOpen(false)} />
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog duplica */}
       <Dialog open={confirmDup} onOpenChange={setConfirmDup}>

@@ -5,6 +5,9 @@ import {
   accountRoleErrorMessage,
   resolveRole,
 } from "@/lib/crm-settings/roles"
+import { setNextcloudUserEnabled } from "@/lib/nextcloud/provisioning"
+import { nextcloudUsernameFromEmail } from "@/lib/nextcloud/config"
+import { storeNextcloudCredential } from "@/lib/nextcloud/credentials"
 
 type PatchPayload = {
   nome?: string
@@ -57,6 +60,24 @@ export async function PATCH(
       { error: accountRoleErrorMessage(error.message) },
       { status: 500 },
     )
+  }
+
+  // Sincronizza lo stato dell'account Nextcloud quando cambia "attivo":
+  // disattivazione CRM -> disable NC; riattivazione -> enable. Best-effort,
+  // non blocca il salvataggio (errori loggati e riflessi nello stato cred).
+  if (body.attivo !== undefined) {
+    const username = nextcloudUsernameFromEmail(data.email)
+    const result = await setNextcloudUserEnabled(username, data.attivo)
+    if (!result.ok) {
+      console.error(`[nextcloud] enable/disable fallito per ${username}:`, result.error)
+    } else {
+      await storeNextcloudCredential({
+        utenteId: data.id,
+        username,
+        status: data.attivo ? "active" : "disabled",
+        lastError: null,
+      })
+    }
   }
 
   return NextResponse.json({ utente: data })

@@ -259,6 +259,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       "crm_settings.system.regole",
       "crm_settings.system.flussi",
       "crm_settings.system.import_export",
+      "crm_settings.file_manager",
     ])
     grantRecords([...MODULE_KEYS], ["view", "create", "edit", "delete", "export", "assign"])
     grantActions([

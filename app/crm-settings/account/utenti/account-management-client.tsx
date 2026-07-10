@@ -66,6 +66,8 @@ import { cn } from "@/lib/utils"
 const DEFAULT_SEDI = ["Catania", "Giarre (CT)", "Treviso", "Torino", "Porto Sant'Elpidio"]
 const EMPTY_FORM = { nome: "", email: "", ruolo: "", sede: "", attivo: true }
 
+type NextcloudStatus = "active" | "pending" | "failed" | "disabled"
+
 type Utente = {
   id: string
   nome: string
@@ -75,6 +77,8 @@ type Utente = {
   sede: string
   attivo: boolean
   created_at: string
+  nextcloud_status?: NextcloudStatus
+  nextcloud_error?: string | null
 }
 
 type RuoloProfilo = {
@@ -129,6 +133,22 @@ function RolePill({ code, label }: { code: string; label: string }) {
     >
       {label}
     </span>
+  )
+}
+
+const NC_STATUS_META: Record<NextcloudStatus, { label: string; className: string }> = {
+  active: { label: "Attivo", className: "bg-teal/15 text-teal" },
+  pending: { label: "In attesa", className: "bg-amber-500/15 text-amber-600" },
+  failed: { label: "Errore", className: "bg-destructive/10 text-destructive" },
+  disabled: { label: "Disabilitato", className: "bg-muted text-muted-foreground" },
+}
+
+function NcStatusBadge({ status }: { status?: NextcloudStatus }) {
+  const meta = NC_STATUS_META[status ?? "pending"]
+  return (
+    <Badge variant="outline" className={cn("border-transparent", meta.className)}>
+      {meta.label}
+    </Badge>
   )
 }
 
@@ -251,16 +271,27 @@ export function AccountManagementClient({
       })
       const body = (await res.json().catch(() => null)) as {
         utente?: Utente
+        nextcloud?: { status: NextcloudStatus; error: string | null }
         error?: string
       } | null
       if (!res.ok || !body?.utente) {
         throw new Error(body?.error ?? "Creazione account non riuscita")
       }
+      const created: Utente = {
+        ...body.utente,
+        nextcloud_status: body.nextcloud?.status ?? "pending",
+        nextcloud_error: body.nextcloud?.error ?? null,
+      }
       setUsers((prev) =>
-        [...prev, body.utente!].sort((a, b) => a.nome.localeCompare(b.nome)),
+        [...prev, created].sort((a, b) => a.nome.localeCompare(b.nome)),
       )
       setNewOpen(false)
       setNewForm(EMPTY_FORM)
+      if (body.nextcloud && body.nextcloud.status !== "active") {
+        setError(
+          `Utente creato, ma il provisioning Nextcloud e' ${body.nextcloud.status}: ${body.nextcloud.error ?? "vedi log"}. Usa "Riprova provisioning" dal menu azioni.`,
+        )
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Creazione account non riuscita")
     } finally {
@@ -270,6 +301,43 @@ export function AccountManagementClient({
 
   async function toggleActive(user: Utente) {
     await saveUser(user.id, { ...userToForm(user), attivo: !user.attivo })
+  }
+
+  async function retryNextcloud(user: Utente) {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/crm-settings/utenti/${user.id}/nextcloud`, {
+        method: "POST",
+      })
+      const body = (await res.json().catch(() => null)) as {
+        nextcloud?: { status: NextcloudStatus; error: string | null }
+        error?: string
+      } | null
+      if (!res.ok || !body?.nextcloud) {
+        throw new Error(body?.error ?? "Provisioning Nextcloud non riuscito")
+      }
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === user.id
+            ? {
+                ...u,
+                nextcloud_status: body.nextcloud!.status,
+                nextcloud_error: body.nextcloud!.error,
+              }
+            : u,
+        ),
+      )
+      if (body.nextcloud.status !== "active") {
+        setError(
+          `Provisioning Nextcloud per ${user.email}: ${body.nextcloud.error ?? "non riuscito"}`,
+        )
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Provisioning Nextcloud non riuscito")
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function deleteUser() {
@@ -382,6 +450,7 @@ export function AccountManagementClient({
               <TableHead>Sede</TableHead>
               <TableHead>Creato il</TableHead>
               <TableHead>Stato</TableHead>
+              <TableHead>Nextcloud</TableHead>
               <TableHead className="w-12 text-right">Azioni</TableHead>
             </TableRow>
           </TableHeader>
@@ -420,6 +489,9 @@ export function AccountManagementClient({
                     </Badge>
                   )}
                 </TableCell>
+                <TableCell title={user.nextcloud_error ?? undefined}>
+                  <NcStatusBadge status={user.nextcloud_status} />
+                </TableCell>
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <DropdownMenu>
                     <DropdownMenuTrigger
@@ -440,6 +512,11 @@ export function AccountManagementClient({
                       <DropdownMenuItem onClick={() => toggleActive(user)}>
                         {user.attivo ? "Disattiva" : "Attiva"}
                       </DropdownMenuItem>
+                      {user.nextcloud_status !== "active" ? (
+                        <DropdownMenuItem onClick={() => retryNextcloud(user)}>
+                          Riprova provisioning Nextcloud
+                        </DropdownMenuItem>
+                      ) : null}
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         variant="destructive"
@@ -454,7 +531,7 @@ export function AccountManagementClient({
             ))}
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                   Nessun account trovato.
                 </TableCell>
               </TableRow>

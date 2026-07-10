@@ -1,13 +1,11 @@
-import { NextResponse } from "next/server";
- 
-export async function GET() {
-  const params = new URLSearchParams({
-    response_type: "code",
-    client_id: process.env.NEXTCLOUD_CLIENT_ID!,
-    redirect_uri: "https://solair-crm-dashboard.vercel.app/api/auth/nextcloud/callback",
-  });
- 
-  const url = `${process.env.NEXTCLOUD_URL}/apps/oauth2/authorize?${params}`;
-  return NextResponse.redirect(url);
+import { NextRequest, NextResponse } from "next/server"
+
+// ============================================================================
+// LEGACY / DEPRECATO — avvio del flusso OAuth2 interattivo per-utente.
+// Superato dal provisioning server-side (vedi callback/route.ts e
+// lib/nextcloud/*). Non avvia piu' l'authorize OAuth: gli account Nextcloud
+// vengono creati automaticamente alla creazione utente nel CRM.
+// ============================================================================
+export async function GET(request: NextRequest) {
+  return NextResponse.redirect(new URL("/documenti?nc_error=oauth_deprecated", request.url))
 }
- 

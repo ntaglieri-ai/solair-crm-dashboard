@@ -1,20 +1,32 @@
-"use client"
-
-import { ExternalLink } from "lucide-react"
+import { AlertCircle, ExternalLink } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { CartellePreferite } from "@/components/documenti/cartelle-preferite"
 import { DocumentiRecenti } from "@/components/documenti/documenti-recenti"
 import { StorageCta } from "@/components/documenti/storage-cta"
-import { currentDocumentiUser } from "@/lib/documenti-data"
-import { PermissionPageGuard } from "@/lib/permissions/client-guard"
+import { openNextcloudUrl } from "@/lib/documenti-data"
+import { requirePage } from "@/lib/permissions/server"
+import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permissions"
+import { loadDocumentiData } from "@/lib/nextcloud/documenti"
 
-export default function DocumentiPage() {
-  const user = currentDocumentiUser
+export default async function DocumentiPage() {
+  // Enforcement pagina server-side (redirect se il ruolo non ha accesso).
+  await requirePage("documenti")
+
+  const snapshot = await loadCurrentPermissionSnapshot()
+  const { subject } = snapshot
+
+  const data =
+    subject.userId && subject.email
+      ? await loadDocumentiData({
+          utenteId: subject.userId,
+          email: subject.email,
+          roleCode: subject.ruoloCode,
+        })
+      : { connected: false, message: "Utente non risolto.", favorites: [], recent: [] }
 
   return (
-    <PermissionPageGuard page="documenti">
-      <div className="flex flex-col gap-6 p-4 md:p-6">
+    <div className="flex flex-col gap-6 p-4 md:p-6">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -26,31 +38,29 @@ export default function DocumentiPage() {
 
         <Button
           className="gap-1.5"
-          render={
-            <a
-              href={user.nextcloud_url}
-              target="_blank"
-              rel="noopener noreferrer"
-            />
-          }
+          nativeButton={false}
+          render={<a href={openNextcloudUrl()} target="_blank" rel="noopener noreferrer" />}
         >
           Apri Nextcloud
           <ExternalLink className="size-4" aria-hidden="true" />
         </Button>
       </div>
 
-      <CartellePreferite
-        cartelle={user.cartelle_preferite}
-        baseUrl={user.nextcloud_url}
-      />
+      {!data.connected || data.message ? (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-sm text-amber-700">
+          <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <span>{data.message}</span>
+        </div>
+      ) : null}
 
-      <DocumentiRecenti
-        documenti={user.documenti_recenti}
-        baseUrl={user.nextcloud_url}
-      />
+      {data.connected ? (
+        <>
+          <CartellePreferite cartelle={data.favorites} />
+          <DocumentiRecenti documenti={data.recent} />
+        </>
+      ) : null}
 
-      <StorageCta baseUrl={user.nextcloud_url} />
-      </div>
-    </PermissionPageGuard>
+      <StorageCta />
+    </div>
   )
 }

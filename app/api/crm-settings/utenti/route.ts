@@ -5,6 +5,8 @@ import {
   accountRoleErrorMessage,
   resolveRole,
 } from "@/lib/crm-settings/roles"
+import { provisionNextcloudUser } from "@/lib/nextcloud/provisioning"
+import { getNextcloudCredentialStatuses } from "@/lib/nextcloud/credentials"
 
 type UserPayload = {
   nome: string
@@ -36,7 +38,20 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ utenti: utenti ?? [], ruoli: ruoli ?? [] })
+  // Arricchisce ogni utente con lo stato del provisioning Nextcloud.
+  const ncStatuses = await getNextcloudCredentialStatuses(
+    (utenti ?? []).map((u) => u.id),
+  )
+  const utentiConNc = (utenti ?? []).map((u) => {
+    const nc = ncStatuses.get(u.id)
+    return {
+      ...u,
+      nextcloud_status: nc?.status ?? "pending",
+      nextcloud_error: nc?.last_error ?? null,
+    }
+  })
+
+  return NextResponse.json({ utenti: utentiConNc, ruoli: ruoli ?? [] })
 }
 
 export async function POST(request: Request) {
@@ -76,5 +91,26 @@ export async function POST(request: Request) {
     )
   }
 
-  return NextResponse.json({ utente: data }, { status: 201 })
+  // Provisioning Nextcloud: crea l'account speculare + app-password cifrata.
+  // Non blocca la creazione CRM: in caso di errore l'utente resta creato ma la
+  // credenziale e' marcata pending/failed ed e' rilanciabile dalla UI.
+  const provisioning = await provisionNextcloudUser({
+    id: data.id,
+    email: data.email,
+    nome: data.nome,
+  })
+  if (provisioning.status !== "active") {
+    console.error(
+      `[nextcloud] provisioning ${provisioning.status} per utente ${data.id}:`,
+      provisioning.error,
+    )
+  }
+
+  return NextResponse.json(
+    {
+      utente: data,
+      nextcloud: { status: provisioning.status, error: provisioning.error },
+    },
+    { status: 201 },
+  )
 }

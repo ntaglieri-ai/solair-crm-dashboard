@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { currentAccountProfileFromSnapshot } from "@/lib/crm-settings/current-account"
 import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permissions"
+import { getNextcloudCredentialStatuses } from "@/lib/nextcloud/credentials"
 import { AccountManagementClient } from "./account-management-client"
 
 type Utente = {
@@ -49,6 +50,10 @@ async function loadAccountManagementData() {
     normalizedRoles.map((ruolo) => [ruolo.code.toUpperCase(), ruolo]),
   )
 
+  const ncStatuses = await getNextcloudCredentialStatuses(
+    ((utenti ?? []) as Utente[]).map((u) => u.id),
+  )
+
   return {
     initialUsers: ((utenti ?? []) as Utente[]).map((utente) => ({
       ...utente,
@@ -59,6 +64,8 @@ async function loadAccountManagementData() {
         "",
       sede: utente.sede ?? "",
       attivo: utente.attivo !== false,
+      nextcloud_status: ncStatuses.get(utente.id)?.status ?? "pending",
+      nextcloud_error: ncStatuses.get(utente.id)?.last_error ?? null,
     })),
     initialRoles: normalizedRoles,
     currentProfile: currentAccountProfileFromSnapshot(currentPermissions),

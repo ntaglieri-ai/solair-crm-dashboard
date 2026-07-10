@@ -1,100 +1,57 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
+import { getNextcloudAppPassword } from "@/lib/nextcloud/credentials"
+import { nextcloudBaseUrl, nextcloudUsernameFromEmail } from "@/lib/nextcloud/config"
+import { canAccessNcPath, normalizeNcPath } from "@/lib/nextcloud/path-permissions"
+import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permissions"
 
-export async function GET() {
-  const supabase = await createClient();
+// "Apri Nextcloud": autentica l'utente su Nextcloud tramite la sua app-password
+// gia' provisionata (nessun OAuth interattivo). Ricicla la tecnica del
+// session-bridge /login?user=&password= usando la app-password cifrata a DB.
+// Con ?path=... apre direttamente quella cartella, ma solo se il ruolo vi ha
+// accesso (regole path-based enforced anche qui, non solo in UI).
+export async function GET(request: NextRequest) {
+  const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await supabase.auth.getUser()
+
+  const base = nextcloudBaseUrl()
 
   if (!user) {
-    return NextResponse.redirect(
-      "https://solair-crm-dashboard.vercel.app/login"
-    );
+    return NextResponse.redirect(new URL("/login", request.url))
   }
 
   const { data: utente } = await supabase
     .from("utenti")
-    .select("nextcloud_access_token, nextcloud_refresh_token, nextcloud_token_expires_at")
+    .select("id, email")
     .eq("auth_user_id", user.id)
-    .single();
+    .maybeSingle()
 
-  // Se non connesso → avvia flusso OAuth
-  if (!utente?.nextcloud_access_token) {
-    return NextResponse.redirect(
-      "https://solair-crm-dashboard.vercel.app/api/auth/nextcloud/connect"
-    );
+  if (!utente) {
+    return NextResponse.redirect(new URL("/documenti?nc_error=no_account", request.url))
   }
 
-  // Se token scaduto → refresh
-  const isExpired =
-    utente.nextcloud_token_expires_at &&
-    new Date(utente.nextcloud_token_expires_at) < new Date();
-
-  let accessToken = utente.nextcloud_access_token;
-
-  if (isExpired && utente.nextcloud_refresh_token) {
-    const res = await fetch(`${process.env.NEXTCLOUD_URL}/apps/oauth2/api/v1/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: utente.nextcloud_refresh_token,
-        client_id: process.env.NEXTCLOUD_CLIENT_ID!,
-        client_secret: process.env.NEXTCLOUD_CLIENT_SECRET!,
-      }),
-    });
-
-    const tokens = await res.json();
-
-    if (tokens.access_token) {
-      accessToken = tokens.access_token;
-      await supabase
-        .from("utenti")
-        .update({
-          nextcloud_access_token: tokens.access_token,
-          nextcloud_refresh_token: tokens.refresh_token,
-          nextcloud_token_expires_at: new Date(
-            Date.now() + tokens.expires_in * 1000
-          ).toISOString(),
-        })
-        .eq("auth_user_id", user.id);
-    } else {
-      // Refresh fallito → riautentica
-      return NextResponse.redirect(
-        "https://solair-crm-dashboard.vercel.app/api/auth/nextcloud/connect"
-      );
-    }
-  }
-
-  // Genera app password temporanea via OCS API
-  const ocsRes = await fetch(
-    `${process.env.NEXTCLOUD_URL}/ocs/v2.php/core/getapppassword`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "OCS-APIRequest": "true",
-      },
-    }
-  );
-
-  const xml = await ocsRes.text();
-  const match = xml.match(/<apppassword>(.*?)<\/apppassword>/);
-  const appPassword = match?.[1];
-
+  const appPassword = await getNextcloudAppPassword(utente.id)
   if (!appPassword) {
-    // Fallback: riautentica
-    return NextResponse.redirect(
-      "https://solair-crm-dashboard.vercel.app/api/auth/nextcloud/connect"
-    );
+    // Provisioning non completato: rimanda alla pagina con errore esplicito.
+    return NextResponse.redirect(new URL("/documenti?nc_error=not_provisioned", request.url))
   }
 
-  // Estrai username dal token OCS
-  const userMatch = xml.match(/<loginname>(.*?)<\/loginname>/);
-  const ncUsername = userMatch?.[1] ?? user.email;
+  const username = nextcloudUsernameFromEmail(utente.email)
 
-  // Login diretto Nextcloud con app password temporanea
-  const ncLoginUrl = `${process.env.NEXTCLOUD_URL}/login?user=${encodeURIComponent(ncUsername!)}&password=${encodeURIComponent(appPassword)}&redirect_url=/apps/files`;
+  // Redirect target: root files, oppure una cartella specifica se richiesta e
+  // consentita al ruolo dell'utente.
+  let redirectPath = "/apps/files"
+  const requested = normalizeNcPath(request.nextUrl.searchParams.get("path") ?? "")
+  if (requested) {
+    const snapshot = await loadCurrentPermissionSnapshot()
+    if (canAccessNcPath(requested, snapshot.subject.ruoloCode)) {
+      redirectPath = `/apps/files/?dir=/${requested}`
+    }
+  }
 
-  return NextResponse.redirect(ncLoginUrl);
+  const loginUrl = `${base}/login?user=${encodeURIComponent(username)}&password=${encodeURIComponent(appPassword)}&redirect_url=${encodeURIComponent(redirectPath)}`
+
+  return NextResponse.redirect(loginUrl)
 }

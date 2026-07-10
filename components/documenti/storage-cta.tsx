@@ -3,8 +3,9 @@
 import { Cloud, ExternalLink } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { openNextcloudUrl } from "@/lib/documenti-data"
 
-export function StorageCta({ baseUrl }: { baseUrl: string }) {
+export function StorageCta() {
   return (
     <section className="flex flex-col items-start gap-4 rounded-xl bg-[#2E8B72]/8 p-5 ring-1 ring-[#2E8B72]/20 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-start gap-4">
@@ -25,9 +26,7 @@ export function StorageCta({ baseUrl }: { baseUrl: string }) {
       <Button
         className="shrink-0 gap-1.5"
         nativeButton={false}
-        render={
-          <a href={baseUrl} target="_blank" rel="noopener noreferrer" />
-        }
+        render={<a href={openNextcloudUrl()} target="_blank" rel="noopener noreferrer" />}
       >
         Apri Nextcloud
         <ExternalLink className="size-4" aria-hidden="true" />

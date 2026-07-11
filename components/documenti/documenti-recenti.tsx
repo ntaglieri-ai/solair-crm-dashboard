@@ -1,6 +1,15 @@
 "use client"
 
-import { FileText, FileSpreadsheet, FileImage, Archive, File, ExternalLink, type LucideIcon } from "lucide-react"
+import {
+  FileText,
+  FileSpreadsheet,
+  FileImage,
+  Archive,
+  File,
+  ExternalLink,
+  FolderOpen,
+  type LucideIcon,
+} from "lucide-react"
 
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -12,6 +21,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   type DocumentoRecente,
   fileExtension,
@@ -53,12 +67,26 @@ export function DocumentiRecenti({ documenti }: { documenti: DocumentoRecente[] 
           <TableBody>
             {documenti.map((doc) => {
               const { Icon, className } = iconFor(doc.name)
+              // Deep link diretto al file quando abbiamo l'oc:fileid; senza,
+              // degradiamo aprendo la cartella contenitore (comportamento sicuro).
+              const fileHref = doc.fileId
+                ? openNextcloudUrl(doc.path, doc.fileId)
+                : openNextcloudUrl(parentDir(doc.path))
+              const folderHref = openNextcloudUrl(parentDir(doc.path))
               return (
                 <TableRow key={doc.path}>
                   <TableCell className="pl-4">
                     <div className="flex items-center gap-2">
                       <Icon className={`size-4 shrink-0 ${className}`} aria-hidden="true" />
-                      <span className="font-medium text-foreground">{doc.name}</span>
+                      <a
+                        href={fileHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="truncate font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
+                        title={`Apri ${doc.name}`}
+                      >
+                        {doc.name}
+                      </a>
                     </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{formatSize(doc.size)}</TableCell>
@@ -66,21 +94,52 @@ export function DocumentiRecenti({ documenti }: { documenti: DocumentoRecente[] 
                     {relativeDateIt(doc.modified)}
                   </TableCell>
                   <TableCell className="pr-4 text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      nativeButton={false}
-                      aria-label={`Apri ${doc.name} in Nextcloud`}
-                      render={
-                        <a
-                          href={openNextcloudUrl(parentDir(doc.path))}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                    <div className="flex items-center justify-end gap-1">
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              nativeButton={false}
+                              aria-label={`Apri il file ${doc.name}`}
+                              render={
+                                <a
+                                  href={fileHref}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                />
+                              }
+                            >
+                              <ExternalLink className="size-4" aria-hidden="true" />
+                            </Button>
+                          }
                         />
-                      }
-                    >
-                      <ExternalLink className="size-4" aria-hidden="true" />
-                    </Button>
+                        <TooltipContent>Apri file</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              nativeButton={false}
+                              aria-label={`Vai alla cartella di ${doc.name}`}
+                              render={
+                                <a
+                                  href={folderHref}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                />
+                              }
+                            >
+                              <FolderOpen className="size-4" aria-hidden="true" />
+                            </Button>
+                          }
+                        />
+                        <TooltipContent>Vai alla cartella</TooltipContent>
+                      </Tooltip>
+                    </div>
                   </TableCell>
                 </TableRow>
               )

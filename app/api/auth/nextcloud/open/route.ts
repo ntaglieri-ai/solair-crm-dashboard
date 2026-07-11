@@ -40,14 +40,21 @@ export async function GET(request: NextRequest) {
 
   const username = nextcloudUsernameFromEmail(utente.email)
 
-  // Redirect target: root files, oppure una cartella specifica se richiesta e
-  // consentita al ruolo dell'utente.
+  // Redirect target: root files, una cartella specifica, oppure un singolo file
+  // (deep link /f/{fileid}, che Nextcloud risolve nel viewer del file). In tutti
+  // i casi il path richiesto deve essere consentito al ruolo dell'utente: per un
+  // file passiamo il suo path completo, cosi' le regole prefix-based lo coprono.
   let redirectPath = "/apps/files"
   const requested = normalizeNcPath(request.nextUrl.searchParams.get("path") ?? "")
+  const fileId = request.nextUrl.searchParams.get("fileid")
   if (requested) {
     const snapshot = await loadCurrentPermissionSnapshot()
     if (canAccessNcPath(requested, snapshot.subject.ruoloCode)) {
-      redirectPath = `/apps/files/?dir=/${requested}`
+      // fileid e' sempre numerico su Nextcloud: valida per evitare open-redirect.
+      redirectPath =
+        fileId && /^\d+$/.test(fileId)
+          ? `/f/${fileId}`
+          : `/apps/files/?dir=/${requested}`
     }
   }
 

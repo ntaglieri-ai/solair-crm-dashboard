@@ -90,6 +90,7 @@ export async function loadDocumentiData(user: CurrentUser): Promise<DocumentiDat
         path: e.path,
         size: e.size,
         modified: e.lastModified,
+        fileId: e.fileId,
       }))
   } catch (e) {
     message = "Impossibile leggere i file recenti da Nextcloud."

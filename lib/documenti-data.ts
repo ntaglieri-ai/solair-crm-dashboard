@@ -15,6 +15,7 @@ export interface DocumentoRecente {
   path: string
   size: number | null
   modified: string | null // ISO
+  fileId: string | null // oc:fileid Nextcloud, per il deep link diretto al file
 }
 
 export interface DocumentiData {
@@ -24,10 +25,18 @@ export interface DocumentiData {
   recent: DocumentoRecente[]
 }
 
-/** URL della route server che apre Nextcloud autenticato via app-password. */
-export function openNextcloudUrl(path?: string): string {
+/**
+ * URL della route server che apre Nextcloud autenticato via app-password.
+ * Con `path` apre quella cartella; passando anche `fileId` (oc:fileid) apre
+ * direttamente quel file nel viewer Nextcloud (deep link /f/{id}).
+ */
+export function openNextcloudUrl(path?: string, fileId?: string | null): string {
   const base = "/api/auth/nextcloud/open"
-  return path ? `${base}?path=${encodeURIComponent(path)}` : base
+  const params = new URLSearchParams()
+  if (path) params.set("path", path)
+  if (fileId) params.set("fileid", fileId)
+  const qs = params.toString()
+  return qs ? `${base}?${qs}` : base
 }
 
 /** Formatta una dimensione in byte in stringa leggibile. */

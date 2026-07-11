@@ -13,6 +13,7 @@ export type NcEntry = {
   contentType: string | null
   lastModified: string | null // ISO
   favorite: boolean // oc:favorite=1 (stella nativa Nextcloud)
+  fileId: string | null // oc:fileid, per i deep link diretti al file (/f/{id})
 }
 
 function davRoot(username: string): string {
@@ -28,6 +29,7 @@ const PROPFIND_BODY = `<?xml version="1.0"?>
     <d:getcontenttype/>
     <d:resourcetype/>
     <oc:favorite/>
+    <oc:fileid/>
   </d:prop>
 </d:propfind>`
 
@@ -77,6 +79,7 @@ function parsePropfind(xml: string, username: string): NcEntry[] {
       contentType: tag(block, "getcontenttype"),
       lastModified: lastMod ? new Date(lastMod).toISOString() : null,
       favorite: tag(block, "favorite") === "1",
+      fileId: tag(block, "fileid"),
     })
   }
 
@@ -209,7 +212,7 @@ export async function recentFiles(
 <d:searchrequest xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
   <d:basicsearch>
     <d:select><d:prop>
-      <d:displayname/><d:getlastmodified/><d:getcontentlength/><d:getcontenttype/><d:resourcetype/>
+      <d:displayname/><d:getlastmodified/><d:getcontentlength/><d:getcontenttype/><d:resourcetype/><oc:fileid/>
     </d:prop></d:select>
     <d:from><d:scope>
       <d:href>/files/${username}</d:href><d:depth>infinity</d:depth>

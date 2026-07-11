@@ -5,10 +5,10 @@ import "server-only"
 import { createClient } from "@/lib/supabase/server"
 import type { RoleCode } from "@/lib/permissions/types"
 import type { CartellaPreferita, DocumentiData, DocumentoRecente } from "@/lib/documenti-data"
-import { getNextcloudAppPassword } from "./credentials"
+import { getNextcloudAppPassword, getNextcloudUsername } from "./credentials"
 import { nextcloudUsernameFromEmail } from "./config"
-import { recentFiles } from "./webdav"
-import { canAccessNcPath } from "./path-permissions"
+import { listFavorites, recentFiles } from "./webdav"
+import { canAccessNcPath, normalizeNcPath } from "./path-permissions"
 
 type CurrentUser = {
   utenteId: string
@@ -33,7 +33,11 @@ export async function loadDocumentiData(user: CurrentUser): Promise<DocumentiDat
     }
   }
 
-  const username = nextcloudUsernameFromEmail(user.email)
+  // Lo userid Nextcloud puo' NON coincidere con l'email (es. account admin
+  // riconciliato a mano): usa quello memorizzato nella credenziale, con
+  // fallback all'email per gli account provisionati in automatico.
+  const username =
+    (await getNextcloudUsername(user.utenteId)) ?? nextcloudUsernameFromEmail(user.email)
   const supabase = await createClient()
 
   // Preferiti (RLS: l'utente vede solo i propri) + filtro path-based per ruolo.
@@ -46,6 +50,32 @@ export async function loadDocumentiData(user: CurrentUser): Promise<DocumentiDat
   const favorites: CartellaPreferita[] = ((favRows ?? []) as CartellaPreferita[]).filter(
     (f) => canAccessNcPath(f.path, user.roleCode),
   )
+
+  // Sync bidirezionale con le stelle native Nextcloud (oc:favorite): importa le
+  // cartelle marcate come preferite direttamente in Nextcloud che non sono
+  // ancora nella tabella, cosi' persistono con una label. Best-effort: se il
+  // REPORT fallisce mostriamo comunque i preferiti gia' salvati.
+  try {
+    const existingPaths = new Set(favorites.map((f) => normalizeNcPath(f.path)))
+    const ncFavFolders = (await listFavorites(username, appPassword)).filter(
+      (e) => e.isDir && canAccessNcPath(e.path, user.roleCode),
+    )
+    const toImport = ncFavFolders.filter((e) => !existingPaths.has(normalizeNcPath(e.path)))
+
+    if (toImport.length > 0) {
+      const { data: imported } = await supabase
+        .from("cartelle_preferite")
+        .upsert(
+          toImport.map((e) => ({ utente_id: user.utenteId, path: e.path, label: e.name })),
+          { onConflict: "utente_id,path" },
+        )
+        .select("id, label, path")
+      if (imported) favorites.push(...(imported as CartellaPreferita[]))
+    }
+    favorites.sort((a, b) => a.label.localeCompare(b.label))
+  } catch (e) {
+    console.error("[nextcloud] import favoriti nativi fallito:", e)
+  }
 
   // Recenti via WebDAV, poi filtro path-based server-side.
   let recent: DocumentoRecente[] = []

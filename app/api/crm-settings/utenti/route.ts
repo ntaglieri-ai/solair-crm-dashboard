@@ -7,6 +7,7 @@ import {
 } from "@/lib/crm-settings/roles"
 import { provisionNextcloudUser } from "@/lib/nextcloud/provisioning"
 import { getNextcloudCredentialStatuses } from "@/lib/nextcloud/credentials"
+import { provisionAuthUser } from "@/lib/auth/user-provisioning"
 
 type UserPayload = {
   nome: string
@@ -25,7 +26,9 @@ export async function GET() {
     await Promise.all([
       supabase
         .from("utenti")
-        .select("id, nome, email, ruolo, ruolo_id, sede, attivo, created_at")
+        .select(
+          "id, nome, email, ruolo, ruolo_id, sede, attivo, created_at, must_change_password, welcome_email_status, welcome_email_error",
+        )
         .order("nome"),
       supabase
         .from("ruoli")
@@ -81,7 +84,9 @@ export async function POST(request: Request) {
       sede: body.sede,
       attivo: body.attivo ?? true,
     })
-    .select("id, nome, email, ruolo, ruolo_id, sede, attivo, created_at")
+    .select(
+      "id, nome, email, ruolo, ruolo_id, sede, attivo, created_at, must_change_password, welcome_email_status, welcome_email_error",
+    )
     .single()
 
   if (error) {
@@ -106,10 +111,35 @@ export async function POST(request: Request) {
     )
   }
 
+  // Provisioning Auth: crea l'account Supabase Auth con password temporanea
+  // e la invia via email. Stesso approccio "loud, not silent" del Nextcloud:
+  // l'utente CRM resta creato anche se Auth/email falliscono, ma lo stato e'
+  // visibile e rilanciabile dalla UI (retryWelcomeEmail).
+  const authProvisioning = await provisionAuthUser({
+    id: data.id,
+    email: data.email,
+    nome: data.nome,
+  })
+  if (authProvisioning.error) {
+    console.error(`[auth] provisioning fallito per utente ${data.id}:`, authProvisioning.error)
+  }
+  if (authProvisioning.emailStatus !== "sent") {
+    console.error(
+      `[auth] invio email di benvenuto ${authProvisioning.emailStatus} per utente ${data.id}:`,
+      authProvisioning.emailError,
+    )
+  }
+
   return NextResponse.json(
     {
-      utente: data,
+      utente: {
+        ...data,
+        must_change_password: true,
+        welcome_email_status: authProvisioning.emailStatus,
+        welcome_email_error: authProvisioning.emailError,
+      },
       nextcloud: { status: provisioning.status, error: provisioning.error },
+      auth: { error: authProvisioning.error },
     },
     { status: 201 },
   )

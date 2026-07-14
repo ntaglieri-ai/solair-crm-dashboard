@@ -13,6 +13,9 @@ type Utente = {
   sede: string
   attivo: boolean
   created_at: string
+  must_change_password: boolean | null
+  welcome_email_status: "pending" | "sent" | "failed" | null
+  welcome_email_error: string | null
 }
 
 type RuoloProfilo = {
@@ -32,7 +35,9 @@ async function loadAccountManagementData() {
       loadCurrentPermissionSnapshot(),
       supabase
         .from("utenti")
-        .select("id, nome, email, ruolo, ruolo_id, sede, attivo, created_at")
+        .select(
+          "id, nome, email, ruolo, ruolo_id, sede, attivo, created_at, must_change_password, welcome_email_status, welcome_email_error",
+        )
         .order("nome"),
       supabase
         .from("ruoli")
@@ -66,6 +71,9 @@ async function loadAccountManagementData() {
       attivo: utente.attivo !== false,
       nextcloud_status: ncStatuses.get(utente.id)?.status ?? "pending",
       nextcloud_error: ncStatuses.get(utente.id)?.last_error ?? null,
+      must_change_password: utente.must_change_password ?? false,
+      welcome_email_status: utente.welcome_email_status ?? "pending",
+      welcome_email_error: utente.welcome_email_error ?? null,
     })),
     initialRoles: normalizedRoles,
     currentProfile: currentAccountProfileFromSnapshot(currentPermissions),

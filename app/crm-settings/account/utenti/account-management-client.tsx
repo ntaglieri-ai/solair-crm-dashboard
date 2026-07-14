@@ -67,6 +67,7 @@ const DEFAULT_SEDI = ["Catania", "Giarre (CT)", "Treviso", "Torino", "Porto Sant
 const EMPTY_FORM = { nome: "", email: "", ruolo: "", sede: "", attivo: true }
 
 type NextcloudStatus = "active" | "pending" | "failed" | "disabled"
+type WelcomeEmailStatus = "pending" | "sent" | "failed"
 
 type Utente = {
   id: string
@@ -79,6 +80,9 @@ type Utente = {
   created_at: string
   nextcloud_status?: NextcloudStatus
   nextcloud_error?: string | null
+  must_change_password?: boolean
+  welcome_email_status?: WelcomeEmailStatus
+  welcome_email_error?: string | null
 }
 
 type RuoloProfilo = {
@@ -145,6 +149,21 @@ const NC_STATUS_META: Record<NextcloudStatus, { label: string; className: string
 
 function NcStatusBadge({ status }: { status?: NextcloudStatus }) {
   const meta = NC_STATUS_META[status ?? "pending"]
+  return (
+    <Badge variant="outline" className={cn("border-transparent", meta.className)}>
+      {meta.label}
+    </Badge>
+  )
+}
+
+const EMAIL_STATUS_META: Record<WelcomeEmailStatus, { label: string; className: string }> = {
+  sent: { label: "Inviata", className: "bg-teal/15 text-teal" },
+  pending: { label: "In attesa", className: "bg-amber-500/15 text-amber-600" },
+  failed: { label: "Errore", className: "bg-destructive/10 text-destructive" },
+}
+
+function EmailStatusBadge({ status }: { status?: WelcomeEmailStatus }) {
+  const meta = EMAIL_STATUS_META[status ?? "pending"]
   return (
     <Badge variant="outline" className={cn("border-transparent", meta.className)}>
       {meta.label}
@@ -272,6 +291,7 @@ export function AccountManagementClient({
       const body = (await res.json().catch(() => null)) as {
         utente?: Utente
         nextcloud?: { status: NextcloudStatus; error: string | null }
+        auth?: { error: string | null }
         error?: string
       } | null
       if (!res.ok || !body?.utente) {
@@ -290,6 +310,14 @@ export function AccountManagementClient({
       if (body.nextcloud && body.nextcloud.status !== "active") {
         setError(
           `Utente creato, ma il provisioning Nextcloud e' ${body.nextcloud.status}: ${body.nextcloud.error ?? "vedi log"}. Usa "Riprova provisioning" dal menu azioni.`,
+        )
+      } else if (body.auth?.error) {
+        setError(
+          `Utente creato, ma l'account Auth non e' stato creato: ${body.auth.error}.`,
+        )
+      } else if (body.utente.welcome_email_status !== "sent") {
+        setError(
+          `Utente creato, ma l'invio dell'email con la password temporanea e' ${body.utente.welcome_email_status}: ${body.utente.welcome_email_error ?? "vedi log"}. Usa "Rinvia password temporanea" dal menu azioni.`,
         )
       }
     } catch (e) {
@@ -335,6 +363,44 @@ export function AccountManagementClient({
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Provisioning Nextcloud non riuscito")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function retryWelcomeEmail(user: Utente) {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/crm-settings/utenti/${user.id}/welcome-email`, {
+        method: "POST",
+      })
+      const body = (await res.json().catch(() => null)) as {
+        auth?: { error: string | null }
+        utente?: { welcome_email_status: WelcomeEmailStatus; welcome_email_error: string | null }
+        error?: string
+      } | null
+      if (!res.ok || !body?.utente) {
+        throw new Error(body?.auth?.error ?? body?.error ?? "Invio email non riuscito")
+      }
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === user.id
+            ? {
+                ...u,
+                welcome_email_status: body.utente!.welcome_email_status,
+                welcome_email_error: body.utente!.welcome_email_error,
+              }
+            : u,
+        ),
+      )
+      if (body.utente.welcome_email_status !== "sent") {
+        setError(
+          `Invio email per ${user.email}: ${body.utente.welcome_email_error ?? "non riuscito"}`,
+        )
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Invio email non riuscito")
     } finally {
       setSaving(false)
     }
@@ -451,6 +517,7 @@ export function AccountManagementClient({
               <TableHead>Creato il</TableHead>
               <TableHead>Stato</TableHead>
               <TableHead>Nextcloud</TableHead>
+              <TableHead>Password temp.</TableHead>
               <TableHead className="w-12 text-right">Azioni</TableHead>
             </TableRow>
           </TableHeader>
@@ -492,6 +559,9 @@ export function AccountManagementClient({
                 <TableCell title={user.nextcloud_error ?? undefined}>
                   <NcStatusBadge status={user.nextcloud_status} />
                 </TableCell>
+                <TableCell title={user.welcome_email_error ?? undefined}>
+                  <EmailStatusBadge status={user.welcome_email_status} />
+                </TableCell>
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <DropdownMenu>
                     <DropdownMenuTrigger
@@ -517,6 +587,11 @@ export function AccountManagementClient({
                           Riprova provisioning Nextcloud
                         </DropdownMenuItem>
                       ) : null}
+                      {user.welcome_email_status !== "sent" ? (
+                        <DropdownMenuItem onClick={() => retryWelcomeEmail(user)}>
+                          Rinvia password temporanea
+                        </DropdownMenuItem>
+                      ) : null}
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         variant="destructive"
@@ -531,7 +606,7 @@ export function AccountManagementClient({
             ))}
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
                   Nessun account trovato.
                 </TableCell>
               </TableRow>

@@ -57,6 +57,36 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  const isCambiaPasswordRoute = request.nextUrl.pathname === "/cambia-password"
+  // L'endpoint che azzera il flag deve restare raggiungibile MENTRE il flag
+  // e' ancora true, altrimenti il gate qui sotto lo re-indirizzerebbe prima
+  // che possa completare l'aggiornamento (redirect loop autoreferenziale).
+  const isCompletePasswordChangeRoute =
+    request.nextUrl.pathname === "/api/auth/complete-password-change"
+
+  // Solo dopo un login riuscito: se l'utente ha ancora la password temporanea
+  // (must_change_password), blocca l'accesso a tutto il resto del CRM finche'
+  // non la sostituisce. /login resta fuori da questo controllo (vedi sopra).
+  if (isAuthenticated && !isPublicRoute && !isCompletePasswordChangeRoute) {
+    const { data: utente } = await supabase
+      .from("utenti")
+      .select("must_change_password")
+      .eq("auth_user_id", claimsData!.claims!.sub as string)
+      .maybeSingle()
+    const mustChangePassword = utente?.must_change_password === true
+
+    if (mustChangePassword && !isCambiaPasswordRoute) {
+      const url = request.nextUrl.clone()
+      url.pathname = "/cambia-password"
+      return NextResponse.redirect(url)
+    }
+    if (!mustChangePassword && isCambiaPasswordRoute) {
+      const url = request.nextUrl.clone()
+      url.pathname = "/"
+      return NextResponse.redirect(url)
+    }
+  }
+
   return supabaseResponse
 }
 

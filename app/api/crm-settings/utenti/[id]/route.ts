@@ -14,6 +14,7 @@ import {
   getNextcloudUsername,
   storeNextcloudCredential,
 } from "@/lib/nextcloud/credentials"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 type PatchPayload = {
   nome?: string
@@ -99,11 +100,18 @@ export async function DELETE(
   const { id } = await params
   const supabase = await createClient()
 
-  // Recupera lo userid Nextcloud PRIMA di cancellare la riga utenti: la FK di
-  // nextcloud_credentials e' `on delete cascade`, quindi la delete rimuove la
-  // credenziale e con essa nc_username, lasciando l'account NC orfano senza
-  // modo di risalire a quale account rimuovere. null = utente mai provisionato.
+  // Recupera lo userid Nextcloud e l'auth_user_id PRIMA di cancellare la riga
+  // utenti: la FK di nextcloud_credentials e' `on delete cascade`, quindi la
+  // delete rimuove la credenziale e con essa nc_username, lasciando l'account
+  // NC orfano senza modo di risalire a quale account rimuovere. null = utente
+  // mai provisionato (Nextcloud) / mai collegato (Auth).
   const ncUsername = await getNextcloudUsername(id)
+  const { data: existing } = await supabase
+    .from("utenti")
+    .select("auth_user_id")
+    .eq("id", id)
+    .maybeSingle()
+  const authUserId = existing?.auth_user_id ?? null
 
   const { error } = await supabase.from("utenti").delete().eq("id", id)
 
@@ -121,6 +129,24 @@ export async function DELETE(
       console.error(
         `[nextcloud] delete account fallita per "${ncUsername}" (utente ${id}): ${result.error} — rimuovere manualmente`,
       )
+    }
+  }
+
+  // Elimina l'account Supabase Auth associato, stesso approccio best-effort:
+  // altrimenti resterebbe orfano (credenziali valide ma nessun utente CRM).
+  if (authUserId) {
+    const admin = createAdminClient()
+    if (!admin) {
+      console.error(
+        `[auth] SUPABASE_SERVICE_ROLE_KEY non configurata: account Auth ${authUserId} (utente ${id}) non rimosso — rimuovere manualmente`,
+      )
+    } else {
+      const { error: deleteAuthError } = await admin.auth.admin.deleteUser(authUserId)
+      if (deleteAuthError) {
+        console.error(
+          `[auth] delete account fallita per ${authUserId} (utente ${id}): ${deleteAuthError.message} — rimuovere manualmente`,
+        )
+      }
     }
   }
 

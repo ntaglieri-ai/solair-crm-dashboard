@@ -12,6 +12,7 @@ import {
   type RecordPermesso,
 } from "@/lib/ruoli-data"
 import { PermissionManagementClient } from "./permission-management-client"
+import { completeFieldPermissions } from "@/lib/permissions/field-catalog"
 
 // Tabelle Supabase normalizzate per la gestione permessi.
 type RuoloRow = {
@@ -136,6 +137,7 @@ function buildRuoli(
 
     return {
       id: r.id,
+      code: r.code,
       nome: r.nome,
       descrizione: r.descrizione ?? "",
       colore: toColore(r.colore, r.code),
@@ -150,7 +152,7 @@ function buildRuoli(
         riconfigurazioni: ui.get("riconfigurazioni") === true,
         azioni,
         scope_dati,
-        campi,
+        campi: completeFieldPermissions(campi, r.code),
       },
     } satisfies Ruolo
   })

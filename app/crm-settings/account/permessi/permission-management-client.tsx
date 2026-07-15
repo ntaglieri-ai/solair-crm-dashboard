@@ -27,6 +27,19 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { ACTION_KEYS, MODULE_KEYS } from "@/lib/permissions/constants"
+import type { FieldAccess } from "@/lib/permissions/types"
+import {
+  CRM_FIELD_CATALOG,
+  CRM_FIELD_MODULES,
+  FIELD_ACCESS_OPTIONS,
+  FIELD_CATEGORY_ORDER,
+  FIELD_MODULE_LABELS,
+  buildFieldPermissionsForRole,
+  completeFieldPermissions,
+  normalizeFieldAccess,
+  type FieldModuleKey,
+  type FieldSensitivityCategory,
+} from "@/lib/permissions/field-catalog"
 import {
   Dialog,
   DialogContent,
@@ -184,6 +197,7 @@ function withAdvanced(
     actions?: string[]
     scope?: string
     fieldAccess?: string
+    roleCode?: string
   } = {},
 ): RuoloPermessi {
   return {
@@ -192,9 +206,19 @@ function withAdvanced(
       ACTION_KEYS.map((action) => [action, config.actions?.includes(action) ?? false]),
     ),
     scope_dati: Object.fromEntries(MODULE_KEYS.map((moduleKey) => [moduleKey, config.scope ?? "none"])),
-    campi: Object.fromEntries(
-      MODULE_KEYS.map((moduleKey) => [moduleKey, { "*": config.fieldAccess ?? "hidden" }]),
-    ),
+    campi: config.fieldAccess
+      ? Object.fromEntries(
+          CRM_FIELD_MODULES.map((moduleKey) => [
+            moduleKey,
+            Object.fromEntries(
+              CRM_FIELD_CATALOG[moduleKey].map((field) => [
+                field.key,
+                normalizeFieldAccess(config.fieldAccess),
+              ]),
+            ),
+          ]),
+        )
+      : buildFieldPermissionsForRole(config.roleCode ?? "STANDARD"),
   }
 }
 
@@ -255,7 +279,7 @@ function templatePermessi(template: RoleTemplate, source?: Ruolo): RuoloPermessi
       {
         actions: ["lead.columns.customize_own", "lead.tags.edit"],
         scope: "assigned",
-        fieldAccess: "editable",
+        roleCode: "AGENT",
       },
     )
   }
@@ -293,7 +317,7 @@ function templatePermessi(template: RoleTemplate, source?: Ruolo): RuoloPermessi
           "lead.fields.required.manage",
         ],
         scope: "all",
-        fieldAccess: "editable",
+        roleCode: "ADMIN",
       },
     )
   }
@@ -363,6 +387,7 @@ export function PermissionManagementClient({
 
   const active = ruoli.find((r) => r.id === activeId) ?? null
   const copySource = ruoli.find((r) => r.id === copyFromRoleId) ?? active ?? ruoli[0]
+  const activeRoleCode = active?.code ?? active?.nome ?? "STANDARD"
 
   function applyTemplate(template: RoleTemplate, source = copySource) {
     setRoleTemplate(template)
@@ -383,7 +408,10 @@ export function PermissionManagementClient({
     }
     setError(null)
     setActiveId(r.id)
-    setDraft(structuredClone(r.permessi))
+    setDraft({
+      ...structuredClone(r.permessi),
+      campi: completeFieldPermissions(r.permessi.campi, r.code ?? r.nome),
+    })
   }
 
   function openNewRole() {
@@ -405,7 +433,13 @@ export function PermissionManagementClient({
     setRoleColor(active.colore)
     setRoleTemplate("copy")
     setCopyFromRoleId(active.id)
-    setRolePermessi(structuredClone(draft ?? active.permessi))
+    setRolePermessi({
+      ...structuredClone(draft ?? active.permessi),
+      campi: completeFieldPermissions(
+        (draft ?? active.permessi).campi,
+        active.code ?? active.nome,
+      ),
+    })
     setRoleDialogOpen(true)
   }
 
@@ -414,6 +448,10 @@ export function PermissionManagementClient({
     setCreatingRole(true)
     setError(null)
     try {
+      const payload: RuoloPermessi = {
+        ...rolePermessi,
+        campi: completeFieldPermissions(rolePermessi.campi, roleName),
+      }
       const res = await fetch("/api/crm-settings/permessi", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -421,7 +459,7 @@ export function PermissionManagementClient({
           nome: roleName,
           descrizione: roleDescription,
           colore: roleColor,
-          permessi: rolePermessi,
+          permessi: payload,
         }),
       })
       const body = (await res.json().catch(() => null)) as {
@@ -447,10 +485,14 @@ export function PermissionManagementClient({
     setSaving(true)
     setError(null)
     try {
+      const payload: RuoloPermessi = {
+        ...draft,
+        campi: completeFieldPermissions(draft.campi, activeRoleCode),
+      }
       const res = await fetch("/api/crm-settings/permessi", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ruoloId: active.id, permessi: draft }),
+        body: JSON.stringify({ ruoloId: active.id, permessi: payload }),
       })
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as {
@@ -458,7 +500,7 @@ export function PermissionManagementClient({
         } | null
         throw new Error(body?.error ?? "Salvataggio non riuscito")
       }
-      const saved = draft
+      const saved = payload
       setRuoli((prev) =>
         prev.map((r) =>
           r.id === active.id ? { ...r, permessi: saved } : r,
@@ -487,6 +529,55 @@ export function PermissionManagementClient({
         ? current.filter((p) => p !== perm)
         : [...current, perm]
       return { ...d, record: { ...d.record, [modulo]: next } }
+    })
+  }
+
+  function fieldAccessForDraft(module: FieldModuleKey, field: string) {
+    return normalizeFieldAccess(
+      draft?.campi?.[module]?.[field] ?? draft?.campi?.[module]?.["*"],
+    )
+  }
+
+  function setFieldAccess(
+    module: FieldModuleKey,
+    field: string,
+    access: FieldAccess,
+  ) {
+    setDraft((d) => {
+      if (!d) return d
+      const completed = completeFieldPermissions(d.campi, activeRoleCode)
+      return {
+        ...d,
+        campi: {
+          ...completed,
+          [module]: {
+            ...completed[module],
+            [field]: access,
+          },
+        },
+      }
+    })
+  }
+
+  function setCategoryAccess(
+    module: FieldModuleKey,
+    category: FieldSensitivityCategory,
+    access: FieldAccess,
+  ) {
+    setDraft((d) => {
+      if (!d) return d
+      const completed = completeFieldPermissions(d.campi, activeRoleCode)
+      const nextModule = { ...completed[module] }
+      for (const field of CRM_FIELD_CATALOG[module]) {
+        if (field.category === category) nextModule[field.key] = access
+      }
+      return {
+        ...d,
+        campi: {
+          ...completed,
+          [module]: nextModule,
+        },
+      }
     })
   }
 
@@ -641,7 +732,130 @@ export function PermissionManagementClient({
               </AccordionContent>
             </AccordionItem>
 
-            {/* 3. Visibilità sedi */}
+            {/* 3. Campi record */}
+            <AccordionItem value="campi">
+              <AccordionTrigger>Campi record</AccordionTrigger>
+              <AccordionContent>
+                <Accordion defaultValue={["clienti"]} className="gap-2">
+                  {CRM_FIELD_MODULES.map((module) => {
+                    const total = CRM_FIELD_CATALOG[module].length
+                    const hidden = CRM_FIELD_CATALOG[module].filter(
+                      (field) => fieldAccessForDraft(module, field.key) === "hidden",
+                    ).length
+                    return (
+                      <AccordionItem
+                        key={module}
+                        value={module}
+                        className="rounded-lg border border-border px-3"
+                      >
+                        <AccordionTrigger className="py-3">
+                          <span className="flex min-w-0 flex-1 items-center gap-2">
+                            <span>{FIELD_MODULE_LABELS[module]}</span>
+                            <Badge variant="outline" className="text-[11px]">
+                              {total - hidden}/{total} visibili
+                            </Badge>
+                          </span>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="flex flex-col gap-3">
+                            {FIELD_CATEGORY_ORDER.map((category) => {
+                              const fields = CRM_FIELD_CATALOG[module].filter(
+                                (field) => field.category === category,
+                              )
+                              if (fields.length === 0) return null
+                              const categoryHidden = fields.filter(
+                                (field) =>
+                                  fieldAccessForDraft(module, field.key) === "hidden",
+                              ).length
+
+                              return (
+                                <section
+                                  key={category}
+                                  className="rounded-lg border border-border bg-background p-3"
+                                >
+                                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="min-w-0">
+                                      <h4 className="text-sm font-semibold text-foreground">
+                                        {category}
+                                      </h4>
+                                      <p className="text-xs text-muted-foreground">
+                                        {fields.length - categoryHidden}/{fields.length} campi visibili
+                                      </p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {FIELD_ACCESS_OPTIONS.map((option) => (
+                                        <Button
+                                          key={option.value}
+                                          type="button"
+                                          size="xs"
+                                          variant="outline"
+                                          onClick={() =>
+                                            setCategoryAccess(
+                                              module,
+                                              category,
+                                              option.value,
+                                            )
+                                          }
+                                        >
+                                          {option.label}
+                                        </Button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                                    {fields.map((field) => (
+                                      <div
+                                        key={field.key}
+                                        className="grid grid-cols-[minmax(0,1fr)_8.5rem] items-center gap-2 rounded-md border border-border px-2.5 py-2"
+                                      >
+                                        <span className="truncate text-sm text-foreground">
+                                          {field.key}
+                                        </span>
+                                        <Select
+                                          value={fieldAccessForDraft(module, field.key)}
+                                          onValueChange={(value) =>
+                                            setFieldAccess(
+                                              module,
+                                              field.key,
+                                              normalizeFieldAccess(value),
+                                            )
+                                          }
+                                        >
+                                          <SelectTrigger className="h-8 text-xs">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {FIELD_ACCESS_OPTIONS.map((option) => (
+                                              <SelectItem
+                                                key={option.value}
+                                                value={option.value}
+                                              >
+                                                {option.label}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </section>
+                              )
+                            })}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    )
+                  })}
+                </Accordion>
+                <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                  I valori salvati sono quelli tecnici supportati dal database:
+                  editable, readonly e hidden. La regola sul singolo campo prevale
+                  sempre sull'eventuale wildcard legacy.
+                </p>
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* 4. Visibilità sedi */}
             <AccordionItem value="sedi">
               <AccordionTrigger>Visibilità sedi</AccordionTrigger>
               <AccordionContent>
@@ -663,7 +877,7 @@ export function PermissionManagementClient({
               </AccordionContent>
             </AccordionItem>
 
-            {/* 4. Cartelle Nextcloud */}
+            {/* 5. Cartelle Nextcloud */}
             <AccordionItem value="nextcloud">
               <AccordionTrigger>Cartelle Nextcloud</AccordionTrigger>
               <AccordionContent>
@@ -685,7 +899,7 @@ export function PermissionManagementClient({
               </AccordionContent>
             </AccordionItem>
 
-            {/* 5. Riconfigurazioni CRM */}
+            {/* 6. Riconfigurazioni CRM */}
             <AccordionItem value="riconfig">
               <AccordionTrigger>Riconfigurazioni CRM</AccordionTrigger>
               <AccordionContent>

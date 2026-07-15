@@ -6,6 +6,7 @@ import type {
   RecordAction,
   RoleCode,
 } from "./types"
+import { buildFieldPermissionsForRole } from "./field-catalog"
 
 export const PAGE_KEYS = [
   "dashboard",
@@ -198,7 +199,7 @@ function recordPermissions(enabled: boolean) {
   ) as Record<string, Record<string, boolean>>
 }
 
-function defaultFields(access: FieldAccess) {
+function defaultFields(access: FieldAccess): Record<string, Record<string, FieldAccess>> {
   return Object.fromEntries(MODULE_KEYS.map((moduleKey) => [moduleKey, { "*": access }]))
 }
 
@@ -223,6 +224,7 @@ export function buildDefaultPermissionSnapshot(params?: {
   const fields = defaultFields("hidden")
   const actions = recordForAllActions(false)
   const scopes = defaultScopes("none")
+  const roleFields = buildFieldPermissionsForRole(roleCode)
 
   const grantPages = (access: PageAccess, keys: string[]) => {
     for (const key of keys) pages[key] = access
@@ -251,7 +253,7 @@ export function buildDefaultPermissionSnapshot(params?: {
     Object.assign(actions, recordForAllActions(true))
     for (const moduleKey of MODULE_KEYS) {
       records[moduleKey] = Object.fromEntries(RECORD_ACTIONS.map((action) => [action, true]))
-      fields[moduleKey] = { "*": "editable" }
+      fields[moduleKey] = roleFields[moduleKey] ?? { "*": "editable" }
       scopes[moduleKey] = "all"
     }
   } else if (roleCode === "ADMIN") {
@@ -299,7 +301,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       actions[`${moduleKey}.default_values.manage`] = true
       actions[`${moduleKey}.assignment_rules.manage`] = true
       actions[`${moduleKey}.workflows.manage`] = true
-      fields[moduleKey] = { "*": "editable" }
+      fields[moduleKey] = roleFields[moduleKey] ?? { "*": "editable" }
       scopes[moduleKey] = "all"
     }
   } else if (roleCode === "AGENT") {
@@ -309,8 +311,8 @@ export function buildDefaultPermissionSnapshot(params?: {
     grantPages("r", ["dashboard", "clienti", "documenti", "crm_settings.system.azienda", "crm_settings.system.sedi", "crm_settings.system.aspetto"])
     grantRecords(["lead", "clienti", "compiti", "scadenze"], ["view", "create", "edit"])
     grantActions(["lead.columns.customize_own", "lead.tags.edit", "company.profile.view", "company.sites.view", "appearance.personal.manage"])
-    for (const moduleKey of ["lead", "clienti", "compiti", "scadenze"]) {
-      fields[moduleKey] = { "*": "editable" }
+    for (const moduleKey of MODULE_KEYS) {
+      fields[moduleKey] = roleFields[moduleKey] ?? { "*": "editable" }
       scopes[moduleKey] = "assigned"
     }
   } else if (roleCode === "DIRECTOR") {
@@ -326,8 +328,8 @@ export function buildDefaultPermissionSnapshot(params?: {
       "assign",
     ])
     grantActions(["lead.columns.customize_own", "lead.tags.edit", "company.profile.view", "company.sites.view", "appearance.personal.manage"])
-    for (const moduleKey of ["lead", "clienti", "compiti", "scadenze"]) {
-      fields[moduleKey] = { "*": "editable" }
+    for (const moduleKey of MODULE_KEYS) {
+      fields[moduleKey] = roleFields[moduleKey] ?? { "*": "readonly" }
       scopes[moduleKey] = "own_sede"
     }
   } else {
@@ -337,8 +339,8 @@ export function buildDefaultPermissionSnapshot(params?: {
     grantPages("r", ["dashboard", "documenti", "crm_settings.system.azienda", "crm_settings.system.sedi", "crm_settings.system.aspetto"])
     grantRecords(["lead", "clienti", "compiti", "scadenze"], ["view"])
     grantActions(["lead.columns.customize_own", "company.profile.view", "company.sites.view", "appearance.personal.manage"])
-    for (const moduleKey of ["lead", "clienti", "compiti", "scadenze"]) {
-      fields[moduleKey] = { "*": "readonly" }
+    for (const moduleKey of MODULE_KEYS) {
+      fields[moduleKey] = roleFields[moduleKey] ?? { "*": "readonly" }
       scopes[moduleKey] = "own"
     }
   }

@@ -88,6 +88,7 @@ function buildPermissionRows(ruoloId: string, permessi: RuoloPermessi) {
         ruolo_id: ruoloId,
         modulo,
         campo,
+        campo_nome: campo,
         accesso,
       })),
   )
@@ -160,6 +161,21 @@ async function savePermissions(ruoloId: string, permessi: RuoloPermessi) {
     }
   }
 
+  if (fieldRows.length > 0) {
+    const deleteWildcard = await supabase
+      .from("permessi_campo")
+      .delete()
+      .eq("ruolo_id", ruoloId)
+      .eq("campo", "*")
+
+    if (deleteWildcard.error) {
+      console.warn(
+        "[crm-settings/permessi] delete wildcard field permission warning:",
+        deleteWildcard.error.message,
+      )
+    }
+  }
+
   return null
 }
 
@@ -192,7 +208,7 @@ export async function POST(request: Request) {
       ordinamento: ((lastRole?.ordinamento as number | null) ?? 0) + 1,
       sistema: false,
     })
-    .select("id, nome, descrizione, colore")
+    .select("id, code, nome, descrizione, colore")
     .single()
 
   if (ruoloError || !ruolo) {
@@ -216,6 +232,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ruolo: {
       id: ruolo.id,
+      code: ruolo.code,
       nome: ruolo.nome,
       descrizione: ruolo.descrizione ?? "",
       colore: ruolo.colore ?? "gray",

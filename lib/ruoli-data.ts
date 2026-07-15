@@ -78,6 +78,7 @@ export interface RuoloPermessi {
 
 export interface Ruolo {
   id: string
+  code?: string | null
   nome: string
   descrizione: string
   colore: RuoloColore

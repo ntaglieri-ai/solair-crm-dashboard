@@ -303,6 +303,22 @@ async function loadCurrentPermissionSnapshotUncached(): Promise<PermissionSnapsh
     for (const row of payload.scopes ?? [])
       snapshot.scopes[row.risorsa] = row.scope ?? "none"
 
+    if (snapshot.subject.ruoloId) {
+      const roleRows = await loadRolePermissionRows(
+        fastSupabase,
+        snapshot.subject.ruoloId,
+      )
+
+      for (const row of roleRows.actions)
+        snapshot.actions[row.azione] = row.abilitato === true
+      for (const row of roleRows.fields) {
+        snapshot.fields[row.modulo] ??= {}
+        snapshot.fields[row.modulo][row.campo] = row.accesso ?? "hidden"
+      }
+      for (const row of roleRows.scopes)
+        snapshot.scopes[row.risorsa] = row.scope ?? "none"
+    }
+
     return snapshot
   }
 

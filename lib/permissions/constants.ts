@@ -275,8 +275,8 @@ export function buildDefaultPermissionSnapshot(params?: {
       "crm_settings.system.valori",
       "crm_settings.system.regole",
       "crm_settings.system.flussi",
+      "crm_settings.system.make",
       "crm_settings.system.import_export",
-      "crm_settings.file_manager",
     ])
     grantRecords([...MODULE_KEYS], ["view", "create", "edit", "delete", "export", "assign"])
     grantActions([
@@ -303,7 +303,10 @@ export function buildDefaultPermissionSnapshot(params?: {
       scopes[moduleKey] = "all"
     }
   } else if (roleCode === "AGENT") {
-    grantPages("r", ["dashboard", "lead", "clienti", "compiti", "scadenze", "documenti", "crm_settings", "crm_settings.system", "crm_settings.system.azienda", "crm_settings.system.sedi", "crm_settings.system.aspetto"])
+    grantPages("rw", ["lead", "compiti", "scadenze", "installatori"])
+    // CRM Settings negato: restano leggibili solo azienda/sedi/aspetto (info
+    // aziendali + personalizzazione aspetto proprio).
+    grantPages("r", ["dashboard", "clienti", "documenti", "crm_settings.system.azienda", "crm_settings.system.sedi", "crm_settings.system.aspetto"])
     grantRecords(["lead", "clienti", "compiti", "scadenze"], ["view", "create", "edit"])
     grantActions(["lead.columns.customize_own", "lead.tags.edit", "company.profile.view", "company.sites.view", "appearance.personal.manage"])
     for (const moduleKey of ["lead", "clienti", "compiti", "scadenze"]) {
@@ -311,8 +314,10 @@ export function buildDefaultPermissionSnapshot(params?: {
       scopes[moduleKey] = "assigned"
     }
   } else if (roleCode === "DIRECTOR") {
-    grantPages("rw", ["dashboard", "lead", "clienti", "compiti", "scadenze", "documenti"])
-    grantPages("r", ["crm_settings", "crm_settings.system", "crm_settings.system.azienda", "crm_settings.system.sedi", "crm_settings.system.aspetto"])
+    grantPages("rw", ["dashboard", "lead", "clienti", "compiti", "scadenze", "installatori"])
+    // Documenti in sola lettura; Automazioni (flussi/make) in lettura; CRM
+    // Settings negato tranne azienda/sedi/aspetto leggibili; Manutenzione negata.
+    grantPages("r", ["documenti", "crm_settings.system.flussi", "crm_settings.system.make", "crm_settings.system.azienda", "crm_settings.system.sedi", "crm_settings.system.aspetto"])
     grantRecords(["lead", "clienti", "compiti", "scadenze"], [
       "view",
       "create",
@@ -326,7 +331,10 @@ export function buildDefaultPermissionSnapshot(params?: {
       scopes[moduleKey] = "own_sede"
     }
   } else {
-    grantPages("r", ["dashboard", "lead", "clienti", "compiti", "scadenze", "crm_settings", "crm_settings.system", "crm_settings.system.azienda", "crm_settings.system.sedi", "crm_settings.system.aspetto"])
+    grantPages("rw", ["lead", "clienti", "compiti", "scadenze", "installatori"])
+    // CRM Settings negato tranne azienda/sedi/aspetto leggibili; Documenti in
+    // sola lettura; Automazioni e Manutenzione negate.
+    grantPages("r", ["dashboard", "documenti", "crm_settings.system.azienda", "crm_settings.system.sedi", "crm_settings.system.aspetto"])
     grantRecords(["lead", "clienti", "compiti", "scadenze"], ["view"])
     grantActions(["lead.columns.customize_own", "company.profile.view", "company.sites.view", "appearance.personal.manage"])
     for (const moduleKey of ["lead", "clienti", "compiti", "scadenze"]) {

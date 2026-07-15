@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { requireApiAction } from "@/lib/permissions/server"
 import {
-  accountRoleErrorMessage,
+  accountUserErrorMessage,
   resolveRole,
 } from "@/lib/crm-settings/roles"
 import { provisionNextcloudUser } from "@/lib/nextcloud/provisioning"
@@ -38,7 +38,11 @@ export async function GET() {
 
   const error = utentiError ?? ruoliError
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error("[utenti] caricamento elenco fallito:", error)
+    return NextResponse.json(
+      { error: accountUserErrorMessage(error) },
+      { status: 500 },
+    )
   }
 
   // Arricchisce ogni utente con lo stato del provisioning Nextcloud.
@@ -90,8 +94,9 @@ export async function POST(request: Request) {
     .single()
 
   if (error) {
+    console.error("[utenti] creazione utente fallita:", error)
     return NextResponse.json(
-      { error: accountRoleErrorMessage(error.message) },
+      { error: accountUserErrorMessage(error) },
       { status: 500 },
     )
   }

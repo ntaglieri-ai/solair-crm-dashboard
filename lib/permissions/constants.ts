@@ -152,6 +152,23 @@ export function normalizeRoleCode(value: string | null | undefined): RoleCode {
   return (value ?? "STANDARD").trim().toUpperCase() || "STANDARD"
 }
 
+/**
+ * Nome visualizzato per l'utente corrente: usa il `nome` da `utenti` (senza
+ * spazi superflui) e ricade sull'email SOLO se il nome è genuinamente
+ * assente — null, undefined o stringa vuota/whitespace. Ultimo fallback
+ * "Utente" per non mostrare mai una greeting vuota.
+ */
+export function resolveSubjectName(
+  nome: string | null | undefined,
+  email: string | null | undefined,
+): string {
+  const trimmedNome = nome?.trim()
+  if (trimmedNome) return trimmedNome
+  const trimmedEmail = email?.trim()
+  if (trimmedEmail) return trimmedEmail
+  return "Utente"
+}
+
 function initialsFromName(value: string | null | undefined) {
   const parts = (value ?? "")
     .trim()
@@ -323,8 +340,8 @@ export function buildDefaultPermissionSnapshot(params?: {
       authUserId: params?.authUserId ?? null,
       userId: params?.userId ?? null,
       email: params?.email ?? null,
-      nome: params?.nome ?? "Utente",
-      iniziali: initialsFromName(params?.nome ?? params?.email),
+      nome: resolveSubjectName(params?.nome, params?.email),
+      iniziali: initialsFromName(resolveSubjectName(params?.nome, params?.email)),
       ruoloId: params?.ruoloId ?? null,
       ruoloCode: roleCode,
       ruoloNome: roleName,

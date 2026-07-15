@@ -90,3 +90,54 @@ export async function sendWelcomeEmail(params: {
     return { ok: false, error: e instanceof Error ? e.message : "Errore invio email" }
   }
 }
+
+export async function sendPasswordResetEmail(params: {
+  to: string
+  nome: string
+  tempPassword: string
+}): Promise<{ ok: boolean; error: string | null }> {
+  const cfg = smtpConfig()
+  if (!cfg) {
+    return {
+      ok: false,
+      error: "SMTP non configurato (SMTP_HOST/PORT/USER/PASSWORD/FROM mancanti)",
+    }
+  }
+
+  try {
+    const transport = getTransport(cfg)
+    await transport.sendMail({
+      from: cfg.from,
+      to: params.to,
+      subject: "Reimposta la password di Solair CRM",
+      text: [
+        `Ciao ${params.nome},`,
+        "",
+        "Abbiamo ricevuto una richiesta di reimpostazione della password per il tuo account Solair CRM.",
+        "",
+        `Email: ${params.to}`,
+        `La tua nuova password temporanea: ${params.tempPassword}`,
+        "",
+        "Al prossimo accesso ti verra' chiesto di impostare una nuova password.",
+        "",
+        "Se non hai richiesto tu il reset, ignora questa email: la tua password attuale non e' stata cambiata finche' non accedi con quella temporanea.",
+        "",
+        `Accedi qui: ${loginUrl()}`,
+      ].join("\n"),
+      html: `
+        <p>Ciao ${params.nome},</p>
+        <p>Abbiamo ricevuto una richiesta di reimpostazione della password per il tuo account Solair CRM.</p>
+        <p>
+          Email: <strong>${params.to}</strong><br/>
+          La tua nuova password temporanea: <strong>${params.tempPassword}</strong>
+        </p>
+        <p>Al prossimo accesso ti verra' chiesto di impostare una nuova password.</p>
+        <p>Se non hai richiesto tu il reset, ignora questa email: la tua password attuale non e' stata cambiata finche' non accedi con quella temporanea.</p>
+        <p><a href="${loginUrl()}">Accedi al CRM</a></p>
+      `,
+    })
+    return { ok: true, error: null }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Errore invio email" }
+  }
+}

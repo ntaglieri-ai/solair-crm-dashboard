@@ -37,8 +37,10 @@ export async function middleware(request: NextRequest) {
   const { data: claimsData } = await supabase.auth.getClaims()
   const isAuthenticated = Boolean(claimsData?.claims?.sub)
 
-  // Route pubbliche (non protette)
-  const publicRoutes = ["/login"]
+  // Route pubbliche (non protette). Il reset password self-service e' invocato
+  // da utenti NON autenticati (hanno dimenticato la password), quindi il suo
+  // endpoint deve restare raggiungibile senza sessione.
+  const publicRoutes = ["/login", "/api/auth/password-reset"]
   const isPublicRoute = publicRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route)
   )

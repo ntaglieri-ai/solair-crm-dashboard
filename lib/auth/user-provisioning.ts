@@ -7,7 +7,7 @@
 import { randomBytes } from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
-import { sendWelcomeEmail } from "@/lib/email/mailer"
+import { sendWelcomeEmail, sendPasswordResetEmail } from "@/lib/email/mailer"
 
 export type WelcomeEmailStatus = "pending" | "sent" | "failed"
 
@@ -150,4 +150,71 @@ export async function retryWelcomeEmail(utente: {
     .eq("id", utente.id)
 
   return { authUserId: utente.auth_user_id, emailStatus, emailError: emailResult.error, error: null }
+}
+
+/**
+ * Reset self-service (flusso "Password dimenticata?" dalla pagina di login):
+ * genera una NUOVA password temporanea, la imposta sull'account Auth esistente,
+ * rialza must_change_password e invia l'email di reset. Stessa infrastruttura
+ * di retryWelcomeEmail ma con wording dedicato; NON tocca welcome_email_status,
+ * che appartiene al flusso di onboarding e non a un reset spontaneo.
+ */
+export async function sendPasswordReset(utente: {
+  id: string
+  email: string
+  nome: string
+  auth_user_id: string | null
+}): Promise<AuthProvisionResult> {
+  const admin = createAdminClient()
+  if (!admin) {
+    return {
+      authUserId: utente.auth_user_id,
+      emailStatus: "failed",
+      emailError: null,
+      error: "SUPABASE_SERVICE_ROLE_KEY non configurata: impossibile aggiornare l'account Auth",
+    }
+  }
+
+  if (!utente.auth_user_id) {
+    return {
+      authUserId: null,
+      emailStatus: "failed",
+      emailError: null,
+      error: "Utente senza account Auth collegato: reset non applicabile",
+    }
+  }
+
+  const tempPassword = generateTempPassword()
+  const { error: updateError } = await admin.auth.admin.updateUserById(utente.auth_user_id, {
+    password: tempPassword,
+  })
+
+  if (updateError) {
+    return {
+      authUserId: utente.auth_user_id,
+      emailStatus: "failed",
+      emailError: null,
+      error: `Reset password temporanea fallito: ${updateError.message}`,
+    }
+  }
+
+  const supabase = await createClient()
+  await supabase
+    .from("utenti")
+    .update({ must_change_password: true })
+    .eq("id", utente.id)
+
+  const emailResult = await sendPasswordResetEmail({
+    to: utente.email,
+    nome: utente.nome,
+    tempPassword,
+  })
+  const emailStatus: WelcomeEmailStatus = emailResult.ok ? "sent" : "failed"
+
+  return {
+    authUserId: utente.auth_user_id,
+    emailStatus,
+    emailError: emailResult.error,
+    error: null,
+  }
 }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { requireApiAction } from "@/lib/permissions/server"
 import {
-  accountRoleErrorMessage,
+  accountUserErrorMessage,
   resolveRole,
 } from "@/lib/crm-settings/roles"
 import {
@@ -63,8 +63,9 @@ export async function PATCH(
     .single()
 
   if (error) {
+    console.error(`[utenti] aggiornamento utente ${id} fallito:`, error)
     return NextResponse.json(
-      { error: accountRoleErrorMessage(error.message) },
+      { error: accountUserErrorMessage(error) },
       { status: 500 },
     )
   }
@@ -116,7 +117,11 @@ export async function DELETE(
   const { error } = await supabase.from("utenti").delete().eq("id", id)
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error(`[utenti] eliminazione utente ${id} fallita:`, error)
+    return NextResponse.json(
+      { error: accountUserErrorMessage(error) },
+      { status: 500 },
+    )
   }
 
   // Elimina l'account Nextcloud associato. Best-effort e coerente con

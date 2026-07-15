@@ -278,7 +278,9 @@ async function loadCurrentPermissionSnapshotUncached(): Promise<PermissionSnapsh
       authUserId: fastAuthUser.id,
       userId: utente?.id ?? null,
       email: utente?.email ?? fastAuthUser.email,
-      nome: utente?.nome ?? fastAuthUser.email ?? "Utente",
+      // Il fallback all'email (se nome assente) è centralizzato in
+      // buildDefaultPermissionSnapshot → resolveSubjectName.
+      nome: utente?.nome ?? null,
       ruoloId: ruolo?.id ?? utente?.ruolo_id ?? null,
       ruoloCode,
       ruoloNome: ruolo?.nome ?? ruoloCode,
@@ -335,7 +337,8 @@ async function loadCurrentPermissionSnapshotUncached(): Promise<PermissionSnapsh
     authUserId: authUser.id,
     userId: utente?.id ?? null,
     email: utente?.email ?? authUser.email ?? null,
-    nome: utente?.nome ?? authUser.email ?? "Utente",
+    // Vedi nota sopra: risoluzione nome/email centralizzata in resolveSubjectName.
+    nome: utente?.nome ?? null,
     ruoloId: ruolo?.id ?? utente?.ruolo_id ?? null,
     ruoloCode,
     ruoloNome: ruolo?.nome ?? ruoloCode,

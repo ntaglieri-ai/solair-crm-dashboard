@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import {
   MapPin,
   MoreHorizontal,
@@ -307,6 +308,10 @@ export function AccountManagementClient({
       )
       setNewOpen(false)
       setNewForm(EMPTY_FORM)
+      // L'account CRM e' stato creato: conferma sempre con il toast di successo,
+      // a prescindere dallo stato di Nextcloud/Auth/email (che restano tracciati
+      // dai badge e dall'eventuale banner informativo qui sotto).
+      toast.success("Account creato con successo", { description: created.email })
       if (body.nextcloud && body.nextcloud.status !== "active") {
         setError(
           `Utente creato, ma il provisioning Nextcloud e' ${body.nextcloud.status}: ${body.nextcloud.error ?? "vedi log"}. Usa "Riprova provisioning" dal menu azioni.`,

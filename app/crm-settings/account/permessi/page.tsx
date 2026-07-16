@@ -12,6 +12,7 @@ import {
   type RecordPermesso,
 } from "@/lib/ruoli-data"
 import { PermissionManagementClient } from "./permission-management-client"
+import { NextcloudPathsEditor } from "./nextcloud-paths-editor"
 import { completeFieldPermissions } from "@/lib/permissions/field-catalog"
 
 // Tabelle Supabase normalizzate per la gestione permessi.
@@ -45,6 +46,12 @@ type PermessoCampoRow = {
   accesso: string
 }
 type UtenteRuoloRow = { ruolo: string | null; ruolo_id: string | null }
+type NcPathRuleRow = {
+  path_prefix: string
+  ruolo_id: string
+  accesso: "hidden" | "readonly" | "editable"
+  priorita: number
+}
 
 function toColore(value: string | null, code: string | null): RuoloColore {
   const builtInColors: Record<string, RuoloColore> = {
@@ -148,7 +155,6 @@ function buildRuoli(
         pagine,
         record,
         visibilita_sedi: ui.get("visibilita_sedi") ? "all" : "own",
-        cartelle_nextcloud: ui.get("cartelle_nextcloud") ? "all" : "own",
         riconfigurazioni: ui.get("riconfigurazioni") === true,
         azioni,
         scope_dati,
@@ -171,6 +177,7 @@ export default async function PermissionManagementPage() {
     { data: permessiScope },
     { data: permessiCampo },
     { data: utenti },
+    { data: permessiCartelle },
   ] =
     await Promise.all([
       loadCurrentPermissionSnapshot(),
@@ -185,6 +192,10 @@ export default async function PermissionManagementPage() {
       supabase.from("permessi_scope").select("ruolo_id, risorsa, scope"),
       supabase.from("permessi_campo").select("ruolo_id, modulo, campo, accesso"),
       supabase.from("utenti").select("ruolo, ruolo_id"),
+      supabase
+        .from("permessi_cartelle_nextcloud")
+        .select("path_prefix, ruolo_id, accesso, priorita")
+        .order("priorita", { ascending: true }),
     ])
 
   const mapped = buildRuoli(
@@ -198,10 +209,27 @@ export default async function PermissionManagementPage() {
     (utenti as UtenteRuoloRow[] | null) ?? [],
   )
 
+  const ruoliRows = (ruoli as RuoloRow[] | null) ?? []
+  const roleColumns = ruoliRows.map((r) => ({
+    id: r.id,
+    code: r.code,
+    nome: r.nome,
+    colore: toColore(r.colore, r.code),
+  }))
+  const canManageNc =
+    currentPermissions.actions["crm_settings.account.roles.manage"] === true
+
   return (
-    <PermissionManagementClient
-      ruoli={mapped}
-      currentProfile={currentAccountProfileFromSnapshot(currentPermissions)}
-    />
+    <div className="flex flex-col gap-6">
+      <PermissionManagementClient
+        ruoli={mapped}
+        currentProfile={currentAccountProfileFromSnapshot(currentPermissions)}
+      />
+      <NextcloudPathsEditor
+        roles={roleColumns}
+        initialRules={(permessiCartelle as NcPathRuleRow[] | null) ?? []}
+        canManage={canManageNc}
+      />
+    </div>
   )
 }

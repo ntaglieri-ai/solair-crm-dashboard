@@ -105,7 +105,6 @@ function emptyPermessi(): RuoloPermessi {
     >,
     record,
     visibilita_sedi: "own",
-    cartelle_nextcloud: "own",
     riconfigurazioni: false,
   }
 }
@@ -877,29 +876,7 @@ export function PermissionManagementClient({
               </AccordionContent>
             </AccordionItem>
 
-            {/* 5. Cartelle Nextcloud */}
-            <AccordionItem value="nextcloud">
-              <AccordionTrigger>Cartelle Nextcloud</AccordionTrigger>
-              <AccordionContent>
-                <div className="flex flex-col gap-3">
-                  {(
-                    [
-                      ["all", "Tutte le cartelle"],
-                      ["own", "Solo cartelle della propria sede"],
-                    ] as [VisibilitaScope, string][]
-                  ).map(([val, label]) => (
-                    <RadioRow
-                      key={val}
-                      label={label}
-                      checked={draft.cartelle_nextcloud === val}
-                      onSelect={() => setDraft({ ...draft, cartelle_nextcloud: val })}
-                    />
-                  ))}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-
-            {/* 6. Riconfigurazioni CRM */}
+            {/* 5. Riconfigurazioni CRM */}
             <AccordionItem value="riconfig">
               <AccordionTrigger>Riconfigurazioni CRM</AccordionTrigger>
               <AccordionContent>

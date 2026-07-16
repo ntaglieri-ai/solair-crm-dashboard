@@ -56,11 +56,6 @@ function buildPermissionRows(ruoloId: string, permessi: RuoloPermessi) {
     },
     {
       ruolo_id: ruoloId,
-      chiave: "cartelle_nextcloud",
-      abilitato: permessi.cartelle_nextcloud === "all",
-    },
-    {
-      ruolo_id: ruoloId,
       chiave: "riconfigurazioni",
       abilitato: permessi.riconfigurazioni === true,
     },

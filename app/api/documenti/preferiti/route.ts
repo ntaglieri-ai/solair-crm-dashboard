@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { requireApiPage } from "@/lib/permissions/server"
 import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permissions"
-import { canAccessNcPath, normalizeNcPath } from "@/lib/nextcloud/path-permissions"
+import { canAccessNcPath, loadNcPathRules, normalizeNcPath } from "@/lib/nextcloud/path-permissions"
 import { getNextcloudAppPassword, getNextcloudUsername } from "@/lib/nextcloud/credentials"
 import { nextcloudUsernameFromEmail } from "@/lib/nextcloud/config"
 import { setFavorite } from "@/lib/nextcloud/webdav"
@@ -54,8 +54,9 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  const pathRules = await loadNcPathRules()
   const preferiti = (data ?? []).filter((f) =>
-    canAccessNcPath(f.path as string, snapshot.subject.ruoloCode),
+    canAccessNcPath(f.path as string, snapshot.subject.ruoloCode, pathRules),
   )
   return NextResponse.json({ preferiti })
 }
@@ -77,7 +78,8 @@ export async function POST(request: Request) {
   if (!path) return NextResponse.json({ error: "Path mancante" }, { status: 400 })
 
   // Non permettere di salvare preferiti verso path non consentiti al ruolo.
-  if (!canAccessNcPath(path, snapshot.subject.ruoloCode)) {
+  const pathRules = await loadNcPathRules()
+  if (!canAccessNcPath(path, snapshot.subject.ruoloCode, pathRules)) {
     return NextResponse.json({ error: "Accesso al percorso non consentito" }, { status: 403 })
   }
 

@@ -8,7 +8,7 @@ import type { CartellaPreferita, DocumentiData, DocumentoRecente } from "@/lib/d
 import { getNextcloudAppPassword, getNextcloudUsername } from "./credentials"
 import { nextcloudUsernameFromEmail } from "./config"
 import { listFavorites, recentFiles } from "./webdav"
-import { canAccessNcPath, normalizeNcPath } from "./path-permissions"
+import { canAccessNcPath, loadNcPathRules, normalizeNcPath } from "./path-permissions"
 
 type CurrentUser = {
   utenteId: string
@@ -39,6 +39,7 @@ export async function loadDocumentiData(user: CurrentUser): Promise<DocumentiDat
   const username =
     (await getNextcloudUsername(user.utenteId)) ?? nextcloudUsernameFromEmail(user.email)
   const supabase = await createClient()
+  const pathRules = await loadNcPathRules()
 
   // Preferiti (RLS: l'utente vede solo i propri) + filtro path-based per ruolo.
   const { data: favRows } = await supabase
@@ -48,7 +49,7 @@ export async function loadDocumentiData(user: CurrentUser): Promise<DocumentiDat
     .order("label")
 
   const favorites: CartellaPreferita[] = ((favRows ?? []) as CartellaPreferita[]).filter(
-    (f) => canAccessNcPath(f.path, user.roleCode),
+    (f) => canAccessNcPath(f.path, user.roleCode, pathRules),
   )
 
   // Sync bidirezionale con le stelle native Nextcloud (oc:favorite): importa le
@@ -58,7 +59,7 @@ export async function loadDocumentiData(user: CurrentUser): Promise<DocumentiDat
   try {
     const existingPaths = new Set(favorites.map((f) => normalizeNcPath(f.path)))
     const ncFavFolders = (await listFavorites(username, appPassword)).filter(
-      (e) => e.isDir && canAccessNcPath(e.path, user.roleCode),
+      (e) => e.isDir && canAccessNcPath(e.path, user.roleCode, pathRules),
     )
     const toImport = ncFavFolders.filter((e) => !existingPaths.has(normalizeNcPath(e.path)))
 
@@ -83,7 +84,7 @@ export async function loadDocumentiData(user: CurrentUser): Promise<DocumentiDat
   try {
     const files = await recentFiles(username, appPassword, 20)
     recent = files
-      .filter((e) => canAccessNcPath(e.path, user.roleCode))
+      .filter((e) => canAccessNcPath(e.path, user.roleCode, pathRules))
       .slice(0, 8)
       .map((e) => ({
         name: e.name,

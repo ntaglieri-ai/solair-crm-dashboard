@@ -69,7 +69,6 @@ export interface RuoloPermessi {
   pagine: Record<PaginaId, boolean>
   record: Record<ModuloRecordId, RecordPermesso[]>
   visibilita_sedi: VisibilitaScope
-  cartelle_nextcloud: VisibilitaScope
   riconfigurazioni: boolean
   azioni?: Record<string, boolean>
   scope_dati?: Record<string, string>
@@ -120,7 +119,6 @@ export const mockRuoli: Ruolo[] = [
         scadenze: ["view", "create", "edit", "delete"],
       },
       visibilita_sedi: "all",
-      cartelle_nextcloud: "all",
       riconfigurazioni: true,
     },
   },
@@ -148,7 +146,6 @@ export const mockRuoli: Ruolo[] = [
         scadenze: ["view", "create"],
       },
       visibilita_sedi: "own",
-      cartelle_nextcloud: "own",
       riconfigurazioni: false,
     },
   },
@@ -176,7 +173,6 @@ export const mockRuoli: Ruolo[] = [
         scadenze: ["view", "create", "edit"],
       },
       visibilita_sedi: "own",
-      cartelle_nextcloud: "own",
       riconfigurazioni: false,
     },
   },

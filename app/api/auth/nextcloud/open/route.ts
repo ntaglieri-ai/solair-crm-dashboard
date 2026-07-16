@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getNextcloudAppPassword } from "@/lib/nextcloud/credentials"
 import { nextcloudBaseUrl, nextcloudUsernameFromEmail } from "@/lib/nextcloud/config"
-import { canAccessNcPath, normalizeNcPath } from "@/lib/nextcloud/path-permissions"
+import { canAccessNcPath, loadNcPathRules, normalizeNcPath } from "@/lib/nextcloud/path-permissions"
 import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permissions"
 
 // "Apri Nextcloud": autentica l'utente su Nextcloud tramite la sua app-password
@@ -49,7 +49,8 @@ export async function GET(request: NextRequest) {
   const fileId = request.nextUrl.searchParams.get("fileid")
   if (requested) {
     const snapshot = await loadCurrentPermissionSnapshot()
-    if (canAccessNcPath(requested, snapshot.subject.ruoloCode)) {
+    const pathRules = await loadNcPathRules()
+    if (canAccessNcPath(requested, snapshot.subject.ruoloCode, pathRules)) {
       // fileid e' sempre numerico su Nextcloud: valida per evitare open-redirect.
       redirectPath =
         fileId && /^\d+$/.test(fileId)

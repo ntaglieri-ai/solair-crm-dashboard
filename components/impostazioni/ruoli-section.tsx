@@ -178,7 +178,6 @@ function RuoloDetail({
       scadenze: [...ruolo.permessi.record.scadenze],
     },
     visibilita_sedi: ruolo.permessi.visibilita_sedi,
-    cartelle_nextcloud: ruolo.permessi.cartelle_nextcloud,
     riconfigurazioni: ruolo.permessi.riconfigurazioni,
   }))
 
@@ -199,10 +198,7 @@ function RuoloDetail({
     })
   }
 
-  function setVisibilita(
-    key: "visibilita_sedi" | "cartelle_nextcloud",
-    value: VisibilitaScope,
-  ) {
+  function setVisibilita(key: "visibilita_sedi", value: VisibilitaScope) {
     setPermessi((p) => ({ ...p, [key]: value }))
   }
 
@@ -289,23 +285,7 @@ function RuoloDetail({
         </div>
       </CollapsibleSection>
 
-      {/* 4. Cartelle Nextcloud */}
-      <CollapsibleSection title="Cartelle Nextcloud">
-        <div className="flex flex-col gap-3">
-          <RadioRow
-            checked={permessi.cartelle_nextcloud === "all"}
-            onSelect={() => setVisibilita("cartelle_nextcloud", "all")}
-            label="Tutte le cartelle"
-          />
-          <RadioRow
-            checked={permessi.cartelle_nextcloud === "own"}
-            onSelect={() => setVisibilita("cartelle_nextcloud", "own")}
-            label="Solo cartelle della propria sede"
-          />
-        </div>
-      </CollapsibleSection>
-
-      {/* 5. Riconfigurazioni CRM */}
+      {/* 4. Riconfigurazioni CRM */}
       <CollapsibleSection title="Riconfigurazioni CRM">
         <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
           <Label className="text-sm leading-relaxed text-foreground">

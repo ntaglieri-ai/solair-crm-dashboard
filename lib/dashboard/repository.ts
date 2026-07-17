@@ -3,6 +3,12 @@ import type { DashboardMapMarker } from "@/components/dashboard/italy-map"
 import type { SystemSede } from "@/lib/system-settings-data"
 import type { NoticeboardItem } from "@/components/dashboard/noticeboard"
 import { regionFromProvince } from "@/lib/dashboard/italy-regions"
+import type { PermissionSnapshot } from "@/lib/permissions/types"
+import { applyDashboardScope } from "@/lib/dashboard/scope"
+import { getNextcloudAppPassword, getNextcloudUsername } from "@/lib/nextcloud/credentials"
+import { nextcloudUsernameFromEmail } from "@/lib/nextcloud/config"
+import { recentFiles } from "@/lib/nextcloud/webdav"
+import { canAccessNcPath, loadNcPathRules } from "@/lib/nextcloud/path-permissions"
 
 export type DashboardLead = {
   id: string
@@ -38,6 +44,61 @@ export type DashboardData = {
     later: number
   }
 }
+
+export type DashboardTask = {
+  id: string
+  title: string
+  dueDate: string | null
+  status: string | null
+  priority: string | null
+  relatedType: string | null
+  relatedId: string | null
+  relatedName: string | null
+}
+
+export type DashboardSystemIssue = {
+  userId: string
+  name: string
+  status: string
+  error: string | null
+}
+
+export type DashboardHealthIndicator = {
+  id: string
+  label: string
+  status: "operational" | "degraded" | "unconfigured"
+  detail: string
+}
+
+export type EconomicWidgetData = {
+  count: number
+  available: boolean
+  detail: string
+}
+
+export type AgentDashboardData = {
+  noticeboard: NoticeboardItem[]
+  counts: {
+    activeLeads: number
+    clients: number
+    overdueTasks: number
+  }
+  upcomingTasks: DashboardTask[]
+  staleLeads: DashboardLead[]
+}
+
+export type SystemSemaphoreData = {
+  regular: boolean
+}
+
+export type SuperadminDashboardData = {
+  noticeboard: NoticeboardItem[]
+  nextcloudIssues: DashboardSystemIssue[]
+  welcomeEmailIssues: DashboardSystemIssue[]
+  health: DashboardHealthIndicator[]
+}
+
+export const STALE_LEAD_DAYS = 3
 
 const CITY_COORDINATES: Array<{
   aliases: string[]
@@ -83,6 +144,61 @@ type AggregateLocation = {
   count: number
 }
 type AggregateTrend = { key: string; count: number }
+
+function noticeboardCutoff() {
+  const cutoff = new Date()
+  cutoff.setMonth(cutoff.getMonth() - 3)
+  return cutoff
+}
+
+function normalizeNoticeboardItems(value: unknown): NoticeboardItem[] {
+  if (!Array.isArray(value)) return []
+  const cutoff = noticeboardCutoff().getTime()
+  return value
+    .filter((item): item is NoticeboardItem => {
+      if (!item || typeof item !== "object") return false
+      const candidate = item as Record<string, unknown>
+      return (
+        typeof candidate.id === "string" &&
+        typeof candidate.title === "string" &&
+        typeof candidate.body === "string" &&
+        typeof candidate.author === "string" &&
+        typeof candidate.createdAt === "string" &&
+        typeof candidate.pinned === "boolean" &&
+        new Date(candidate.createdAt).getTime() >= cutoff
+      )
+    })
+    .sort(
+      (a, b) =>
+        Number(b.pinned) - Number(a.pinned) ||
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
+}
+
+async function loadNoticeboard(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<NoticeboardItem[]> {
+  const { data } = await supabase
+    .from("crm_settings")
+    .select("valore")
+    .eq("chiave", "dashboard.noticeboard")
+    .maybeSingle()
+
+  const rawItems = Array.isArray(data?.valore) ? data.valore : []
+  const items = normalizeNoticeboardItems(rawItems)
+  if (items.length !== rawItems.length) {
+    await supabase.from("crm_settings").upsert(
+      {
+        chiave: "dashboard.noticeboard",
+        valore: items,
+        descrizione: "Comunicazioni della bacheca aziendale",
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "chiave" },
+    )
+  }
+  return items
+}
 
 function groupedCounts(
   rows: Array<Record<string, unknown>>,
@@ -179,7 +295,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     aggregatesResult,
     settingsResult,
     usersResult,
-    noticeboardResult,
+    noticeboard,
   ] = await Promise.all([
     supabase.from("leads").select("id", { count: "exact", head: true }),
     supabase.from("clienti").select("id", { count: "exact", head: true }),
@@ -204,11 +320,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       .eq("chiave", "system.sedi")
       .maybeSingle(),
     supabase.from("utenti").select("sede").not("sede", "is", null),
-    supabase
-      .from("crm_settings")
-      .select("valore")
-      .eq("chiave", "dashboard.noticeboard")
-      .maybeSingle(),
+    loadNoticeboard(supabase),
   ])
 
   const requiredErrors = [
@@ -311,9 +423,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     leadsByStatus: (aggregates.leadsByStatus ?? []) as AggregateCount[],
     clientiByStatus: (aggregates.clientiByStatus ?? []) as AggregateCount[],
     mapMarkers,
-    noticeboard: Array.isArray(noticeboardResult.data?.valore)
-      ? (noticeboardResult.data.valore as NoticeboardItem[])
-      : [],
+    noticeboard,
     leadsByRegion: Array.from(regionCounts, ([region, count]) => ({ region, count }))
       .sort((a, b) => b.count - a.count),
     unmappedLeadLocations,
@@ -325,5 +435,235 @@ export async function getDashboardData(): Promise<DashboardData> {
       next7Days: Number(deadlines.next7Days ?? 0),
       later: Number(deadlines.later ?? 0),
     },
+  }
+}
+
+function mapTask(row: Record<string, unknown>): DashboardTask {
+  return {
+    id: String(row.id),
+    title: String(row.oggetto ?? "Compito senza oggetto"),
+    dueDate: typeof row.scadenza === "string" ? row.scadenza : null,
+    status: typeof row.stato === "string" ? row.stato : null,
+    priority: typeof row.priorita === "string" ? row.priorita : null,
+    relatedType: typeof row.correlato_tipo === "string" ? row.correlato_tipo : null,
+    relatedId: typeof row.correlato_id === "string" ? row.correlato_id : null,
+    relatedName: typeof row.correlato_nome === "string" ? row.correlato_nome : null,
+  }
+}
+
+function economicPath(path: string) {
+  const value = path.toLocaleLowerCase("it")
+  return (
+    value.includes("finanziaria") ||
+    value.includes("finanziamenti") ||
+    value.includes("contratti") ||
+    value.includes("preventivi")
+  )
+}
+
+async function countEconomicRecentFiles(snapshot: PermissionSnapshot): Promise<EconomicWidgetData> {
+  const subject = snapshot.subject
+  if (!subject.userId || !subject.email) {
+    return { count: 0, available: false, detail: "Utente non risolto" }
+  }
+
+  const appPassword = await getNextcloudAppPassword(subject.userId)
+  if (!appPassword) {
+    return { count: 0, available: false, detail: "Account Nextcloud non collegato" }
+  }
+
+  try {
+    const username =
+      (await getNextcloudUsername(subject.userId)) ?? nextcloudUsernameFromEmail(subject.email)
+    const rules = await loadNcPathRules()
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 30)
+    const files = await recentFiles(username, appPassword, 80)
+    return {
+      count: files.filter((file) => {
+        const modified = file.lastModified ? new Date(file.lastModified) : null
+        return (
+          !file.isDir &&
+          modified !== null &&
+          modified >= cutoff &&
+          economicPath(file.path) &&
+          canAccessNcPath(file.path, subject.ruoloCode, rules)
+        )
+      }).length,
+      available: true,
+      detail: "File recenti accessibili negli ultimi 30 giorni",
+    }
+  } catch (error) {
+    return {
+      count: 0,
+      available: false,
+      detail: error instanceof Error ? error.message : "Conteggio Nextcloud non disponibile",
+    }
+  }
+}
+
+export async function getEconomicWidgetData(
+  snapshot: PermissionSnapshot,
+): Promise<EconomicWidgetData> {
+  return countEconomicRecentFiles(snapshot)
+}
+
+export async function getSystemSemaphoreData(): Promise<SystemSemaphoreData> {
+  const supabase = await createClient()
+  const [nextcloud, email] = await Promise.all([
+    supabase
+      .from("nextcloud_credentials")
+      .select("utente_id", { count: "exact", head: true })
+      .eq("status", "failed"),
+    supabase
+      .from("utenti")
+      .select("id", { count: "exact", head: true })
+      .eq("welcome_email_status", "failed"),
+  ])
+
+  return {
+    regular: (nextcloud.count ?? 0) === 0 && (email.count ?? 0) === 0,
+  }
+}
+
+export async function getAgentDashboardData(
+  snapshot: PermissionSnapshot,
+): Promise<AgentDashboardData> {
+  const supabase = await createClient()
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const staleCutoff = new Date(today)
+  staleCutoff.setDate(staleCutoff.getDate() - STALE_LEAD_DAYS)
+
+  const leadsActiveQ = applyDashboardScope(
+    supabase
+      .from("leads")
+      .select("id", { count: "exact", head: true })
+      .neq("stato_lead", "Perso")
+      .neq("stato_lead", "Rifiutato"),
+    snapshot,
+    "lead",
+  )
+  const clientsQ = applyDashboardScope(
+    supabase.from("clienti").select("id", { count: "exact", head: true }),
+    snapshot,
+    "clienti",
+  )
+  const overdueTasksQ = applyDashboardScope(
+    supabase
+      .from("compiti")
+      .select("id", { count: "exact", head: true })
+      .lt("scadenza", today.toISOString())
+      .neq("stato", "Completato"),
+    snapshot,
+    "compiti",
+  )
+  const upcomingTasksQ = applyDashboardScope(
+    supabase
+      .from("compiti")
+      .select("id,oggetto,scadenza,priorita,stato,correlato_id,correlato_tipo,correlato_nome")
+      .neq("stato", "Completato")
+      .order("scadenza", { ascending: true, nullsFirst: false })
+      .limit(5),
+    snapshot,
+    "compiti",
+  )
+  const staleLeadsQ = applyDashboardScope(
+    supabase
+      .from("leads")
+      .select("id,nome_lead,nome,cognome,stato_lead,valutazione,sede,created_at")
+      .in("stato_lead", ["Non contattato", "Tentato di contattare"])
+      .lte("updated_at", staleCutoff.toISOString())
+      .order("updated_at", { ascending: true, nullsFirst: false })
+      .limit(5),
+    snapshot,
+    "lead",
+  )
+
+  const [noticeboard, activeLeads, clients, overdueTasks, upcomingTasks, staleLeads] =
+    await Promise.all([
+      loadNoticeboard(supabase),
+      leadsActiveQ,
+      clientsQ,
+      overdueTasksQ,
+      upcomingTasksQ,
+      staleLeadsQ,
+    ])
+
+  return {
+    noticeboard,
+    counts: {
+      activeLeads: activeLeads.count ?? 0,
+      clients: clients.count ?? 0,
+      overdueTasks: overdueTasks.count ?? 0,
+    },
+    upcomingTasks: ((upcomingTasks.data ?? []) as Array<Record<string, unknown>>).map(mapTask),
+    staleLeads: ((staleLeads.data ?? []) as Array<Record<string, unknown>>).map(mapLead),
+  }
+}
+
+export async function getSuperadminDashboardData(): Promise<SuperadminDashboardData> {
+  const supabase = await createClient()
+  const [noticeboard, nextcloud, welcome] = await Promise.all([
+    loadNoticeboard(supabase),
+    supabase
+      .from("nextcloud_credentials")
+      .select("utente_id,status,last_error,utenti:utente_id(nome)")
+      .neq("status", "active")
+      .limit(12),
+    supabase
+      .from("utenti")
+      .select("id,nome,welcome_email_status,welcome_email_error")
+      .eq("welcome_email_status", "failed")
+      .limit(12),
+  ])
+
+  const nextcloudIssues = ((nextcloud.data ?? []) as Array<Record<string, unknown>>).map(
+    (row) => {
+      const user = row.utenti as { nome?: string } | null
+      return {
+        userId: String(row.utente_id),
+        name: user?.nome ?? "Utente CRM",
+        status: String(row.status ?? "unknown"),
+        error: typeof row.last_error === "string" ? row.last_error : null,
+      }
+    },
+  )
+  const welcomeEmailIssues = ((welcome.data ?? []) as Array<Record<string, unknown>>).map(
+    (row) => ({
+      userId: String(row.id),
+      name: String(row.nome ?? "Utente CRM"),
+      status: String(row.welcome_email_status ?? "failed"),
+      error:
+        typeof row.welcome_email_error === "string" ? row.welcome_email_error : null,
+    }),
+  )
+
+  return {
+    noticeboard,
+    nextcloudIssues,
+    welcomeEmailIssues,
+    health: [
+      {
+        id: "nextcloud",
+        label: "Nextcloud",
+        status: nextcloudIssues.length > 0 || nextcloud.error ? "degraded" : "operational",
+        detail: nextcloud.error
+          ? nextcloud.error.message
+          : nextcloudIssues.length > 0
+            ? "Provisioning da verificare"
+            : "Credenziali operative",
+      },
+      {
+        id: "smtp",
+        label: "Email SMTP",
+        status: welcomeEmailIssues.length > 0 || welcome.error ? "degraded" : "operational",
+        detail: welcome.error
+          ? welcome.error.message
+          : welcomeEmailIssues.length > 0
+            ? "Invii welcome email da riprovare"
+            : "Invii recenti regolari",
+      },
+    ],
   }
 }

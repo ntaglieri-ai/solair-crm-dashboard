@@ -6,6 +6,12 @@ import type { NoticeboardItem } from "@/components/dashboard/noticeboard"
 const KEY = "dashboard.noticeboard"
 const MANAGER_ROLES = new Set(["SUPERADMIN", "ADMIN", "DIRECTOR"])
 
+function cutoffDate() {
+  const cutoff = new Date()
+  cutoff.setMonth(cutoff.getMonth() - 3)
+  return cutoff
+}
+
 function validItems(value: unknown): value is NoticeboardItem[] {
   return (
     Array.isArray(value) &&
@@ -34,11 +40,20 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Payload non valido" }, { status: 400 })
   }
 
+  const cutoff = cutoffDate().getTime()
+  const items = body.items
+    .filter((item) => new Date(item.createdAt).getTime() >= cutoff)
+    .sort(
+      (a, b) =>
+        Number(b.pinned) - Number(a.pinned) ||
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
+
   const supabase = await createClient()
   const { error } = await supabase.from("crm_settings").upsert(
     {
       chiave: KEY,
-      valore: body.items,
+      valore: items,
       descrizione: "Comunicazioni della bacheca aziendale",
       updated_at: new Date().toISOString(),
     },

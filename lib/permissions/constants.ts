@@ -26,6 +26,7 @@ export const PAGE_KEYS = [
   "crm_settings.system.azienda",
   "crm_settings.system.sedi",
   "crm_settings.system.aspetto",
+  "crm_settings.system.comunicazioni",
   "crm_settings.system.attributi",
   "crm_settings.system.valori",
   "crm_settings.system.regole",
@@ -56,6 +57,7 @@ export const ROUTE_PAGE_MAP: Record<string, string> = {
   "/crm-settings/system/azienda": "crm_settings.system.azienda",
   "/crm-settings/system/sedi": "crm_settings.system.sedi",
   "/crm-settings/system/aspetto": "crm_settings.system.aspetto",
+  "/crm-settings/system/comunicazioni": "crm_settings.system.comunicazioni",
   "/crm-settings/system/attributi": "crm_settings.system.attributi",
   "/crm-settings/system/valori": "crm_settings.system.valori",
   "/crm-settings/system/regole": "crm_settings.system.regole",
@@ -106,6 +108,8 @@ export const ACTION_KEYS = [
   "company.profile.edit",
   "company.sites.view",
   "company.sites.manage",
+  "company.communication.view",
+  "company.communication.manage",
   "appearance.personal.manage",
   "lead.columns.customize_own",
   "lead.tags.edit",
@@ -273,6 +277,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       "crm_settings.system.azienda",
       "crm_settings.system.sedi",
       "crm_settings.system.aspetto",
+      "crm_settings.system.comunicazioni",
       "crm_settings.system.attributi",
       "crm_settings.system.valori",
       "crm_settings.system.regole",
@@ -293,6 +298,8 @@ export function buildDefaultPermissionSnapshot(params?: {
       "company.profile.edit",
       "company.sites.view",
       "company.sites.manage",
+      "company.communication.view",
+      "company.communication.manage",
       "appearance.personal.manage",
     ])
     grantFieldManagement([...MODULE_KEYS])
@@ -316,10 +323,20 @@ export function buildDefaultPermissionSnapshot(params?: {
       scopes[moduleKey] = "assigned"
     }
   } else if (roleCode === "DIRECTOR") {
-    grantPages("rw", ["dashboard", "lead", "clienti", "compiti", "scadenze", "installatori"])
+    grantPages("rw", [
+      "dashboard",
+      "lead",
+      "clienti",
+      "compiti",
+      "scadenze",
+      "installatori",
+      "crm_settings.system.azienda",
+      "crm_settings.system.sedi",
+      "crm_settings.system.comunicazioni",
+    ])
     // Documenti in sola lettura; Automazioni (flussi/make) in lettura; CRM
-    // Settings negato tranne azienda/sedi/aspetto leggibili; Manutenzione negata.
-    grantPages("r", ["documenti", "crm_settings.system.flussi", "crm_settings.system.make", "crm_settings.system.azienda", "crm_settings.system.sedi", "crm_settings.system.aspetto"])
+    // Settings limitato a sezioni operative; Manutenzione negata.
+    grantPages("r", ["documenti", "crm_settings.system.flussi", "crm_settings.system.make", "crm_settings.system.aspetto"])
     grantRecords(["lead", "clienti", "compiti", "scadenze"], [
       "view",
       "create",
@@ -327,7 +344,17 @@ export function buildDefaultPermissionSnapshot(params?: {
       "export",
       "assign",
     ])
-    grantActions(["lead.columns.customize_own", "lead.tags.edit", "company.profile.view", "company.sites.view", "appearance.personal.manage"])
+    grantActions([
+      "lead.columns.customize_own",
+      "lead.tags.edit",
+      "company.profile.view",
+      "company.profile.edit",
+      "company.sites.view",
+      "company.sites.manage",
+      "company.communication.view",
+      "company.communication.manage",
+      "appearance.personal.manage",
+    ])
     for (const moduleKey of MODULE_KEYS) {
       fields[moduleKey] = roleFields[moduleKey] ?? { "*": "readonly" }
       scopes[moduleKey] = "own_sede"

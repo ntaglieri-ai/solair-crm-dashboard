@@ -2,13 +2,12 @@
 
 import { useEffect, useRef, useState } from "react"
 import Image from "next/image"
-import { Building2, ImageUp, Loader2, Save } from "lucide-react"
+import { Building2, ImageUp, Loader2, Save, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { SectionHeader } from "@/components/impostazioni/settings-ui"
 import { usePersistentSystemSetting } from "@/lib/crm-settings/use-persistent-system-setting"
 import { usePermissions } from "@/lib/permissions/provider"
 
@@ -35,7 +34,14 @@ const EMPTY_PROFILE: CompanyProfile = {
   registeredOffice: "",
   pec: "",
   description: "",
-  logoUrl: "",
+  logoUrl: "/solair-brand-logo.png",
+}
+
+const DEFAULT_LOGO_URL = "/solair-brand-logo.png"
+
+function normalizedLogoUrl(value: string) {
+  if (!value || value.endsWith("/solair-group-logo.png")) return DEFAULT_LOGO_URL
+  return value
 }
 
 export default function CompanyPage() {
@@ -78,28 +84,32 @@ export default function CompanyPage() {
   }
 
   function save() {
-    setStored(form)
+    setStored({ ...form, logoUrl: normalizedLogoUrl(form.logoUrl) })
     toast.success("Informazioni aziendali salvate")
   }
 
+  const displayLogo = normalizedLogoUrl(form.logoUrl)
+
   return (
     <div className="flex flex-col gap-5">
-      <SectionHeader
-        title="Informazioni aziendali"
-        description={
-          canEdit
-            ? "Identità e riferimenti ufficiali utilizzati nel CRM."
-            : "Informazioni aziendali disponibili in sola lettura."
-        }
-        action={
-          canEdit ? (
-            <Button onClick={save} disabled={store.saving}>
-              {store.saving ? <Loader2 className="animate-spin" /> : <Save />}
-              Salva
-            </Button>
-          ) : undefined
-        }
-      />
+      <header className="company-profile-hero">
+        <div>
+          <div className="mb-2 flex items-center gap-2 text-sm font-black uppercase text-white/75">
+            <Sparkles className="size-4" />
+            Identità aziendale
+          </div>
+          <h1 className="text-4xl font-black text-white">Informazioni aziendali</h1>
+          <p className="mt-2 max-w-2xl text-base font-semibold text-white/78">
+            Identità, logo e riferimenti ufficiali usati nel CRM e nella schermata principale.
+          </p>
+        </div>
+        {canEdit ? (
+          <Button onClick={save} disabled={store.saving} className="bg-white text-[#1e3a5f] hover:bg-white/90">
+            {store.saving ? <Loader2 className="animate-spin" /> : <Save />}
+            Salva
+          </Button>
+        ) : null}
+      </header>
 
       {store.error ? (
         <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
@@ -107,18 +117,23 @@ export default function CompanyPage() {
         </p>
       ) : null}
 
-      <section className="grid gap-5 lg:grid-cols-[260px_1fr]">
-        <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
-          <span className="text-sm font-semibold">Logo aziendale</span>
-          <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg border border-dashed border-border bg-muted/40">
-            {form.logoUrl ? (
+      <section className="grid gap-5 lg:grid-cols-[340px_1fr]">
+        <div className="company-logo-card">
+          <div>
+            <span className="text-sm font-black uppercase text-[#315fc5]">Logo aziendale</span>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Logo usato nella home del CRM e nelle intestazioni.
+            </p>
+          </div>
+          <div className="company-logo-preview" aria-label="Anteprima logo aziendale">
+            {displayLogo ? (
               <Image
-                src={form.logoUrl}
+                src={displayLogo}
                 alt="Logo aziendale"
-                width={220}
-                height={140}
+                width={300}
+                height={170}
                 unoptimized
-                className="max-h-full max-w-full object-contain p-5"
+                className="h-36 w-72 object-contain"
               />
             ) : (
               <Building2 className="size-10 text-muted-foreground" />
@@ -144,11 +159,20 @@ export default function CompanyPage() {
                 {uploading ? <Loader2 className="animate-spin" /> : <ImageUp />}
                 Carica logo
               </Button>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="company-logo-url">URL logo</Label>
+                <Input
+                  id="company-logo-url"
+                  value={form.logoUrl}
+                  onChange={(event) => update("logoUrl", event.target.value)}
+                  placeholder="/solair-brand-logo.png"
+                />
+              </div>
             </>
           ) : null}
         </div>
 
-        <div className="grid gap-4 rounded-lg border border-border bg-card p-5 sm:grid-cols-2">
+        <div className="company-profile-card grid gap-5 sm:grid-cols-2">
           <Field label="Ragione sociale" value={form.legalName} disabled={!canEdit} onChange={(value) => update("legalName", value)} />
           <Field label="Partita IVA" value={form.vatNumber} disabled={!canEdit} onChange={(value) => update("vatNumber", value)} />
           <Field label="Codice fiscale" value={form.taxCode} disabled={!canEdit} onChange={(value) => update("taxCode", value)} />

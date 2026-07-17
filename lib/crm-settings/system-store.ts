@@ -4,6 +4,7 @@ export const SYSTEM_SETTING_KEYS = [
   "system.valori",
   "system.regole",
   "system.flussi",
+  "system.communication",
   "company.profile",
   "company.integrations.make",
   "maintenance.nextcloud",

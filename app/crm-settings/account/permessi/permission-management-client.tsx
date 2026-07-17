@@ -170,6 +170,8 @@ const ACTION_LABELS: Record<string, string> = {
   "company.profile.edit": "Modifica informazioni aziendali",
   "company.sites.view": "Vede sedi e territori",
   "company.sites.manage": "Gestisce sedi e territori",
+  "company.communication.view": "Vede canali e mail server",
+  "company.communication.manage": "Gestisce canali e mail server",
   "appearance.personal.manage": "Personalizza il proprio aspetto",
   "lead.columns.customize_own": "Personalizza colonne Lead",
   "lead.tags.edit": "Modifica tag Lead",
@@ -849,7 +851,7 @@ export function PermissionManagementClient({
                 <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
                   I valori salvati sono quelli tecnici supportati dal database:
                   editable, readonly e hidden. La regola sul singolo campo prevale
-                  sempre sull'eventuale wildcard legacy.
+                  sempre sull&apos;eventuale wildcard legacy.
                 </p>
               </AccordionContent>
             </AccordionItem>

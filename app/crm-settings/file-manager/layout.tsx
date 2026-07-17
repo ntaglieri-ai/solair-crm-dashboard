@@ -69,8 +69,8 @@ export default function FileManagerLayout({
           { label: "Solair CRM", action: () => navigate("/") },
           { label: "CRM Settings & Admin", action: openCrmSettings },
           {
-            label: "File Manager",
-            action: () => openCrmSettingsLayer("maintenance"),
+            label: "Integrazioni",
+            action: () => openCrmSettingsLayer("integrations"),
           },
           { label: currentTitle },
         ]}
@@ -81,7 +81,7 @@ export default function FileManagerLayout({
         <aside className="lg:w-60 lg:shrink-0">
           <CrmSectionBackLink
             label="File Manager"
-            onClick={() => openCrmSettingsLayer("maintenance")}
+            onClick={() => openCrmSettingsLayer("integrations")}
           />
           <nav className="flex flex-col gap-1" aria-label="Sezioni File Manager">
             {SECTION_LINKS.map((link) => {

@@ -50,6 +50,18 @@ export default function SystemSettingsLayout({
 
   const current = SYSTEM_SECTION_LINKS.find((l) => l.href === pathname)
   const currentTitle = current?.label ?? "Azienda e sistema"
+  const drawerGroup =
+    pathname === "/crm-settings/system/comunicazioni"
+      ? { label: "Comunicazioni", layer: "communication" as const }
+      : [
+          "/crm-settings/system/attributi",
+          "/crm-settings/system/valori",
+          "/crm-settings/system/regole",
+          "/crm-settings/system/flussi",
+          "/crm-settings/system/import-export",
+        ].includes(pathname)
+        ? { label: "Configurazione CRM", layer: "crm-config" as const }
+        : { label: "Azienda", layer: "company" as const }
 
   return (
     <div className="flex flex-col gap-5">
@@ -58,8 +70,8 @@ export default function SystemSettingsLayout({
           { label: "Solair CRM", action: () => navigate("/") },
           { label: "CRM Settings & Admin", action: openCrmSettings },
           {
-            label: "Azienda e sistema",
-            action: () => openCrmSettingsLayer("system"),
+            label: drawerGroup.label,
+            action: () => openCrmSettingsLayer(drawerGroup.layer),
           },
           { label: currentTitle },
         ]}
@@ -69,8 +81,8 @@ export default function SystemSettingsLayout({
         {/* Sidebar di sezione */}
         <aside className="lg:w-60 lg:shrink-0">
           <CrmSectionBackLink
-            label="Azienda e sistema"
-            onClick={() => openCrmSettingsLayer("system")}
+            label={drawerGroup.label}
+            onClick={() => openCrmSettingsLayer(drawerGroup.layer)}
           />
           <nav
             className="flex flex-col gap-1"

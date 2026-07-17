@@ -2,7 +2,8 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { SunMedium, User, Settings, LogOut, ChevronsUpDown } from "lucide-react"
+import { useEffect, useState } from "react"
+import { User, Settings, LogOut, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
@@ -29,6 +30,13 @@ const OGGI = new Intl.DateTimeFormat("it-IT", {
   month: "long",
   year: "numeric",
 }).format(new Date())
+
+const DEFAULT_COMPANY_LOGO = "/solair-brand-logo.png"
+
+function normalizedLogoUrl(value?: string) {
+  if (!value || value.endsWith("/solair-group-logo.png")) return DEFAULT_COMPANY_LOGO
+  return value
+}
 
 function isActive(href: string, pathname: string) {
   if (href === "/") return pathname === "/"
@@ -156,6 +164,7 @@ function NavSection({ title, items }: { title: string; items: NavItem[] }) {
 
 export function Sidebar() {
   const permissions = usePermissions()
+  const [companyLogo, setCompanyLogo] = useState(DEFAULT_COMPANY_LOGO)
   const visiblePrincipale = NAV_PRINCIPALE.filter((item) => {
     const page = pageKeyFromPath(item.href)
     return page ? permissions.canPage(page) : true
@@ -168,19 +177,42 @@ export function Sidebar() {
     permissions.canPage("crm_settings") ||
     permissions.canAction("company.profile.view")
 
+  useEffect(() => {
+    if (!permissions.canAction("company.profile.view")) return
+    let cancelled = false
+    fetch("/api/crm-settings/system/company.profile", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { value?: { logoUrl?: string } } | null) => {
+        if (!cancelled) setCompanyLogo(normalizedLogoUrl(payload?.value?.logoUrl))
+      })
+      .catch(() => {
+        /* fallback locale */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [permissions])
+
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-sidebar-border bg-sidebar lg:flex">
       {/* Logo */}
       <div className="border-b border-sidebar-border px-5 py-5">
-        <div className="flex items-center gap-3">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-navy text-navy-foreground shadow-[0_8px_24px_rgba(30,58,95,.2)]">
-            <SunMedium className="size-6" />
+        <Link
+          href="https://www.solairgroup.it"
+          className="flex justify-center rounded-lg outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Apri il sito Solair Group"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <div className="flex h-20 w-40 items-center justify-start overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={companyLogo}
+              alt="Solair CRM"
+              className="h-16 w-36 object-contain object-left"
+            />
           </div>
-          <div className="flex min-w-0 flex-col leading-tight">
-            <span className="text-[17px] font-extrabold text-foreground">Solair CRM</span>
-            <span className="text-xs text-muted-foreground">solairgroup.it</span>
-          </div>
-        </div>
+        </Link>
         <p className="mt-3 text-[15px] font-bold capitalize leading-5 text-primary">
           {OGGI}
         </p>

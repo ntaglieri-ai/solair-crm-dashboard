@@ -26,6 +26,11 @@ export default function MaintenanceLayout({ children }: { children: ReactNode })
     (item) => item.section === "maintenance",
   )
   const current = links.find((item) => item.href === pathname)
+  const drawerGroup =
+    pathname === "/crm-settings/maintenance/make" ||
+    pathname === "/crm-settings/maintenance/file-manager"
+      ? { label: "Integrazioni", layer: "integrations" as const }
+      : { label: "Manutenzione", layer: "maintenance" as const }
 
   useEffect(() => {
     if (!allowed) navigate("/", { replace: true })
@@ -40,8 +45,8 @@ export default function MaintenanceLayout({ children }: { children: ReactNode })
           { label: "Solair CRM", action: () => navigate("/") },
           { label: "CRM Settings & Admin", action: openCrmSettings },
           {
-            label: "Manutenzione",
-            action: () => openCrmSettingsLayer("maintenance"),
+            label: drawerGroup.label,
+            action: () => openCrmSettingsLayer(drawerGroup.layer),
           },
           { label: current?.title ?? "Manutenzione" },
         ]}
@@ -49,8 +54,8 @@ export default function MaintenanceLayout({ children }: { children: ReactNode })
       <div className="flex flex-col gap-6 lg:flex-row">
         <aside className="lg:w-60 lg:shrink-0">
           <CrmSectionBackLink
-            label="Manutenzione"
-            onClick={() => openCrmSettingsLayer("maintenance")}
+            label={drawerGroup.label}
+            onClick={() => openCrmSettingsLayer(drawerGroup.layer)}
           />
           <nav className="flex flex-col gap-1" aria-label="Manutenzione">
             {links.map((link) => {

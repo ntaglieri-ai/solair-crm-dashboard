@@ -1,21 +1,31 @@
 import type { LucideIcon } from "lucide-react"
 import {
   Activity,
+  ArrowLeftRight,
   Building,
   Building2,
   DatabaseBackup,
   FileCog,
+  GitBranch,
   KeyRound,
+  ListChecks,
+  Mail,
   Palette,
   PlugZap,
+  SlidersHorizontal,
   ScrollText,
   ShieldCheck,
   Users,
+  Workflow,
 } from "lucide-react"
 
 export type CrmSettingsLayer =
   | "root"
   | "account-security"
+  | "company"
+  | "communication"
+  | "crm-config"
+  | "integrations"
   | "maintenance"
   | "system"
 
@@ -122,6 +132,66 @@ export const CRM_SETTINGS_CATALOG: CrmSettingsCatalogItem[] = [
     href: "/crm-settings/system/aspetto",
     pageKey: "crm_settings.system.aspetto",
     icon: Palette,
+    status: "active",
+  },
+  {
+    id: "communication",
+    section: "organization",
+    title: "Canali e mail server",
+    description: "SMTP, IMAP, centralino, WhatsApp e canali operativi",
+    href: "/crm-settings/system/comunicazioni",
+    pageKey: "crm_settings.system.comunicazioni",
+    icon: Mail,
+    status: "active",
+  },
+  {
+    id: "attributes",
+    section: "organization",
+    title: "Campi e attributi",
+    description: "Schema campi, visibilita' e configurazione moduli",
+    href: "/crm-settings/system/attributi",
+    pageKey: "crm_settings.system.attributi",
+    icon: SlidersHorizontal,
+    status: "active",
+  },
+  {
+    id: "default-values",
+    section: "organization",
+    title: "Valori predefiniti",
+    description: "Liste, stati, priorita' e valori configurabili",
+    href: "/crm-settings/system/valori",
+    pageKey: "crm_settings.system.valori",
+    icon: ListChecks,
+    status: "active",
+  },
+  {
+    id: "assignment-rules",
+    section: "organization",
+    title: "Regole di assegnazione",
+    description: "Distribuzione lead, proprietari e logiche operative",
+    href: "/crm-settings/system/regole",
+    pageKey: "crm_settings.system.regole",
+    icon: GitBranch,
+    status: "active",
+  },
+  {
+    id: "workflows",
+    section: "organization",
+    title: "Flussi operativi",
+    description: "Automazioni CRM, stati e processi interni",
+    href: "/crm-settings/system/flussi",
+    pageKey: "crm_settings.system.flussi",
+    icon: Workflow,
+    status: "active",
+  },
+  {
+    id: "import-export",
+    section: "organization",
+    title: "Import / Export",
+    description: "Importazioni, esportazioni e migrazione dati",
+    href: "/crm-settings/system/import-export",
+    pageKey: "crm_settings.system.import_export",
+    icon: ArrowLeftRight,
     status: "active",
   },
   {

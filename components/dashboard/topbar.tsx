@@ -20,6 +20,8 @@ const SECTION_TITLES: { prefix: string; title: string }[] = [
   { prefix: "/impostazioni", title: "Impostazioni" },
 ]
 
+const DEFAULT_COMPANY_LOGO = "/solair-brand-logo.png"
+
 function getSectionTitle(pathname: string) {
   const match = SECTION_TITLES.find((s) => pathname.startsWith(s.prefix))
   return match?.title ?? "Dashboard"
@@ -37,7 +39,10 @@ export function Topbar() {
             aria-label="Breadcrumb"
             className="flex items-center gap-1 text-xs text-muted-foreground"
           >
-            <span>Solair CRM</span>
+            <span className="flex h-6 w-12 items-center justify-start overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={DEFAULT_COMPANY_LOGO} alt="Solair CRM" className="h-5 w-11 object-contain object-left" />
+            </span>
             <ChevronRight className="size-3" />
             <span className="text-foreground">{title}</span>
           </nav>

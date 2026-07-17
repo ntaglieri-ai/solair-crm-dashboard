@@ -68,7 +68,7 @@ export default function AccountSecurityLayout({
           { label: "Solair CRM", action: () => navigate("/") },
           { label: "CRM Settings & Admin", action: openCrmSettings },
           {
-            label: "Account & Security",
+            label: "Account e accessi",
             action: () => openCrmSettingsLayer("account-security"),
           },
           { label: currentTitle },
@@ -79,10 +79,10 @@ export default function AccountSecurityLayout({
         {/* Sidebar di sezione */}
         <aside className="lg:w-60 lg:shrink-0">
           <CrmSectionBackLink
-            label="Account & Security"
+            label="Account e accessi"
             onClick={() => openCrmSettingsLayer("account-security")}
           />
-          <nav className="flex flex-col gap-1" aria-label="Sezioni Account & Security">
+          <nav className="flex flex-col gap-1" aria-label="Sezioni Account e accessi">
             {visibleLinks.map((link) => {
               const active = pathname === link.href
               const Icon = link.icon

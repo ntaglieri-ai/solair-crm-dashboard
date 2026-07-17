@@ -58,15 +58,24 @@ export type ProvisionResult = {
   error: string | null
 }
 
-/** Crea l'account Nextcloud. Ritorna lo statuscode OCS (100 = ok, 102 = esiste). */
+/**
+ * Crea l'account Nextcloud. Ritorna lo statuscode OCS (100 = ok, 102 = esiste).
+ *
+ * NB: l'email NON viene passata alla creazione di proposito. Nextcloud invia
+ * la propria mail di benvenuto ("Welcome to Storage Share") solo se `email` e'
+ * valorizzata nella POST addUser (vedi UsersController::addUser upstream). Per
+ * l'utente finale l'account Nextcloud e' invisibile: l'accesso passa sempre
+ * dal CRM via app-password — quindi quella mail e' rumore indesiderato e va
+ * soppressa. L'email viene impostata subito dopo via setUserEmail (PUT
+ * editUser), che NON scatena alcuna mail di benvenuto.
+ */
 async function createUser(
   cfg: NextcloudAdminConfig,
-  params: { userid: string; password: string; email: string; displayName: string },
+  params: { userid: string; password: string; displayName: string },
 ): Promise<OcsMeta> {
   const body = new URLSearchParams({
     userid: params.userid,
     password: params.password,
-    email: params.email,
     displayName: params.displayName,
   })
   const res = await fetch(`${cfg.baseUrl}/ocs/v2.php/cloud/users?format=json`, {
@@ -77,6 +86,30 @@ async function createUser(
     }),
     body,
   })
+  const { meta } = await parseOcs(res)
+  return meta
+}
+
+/**
+ * Imposta l'email dell'account via PUT editUser (key=email). A differenza della
+ * creazione con email, questo NON invia la mail di benvenuto di Nextcloud.
+ */
+async function setUserEmail(
+  cfg: NextcloudAdminConfig,
+  userid: string,
+  email: string,
+): Promise<OcsMeta> {
+  const res = await fetch(
+    `${cfg.baseUrl}/ocs/v2.php/cloud/users/${encodeURIComponent(userid)}?format=json`,
+    {
+      method: "PUT",
+      headers: ocsHeaders({
+        Authorization: basicAuth(cfg.adminUser, cfg.adminPassword),
+        "Content-Type": "application/x-www-form-urlencoded",
+      }),
+      body: new URLSearchParams({ key: "email", value: email }),
+    },
+  )
   const { meta } = await parseOcs(res)
   return meta
 }
@@ -185,7 +218,6 @@ export async function provisionNextcloudUser(utente: {
     const meta = await createUser(cfg, {
       userid: username,
       password: initialPassword,
-      email: utente.email,
       displayName: utente.nome,
     })
 
@@ -202,6 +234,16 @@ export async function provisionNextcloudUser(utente: {
       const error = `Creazione account Nextcloud fallita (OCS ${meta.statuscode}: ${meta.message})`
       await storeNextcloudCredential({ utenteId: utente.id, username, status: "failed", lastError: error })
       return { status: "failed", username, appPassword: null, error }
+    }
+
+    // Email impostata dopo la creazione (PUT), per non far partire la mail di
+    // benvenuto di Nextcloud. Non fatale: l'account e l'app-password funzionano
+    // comunque, l'email e' solo metadato lato Nextcloud.
+    const emailMeta = await setUserEmail(cfg, username, utente.email)
+    if (!isOcsOk(emailMeta)) {
+      console.warn(
+        `[nextcloud] impostazione email fallita per "${username}" (OCS ${emailMeta.statuscode}: ${emailMeta.message})`,
+      )
     }
 
     const appPassword = await mintAppPassword(cfg, username, initialPassword)

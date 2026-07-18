@@ -47,10 +47,20 @@ const FALLBACK_RULES: NcPathRule[] = [
   { prefix: "Solair-Ufficio/VIOLA/Firme E Timbri/", priorita: 60, allowed: new Set(ADMIN_PLUS) },
   { prefix: "Solair-Ufficio/Old", priorita: 70, allowed: new Set(DIRECTOR_PLUS) },
   { prefix: "Vendita-Digitale/Old", priorita: 80, allowed: new Set(DIRECTOR_PLUS) },
-  { prefix: "LISTINI", priorita: 90, allowed: new Set(ALL_ROLES) },
-  { prefix: "Schede tecniche", priorita: 100, allowed: new Set(ALL_ROLES) },
-  { prefix: "INSERZIONI ATTIVE", priorita: 110, allowed: new Set(ALL_ROLES) },
-  { prefix: "Sponsorizzate", priorita: 120, allowed: new Set(ALL_ROLES) },
+  // Cat 4 — Materiale commerciale (tutti i ruoli). Prefissi FIX 18/07: i nomi nudi
+  // ("LISTINI", "Schede tecniche", ecc.) non matchavano mai via startsWith perche'
+  // sul filesystem reale queste cartelle sono annidate sotto Solair-Agenti/,
+  // Solair-Ufficio/ e Vendita-Digitale/, mai a root. Elencata una riga per ogni
+  // posizione reale (verificata via `rclone lsd --max-depth 2`); il casing di
+  // "Schede tecniche"/"Schede Tecniche" e' quello reale su disco (match case-sensitive).
+  { prefix: "Solair-Agenti/LISTINI", priorita: 90, allowed: new Set(ALL_ROLES) },
+  { prefix: "Vendita-Digitale/LISTINI", priorita: 91, allowed: new Set(ALL_ROLES) },
+  { prefix: "Solair-Agenti/Schede tecniche", priorita: 100, allowed: new Set(ALL_ROLES) },
+  { prefix: "Vendita-Digitale/Schede tecniche", priorita: 101, allowed: new Set(ALL_ROLES) },
+  { prefix: "Solair-Ufficio/Schede Tecniche", priorita: 102, allowed: new Set(ALL_ROLES) },
+  { prefix: "Vendita-Digitale/INSERZIONI ATTIVE", priorita: 110, allowed: new Set(ALL_ROLES) },
+  { prefix: "Solair-Agenti/Sponsorizzate", priorita: 120, allowed: new Set(ALL_ROLES) },
+  { prefix: "Solair-Ufficio/Sponsorizzate", priorita: 121, allowed: new Set(ALL_ROLES) },
 ]
 
 // Cache in-memory con lo STESSO pattern di load-permissions (TTL da

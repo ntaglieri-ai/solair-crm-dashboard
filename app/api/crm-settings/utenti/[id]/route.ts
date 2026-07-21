@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextResponse, after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { requireApiAction } from "@/lib/permissions/server"
 import {
@@ -124,36 +124,53 @@ export async function DELETE(
     )
   }
 
-  // Elimina l'account Nextcloud associato. Best-effort e coerente con
-  // l'approccio "loud, not silent" del provisioning: se fallisce (rete, account
-  // gia' rimosso) logghiamo forte per riconciliazione manuale ma NON blocchiamo
-  // la cancellazione CRM, gia' avvenuta. Skip pulito se mai provisionato.
-  if (ncUsername) {
-    const result = await deleteNextcloudUser(ncUsername)
-    if (!result.ok) {
-      console.error(
-        `[nextcloud] delete account fallita per "${ncUsername}" (utente ${id}): ${result.error} — rimuovere manualmente`,
-      )
-    }
-  }
-
-  // Elimina l'account Supabase Auth associato, stesso approccio best-effort:
-  // altrimenti resterebbe orfano (credenziali valide ma nessun utente CRM).
-  if (authUserId) {
-    const admin = createAdminClient()
-    if (!admin) {
-      console.error(
-        `[auth] SUPABASE_SERVICE_ROLE_KEY non configurata: account Auth ${authUserId} (utente ${id}) non rimosso — rimuovere manualmente`,
-      )
-    } else {
-      const { error: deleteAuthError } = await admin.auth.admin.deleteUser(authUserId)
-      if (deleteAuthError) {
+  // Elimina l'account Nextcloud e l'account Supabase Auth associati, in
+  // BACKGROUND via after(): la riga utenti e' gia' cancellata sopra (la
+  // cancellazione CRM e' gia' avvenuta a tutti gli effetti), quindi non ha
+  // senso far aspettare il browser per due chiamate di rete di pulizia
+  // (Nextcloud OCS delete + Supabase Auth admin delete). Stesso approccio
+  // "loud, not silent, best-effort" di prima: se falliscono, loggano forte
+  // per riconciliazione manuale, ma non bloccano piu' la risposta HTTP.
+  after(async () => {
+    if (ncUsername) {
+      try {
+        const result = await deleteNextcloudUser(ncUsername)
+        if (!result.ok) {
+          console.error(
+            `[nextcloud] delete account fallita per "${ncUsername}" (utente ${id}): ${result.error} — rimuovere manualmente`,
+          )
+        }
+      } catch (err) {
         console.error(
-          `[auth] delete account fallita per ${authUserId} (utente ${id}): ${deleteAuthError.message} — rimuovere manualmente`,
+          `[nextcloud] delete account in background fallita per "${ncUsername}" (utente ${id}):`,
+          err,
         )
       }
     }
-  }
+
+    if (authUserId) {
+      const admin = createAdminClient()
+      if (!admin) {
+        console.error(
+          `[auth] SUPABASE_SERVICE_ROLE_KEY non configurata: account Auth ${authUserId} (utente ${id}) non rimosso — rimuovere manualmente`,
+        )
+      } else {
+        try {
+          const { error: deleteAuthError } = await admin.auth.admin.deleteUser(authUserId)
+          if (deleteAuthError) {
+            console.error(
+              `[auth] delete account fallita per ${authUserId} (utente ${id}): ${deleteAuthError.message} — rimuovere manualmente`,
+            )
+          }
+        } catch (err) {
+          console.error(
+            `[auth] delete account in background fallita per ${authUserId} (utente ${id}):`,
+            err,
+          )
+        }
+      }
+    }
+  })
 
   return NextResponse.json({ ok: true })
 }

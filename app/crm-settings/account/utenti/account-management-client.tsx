@@ -276,6 +276,55 @@ export function AccountManagementClient({
     }
   }
 
+  async function pollProvisioningStatus(userId: string, email: string, attempt = 1) {
+    try {
+      const res = await fetch("/api/crm-settings/utenti")
+      const body = (await res.json().catch(() => null)) as { utenti?: Utente[] } | null
+      const fresh = body?.utenti?.find((u) => u.id === userId)
+      if (!fresh) return
+
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === userId
+            ? {
+                ...u,
+                nextcloud_status: fresh.nextcloud_status,
+                nextcloud_error: fresh.nextcloud_error,
+                welcome_email_status: fresh.welcome_email_status,
+                welcome_email_error: fresh.welcome_email_error,
+              }
+            : u,
+        ),
+      )
+
+      const ncDone = fresh.nextcloud_status !== "pending"
+      const emailDone = fresh.welcome_email_status !== "pending"
+
+      if (fresh.nextcloud_status === "failed") {
+        setError(
+          `Provisioning Nextcloud per ${email} non riuscito: ${fresh.nextcloud_error ?? "vedi log"}. Usa "Riprova provisioning" dal menu azioni.`,
+        )
+      }
+      if (fresh.welcome_email_status === "failed") {
+        setError(
+          `Invio email per ${email} non riuscito: ${fresh.welcome_email_error ?? "vedi log"}. Usa "Rinvia password temporanea" dal menu azioni.`,
+        )
+      }
+
+      // Provisioning in background (Nextcloud + email) di solito si risolve in
+      // 1-3s. Se dopo qualche tentativo e' ancora "pending" restiamo in
+      // silenzio: i badge in tabella mostrano gia' "In attesa" senza bisogno
+      // di allarmare l'utente con un banner — puo' sempre ricontrollare o
+      // ricaricare piu' tardi.
+      if ((!ncDone || !emailDone) && attempt < 4) {
+        setTimeout(() => pollProvisioningStatus(userId, email, attempt + 1), attempt * 1500)
+      }
+    } catch {
+      // Poll silenzioso: un fallimento di rete qui non deve generare rumore,
+      // i badge restano "In attesa" e l'utente puo' sempre fare "Riprova".
+    }
+  }
+
   async function createUser(e: React.FormEvent) {
     e.preventDefault()
     if (!newForm.nome.trim() || !newForm.email.trim() || !newForm.ruolo || !newForm.sede) {
@@ -308,23 +357,14 @@ export function AccountManagementClient({
       )
       setNewOpen(false)
       setNewForm(EMPTY_FORM)
-      // L'account CRM e' stato creato: conferma sempre con il toast di successo,
-      // a prescindere dallo stato di Nextcloud/Auth/email (che restano tracciati
-      // dai badge e dall'eventuale banner informativo qui sotto).
+      // L'account CRM e' creato subito; Nextcloud/Auth/email finiscono di
+      // provisionarsi in background (dopo la risposta HTTP). Il toast di
+      // successo e' immediato e sempre valido — lo stato reale del
+      // provisioning arriva silenziosamente via poll qui sotto, e genera un
+      // avviso SOLO se qualcosa fallisce davvero (non per il semplice
+      // "in corso").
       toast.success("Account creato con successo", { description: created.email })
-      if (body.nextcloud && body.nextcloud.status !== "active") {
-        setError(
-          `Utente creato, ma il provisioning Nextcloud e' ${body.nextcloud.status}: ${body.nextcloud.error ?? "vedi log"}. Usa "Riprova provisioning" dal menu azioni.`,
-        )
-      } else if (body.auth?.error) {
-        setError(
-          `Utente creato, ma l'account Auth non e' stato creato: ${body.auth.error}.`,
-        )
-      } else if (body.utente.welcome_email_status !== "sent") {
-        setError(
-          `Utente creato, ma l'invio dell'email con la password temporanea e' ${body.utente.welcome_email_status}: ${body.utente.welcome_email_error ?? "vedi log"}. Usa "Rinvia password temporanea" dal menu azioni.`,
-        )
-      }
+      void pollProvisioningStatus(created.id, created.email)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Creazione account non riuscita")
     } finally {

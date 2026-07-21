@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextResponse, after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { requireApiAction } from "@/lib/permissions/server"
 import {
@@ -101,50 +101,61 @@ export async function POST(request: Request) {
     )
   }
 
-  // Provisioning Nextcloud: crea l'account speculare + app-password cifrata.
-  // Non blocca la creazione CRM: in caso di errore l'utente resta creato ma la
-  // credenziale e' marcata pending/failed ed e' rilanciabile dalla UI.
-  const provisioning = await provisionNextcloudUser({
-    id: data.id,
-    email: data.email,
-    nome: data.nome,
-  })
-  if (provisioning.status !== "active") {
-    console.error(
-      `[nextcloud] provisioning ${provisioning.status} per utente ${data.id}:`,
-      provisioning.error,
-    )
-  }
+  // Provisioning Nextcloud + Auth (creazione account speculare, app-password
+  // cifrata, account Supabase Auth con password temporanea, invio email di
+  // benvenuto): girano in BACKGROUND via after(), non bloccano piu' la
+  // risposta HTTP. Prima erano sequenziali e sincroni (insert DB -> 3 call
+  // Nextcloud OCS -> creazione Auth -> invio SMTP Aruba), causando lentezza
+  // percepita di diversi secondi in creazione. Gli stati (welcome_email_status,
+  // nextcloud_credentials.status) hanno gia' default 'pending' a livello DB, e
+  // la UI ha gia' un pattern "pending + riprova" pronto (retryWelcomeEmail,
+  // retry Nextcloud da /utenti/[id]/nextcloud) — stesso principio "loud, not
+  // silent" gia' in uso, qui applicato anche al provisioning iniziale.
+  after(async () => {
+    try {
+      const provisioning = await provisionNextcloudUser({
+        id: data.id,
+        email: data.email,
+        nome: data.nome,
+      })
+      if (provisioning.status !== "active") {
+        console.error(
+          `[nextcloud] provisioning ${provisioning.status} per utente ${data.id}:`,
+          provisioning.error,
+        )
+      }
+    } catch (err) {
+      console.error(`[nextcloud] provisioning in background fallito per utente ${data.id}:`, err)
+    }
 
-  // Provisioning Auth: crea l'account Supabase Auth con password temporanea
-  // e la invia via email. Stesso approccio "loud, not silent" del Nextcloud:
-  // l'utente CRM resta creato anche se Auth/email falliscono, ma lo stato e'
-  // visibile e rilanciabile dalla UI (retryWelcomeEmail).
-  const authProvisioning = await provisionAuthUser({
-    id: data.id,
-    email: data.email,
-    nome: data.nome,
+    try {
+      const authProvisioning = await provisionAuthUser({
+        id: data.id,
+        email: data.email,
+        nome: data.nome,
+      })
+      if (authProvisioning.error) {
+        console.error(`[auth] provisioning fallito per utente ${data.id}:`, authProvisioning.error)
+      }
+      if (authProvisioning.emailStatus !== "sent") {
+        console.error(
+          `[auth] invio email di benvenuto ${authProvisioning.emailStatus} per utente ${data.id}:`,
+          authProvisioning.emailError,
+        )
+      }
+    } catch (err) {
+      console.error(`[auth] provisioning in background fallito per utente ${data.id}:`, err)
+    }
   })
-  if (authProvisioning.error) {
-    console.error(`[auth] provisioning fallito per utente ${data.id}:`, authProvisioning.error)
-  }
-  if (authProvisioning.emailStatus !== "sent") {
-    console.error(
-      `[auth] invio email di benvenuto ${authProvisioning.emailStatus} per utente ${data.id}:`,
-      authProvisioning.emailError,
-    )
-  }
 
   return NextResponse.json(
     {
       utente: {
         ...data,
         must_change_password: true,
-        welcome_email_status: authProvisioning.emailStatus,
-        welcome_email_error: authProvisioning.emailError,
       },
-      nextcloud: { status: provisioning.status, error: provisioning.error },
-      auth: { error: authProvisioning.error },
+      nextcloud: { status: "pending", error: null },
+      auth: { error: null },
     },
     { status: 201 },
   )

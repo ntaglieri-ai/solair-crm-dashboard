@@ -1,8 +1,8 @@
 // app/login/page.tsx
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { Suspense, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,8 +10,10 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react"
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const sessioneScaduta = searchParams.get("sessione_scaduta") === "1"
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -96,6 +98,13 @@ export default function LoginPage() {
           <CardContent>
             {mode === "login" ? (
               <form onSubmit={handleLogin} className="space-y-4">
+                {sessioneScaduta && (
+                  <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 p-3 rounded-lg">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    La tua sessione precedente non è più valida. Accedi di nuovo con la password
+                    temporanea ricevuta via email.
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
                   <Input
@@ -213,5 +222,17 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+// useSearchParams() richiede un boundary Suspense: senza, Next.js degrada la
+// pagina a fully client-rendered (o fallisce in build statica). Il fallback
+// e' nullo perche' il layout sotto non dipende da dati asincroni lenti — il
+// contenuto compare appena il client idrata, praticamente istantaneo.
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   )
 }

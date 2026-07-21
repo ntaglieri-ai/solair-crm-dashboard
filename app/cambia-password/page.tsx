@@ -41,6 +41,21 @@ export default function CambiaPasswordPage() {
 
     const { error: updateError } = await supabase.auth.updateUser({ password })
     if (updateError) {
+      // Caso "sessione vecchia ancora presente nel browser ma revocata lato
+      // Supabase" (tipico dopo un reset password: il refresh token della
+      // vecchia sessione viene invalidato, ma il token in memoria nel
+      // browser resta leggibile finche' non si prova un'operazione reale).
+      // Invece di mostrare l'errore tecnico grezzo, ripuliamo la sessione
+      // residua e rimandiamo al login con un messaggio chiaro.
+      const isStaleSession =
+        updateError.message.toLowerCase().includes("session") ||
+        updateError.message.toLowerCase().includes("auth session missing")
+      if (isStaleSession) {
+        await supabase.auth.signOut()
+        router.push("/login?sessione_scaduta=1")
+        router.refresh()
+        return
+      }
       setError(updateError.message)
       setLoading(false)
       return

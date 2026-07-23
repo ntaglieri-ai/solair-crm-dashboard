@@ -17,11 +17,29 @@ import {
   type NextcloudAdminConfig,
 } from "./config"
 import {
+  getNextcloudAppPassword,
   storeNextcloudCredential,
   type NextcloudCredStatus,
 } from "./credentials"
 
 type OcsMeta = { status: string; statuscode: number; message: string }
+
+const CRM_NEXTCLOUD_GROUPS = new Set([
+  "solair-superadmin",
+  "solair-admin",
+  "solair-director",
+  "solair-standard",
+  "solair-agent",
+])
+const LEGACY_CRM_GROUPS = new Set(["agent", "director", "standard"])
+
+export function nextcloudGroupForRole(roleCode: string): string | null {
+  const normalized = roleCode.trim().toUpperCase()
+  if (!["SUPERADMIN", "ADMIN", "DIRECTOR", "STANDARD", "AGENT"].includes(normalized)) {
+    return null
+  }
+  return `solair-${normalized.toLowerCase()}`
+}
 
 // La Provisioning API restituisce 100 (OCS v1) o 200 (OCS v2) in caso di
 // successo; 102 = risorsa gia' esistente.
@@ -42,6 +60,83 @@ async function parseOcs(res: Response): Promise<{ meta: OcsMeta; data: unknown }
       meta: { status: "failure", statuscode: res.status, message: text.slice(0, 200) || res.statusText },
       data: null,
     }
+  }
+}
+
+async function ocsRequest(
+  cfg: NextcloudAdminConfig,
+  path: string,
+  init: RequestInit = {},
+): Promise<{ meta: OcsMeta; data: unknown }> {
+  const headers = new Headers(init.headers)
+  headers.set("Authorization", basicAuth(cfg.adminUser, cfg.adminPassword))
+  headers.set("OCS-APIRequest", "true")
+  headers.set("Accept", "application/json")
+  return parseOcs(
+    await fetch(`${cfg.baseUrl}/ocs/v2.php/cloud/${path}${path.includes("?") ? "&" : "?"}format=json`, {
+      ...init,
+      headers,
+    }),
+  )
+}
+
+/**
+ * Rende il gruppo Nextcloud una proiezione del ruolo CRM. Aggiunge sempre il
+ * gruppo nuovo prima di rimuovere quelli vecchi, e non tocca mai gruppi non
+ * gestiti (in particolare il gruppo amministrativo nativo `admin`).
+ */
+export async function syncNextcloudUserGroup(
+  userid: string,
+  roleCode: string,
+): Promise<{ ok: boolean; group: string | null; error: string | null }> {
+  const cfg = nextcloudAdminConfig()
+  const desired = nextcloudGroupForRole(roleCode)
+  if (!cfg) return { ok: false, group: desired, error: "Credenziali admin Nextcloud non configurate" }
+  if (!desired) return { ok: false, group: null, error: `Ruolo CRM non supportato: ${roleCode}` }
+
+  try {
+    const created = await ocsRequest(cfg, "groups", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ groupid: desired }),
+    })
+    // 102 = il gruppo esiste gia'.
+    if (!isOcsOk(created.meta) && created.meta.statuscode !== 102) {
+      return { ok: false, group: desired, error: `Creazione gruppo ${desired} fallita (OCS ${created.meta.statuscode}: ${created.meta.message})` }
+    }
+
+    const added = await ocsRequest(cfg, `users/${encodeURIComponent(userid)}/groups`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ groupid: desired }),
+    })
+    // Alcune versioni rispondono 102 se l'utente e' gia' nel gruppo.
+    if (!isOcsOk(added.meta) && added.meta.statuscode !== 102) {
+      return { ok: false, group: desired, error: `Assegnazione a ${desired} fallita (OCS ${added.meta.statuscode}: ${added.meta.message})` }
+    }
+
+    const current = await ocsRequest(cfg, `users/${encodeURIComponent(userid)}`)
+    if (!isOcsOk(current.meta)) {
+      return { ok: false, group: desired, error: `Lettura gruppi utente fallita (OCS ${current.meta.statuscode}: ${current.meta.message})` }
+    }
+    const groups = ((current.data as { groups?: unknown } | null)?.groups ?? []) as unknown
+    const currentGroups = Array.isArray(groups) ? groups.filter((g): g is string => typeof g === "string") : []
+
+    for (const group of currentGroups) {
+      if (group === desired || (!CRM_NEXTCLOUD_GROUPS.has(group) && !LEGACY_CRM_GROUPS.has(group))) continue
+      const removed = await ocsRequest(
+        cfg,
+        `users/${encodeURIComponent(userid)}/groups?groupid=${encodeURIComponent(group)}`,
+        { method: "DELETE" },
+      )
+      if (!isOcsOk(removed.meta)) {
+        return { ok: false, group: desired, error: `Rimozione dal vecchio gruppo ${group} fallita (OCS ${removed.meta.statuscode}: ${removed.meta.message})` }
+      }
+    }
+
+    return { ok: true, group: desired, error: null }
+  } catch (e) {
+    return { ok: false, group: desired, error: e instanceof Error ? e.message : "Errore rete Nextcloud" }
   }
 }
 
@@ -236,6 +331,7 @@ export async function provisionNextcloudUser(utente: {
   id: string
   email: string
   nome: string
+  ruolo: string
   /** Password principale condivisa con il CRM. Se omessa ne viene generata una. */
   password?: string
 }): Promise<ProvisionResult> {
@@ -256,10 +352,25 @@ export async function provisionNextcloudUser(utente: {
       displayName: utente.nome,
     })
 
-    // 102 = utente gia' esistente: non conosciamo la sua password, non
-    // possiamo coniare una app-password senza resettarla. Segnaliamo failed
-    // per riconciliazione manuale invece di fingere un successo.
+    // Se esiste gia' ed e' presente una app-password cifrata, il retry viene
+    // usato anche come riconciliazione del gruppo senza resettare credenziali.
     if (meta.statuscode === 102) {
+      const existingAppPassword = await getNextcloudAppPassword(utente.id)
+      if (existingAppPassword) {
+        const groupSync = await syncNextcloudUserGroup(username, utente.ruolo)
+        await storeNextcloudCredential({
+          utenteId: utente.id,
+          username,
+          status: groupSync.ok ? "active" : "failed",
+          lastError: groupSync.error,
+        })
+        return {
+          status: groupSync.ok ? "active" : "failed",
+          username,
+          appPassword: existingAppPassword,
+          error: groupSync.error,
+        }
+      }
       const error = `Account Nextcloud "${username}" gia' esistente: riconciliazione manuale necessaria`
       await storeNextcloudCredential({ utenteId: utente.id, username, status: "failed", lastError: error })
       return { status: "failed", username, appPassword: null, error }
@@ -286,6 +397,13 @@ export async function provisionNextcloudUser(utente: {
       const error = "Account creato ma generazione app-password fallita"
       await storeNextcloudCredential({ utenteId: utente.id, username, status: "failed", lastError: error })
       return { status: "failed", username, appPassword: null, error }
+    }
+
+    const groupSync = await syncNextcloudUserGroup(username, utente.ruolo)
+    if (!groupSync.ok) {
+      const error = `Account creato ma sincronizzazione gruppo fallita: ${groupSync.error}`
+      await storeNextcloudCredential({ utenteId: utente.id, username, appPassword, status: "failed", lastError: error })
+      return { status: "failed", username, appPassword, error }
     }
 
     const stored = await storeNextcloudCredential({

@@ -16,7 +16,7 @@ export async function POST(
   const supabase = await createClient()
   const { data: utente, error } = await supabase
     .from("utenti")
-    .select("id, nome, email")
+    .select("id, nome, email, ruolo")
     .eq("id", id)
     .single()
 
@@ -28,6 +28,7 @@ export async function POST(
     id: utente.id,
     email: utente.email,
     nome: utente.nome,
+    ruolo: utente.ruolo,
   })
 
   return NextResponse.json({

@@ -7,8 +7,8 @@ import { createBrowserClient } from "@supabase/ssr"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react"
+import { AuthShell } from "@/components/auth/auth-shell"
 
 function LoginForm() {
   const router = useRouter()
@@ -83,150 +83,134 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#EEF1F9]">
-      <div className="w-full max-w-md px-4">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#1E3A5F] mb-4">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#2E8B72" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+    <AuthShell
+      eyebrow={mode === "login" ? "Area riservata" : "Recupero accesso"}
+      title={mode === "login" ? "Bentornato" : "Password dimenticata?"}
+      subtitle={
+        mode === "login"
+          ? "Accedi con le tue credenziali Solair CRM."
+          : "Ti mandiamo una password temporanea via email."
+      }
+    >
+      {mode === "login" ? (
+        <form onSubmit={handleLogin} className="space-y-4">
+          {sessioneScaduta && (
+            <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 p-3 rounded-lg">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              La tua sessione precedente non è più valida. Accedi di nuovo con la password
+              temporanea ricevuta via email.
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="nome@solairgroup.it"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+            />
           </div>
-          <h1 className="text-2xl font-bold text-[#1E3A5F]">Solair CRM</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {mode === "login" ? "Accedi al tuo account" : "Recupera la tua password"}
-          </p>
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="current-password"
+            />
+          </div>
 
-        <Card className="border-0 shadow-lg">
-          <CardHeader className="pb-0" />
-          <CardContent>
-            {mode === "login" ? (
-              <form onSubmit={handleLogin} className="space-y-4">
-                {sessioneScaduta && (
-                  <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 p-3 rounded-lg">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    La tua sessione precedente non è più valida. Accedi di nuovo con la password
-                    temporanea ricevuta via email.
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="nome@solairgroup.it"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    autoComplete="email"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    autoComplete="current-password"
-                  />
-                </div>
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              {error}
+            </div>
+          )}
 
-                {error && (
-                  <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    {error}
-                  </div>
-                )}
-
-                <Button
-                  type="submit"
-                  className="w-full bg-[#1E3A5F] hover:bg-[#1E3A5F]/90"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Accesso in corso...
-                    </>
-                  ) : (
-                    "Accedi"
-                  )}
-                </Button>
-
-                <div className="text-center">
-                  <button
-                    type="button"
-                    onClick={() => switchMode("forgot")}
-                    className="text-sm text-[#1E3A5F] hover:underline"
-                  >
-                    Password dimenticata?
-                  </button>
-                </div>
-              </form>
+          <Button
+            type="submit"
+            className="w-full bg-[#1E3A5F] transition-all hover:brightness-110"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Accesso in corso...
+              </>
             ) : (
-              <form onSubmit={handleForgot} className="space-y-4">
-                <p className="text-sm text-gray-600">
-                  Inserisci la tua email: se corrisponde a un account, ti invieremo una
-                  password temporanea per accedere.
-                </p>
-                <div className="space-y-2">
-                  <Label htmlFor="reset-email">Email</Label>
-                  <Input
-                    id="reset-email"
-                    type="email"
-                    placeholder="nome@solairgroup.it"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    autoComplete="email"
-                  />
-                </div>
-
-                {resetMessage && (
-                  <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 p-3 rounded-lg">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    {resetMessage}
-                  </div>
-                )}
-
-                <Button
-                  type="submit"
-                  className="w-full bg-[#1E3A5F] hover:bg-[#1E3A5F]/90"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Invio in corso...
-                    </>
-                  ) : (
-                    "Invia password temporanea"
-                  )}
-                </Button>
-
-                <div className="text-center">
-                  <button
-                    type="button"
-                    onClick={() => switchMode("login")}
-                    className="text-sm text-[#1E3A5F] hover:underline"
-                  >
-                    Torna all&apos;accesso
-                  </button>
-                </div>
-              </form>
+              "Accedi"
             )}
-          </CardContent>
-        </Card>
+          </Button>
 
-        <p className="text-center text-xs text-gray-400 mt-6">
-          Powered by Mostag Studio
-        </p>
-      </div>
-    </div>
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => switchMode("forgot")}
+              className="text-sm text-[#1E3A5F] hover:underline"
+            >
+              Password dimenticata?
+            </button>
+          </div>
+        </form>
+      ) : (
+        <form onSubmit={handleForgot} className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Inserisci la tua email: se corrisponde a un account, ti invieremo una
+            password temporanea per accedere.
+          </p>
+          <div className="space-y-2">
+            <Label htmlFor="reset-email">Email</Label>
+            <Input
+              id="reset-email"
+              type="email"
+              placeholder="nome@solairgroup.it"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+            />
+          </div>
+
+          {resetMessage && (
+            <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 p-3 rounded-lg">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              {resetMessage}
+            </div>
+          )}
+
+          <Button
+            type="submit"
+            className="w-full bg-[#1E3A5F] transition-all hover:brightness-110"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Invio in corso...
+              </>
+            ) : (
+              "Invia password temporanea"
+            )}
+          </Button>
+
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => switchMode("login")}
+              className="text-sm text-[#1E3A5F] hover:underline"
+            >
+              Torna all&apos;accesso
+            </button>
+          </div>
+        </form>
+      )}
+    </AuthShell>
   )
 }
 

@@ -7,8 +7,8 @@ import { createBrowserClient } from "@supabase/ssr"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { AlertCircle, Loader2 } from "lucide-react"
+import { AuthShell } from "@/components/auth/auth-shell"
 
 const MIN_LENGTH = 8
 
@@ -81,74 +81,59 @@ export default function CambiaPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#EEF1F9]">
-      <div className="w-full max-w-md px-4">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#1E3A5F] mb-4">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#2E8B72" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-[#1E3A5F]">Imposta una nuova password</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Per motivi di sicurezza devi sostituire la password temporanea prima di continuare.
-          </p>
+    <AuthShell
+      eyebrow="Ultimo passo"
+      title="Imposta una nuova password"
+      subtitle="Per motivi di sicurezza devi sostituire la password temporanea prima di continuare."
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="password">Nuova password</Label>
+          <Input
+            id="password"
+            type="password"
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            autoComplete="new-password"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="confirm">Conferma password</Label>
+          <Input
+            id="confirm"
+            type="password"
+            placeholder="••••••••"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            required
+            autoComplete="new-password"
+          />
         </div>
 
-        <Card className="border-0 shadow-lg">
-          <CardHeader className="pb-0" />
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="password">Nuova password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  autoComplete="new-password"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirm">Conferma password</Label>
-                <Input
-                  id="confirm"
-                  type="password"
-                  placeholder="••••••••"
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                  required
-                  autoComplete="new-password"
-                />
-              </div>
+        {error && (
+          <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {error}
+          </div>
+        )}
 
-              {error && (
-                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  {error}
-                </div>
-              )}
-
-              <Button
-                type="submit"
-                className="w-full bg-[#1E3A5F] hover:bg-[#1E3A5F]/90"
-                disabled={loading}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Salvataggio...
-                  </>
-                ) : (
-                  "Imposta password e continua"
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+        <Button
+          type="submit"
+          className="w-full bg-[#1E3A5F] transition-all hover:brightness-110"
+          disabled={loading}
+        >
+          {loading ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Salvataggio...
+            </>
+          ) : (
+            "Imposta password e continua"
+          )}
+        </Button>
+      </form>
+    </AuthShell>
   )
 }

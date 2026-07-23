@@ -8,6 +8,7 @@ import {
 import {
   deleteNextcloudUser,
   setNextcloudUserEnabled,
+  syncNextcloudUserGroup,
 } from "@/lib/nextcloud/provisioning"
 import { nextcloudUsernameFromEmail } from "@/lib/nextcloud/config"
 import {
@@ -70,22 +71,55 @@ export async function PATCH(
     )
   }
 
-  // Sincronizza lo stato dell'account Nextcloud quando cambia "attivo":
-  // disattivazione CRM -> disable NC; riattivazione -> enable. Best-effort,
-  // non blocca il salvataggio (errori loggati e riflessi nello stato cred).
-  if (body.attivo !== undefined) {
-    const username = nextcloudUsernameFromEmail(data.email)
-    const result = await setNextcloudUserEnabled(username, data.attivo)
-    if (!result.ok) {
-      console.error(`[nextcloud] enable/disable fallito per ${username}:`, result.error)
-    } else {
-      await storeNextcloudCredential({
-        utenteId: data.id,
-        username,
-        status: data.attivo ? "active" : "disabled",
-        lastError: null,
-      })
-    }
+  // Sincronizza lo stato/gruppo Nextcloud in BACKGROUND via after(): sia
+  // l'abilita/disabilita (quando cambia "attivo") sia la proiezione del
+  // ruolo CRM nel gruppo Nextcloud (quando cambia "ruolo") comportano
+  // chiamate di rete verso Nextcloud — il secondo caso in particolare ne fa
+  // diverse in sequenza (crea gruppo, assegna, leggi, rimuovi i vecchi). Un
+  // primo tentativo (23/07) le eseguiva in modo sincrono nella risposta PATCH
+  // e bloccava/appesantiva il salvataggio del cambio ruolo (stesso problema
+  // gia' risolto per creazione/cancellazione account) — e' stato revertito
+  // per questo. Best-effort, non blocca mai il salvataggio CRM: eventuali
+  // errori restano solo nello stato della credenziale, riconciliabili dalla
+  // UI con "Riprova provisioning".
+  if (body.attivo !== undefined || body.ruolo !== undefined) {
+    after(async () => {
+      const storedUsername = await getNextcloudUsername(data.id)
+      const username = storedUsername ?? nextcloudUsernameFromEmail(data.email)
+      let lastError: string | null = null
+
+      if (body.attivo !== undefined) {
+        const result = await setNextcloudUserEnabled(username, data.attivo)
+        if (!result.ok) {
+          console.error(`[nextcloud] enable/disable fallito per ${username}:`, result.error)
+          lastError = result.error
+        }
+      }
+
+      if (body.ruolo !== undefined) {
+        const groupSync = await syncNextcloudUserGroup(username, data.ruolo)
+        if (!groupSync.ok) {
+          console.error(`[nextcloud] sincronizzazione gruppo fallita per ${username}:`, groupSync.error)
+          lastError = groupSync.error
+        }
+      }
+
+      // Aggiorna lo stato della credenziale SOLO se l'utente e' gia'
+      // provisionato su Nextcloud (riga esistente). Per un utente mai
+      // provisionato un semplice cambio ruolo/attivo non deve fabbricare una
+      // nuova riga "failed": l'eventuale errore resta nei log, senza sporcare
+      // lo stato mostrato in UI. Le chiamate enable/disable e group-sync
+      // restano comunque best-effort (username derivato dall'email come
+      // fallback), per non perdere l'intento di sicurezza del disable.
+      if (storedUsername) {
+        await storeNextcloudCredential({
+          utenteId: data.id,
+          username,
+          status: lastError ? "failed" : data.attivo ? "active" : "disabled",
+          lastError,
+        })
+      }
+    })
   }
 
   return NextResponse.json({ utente: data })

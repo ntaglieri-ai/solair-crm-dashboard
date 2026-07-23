@@ -45,6 +45,130 @@ async function parseOcs(res: Response): Promise<{ meta: OcsMeta; data: unknown }
   }
 }
 
+// Sincronizzazione ruolo CRM -> gruppo Nextcloud. Prefisso solair- per evitare
+// collisione col gruppo amministrativo nativo di Nextcloud (admin). I gruppi
+// legacy senza prefisso (agent/director/standard) erano usati nel test
+// manuale del 23/07 prima del refactor: vengono rimossi come i gruppi
+// gestiti attuali se un utente li ha ancora.
+const CRM_NEXTCLOUD_GROUPS = new Set([
+  "solair-superadmin",
+  "solair-admin",
+  "solair-director",
+  "solair-standard",
+  "solair-agent",
+])
+const LEGACY_CRM_GROUPS = new Set(["agent", "director", "standard"])
+
+export function nextcloudGroupForRole(roleCode: string): string | null {
+  const normalized = roleCode.trim().toUpperCase()
+  if (!["SUPERADMIN", "ADMIN", "DIRECTOR", "STANDARD", "AGENT"].includes(normalized)) {
+    return null
+  }
+  return `solair-${normalized.toLowerCase()}`
+}
+
+async function ocsRequest(
+  cfg: NextcloudAdminConfig,
+  path: string,
+  init: RequestInit = {},
+): Promise<{ meta: OcsMeta; data: unknown }> {
+  const headers = new Headers(init.headers)
+  headers.set("Authorization", basicAuth(cfg.adminUser, cfg.adminPassword))
+  headers.set("OCS-APIRequest", "true")
+  headers.set("Accept", "application/json")
+  return parseOcs(
+    await fetch(`${cfg.baseUrl}/ocs/v2.php/cloud/${path}${path.includes("?") ? "&" : "?"}format=json`, {
+      ...init,
+      headers,
+    }),
+  )
+}
+
+/**
+ * Rende il gruppo Nextcloud una proiezione del ruolo CRM. Aggiunge sempre il
+ * gruppo nuovo prima di rimuovere quelli vecchi (se il passo di rimozione
+ * fallisse a meta' strada, l'utente non resta mai senza alcun gruppo), e non
+ * tocca mai gruppi non gestiti (in particolare il gruppo admin nativo).
+ *
+ * IMPORTANTE: questa funzione fa diverse chiamate di rete sequenziali verso
+ * Nextcloud (crea gruppo, assegna, leggi gruppi attuali, rimuovi i vecchi).
+ * Un primo tentativo (23/07) la chiamava in modo sincrono dentro la richiesta
+ * HTTP del cambio ruolo, bloccandola per la somma di tutte queste chiamate —
+ * stesso problema di lentezza gia' risolto per creazione/cancellazione
+ * account. E' stato revertito per questo. Va SEMPRE invocata dentro after(),
+ * mai atteso direttamente nella response del route handler.
+ */
+export async function syncNextcloudUserGroup(
+  userid: string,
+  roleCode: string,
+): Promise<{ ok: boolean; group: string | null; error: string | null }> {
+  const cfg = nextcloudAdminConfig()
+  const desired = nextcloudGroupForRole(roleCode)
+  if (!cfg) return { ok: false, group: desired, error: "Credenziali admin Nextcloud non configurate" }
+  if (!desired) return { ok: false, group: null, error: `Ruolo CRM non supportato: ${roleCode}` }
+
+  try {
+    const created = await ocsRequest(cfg, "groups", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ groupid: desired }),
+    })
+    // 102 = il gruppo esiste gia'.
+    if (!isOcsOk(created.meta) && created.meta.statuscode !== 102) {
+      return {
+        ok: false,
+        group: desired,
+        error: `Creazione gruppo ${desired} fallita (OCS ${created.meta.statuscode}: ${created.meta.message})`,
+      }
+    }
+
+    const added = await ocsRequest(cfg, `users/${encodeURIComponent(userid)}/groups`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ groupid: desired }),
+    })
+    // Alcune versioni rispondono 102 se l'utente e' gia' nel gruppo.
+    if (!isOcsOk(added.meta) && added.meta.statuscode !== 102) {
+      return {
+        ok: false,
+        group: desired,
+        error: `Assegnazione a ${desired} fallita (OCS ${added.meta.statuscode}: ${added.meta.message})`,
+      }
+    }
+
+    const current = await ocsRequest(cfg, `users/${encodeURIComponent(userid)}`)
+    if (!isOcsOk(current.meta)) {
+      return {
+        ok: false,
+        group: desired,
+        error: `Lettura gruppi utente fallita (OCS ${current.meta.statuscode}: ${current.meta.message})`,
+      }
+    }
+    const groups = ((current.data as { groups?: unknown } | null)?.groups ?? []) as unknown
+    const currentGroups = Array.isArray(groups) ? groups.filter((g): g is string => typeof g === "string") : []
+
+    for (const group of currentGroups) {
+      if (group === desired || (!CRM_NEXTCLOUD_GROUPS.has(group) && !LEGACY_CRM_GROUPS.has(group))) continue
+      const removed = await ocsRequest(
+        cfg,
+        `users/${encodeURIComponent(userid)}/groups?groupid=${encodeURIComponent(group)}`,
+        { method: "DELETE" },
+      )
+      if (!isOcsOk(removed.meta)) {
+        return {
+          ok: false,
+          group: desired,
+          error: `Rimozione dal vecchio gruppo ${group} fallita (OCS ${removed.meta.statuscode}: ${removed.meta.message})`,
+        }
+      }
+    }
+
+    return { ok: true, group: desired, error: null }
+  } catch (e) {
+    return { ok: false, group: desired, error: e instanceof Error ? e.message : "Errore rete Nextcloud" }
+  }
+}
+
 /** Password casuale forte (classi miste) che rispetta le policy Nextcloud. */
 export function generateStrongPassword(): string {
   const raw = randomBytes(24).toString("base64").replace(/[^a-zA-Z0-9]/g, "")

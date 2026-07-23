@@ -40,7 +40,10 @@ export async function middleware(request: NextRequest) {
   // Route pubbliche (non protette). Il reset password self-service e' invocato
   // da utenti NON autenticati (hanno dimenticato la password), quindi il suo
   // endpoint deve restare raggiungibile senza sessione.
-  const publicRoutes = ["/login", "/api/auth/password-reset"]
+  // La pagina di consenso OIDC deve poter ricevere la richiesta anche senza
+  // sessione: gestisce internamente il rinvio a /login preservando
+  // authorization_id, cosi' il flusso riprende dopo l'autenticazione.
+  const publicRoutes = ["/login", "/oauth/consent", "/api/auth/password-reset"]
   const isPublicRoute = publicRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route)
   )

@@ -8,7 +8,6 @@ import {
 import {
   deleteNextcloudUser,
   setNextcloudUserEnabled,
-  syncNextcloudUserGroup,
 } from "@/lib/nextcloud/provisioning"
 import { nextcloudUsernameFromEmail } from "@/lib/nextcloud/config"
 import {
@@ -79,29 +78,6 @@ export async function PATCH(
     const result = await setNextcloudUserEnabled(username, data.attivo)
     if (!result.ok) {
       console.error(`[nextcloud] enable/disable fallito per ${username}:`, result.error)
-    } else {
-      await storeNextcloudCredential({
-        utenteId: data.id,
-        username,
-        status: data.attivo ? "active" : "disabled",
-        lastError: null,
-      })
-    }
-  }
-
-  // Il ruolo CRM resta la fonte autorevole: dopo il salvataggio proietta il
-  // nuovo ruolo nel solo gruppo Nextcloud gestito, senza alterare ruoli CRM.
-  if (body.ruolo !== undefined) {
-    const username = (await getNextcloudUsername(data.id)) ?? nextcloudUsernameFromEmail(data.email)
-    const result = await syncNextcloudUserGroup(username, data.ruolo)
-    if (!result.ok) {
-      console.error(`[nextcloud] sincronizzazione gruppo fallita per ${username}:`, result.error)
-      await storeNextcloudCredential({
-        utenteId: data.id,
-        username,
-        status: "failed",
-        lastError: result.error,
-      })
     } else {
       await storeNextcloudCredential({
         utenteId: data.id,

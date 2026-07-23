@@ -120,7 +120,6 @@ export async function POST(request: Request) {
         id: data.id,
         email: data.email,
         nome: data.nome,
-        ruolo: data.ruolo,
         password: tempPassword,
       })
       if (provisioning.status !== "active") {

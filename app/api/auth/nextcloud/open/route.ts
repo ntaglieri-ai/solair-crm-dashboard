@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { getNextcloudAppPassword } from "@/lib/nextcloud/credentials"
+import { getNextcloudAppPassword, getNextcloudUsername } from "@/lib/nextcloud/credentials"
 import { nextcloudBaseUrl, nextcloudUsernameFromEmail } from "@/lib/nextcloud/config"
 import { canAccessNcPath, loadNcPathRules, normalizeNcPath } from "@/lib/nextcloud/path-permissions"
 import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permissions"
 
-// "Apri Nextcloud": autentica l'utente su Nextcloud tramite la sua app-password
-// gia' provisionata (nessun OAuth interattivo). Ricicla la tecnica del
-// session-bridge /login?user=&password= usando la app-password cifrata a DB.
+// "Apri Nextcloud": verifica che l'account tecnico sia provisionato e apre il
+// login web con lo username precompilato. La password principale e' la stessa
+// del CRM; l'app-password cifrata resta riservata alle chiamate WebDAV/API.
 // Con ?path=... apre direttamente quella cartella, ma solo se il ruolo vi ha
 // accesso (regole path-based enforced anche qui, non solo in UI).
 export async function GET(request: NextRequest) {
@@ -38,7 +38,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/documenti?nc_error=not_provisioned", request.url))
   }
 
-  const username = nextcloudUsernameFromEmail(utente.email)
+  const username =
+    (await getNextcloudUsername(utente.id)) ?? nextcloudUsernameFromEmail(utente.email)
 
   // Redirect target: root files, una cartella specifica, oppure un singolo file
   // (deep link /f/{fileid}, che Nextcloud risolve nel viewer del file). In tutti
@@ -59,7 +60,14 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const loginUrl = `${base}/login?user=${encodeURIComponent(username)}&password=${encodeURIComponent(appPassword)}&redirect_url=${encodeURIComponent(redirectPath)}`
+  // Quando user_oidc e' configurato, il login Nextcloud inoltra la sessione
+  // CRM gia' attiva a Supabase OIDC e torna senza chiedere la password. Il
+  // fallback mantiene il login condiviso tradizionale finche' la configurazione
+  // server non e' stata completata.
+  const oidcLoginUrl = process.env.NEXTCLOUD_OIDC_LOGIN_URL
+  const loginUrl = oidcLoginUrl
+    ? `${oidcLoginUrl}${oidcLoginUrl.includes("?") ? "&" : "?"}redirect_url=${encodeURIComponent(redirectPath)}`
+    : `${base}/login?user=${encodeURIComponent(username)}&redirect_url=${encodeURIComponent(redirectPath)}`
 
   return NextResponse.redirect(loginUrl)
 }

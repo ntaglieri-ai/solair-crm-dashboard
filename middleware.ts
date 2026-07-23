@@ -55,6 +55,10 @@ export async function middleware(request: NextRequest) {
   // Se autenticato e su /login → redirect a /dashboard
   if (isAuthenticated && request.nextUrl.pathname === "/login") {
     const url = request.nextUrl.clone()
+    const requestedRedirect = request.nextUrl.searchParams.get("redirect")
+    if (requestedRedirect?.startsWith("/") && !requestedRedirect.startsWith("//")) {
+      return NextResponse.redirect(new URL(requestedRedirect, request.url))
+    }
     url.pathname = "/"
     return NextResponse.redirect(url)
   }

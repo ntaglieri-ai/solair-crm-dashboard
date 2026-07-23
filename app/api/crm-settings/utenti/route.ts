@@ -7,7 +7,7 @@ import {
 } from "@/lib/crm-settings/roles"
 import { provisionNextcloudUser } from "@/lib/nextcloud/provisioning"
 import { getNextcloudCredentialStatuses } from "@/lib/nextcloud/credentials"
-import { provisionAuthUser } from "@/lib/auth/user-provisioning"
+import { generateTempPassword, provisionAuthUser } from "@/lib/auth/user-provisioning"
 
 type UserPayload = {
   nome: string
@@ -101,8 +101,8 @@ export async function POST(request: Request) {
     )
   }
 
-  // Provisioning Nextcloud + Auth (creazione account speculare, app-password
-  // cifrata, account Supabase Auth con password temporanea, invio email di
+  // Provisioning Nextcloud + Auth (creazione account speculare con la stessa
+  // password temporanea, app-password WebDAV cifrata, invio email di
   // benvenuto): girano in BACKGROUND via after(), non bloccano piu' la
   // risposta HTTP. Prima erano sequenziali e sincroni (insert DB -> 3 call
   // Nextcloud OCS -> creazione Auth -> invio SMTP Aruba), causando lentezza
@@ -112,11 +112,15 @@ export async function POST(request: Request) {
   // retry Nextcloud da /utenti/[id]/nextcloud) — stesso principio "loud, not
   // silent" gia' in uso, qui applicato anche al provisioning iniziale.
   after(async () => {
+    // Un'unica password temporanea viene usata per entrambi gli account.
+    // Non viene persistita in chiaro: viene soltanto inviata via email.
+    const tempPassword = generateTempPassword()
     try {
       const provisioning = await provisionNextcloudUser({
         id: data.id,
         email: data.email,
         nome: data.nome,
+        password: tempPassword,
       })
       if (provisioning.status !== "active") {
         console.error(
@@ -133,6 +137,7 @@ export async function POST(request: Request) {
         id: data.id,
         email: data.email,
         nome: data.nome,
+        tempPassword,
       })
       if (authProvisioning.error) {
         console.error(`[auth] provisioning fallito per utente ${data.id}:`, authProvisioning.error)

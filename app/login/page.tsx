@@ -14,6 +14,11 @@ function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const sessioneScaduta = searchParams.get("sessione_scaduta") === "1"
+  const requestedRedirect = searchParams.get("redirect")
+  const postLoginRedirect =
+    requestedRedirect?.startsWith("/") && !requestedRedirect.startsWith("//")
+      ? requestedRedirect
+      : "/"
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -44,7 +49,7 @@ function LoginForm() {
       return
     }
 
-    router.push("/")
+    router.push(postLoginRedirect)
     router.refresh()
   }
 
@@ -209,7 +214,7 @@ function LoginForm() {
                     onClick={() => switchMode("login")}
                     className="text-sm text-[#1E3A5F] hover:underline"
                   >
-                    Torna all'accesso
+                    Torna all&apos;accesso
                   </button>
                 </div>
               </form>

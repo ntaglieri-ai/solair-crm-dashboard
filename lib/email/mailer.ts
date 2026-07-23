@@ -120,7 +120,7 @@ export async function sendPasswordResetEmail(params: {
         "",
         "Al prossimo accesso ti verra' chiesto di impostare una nuova password.",
         "",
-        "Se non hai richiesto tu il reset, ignora questa email: la tua password attuale non e' stata cambiata finche' non accedi con quella temporanea.",
+        "Se non hai richiesto tu il reset, contatta subito un amministratore: la password precedente e' stata sostituita.",
         "",
         `Accedi qui: ${loginUrl()}`,
       ].join("\n"),
@@ -132,7 +132,7 @@ export async function sendPasswordResetEmail(params: {
           La tua nuova password temporanea: <strong>${params.tempPassword}</strong>
         </p>
         <p>Al prossimo accesso ti verra' chiesto di impostare una nuova password.</p>
-        <p>Se non hai richiesto tu il reset, ignora questa email: la tua password attuale non e' stata cambiata finche' non accedi con quella temporanea.</p>
+        <p>Se non hai richiesto tu il reset, contatta subito un amministratore: la password precedente e' stata sostituita.</p>
         <p><a href="${loginUrl()}">Accedi al CRM</a></p>
       `,
     })

@@ -3,7 +3,6 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { createBrowserClient } from "@supabase/ssr"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -18,11 +17,6 @@ export default function CambiaPasswordPage() {
   const [confirm, setConfirm] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -39,29 +33,11 @@ export default function CambiaPasswordPage() {
 
     setLoading(true)
 
-    const { error: updateError } = await supabase.auth.updateUser({ password })
-    if (updateError) {
-      // Caso "sessione vecchia ancora presente nel browser ma revocata lato
-      // Supabase" (tipico dopo un reset password: il refresh token della
-      // vecchia sessione viene invalidato, ma il token in memoria nel
-      // browser resta leggibile finche' non si prova un'operazione reale).
-      // Invece di mostrare l'errore tecnico grezzo, ripuliamo la sessione
-      // residua e rimandiamo al login con un messaggio chiaro.
-      const isStaleSession =
-        updateError.message.toLowerCase().includes("session") ||
-        updateError.message.toLowerCase().includes("auth session missing")
-      if (isStaleSession) {
-        await supabase.auth.signOut()
-        router.push("/login?sessione_scaduta=1")
-        router.refresh()
-        return
-      }
-      setError(updateError.message)
-      setLoading(false)
-      return
-    }
-
-    const res = await fetch("/api/auth/complete-password-change", { method: "POST" })
+    const res = await fetch("/api/auth/complete-password-change", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    })
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as { error?: string } | null
       setError(

@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { getNextcloudUsername } from "@/lib/nextcloud/credentials"
+import { nextcloudUsernameFromEmail } from "@/lib/nextcloud/config"
+import { setNextcloudUserPassword } from "@/lib/nextcloud/provisioning"
 
-// Chiamata dalla pagina /cambia-password DOPO che il client ha gia' aggiornato
-// la password via supabase.auth.updateUser(). Qui azzeriamo solo il flag
-// must_change_password per l'utente autenticato corrente: usiamo il service
-// role (bypassa RLS) perche' l'id e' derivato dal JWT verificato server-side,
-// non da input utente, quindi non serve/ha senso un permesso "gestione utenti".
-export async function POST() {
+// Aggiorna in modo coordinato la password principale Nextcloud e Supabase Auth,
+// poi azzera must_change_password. La nuova password transita solo nella
+// richiesta TLS e non viene mai persistita dal CRM.
+export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: claimsData } = await supabase.auth.getClaims()
   const authUserId = claimsData?.claims?.sub
@@ -19,6 +20,39 @@ export async function POST() {
   if (!admin) {
     return NextResponse.json(
       { error: "SUPABASE_SERVICE_ROLE_KEY non configurata" },
+      { status: 500 },
+    )
+  }
+
+  const body = (await request.json().catch(() => null)) as { password?: string } | null
+  const password = body?.password
+  if (!password || password.length < 8) {
+    return NextResponse.json({ error: "La password deve avere almeno 8 caratteri" }, { status: 400 })
+  }
+
+  const { data: utente, error: userError } = await admin
+    .from("utenti")
+    .select("id, email")
+    .eq("auth_user_id", authUserId)
+    .single()
+  if (userError || !utente) {
+    return NextResponse.json({ error: "Account CRM non trovato" }, { status: 404 })
+  }
+
+  const ncUsername =
+    (await getNextcloudUsername(utente.id)) ?? nextcloudUsernameFromEmail(utente.email)
+  const ncUpdate = await setNextcloudUserPassword(ncUsername, password)
+  if (!ncUpdate.ok) {
+    return NextResponse.json(
+      { error: `Password Nextcloud non aggiornata: ${ncUpdate.error}` },
+      { status: 502 },
+    )
+  }
+
+  const { error: authError } = await admin.auth.admin.updateUserById(authUserId, { password })
+  if (authError) {
+    return NextResponse.json(
+      { error: `Password Nextcloud aggiornata, ma aggiornamento CRM fallito: ${authError.message}` },
       { status: 500 },
     )
   }

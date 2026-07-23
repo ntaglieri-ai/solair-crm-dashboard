@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { requireApiAction } from "@/lib/permissions/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { basicAuth, nextcloudAdminConfig, ocsHeaders } from "@/lib/nextcloud/config"
 
 type HealthStatus = "operational" | "degraded" | "unconfigured"
 
@@ -125,6 +126,60 @@ export async function GET() {
       status: "unconfigured",
       latencyMs: null,
       detail: "Endpoint non configurato",
+    })
+  }
+
+  // Verifica separatamente le credenziali tecniche usate da provisioning,
+  // password e gestione account. La GET e' di sola lettura e non espone dati
+  // o segreti nella risposta del CRM.
+  const nextcloudAdmin = nextcloudAdminConfig()
+  if (nextcloudAdmin) {
+    try {
+      const { value, latencyMs } = await timed(() =>
+        fetch(
+          `${nextcloudAdmin.baseUrl}/ocs/v2.php/cloud/users/${encodeURIComponent(nextcloudAdmin.adminUser)}?format=json`,
+          {
+            headers: ocsHeaders({
+              Authorization: basicAuth(
+                nextcloudAdmin.adminUser,
+                nextcloudAdmin.adminPassword,
+              ),
+            }),
+            cache: "no-store",
+            signal: AbortSignal.timeout(5000),
+          },
+        ),
+      )
+      const payload = (await value.json().catch(() => null)) as {
+        ocs?: { meta?: { statuscode?: number; message?: string } }
+      } | null
+      const statusCode = payload?.ocs?.meta?.statuscode
+      const ok = value.ok && (statusCode === 100 || statusCode === 200)
+      services.push({
+        id: "nextcloud-ocs",
+        label: "Nextcloud OCS",
+        status: ok ? "operational" : "degraded",
+        latencyMs,
+        detail: ok
+          ? "Autenticazione tecnica disponibile"
+          : `Autenticazione tecnica rifiutata${statusCode ? ` (OCS ${statusCode})` : ""}`,
+      })
+    } catch {
+      services.push({
+        id: "nextcloud-ocs",
+        label: "Nextcloud OCS",
+        status: "degraded",
+        latencyMs: null,
+        detail: "Verifica autenticazione tecnica non riuscita",
+      })
+    }
+  } else {
+    services.push({
+      id: "nextcloud-ocs",
+      label: "Nextcloud OCS",
+      status: "unconfigured",
+      latencyMs: null,
+      detail: "Credenziali tecniche non configurate",
     })
   }
 

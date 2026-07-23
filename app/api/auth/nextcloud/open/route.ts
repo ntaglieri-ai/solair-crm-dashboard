@@ -68,7 +68,10 @@ export async function GET(request: NextRequest) {
   // codice se il provider viene ricreato con un ID diverso.
   const oidcLoginUrl =
     process.env.NEXTCLOUD_OIDC_LOGIN_URL ?? `${base}/apps/user_oidc/login/3`
-  const loginUrl = `${oidcLoginUrl}${oidcLoginUrl.includes("?") ? "&" : "?"}redirect_url=${encodeURIComponent(redirectPath)}`
+  // La route diretta di user_oidc usa `redirectUrl` (camelCase). Con
+  // `redirect_url` il login riesce, ma Nextcloud ignora la destinazione e apre
+  // la root personale dell'utente.
+  const loginUrl = `${oidcLoginUrl}${oidcLoginUrl.includes("?") ? "&" : "?"}redirectUrl=${encodeURIComponent(redirectPath)}`
 
   return NextResponse.redirect(loginUrl)
 }

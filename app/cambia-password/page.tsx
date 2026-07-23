@@ -3,6 +3,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { createBrowserClient } from "@supabase/ssr"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,6 +14,10 @@ const MIN_LENGTH = 8
 
 export default function CambiaPasswordPage() {
   const router = useRouter()
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  )
   const [password, setPassword] = useState("")
   const [confirm, setConfirm] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -46,6 +51,29 @@ export default function CambiaPasswordPage() {
       )
       setLoading(false)
       return
+    }
+
+    const body = (await res.json().catch(() => null)) as { ok: true; email?: string } | null
+
+    // L'update password lato admin (necessario per impostarla server-side)
+    // revoca il refresh token della sessione corrente, anche se e' l'utente
+    // stesso a cambiarla: il token in mano al browser resta leggibile
+    // localmente ancora per un po', ma non e' piu' valido lato server. Senza
+    // un login fresco qui, la sessione risulterebbe invalida al primo utilizzo
+    // reale (es. l'handshake OIDC di "Apri Nextcloud"), anche se la
+    // navigazione nel CRM sembra funzionare normalmente nel frattempo.
+    if (body?.email) {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: body.email,
+        password,
+      })
+      if (signInError) {
+        setError(
+          "Password aggiornata, ma il nuovo accesso non e' riuscito. Prova a fare login manualmente.",
+        )
+        setLoading(false)
+        return
+      }
     }
 
     router.push("/")

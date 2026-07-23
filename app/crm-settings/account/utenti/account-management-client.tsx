@@ -266,8 +266,11 @@ export function AccountManagementClient({
           .map((user) => (user.id === id ? body.utente! : user))
           .sort((a, b) => a.nome.localeCompare(b.nome)),
       )
-      setSelected(body.utente)
-      setEditForm(userToForm(body.utente))
+      // Chiude il drawer dopo il salvataggio riuscito: prima restava aperto
+      // (setSelected veniva richiamato con l'utente aggiornato invece che a
+      // null), rendendo il salvataggio poco visibile — l'unico segnale era il
+      // colore del badge ruolo che cambiava sotto gli occhi.
+      setSelected(null)
       router.refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Salvataggio utente non riuscito")

@@ -1,5 +1,5 @@
 // Provisioning account Supabase Auth per nuovi utenti CRM.
-// Flusso: riceve/genera la password temporanea condivisa con Nextcloud -> crea account Auth con
+// Flusso: riceve/genera la password temporanea CRM -> crea account Auth con
 // admin.createUser (email_confirm: true, NIENTE invito via magic-link) ->
 // collega auth_user_id -> invia la password via email (SMTP, vedi
 // lib/email/mailer.ts) -> must_change_password resta true finche' l'utente
@@ -8,9 +8,6 @@ import { randomBytes } from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { sendWelcomeEmail, sendPasswordResetEmail } from "@/lib/email/mailer"
-import { getNextcloudUsername } from "@/lib/nextcloud/credentials"
-import { nextcloudUsernameFromEmail } from "@/lib/nextcloud/config"
-import { setNextcloudUserPassword } from "@/lib/nextcloud/provisioning"
 
 export type WelcomeEmailStatus = "pending" | "sent" | "failed"
 
@@ -122,17 +119,6 @@ export async function retryWelcomeEmail(utente: {
   }
 
   const tempPassword = generateTempPassword()
-  const ncUsername =
-    (await getNextcloudUsername(utente.id)) ?? nextcloudUsernameFromEmail(utente.email)
-  const ncUpdate = await setNextcloudUserPassword(ncUsername, tempPassword)
-  if (!ncUpdate.ok) {
-    return {
-      authUserId: utente.auth_user_id,
-      emailStatus: "failed",
-      emailError: null,
-      error: `Password Nextcloud non aggiornata: ${ncUpdate.error}`,
-    }
-  }
   const { error: updateError } = await admin.auth.admin.updateUserById(utente.auth_user_id, {
     password: tempPassword,
   })
@@ -200,17 +186,6 @@ export async function sendPasswordReset(utente: {
   }
 
   const tempPassword = generateTempPassword()
-  const ncUsername =
-    (await getNextcloudUsername(utente.id)) ?? nextcloudUsernameFromEmail(utente.email)
-  const ncUpdate = await setNextcloudUserPassword(ncUsername, tempPassword)
-  if (!ncUpdate.ok) {
-    return {
-      authUserId: utente.auth_user_id,
-      emailStatus: "failed",
-      emailError: null,
-      error: `Password Nextcloud non aggiornata: ${ncUpdate.error}`,
-    }
-  }
   const { error: updateError } = await admin.auth.admin.updateUserById(utente.auth_user_id, {
     password: tempPassword,
   })

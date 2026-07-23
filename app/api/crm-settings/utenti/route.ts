@@ -112,15 +112,14 @@ export async function POST(request: Request) {
   // retry Nextcloud da /utenti/[id]/nextcloud) — stesso principio "loud, not
   // silent" gia' in uso, qui applicato anche al provisioning iniziale.
   after(async () => {
-    // Un'unica password temporanea viene usata per entrambi gli account.
-    // Non viene persistita in chiaro: viene soltanto inviata via email.
+    // La password temporanea appartiene soltanto al CRM. Nextcloud genera
+    // internamente una password tecnica casuale e l'utente accede via OIDC.
     const tempPassword = generateTempPassword()
     try {
       const provisioning = await provisionNextcloudUser({
         id: data.id,
         email: data.email,
         nome: data.nome,
-        password: tempPassword,
       })
       if (provisioning.status !== "active") {
         console.error(

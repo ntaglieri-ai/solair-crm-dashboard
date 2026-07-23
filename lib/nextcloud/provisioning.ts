@@ -1,12 +1,12 @@
 // Provisioning Nextcloud via OCS Provisioning API (admin basic auth).
 // Flusso per nuovo utente CRM:
-//   1. POST cloud/users            -> crea account con la stessa password
-//                                     temporanea usata da Supabase Auth
+//   1. POST cloud/users            -> crea account con password tecnica casuale;
+//                                     l'accesso umano passa da Supabase OIDC
 //   2. GET  core/getapppassword    -> autenticato COME il nuovo utente, conia
 //                                     una app-password revocabile
 //   3. la app-password viene cifrata e salvata (vedi credentials.ts)
-// La password principale non viene salvata dal CRM; serve al login web ed e'
-// riallineata a ogni cambio/reset. WebDAV usa una app-password separata.
+// La password tecnica non viene salvata dal CRM. WebDAV e i client usano
+// app-password/token separati; browser e nuovi dispositivi usano OIDC.
 
 import { randomBytes } from "node:crypto"
 import {
@@ -57,38 +57,6 @@ export type ProvisionResult = {
   username: string
   appPassword: string | null
   error: string | null
-}
-
-/**
- * Allinea la password principale di un account Nextcloud tramite Provisioning
- * API. La password non viene salvata: l'app-password tecnica WebDAV resta
- * separata e continua a essere valida.
- */
-export async function setNextcloudUserPassword(
-  userid: string,
-  password: string,
-): Promise<{ ok: boolean; error: string | null }> {
-  const cfg = nextcloudAdminConfig()
-  if (!cfg) return { ok: false, error: "Credenziali admin Nextcloud non configurate" }
-
-  try {
-    const res = await fetch(
-      `${cfg.baseUrl}/ocs/v2.php/cloud/users/${encodeURIComponent(userid)}?format=json`,
-      {
-        method: "PUT",
-        headers: ocsHeaders({
-          Authorization: basicAuth(cfg.adminUser, cfg.adminPassword),
-          "Content-Type": "application/x-www-form-urlencoded",
-        }),
-        body: new URLSearchParams({ key: "password", value: password }),
-      },
-    )
-    const { meta } = await parseOcs(res)
-    if (isOcsOk(meta)) return { ok: true, error: null }
-    return { ok: false, error: `OCS ${meta.statuscode}: ${meta.message}` }
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Errore rete Nextcloud" }
-  }
 }
 
 /**

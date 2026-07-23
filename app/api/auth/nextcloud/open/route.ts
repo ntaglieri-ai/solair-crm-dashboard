@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { getNextcloudAppPassword, getNextcloudUsername } from "@/lib/nextcloud/credentials"
-import { nextcloudBaseUrl, nextcloudUsernameFromEmail } from "@/lib/nextcloud/config"
+import { getNextcloudAppPassword } from "@/lib/nextcloud/credentials"
+import { nextcloudBaseUrl } from "@/lib/nextcloud/config"
 import { canAccessNcPath, loadNcPathRules, normalizeNcPath } from "@/lib/nextcloud/path-permissions"
 import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permissions"
 
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
   const { data: utente } = await supabase
     .from("utenti")
-    .select("id, email")
+    .select("id")
     .eq("auth_user_id", user.id)
     .maybeSingle()
 
@@ -38,14 +38,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/documenti?nc_error=not_provisioned", request.url))
   }
 
-  const username =
-    (await getNextcloudUsername(utente.id)) ?? nextcloudUsernameFromEmail(utente.email)
-
   // Redirect target: root files, una cartella specifica, oppure un singolo file
   // (deep link /f/{fileid}, che Nextcloud risolve nel viewer del file). In tutti
   // i casi il path richiesto deve essere consentito al ruolo dell'utente: per un
   // file passiamo il suo path completo, cosi' le regole prefix-based lo coprono.
-  let redirectPath = "/apps/files"
+  // La destinazione operativa predefinita e' la cartella condivisa Solair,
+  // non la root personale dell'account Nextcloud.
+  let redirectPath = "/apps/files/?dir=/Solair"
   const requested = normalizeNcPath(request.nextUrl.searchParams.get("path") ?? "")
   const fileId = request.nextUrl.searchParams.get("fileid")
   if (requested) {
@@ -64,10 +63,12 @@ export async function GET(request: NextRequest) {
   // CRM gia' attiva a Supabase OIDC e torna senza chiedere la password. Il
   // fallback mantiene il login condiviso tradizionale finche' la configurazione
   // server non e' stata completata.
-  const oidcLoginUrl = process.env.NEXTCLOUD_OIDC_LOGIN_URL
-  const loginUrl = oidcLoginUrl
-    ? `${oidcLoginUrl}${oidcLoginUrl.includes("?") ? "&" : "?"}redirect_url=${encodeURIComponent(redirectPath)}`
-    : `${base}/login?user=${encodeURIComponent(username)}&redirect_url=${encodeURIComponent(redirectPath)}`
+  // `solair-crm` e' il provider OIDC first-party registrato su questa istanza
+  // (ID Nextcloud 3). L'env consente comunque di sostituirlo senza cambiare
+  // codice se il provider viene ricreato con un ID diverso.
+  const oidcLoginUrl =
+    process.env.NEXTCLOUD_OIDC_LOGIN_URL ?? `${base}/apps/user_oidc/login/3`
+  const loginUrl = `${oidcLoginUrl}${oidcLoginUrl.includes("?") ? "&" : "?"}redirect_url=${encodeURIComponent(redirectPath)}`
 
   return NextResponse.redirect(loginUrl)
 }

@@ -1,8 +1,8 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { Camera, CheckCircle2, LockKeyhole, Mail, Palette, Save, ShieldCheck } from "lucide-react"
+import { AlertCircle, Camera, CheckCircle2, LockKeyhole, Mail, Palette, Save, SendHorizonal, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -38,6 +38,54 @@ export function ProfileForm({ initialProfile }: { initialProfile: PersonalProfil
     initialProfile.preferences,
   )
   const [saving, setSaving] = useState(false)
+
+  // Casella email personale (mittente reale nelle email verso i lead — vedi
+  // il pulsante "Invia email" su Lead). Separata dall'email di accesso al
+  // CRM: puo' coincidere o no, nessun vincolo.
+  const [emailConfigured, setEmailConfigured] = useState<boolean | null>(null)
+  const [savedSmtpUser, setSavedSmtpUser] = useState<string | null>(null)
+  const [smtpUser, setSmtpUser] = useState("")
+  const [smtpPassword, setSmtpPassword] = useState("")
+  const [savingEmail, setSavingEmail] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/profilo/email-credentials", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data: { configured?: boolean; smtpUser?: string | null }) => {
+        if (cancelled) return
+        setEmailConfigured(Boolean(data.configured))
+        setSavedSmtpUser(data.smtpUser ?? null)
+        if (data.smtpUser) setSmtpUser(data.smtpUser)
+      })
+      .catch(() => {
+        if (!cancelled) setEmailConfigured(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function saveEmailCredentials() {
+    setSavingEmail(true)
+    try {
+      const response = await fetch("/api/profilo/email-credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ smtpUser, smtpPassword }),
+      })
+      const result = (await response.json().catch(() => null)) as { error?: string } | null
+      if (!response.ok) throw new Error(result?.error ?? "Salvataggio non riuscito")
+      toast.success("Casella email personale salvata")
+      setEmailConfigured(true)
+      setSavedSmtpUser(smtpUser)
+      setSmtpPassword("")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Salvataggio non riuscito")
+    } finally {
+      setSavingEmail(false)
+    }
+  }
 
   const currentInitials = useMemo(() => initials(nome, cognome), [nome, cognome])
   const avatarPreview =
@@ -291,6 +339,62 @@ export function ProfileForm({ initialProfile }: { initialProfile: PersonalProfil
                 ))}
               </div>
             </div>
+          </div>
+        </section>
+
+        <section
+          className={`profile-side-card ${emailConfigured === false ? "ring-2 ring-amber-400" : ""}`}
+        >
+          <div className="flex items-center gap-2 text-sm font-black text-[#ef6a47]">
+            <SendHorizonal className="size-5" />
+            Email per contatto lead
+          </div>
+          <div className="mt-4 grid gap-3">
+            {emailConfigured === false && (
+              <div className="flex items-start gap-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+                <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                <span>
+                  Configura la tua casella per poter scrivere ai lead a nome tuo (indipendente
+                  dall&apos;email di accesso al CRM).
+                </span>
+              </div>
+            )}
+            {emailConfigured === true && savedSmtpUser && (
+              <div className="flex items-start gap-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+                <span>
+                  Configurata: <strong>{savedSmtpUser}</strong>
+                </span>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="lead-smtp-user">Indirizzo email (es. nome.cognome@solairgroup.it)</Label>
+              <Input
+                id="lead-smtp-user"
+                type="email"
+                value={smtpUser}
+                onChange={(event) => setSmtpUser(event.target.value)}
+                placeholder="nome.cognome@solairgroup.it"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="lead-smtp-password">Password casella</Label>
+              <Input
+                id="lead-smtp-password"
+                type="password"
+                value={smtpPassword}
+                onChange={(event) => setSmtpPassword(event.target.value)}
+                placeholder={emailConfigured ? "••••••••" : "Password"}
+              />
+            </div>
+            <Button
+              variant="outline"
+              onClick={saveEmailCredentials}
+              disabled={savingEmail || !smtpUser.trim() || !smtpPassword}
+            >
+              <Save data-icon="inline-start" />
+              {savingEmail ? "Salvataggio..." : "Salva casella email"}
+            </Button>
           </div>
         </section>
 

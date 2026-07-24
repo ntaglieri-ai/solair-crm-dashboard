@@ -1,6 +1,7 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import {
   IconDotsVertical,
   IconMail,
@@ -120,6 +121,67 @@ export function LeadActionsMenu({
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
   const [keepers, setKeepers] = useState<Record<string, string>>({})
+
+  // Stato casella email personale (per l'invio reale ai lead, vedi dialog
+  // "compose" piu' sotto): null = non ancora verificato, true/false = esito.
+  const [emailConfigured, setEmailConfigured] = useState<boolean | null>(null)
+  const [sendingEmail, setSendingEmail] = useState(false)
+
+  useEffect(() => {
+    if (dialog !== "compose") return
+    let cancelled = false
+    fetch("/api/profilo/email-credentials", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data: { configured?: boolean }) => {
+        if (!cancelled) setEmailConfigured(Boolean(data.configured))
+      })
+      .catch(() => {
+        if (!cancelled) setEmailConfigured(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [dialog])
+
+  async function sendEmailToFiltered() {
+    setSendingEmail(true)
+    try {
+      const res = await fetch("/api/leads/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadIds: filtered.map((lead) => lead.id),
+          subject,
+          body,
+        }),
+      })
+      const result = (await res.json().catch(() => null)) as {
+        error?: string
+        sent?: number
+        failed?: number
+        truncated?: boolean
+      } | null
+      if (!res.ok) {
+        toast.error(result?.error ?? "Invio non riuscito")
+        return
+      }
+      toast.success(`Inviate ${result?.sent ?? 0} email`, {
+        description:
+          result?.failed && result.failed > 0
+            ? `${result.failed} invii falliti — controlla gli indirizzi.`
+            : result?.truncated
+              ? "Elenco troncato a 200 destinatari per invio: ripeti per il resto."
+              : undefined,
+      })
+      setDialog("none")
+      setSubject("")
+      setBody("")
+    } catch {
+      toast.error("Invio non riuscito: errore di rete")
+    } finally {
+      setSendingEmail(false)
+    }
+  }
 
   const updValueOptions =
     updField === "Stato Lead"
@@ -373,21 +435,25 @@ export function LeadActionsMenu({
               />
             </div>
           </div>
+          {emailConfigured === false && (
+            <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-sm text-amber-700">
+              Prima di scrivere ai lead devi configurare la tua casella email personale.{" "}
+              <Link href="/profilo" className="font-semibold underline">
+                Vai al Profilo
+              </Link>
+              .
+            </p>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialog("none")}>
               Annulla
             </Button>
             <Button
-              disabled={!subject.trim()}
-              onClick={() => {
-                toast.success("Email in invio", {
-                  description: `Invio a ${filtered.length} lead avviato.`,
-                })
-                setDialog("none")
-              }}
+              disabled={!subject.trim() || emailConfigured !== true || sendingEmail}
+              onClick={sendEmailToFiltered}
             >
               <IconMail size={16} stroke={1.8} data-icon="inline-start" />
-              Invia a {filtered.length}
+              {sendingEmail ? "Invio in corso…" : `Invia a ${filtered.length}`}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { useTags } from "@/lib/tag-store"
@@ -261,8 +261,30 @@ const EMAIL_STATO_TONE: Record<string, string> = {
 
 function InfoPrincipali({ lead }: { lead: Lead }) {
   const [stato, setStato] = useState(lead["Stato Lead"])
+  const [savingStato, setSavingStato] = useState(false)
   const [showMore, setShowMore] = useState(false)
   const statoItems = Object.fromEntries(STATO_LEAD_ORDER.map((s) => [s, s]))
+
+  async function handleStatoChange(v: string | null) {
+    if (v === null) return
+    const prev = stato
+    setStato(v as Lead["Stato Lead"])
+    setSavingStato(true)
+    try {
+      const res = await fetch(`/api/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ "Stato Lead": v }),
+      })
+      if (!res.ok) throw new Error("Aggiornamento non riuscito")
+      toast.success("Stato aggiornato", { description: v })
+    } catch {
+      setStato(prev)
+      toast.error("Errore nell'aggiornamento dello stato")
+    } finally {
+      setSavingStato(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -282,10 +304,8 @@ function InfoPrincipali({ lead }: { lead: Lead }) {
             <Select
               items={statoItems}
               value={stato}
-              onValueChange={(v) => {
-                setStato(v as Lead["Stato Lead"])
-                toast.success("Stato aggiornato", { description: v })
-              }}
+              onValueChange={handleStatoChange}
+              disabled={savingStato}
             >
               <SelectTrigger className="h-8 w-full bg-card text-[13px]">
                 <SelectValue />
@@ -440,6 +460,26 @@ function Descrizione({ lead }: { lead: Lead }) {
   const [editing, setEditing] = useState(false)
   const [text, setText] = useState(lead.Descrizione)
   const [draft, setDraft] = useState(lead.Descrizione)
+  const [saving, setSaving] = useState(false)
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ Descrizione: draft }),
+      })
+      if (!res.ok) throw new Error("Aggiornamento non riuscito")
+      setText(draft)
+      setEditing(false)
+      toast.success("Descrizione aggiornata")
+    } catch {
+      toast.error("Errore nel salvataggio della descrizione")
+    } finally {
+      setSaving(false)
+    }
+  }
 
   if (editing) {
     return (
@@ -455,6 +495,7 @@ function Descrizione({ lead }: { lead: Lead }) {
           <Button
             size="sm"
             variant="outline"
+            disabled={saving}
             onClick={() => {
               setDraft(text)
               setEditing(false)
@@ -465,13 +506,10 @@ function Descrizione({ lead }: { lead: Lead }) {
           <Button
             size="sm"
             className="bg-teal text-teal-foreground hover:bg-teal/90"
-            onClick={() => {
-              setText(draft)
-              setEditing(false)
-              toast.success("Descrizione aggiornata")
-            }}
+            disabled={saving}
+            onClick={handleSave}
           >
-            Salva
+            {saving ? "Salvataggio..." : "Salva"}
           </Button>
         </div>
       </div>
@@ -1125,6 +1163,20 @@ export function LeadDetailContent({ lead }: { lead: Lead }) {
     (lead.compiti ?? []).filter((task) => !task.completato).map(taskFromLeadTask),
   )
   const [taskDialogOpen, setTaskDialogOpen] = useState(false)
+
+  // Il pulsante "Aggiungi compito" nel pannello laterale (sopra la mappa)
+  // scrolla qui E manda questo evento, per aprire il dialog direttamente
+  // invece di lasciare l'utente a dover ricliccare il bottone "Compito"
+  // qui sotto — i due componenti non condividono props.
+  useEffect(() => {
+    function handleOpenTaskDialog() {
+      setTaskDialogOpen(true)
+    }
+    window.addEventListener("solair:open-task-dialog", handleOpenTaskDialog)
+    return () => {
+      window.removeEventListener("solair:open-task-dialog", handleOpenTaskDialog)
+    }
+  }, [])
 
   const toggleOpenTask = (id: string) =>
     setOpenTasks((prev) =>

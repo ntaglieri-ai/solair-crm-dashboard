@@ -15,6 +15,7 @@ import {
 } from "./lead-utils"
 import { LeadTagBadges } from "./tag-controls"
 import { useTags } from "@/lib/tag-store"
+import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
 import {
   Popover,
   PopoverContent,
@@ -163,12 +164,60 @@ export function LeadCell({
 
     case "Nome Lead":
       return density === "comoda" ? (
-        <span className="flex items-center gap-2.5">
-          <LeadAvatar nome={lead["Nome Lead"]} className="size-9 text-xs" />
-          <span className="font-semibold text-foreground">{lead["Nome Lead"]}</span>
+        <span className="flex min-w-0 items-center justify-between gap-2.5">
+          <span className="flex min-w-0 items-center gap-2.5">
+            <LeadAvatar nome={lead["Nome Lead"]} className="size-9 text-xs" />
+            <span className="truncate font-semibold text-foreground">{lead["Nome Lead"]}</span>
+          </span>
+          <QuickContactIcons
+            kind="lead"
+            recordId={lead.id}
+            nome={lead["Nome Lead"]}
+            telefono={lead.Telefono}
+            email={lead["E-mail"]}
+          />
         </span>
       ) : (
-        <span className="font-semibold text-foreground">{lead["Nome Lead"]}</span>
+        <span className="flex min-w-0 items-center justify-between gap-2.5">
+          <span className="truncate font-semibold text-foreground">{lead["Nome Lead"]}</span>
+          <QuickContactIcons
+            kind="lead"
+            recordId={lead.id}
+            nome={lead["Nome Lead"]}
+            telefono={lead.Telefono}
+            email={lead["E-mail"]}
+          />
+        </span>
+      )
+
+    case "Telefono":
+      return (
+        <span className="flex min-w-0 items-center justify-between gap-2">
+          <span className="truncate text-foreground">{lead.Telefono || "—"}</span>
+          <QuickContactIcons
+            kind="lead"
+            recordId={lead.id}
+            nome={lead["Nome Lead"]}
+            telefono={lead.Telefono}
+            email={lead["E-mail"]}
+            show={["phone", "whatsapp"]}
+          />
+        </span>
+      )
+
+    case "E-mail":
+      return (
+        <span className="flex min-w-0 items-center justify-between gap-2">
+          <span className="truncate text-muted-foreground">{lead["E-mail"] || "—"}</span>
+          <QuickContactIcons
+            kind="lead"
+            recordId={lead.id}
+            nome={lead["Nome Lead"]}
+            telefono={lead.Telefono}
+            email={lead["E-mail"]}
+            show={["email"]}
+          />
+        </span>
       )
 
     case "Stato Lead":
@@ -185,11 +234,6 @@ export function LeadCell({
 
     case "Residente in Sicilia":
       return <BoolDot value={lead["Residente in Sicilia"]} />
-
-    case "E-mail":
-      return (
-        <span className="text-muted-foreground">{lead["E-mail"]}</span>
-      )
 
     case "Lead Proprietario":
       if (loading) {

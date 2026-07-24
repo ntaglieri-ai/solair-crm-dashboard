@@ -219,6 +219,26 @@ function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
   const [editing, setEditing] = useState(false)
   const [descr, setDescr] = useState(cliente.Descrizione ?? "")
   const [draft, setDraft] = useState(cliente.Descrizione ?? "")
+  const [savingDescr, setSavingDescr] = useState(false)
+
+  async function handleSaveDescr() {
+    setSavingDescr(true)
+    try {
+      const res = await fetch(`/api/clienti/${cliente.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ Descrizione: draft }),
+      })
+      if (!res.ok) throw new Error("Aggiornamento non riuscito")
+      setDescr(draft)
+      setEditing(false)
+      toast.success("Descrizione aggiornata")
+    } catch {
+      toast.error("Errore nel salvataggio della descrizione")
+    } finally {
+      setSavingDescr(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -288,6 +308,7 @@ function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
               <Button
                 size="sm"
                 variant="outline"
+                disabled={savingDescr}
                 onClick={() => {
                   setDraft(descr)
                   setEditing(false)
@@ -298,13 +319,10 @@ function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
               <Button
                 size="sm"
                 className="bg-teal text-teal-foreground hover:bg-teal/90"
-                onClick={() => {
-                  setDescr(draft)
-                  setEditing(false)
-                  toast.success("Descrizione aggiornata")
-                }}
+                disabled={savingDescr}
+                onClick={handleSaveDescr}
               >
-                Salva
+                {savingDescr ? "Salvataggio..." : "Salva"}
               </Button>
             </div>
           </div>

@@ -109,7 +109,26 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
             />
             <DropdownMenuContent align="end">
               <DropdownMenuGroup>
-                <DropdownMenuItem onClick={() => toast.success("Cliente duplicato")}>
+                <DropdownMenuItem
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`/api/clienti/${cliente.id}/duplica`, {
+                        method: "POST",
+                      })
+                      const result = (await res.json().catch(() => null)) as
+                        | { id?: string; error?: string }
+                        | null
+                      if (!res.ok || !result?.id) {
+                        toast.error(result?.error ?? "Duplicazione non riuscita")
+                        return
+                      }
+                      toast.success("Cliente duplicato")
+                      router.push(`/clienti/${result.id}`)
+                    } catch {
+                      toast.error("Duplicazione non riuscita: errore di rete")
+                    }
+                  }}
+                >
                   <Copy data-icon="inline-start" />
                   Duplica
                 </DropdownMenuItem>

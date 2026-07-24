@@ -297,6 +297,7 @@ export async function updateClienteRecord(
   if (patch["Clienti Proprietario"] !== undefined)
     row.clienti_proprietario_id = patch["Clienti Proprietario"]
   if (patch.Installatore !== undefined) row.installatore_id = patch.Installatore
+  if (patch.Descrizione !== undefined) row.descrizione = patch.Descrizione
 
   const { data, error } = await supabase
     .from("clienti")

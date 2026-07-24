@@ -1,17 +1,16 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import {
   IconArrowLeft,
   IconCalendarEvent,
   IconClock,
   IconDots,
-  IconMail,
   IconPencil,
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react"
-import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,10 +44,6 @@ export function ScadenzaDetailHeader({
           Scadenze
         </button>
         <div className="flex items-center gap-2">
-          <Button className="bg-teal text-teal-foreground hover:bg-teal/90" size="sm">
-            <IconMail size={15} stroke={1.8} data-icon="inline-start" />
-            Invia e-mail
-          </Button>
           <button
             onClick={onEdit}
             className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
@@ -68,11 +63,28 @@ export function ScadenzaDetailHeader({
               }
             />
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem>Clona</DropdownMenuItem>
-              <DropdownMenuItem>Condividi</DropdownMenuItem>
-              <DropdownMenuItem>Anteprima di stampa</DropdownMenuItem>
-              <DropdownMenuItem>Trova e unisci duplicati</DropdownMenuItem>
-              <DropdownMenuItem>Fusione e-mail</DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`/api/scadenze/${scadenza.id}/clona`, {
+                      method: "POST",
+                    })
+                    const result = (await res.json().catch(() => null)) as
+                      | { id?: string; error?: string }
+                      | null
+                    if (!res.ok || !result?.id) {
+                      toast.error(result?.error ?? "Clonazione non riuscita")
+                      return
+                    }
+                    toast.success("Scadenza clonata")
+                    router.push(`/scadenze/${result.id}`)
+                  } catch {
+                    toast.error("Clonazione non riuscita: errore di rete")
+                  }
+                }}
+              >
+                Clona
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 variant="destructive"

@@ -276,7 +276,15 @@ function UpcomingTasksCard({ lead }: { lead: Lead }) {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => scrollToSection("section-attivita-aperte")}
+          onClick={() => {
+            scrollToSection("section-attivita-aperte")
+            // I due componenti (questo pannello laterale e il contenuto
+            // principale con il dialog compito) non condividono props: uno
+            // scroll da solo lasciava l'utente a dover cliccare un secondo
+            // pulsante identico piu' in basso, sembrando "non funzionare".
+            // Un evento leggero apre direttamente il dialog dall'altro lato.
+            window.dispatchEvent(new CustomEvent("solair:open-task-dialog"))
+          }}
           className="w-full border-teal/40 bg-card text-teal hover:bg-teal/5"
         >
           <IconPlus size={15} stroke={1.8} data-icon="inline-start" />

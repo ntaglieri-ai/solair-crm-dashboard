@@ -10,7 +10,6 @@ import {
   MoreHorizontal,
   Trash2,
   XCircle,
-  Mail,
   Building2,
   UserCircle,
   Megaphone,
@@ -18,6 +17,7 @@ import {
   Copy,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
 import { IconPlus } from "@tabler/icons-react"
 import {
   DropdownMenu,
@@ -105,10 +105,15 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
             <Pencil data-icon="inline-start" />
             Modifica
           </Button>
-          <Button variant="outline" className="bg-card">
-            <Mail data-icon="inline-start" />
-            Invia e-mail
-          </Button>
+          <QuickContactIcons
+            kind="lead"
+            recordId={lead.id}
+            nome={lead["Nome Lead"]}
+            telefono={lead.Telefono}
+            email={lead["E-mail"]}
+            show={["email"]}
+            emailAsButton
+          />
           <DropdownMenu>
             <DropdownMenuTrigger
               render={

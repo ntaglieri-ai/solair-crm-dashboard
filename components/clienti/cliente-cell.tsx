@@ -4,6 +4,7 @@ import { Bell, StickyNote } from "lucide-react"
 import { type ClienteRecord, type ClienteColumnId } from "@/lib/mock-data"
 import { BoolDot } from "@/components/leads/lead-utils"
 import { clienteTagColor, isLightColor } from "@/lib/cliente-tag-store"
+import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
 import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
 
 function ClienteTagPill({ name }: { name: string }) {
@@ -73,26 +74,71 @@ export function ClienteCell({
 
     case "Nome Clienti":
       return density === "comoda" ? (
-        <span className="flex items-center gap-2.5">
-          <ClienteAvatar nome={cliente["Nome Clienti"]} className="size-9 text-xs" />
-          <span className="font-semibold text-foreground">
-            {cliente["Nome Clienti"]}
+        <span className="flex min-w-0 items-center justify-between gap-2.5">
+          <span className="flex min-w-0 items-center gap-2.5">
+            <ClienteAvatar nome={cliente["Nome Clienti"]} className="size-9 text-xs" />
+            <span className="truncate font-semibold text-foreground">
+              {cliente["Nome Clienti"]}
+            </span>
           </span>
+          <QuickContactIcons
+            kind="cliente"
+            recordId={cliente.id}
+            nome={cliente["Nome Clienti"]}
+            telefono={cliente.Cellulare}
+            email={cliente["E-mail"]}
+          />
         </span>
       ) : (
-        <span className="flex items-center gap-2.5">
-          <ClienteAvatar nome={cliente["Nome Clienti"]} className="size-7 text-[10px]" />
-          <span className="font-semibold text-foreground">
-            {cliente["Nome Clienti"]}
+        <span className="flex min-w-0 items-center justify-between gap-2.5">
+          <span className="flex min-w-0 items-center gap-2.5">
+            <ClienteAvatar nome={cliente["Nome Clienti"]} className="size-7 text-[10px]" />
+            <span className="truncate font-semibold text-foreground">
+              {cliente["Nome Clienti"]}
+            </span>
           </span>
+          <QuickContactIcons
+            kind="cliente"
+            recordId={cliente.id}
+            nome={cliente["Nome Clienti"]}
+            telefono={cliente.Cellulare}
+            email={cliente["E-mail"]}
+          />
         </span>
       )
 
     case "Stato":
       return <StatoClienteBadge stato={cliente.Stato} />
 
+    case "Cellulare":
+      return (
+        <span className="flex min-w-0 items-center justify-between gap-2">
+          <span className="truncate text-foreground">{cliente.Cellulare || "—"}</span>
+          <QuickContactIcons
+            kind="cliente"
+            recordId={cliente.id}
+            nome={cliente["Nome Clienti"]}
+            telefono={cliente.Cellulare}
+            email={cliente["E-mail"]}
+            show={["phone", "whatsapp"]}
+          />
+        </span>
+      )
+
     case "E-mail":
-      return <span className="text-muted-foreground">{cliente["E-mail"]}</span>
+      return (
+        <span className="flex min-w-0 items-center justify-between gap-2">
+          <span className="truncate text-muted-foreground">{cliente["E-mail"] || "—"}</span>
+          <QuickContactIcons
+            kind="cliente"
+            recordId={cliente.id}
+            nome={cliente["Nome Clienti"]}
+            telefono={cliente.Cellulare}
+            email={cliente["E-mail"]}
+            show={["email"]}
+          />
+        </span>
+      )
 
     default: {
       if (value === null || value === undefined || value === "") {

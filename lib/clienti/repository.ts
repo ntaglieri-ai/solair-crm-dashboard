@@ -255,6 +255,7 @@ export async function getClienteById(
 
 export async function createClienteRecord(
   body: Partial<ClienteRecord>,
+  leadId?: string,
 ): Promise<ClienteRecord> {
   const supabase = await createClient()
   const { data, error } = await supabase
@@ -270,6 +271,7 @@ export async function createClienteRecord(
       sede: body.Sede || null,
       clienti_proprietario_id: body["Clienti Proprietario"] || null,
       installatore_id: body.Installatore || null,
+      lead_id: leadId ?? null,
     })
     .select(LIST_COLUMNS)
     .single()

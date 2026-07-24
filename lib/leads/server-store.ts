@@ -489,6 +489,8 @@ export async function patchLead(id: string, patch: Partial<Lead>): Promise<Lead 
   if (patch["Wallbox richiesto"] !== undefined) row.wallbox_richiesto = patch["Wallbox richiesto"]
   if (patch.kWp !== undefined) row.kwp = patch.kWp
   if (patch.kWh !== undefined) row.kwh = patch.kWh
+  if (patch["Account convertito"] !== undefined)
+    row.account_convertito_id = patch["Account convertito"]
   const { data, error } = await supabase
     .from("leads")
     .update(row)

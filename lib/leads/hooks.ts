@@ -165,6 +165,29 @@ export function useDeleteLead() {
 }
 
 // ----------------------------------------------------------------------------
+// Mutazione: converte un lead in cliente (crea davvero il record collegato)
+// ----------------------------------------------------------------------------
+export function useConvertLead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/leads/${id}/converti`, { method: "POST" })
+      const body = (await res.json().catch(() => null)) as
+        | { clienteId?: string; error?: string }
+        | null
+      if (!res.ok || !body?.clienteId) {
+        throw new Error(body?.error ?? "Conversione non riuscita")
+      }
+      return body as { clienteId: string }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: leadsKeys.lists() })
+      qc.invalidateQueries({ queryKey: leadsKeys.stats() })
+    },
+  })
+}
+
+// ----------------------------------------------------------------------------
 // Mutazione: crea un lead
 // ----------------------------------------------------------------------------
 export function useCreateLead() {

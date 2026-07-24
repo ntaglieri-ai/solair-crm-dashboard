@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import {
   ChevronRight,
   UserCheck,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
+import { EditRecordDialog } from "@/components/shared/edit-record-dialog"
 import { IconPlus } from "@tabler/icons-react"
 import {
   DropdownMenu,
@@ -44,8 +46,12 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
   const { owners } = useTags()
   const router = useRouter()
   const [showDelete, setShowDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [showLost, setShowLost] = useState(false)
+  const [markingLost, setMarkingLost] = useState(false)
   const [showConvert, setShowConvert] = useState(false)
+  const [converting, setConverting] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
   const nome = lead["Nome Lead"]
   const ownerName =
     owners.find((owner) => owner.id === lead["Lead Proprietario"])?.nome ||
@@ -101,7 +107,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
             <UserCheck data-icon="inline-start" />
             Converti a cliente
           </Button>
-          <Button variant="outline" className="bg-card">
+          <Button variant="outline" className="bg-card" onClick={() => setEditOpen(true)}>
             <Pencil data-icon="inline-start" />
             Modifica
           </Button>
@@ -181,17 +187,26 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDelete(false)}>
+            <Button variant="outline" onClick={() => setShowDelete(false)} disabled={deleting}>
               Annulla
             </Button>
             <Button
               variant="destructive"
-              onClick={() => {
-                setShowDelete(false)
-                router.push("/leads")
+              disabled={deleting}
+              onClick={async () => {
+                setDeleting(true)
+                try {
+                  const res = await fetch(`/api/leads/${lead.id}`, { method: "DELETE" })
+                  if (!res.ok) throw new Error("Eliminazione non riuscita")
+                  toast.success("Lead eliminato", { description: nome })
+                  router.push("/leads")
+                } catch {
+                  toast.error("Errore nell'eliminazione del lead")
+                  setDeleting(false)
+                }
               }}
             >
-              Elimina
+              {deleting ? "Eliminazione..." : "Elimina"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -209,11 +224,32 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowLost(false)}>
+            <Button variant="outline" onClick={() => setShowLost(false)} disabled={markingLost}>
               Annulla
             </Button>
-            <Button variant="destructive" onClick={() => setShowLost(false)}>
-              Segna come perso
+            <Button
+              variant="destructive"
+              disabled={markingLost}
+              onClick={async () => {
+                setMarkingLost(true)
+                try {
+                  const res = await fetch(`/api/leads/${lead.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ "Stato Lead": "Perso" }),
+                  })
+                  if (!res.ok) throw new Error("Aggiornamento non riuscito")
+                  toast.success("Lead segnato come perso")
+                  setShowLost(false)
+                  router.refresh()
+                } catch {
+                  toast.error("Errore nel segnare il lead come perso")
+                } finally {
+                  setMarkingLost(false)
+                }
+              }}
+            >
+              {markingLost ? "Salvataggio..." : "Segna come perso"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -231,18 +267,69 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConvert(false)}>
+            <Button variant="outline" onClick={() => setShowConvert(false)} disabled={converting}>
               Annulla
             </Button>
             <Button
               className="bg-teal text-teal-foreground hover:bg-teal/90"
-              onClick={() => setShowConvert(false)}
+              disabled={converting}
+              onClick={async () => {
+                setConverting(true)
+                try {
+                  const res = await fetch(`/api/leads/${lead.id}/converti`, {
+                    method: "POST",
+                  })
+                  const result = (await res.json().catch(() => null)) as
+                    | { clienteId?: string; error?: string }
+                    | null
+                  if (!res.ok || !result?.clienteId) {
+                    toast.error(result?.error ?? "Conversione non riuscita")
+                    return
+                  }
+                  toast.success("Lead convertito in cliente")
+                  setShowConvert(false)
+                  router.push(`/clienti/${result.clienteId}`)
+                } catch {
+                  toast.error("Conversione non riuscita: errore di rete")
+                } finally {
+                  setConverting(false)
+                }
+              }}
             >
-              Converti
+              {converting ? "Conversione..." : "Converti"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <EditRecordDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        title="Modifica lead"
+        endpoint={`/api/leads/${lead.id}`}
+        fields={[
+          { key: "nome", label: "Nome", value: lead.Nome ?? "" },
+          { key: "cognome", label: "Cognome", value: lead.Cognome ?? "" },
+          { key: "telefono", label: "Telefono", value: lead.Telefono ?? "", type: "tel" },
+          { key: "email", label: "E-mail", value: lead["E-mail"] ?? "", type: "email" },
+          {
+            key: "mobileFisso",
+            label: "Mobile / Fisso",
+            value: lead["Mobile/Fisso"] ?? "",
+          },
+          { key: "citta", label: "Città", value: lead["Città"] ?? "" },
+          { key: "provincia", label: "Provincia", value: lead.Provincia ?? "" },
+        ]}
+        buildBody={(v) => ({
+          Nome: v.nome,
+          Cognome: v.cognome,
+          Telefono: v.telefono,
+          "E-mail": v.email,
+          "Mobile/Fisso": v.mobileFisso,
+          "Città": v.citta,
+          Provincia: v.provincia,
+        })}
+      />
     </div>
   )
 }

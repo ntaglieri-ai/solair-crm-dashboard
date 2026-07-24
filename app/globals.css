@@ -777,3 +777,15 @@
     transform: translateX(210%);
   }
 }
+
+/* "Esporta scheda PDF" (Cliente): stampa browser semplice, nasconde solo la
+   sidebar di navigazione (.app-sidebar) e i pulsanti azione dell'header
+   (.no-print) — NON tutti gli <aside>, perché lead-intelligence-panel.tsx e
+   cliente-intelligence-panel.tsx usano lo stesso tag per i pannelli laterali
+   di contenuto, che in stampa vanno mantenuti visibili. */
+@media print {
+  .app-sidebar,
+  .no-print {
+    display: none !important;
+  }
+}

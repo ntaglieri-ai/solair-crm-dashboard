@@ -913,12 +913,18 @@ function EmailSection({ lead }: { lead: Lead }) {
 
 /* ---------- Sezione Record collegati ---------- */
 
-function RecordCollegati({ lead }: { lead: Lead }) {
+function RecordCollegati({
+  lead,
+  clienteCollegatoNome,
+}: {
+  lead: Lead
+  clienteCollegatoNome?: string | null
+}) {
   const account = lead["Account convertito"]
   if (account) {
     return (
       <Link
-        href="#"
+        href={`/clienti/${account}`}
         className="flex items-center gap-3 rounded-lg border border-border bg-card p-3 transition-colors hover:bg-secondary"
       >
         <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-teal/10 text-teal">
@@ -927,21 +933,17 @@ function RecordCollegati({ lead }: { lead: Lead }) {
         <div className="flex min-w-0 flex-col">
           <span className="text-[11px] text-muted-foreground">Cliente</span>
           <span className="truncate text-[13px] font-medium text-foreground">
-            {account}
+            {clienteCollegatoNome || account}
           </span>
         </div>
       </Link>
     )
   }
   return (
-    <div className="flex items-center justify-between rounded-lg border border-dashed border-border bg-secondary/30 px-3 py-3">
+    <div className="flex items-center rounded-lg border border-dashed border-border bg-secondary/30 px-3 py-3">
       <span className="text-sm text-muted-foreground">
-        Nessun record collegato
+        Nessun record collegato — verrà mostrato qui dopo la conversione in cliente.
       </span>
-      <Button size="sm" variant="outline" className="bg-card">
-        <IconPlus size={15} stroke={1.8} data-icon="inline-start" />
-        Aggiungi nuovo
-      </Button>
     </div>
   )
 }
@@ -1158,7 +1160,13 @@ function SequenzaTemporale({ lead }: { lead: Lead }) {
 
 /* ---------- Componente principale ---------- */
 
-export function LeadDetailContent({ lead }: { lead: Lead }) {
+export function LeadDetailContent({
+  lead,
+  clienteCollegatoNome,
+}: {
+  lead: Lead
+  clienteCollegatoNome?: string | null
+}) {
   const [openTasks, setOpenTasks] = useState<Task[]>(() =>
     (lead.compiti ?? []).filter((task) => !task.completato).map(taskFromLeadTask),
   )
@@ -1315,7 +1323,7 @@ export function LeadDetailContent({ lead }: { lead: Lead }) {
       </Section>
 
       <Section id="section-record" title="Record collegati" icon={IconLink}>
-        <RecordCollegati lead={lead} />
+        <RecordCollegati lead={lead} clienteCollegatoNome={clienteCollegatoNome} />
       </Section>
 
       <Section id="section-timeline" title="Sequenza temporale" icon={IconTimeline}>

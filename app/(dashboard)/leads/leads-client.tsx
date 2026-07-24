@@ -63,6 +63,7 @@ import {
   useCreateLead,
   useDeleteLead,
   useUpdateLead,
+  useConvertLead,
   useBulkLeads,
   fetchLeadsForExport,
 } from "@/lib/leads/hooks"
@@ -287,6 +288,7 @@ export function LeadsClient({
   const createLead = useCreateLead()
   const deleteLead = useDeleteLead()
   const updateLead = useUpdateLead()
+  const convertLead = useConvertLead()
   const bulk = useBulkLeads()
 
   // Le righe sono proiezioni selettive; la tabella usa solo i campi inclusi.
@@ -535,16 +537,14 @@ export function LeadsClient({
   const confirmConvert = () => {
     if (!convertTarget) return
     const name = convertTarget["Nome Lead"]
-    updateLead.mutate(
-      { id: convertTarget.id, patch: { "Stato Lead": "Convertito" } },
-      {
-        onSuccess: () =>
-          toast.success("Lead convertito", {
-            description: `${name} convertito in cliente.`,
-          }),
-        onError: () => toast.error("Conversione non riuscita"),
-      },
-    )
+    convertLead.mutate(convertTarget.id, {
+      onSuccess: () =>
+        toast.success("Lead convertito", {
+          description: `${name} convertito in cliente.`,
+        }),
+      onError: (error) =>
+        toast.error(error instanceof Error ? error.message : "Conversione non riuscita"),
+    })
     setConvertTarget(null)
   }
 

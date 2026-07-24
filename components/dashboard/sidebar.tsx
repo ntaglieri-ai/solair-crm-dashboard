@@ -194,7 +194,7 @@ export function Sidebar() {
   }, [permissions])
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-sidebar-border bg-sidebar lg:flex">
+    <aside className="app-sidebar fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-sidebar-border bg-sidebar lg:flex">
       {/* Logo */}
       <div className="border-b border-sidebar-border px-5 py-5">
         <Link

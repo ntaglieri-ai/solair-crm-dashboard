@@ -46,6 +46,7 @@ function val(v: string | number | null | undefined): string {
 export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
   const router = useRouter()
   const [showDelete, setShowDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [showContract, setShowContract] = useState(false)
   const nome = cliente["Nome Clienti"]
 
@@ -82,7 +83,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 no-print">
           <Button
             className="bg-teal text-teal-foreground hover:bg-teal/90"
             onClick={() => setShowContract(true)}
@@ -133,7 +134,12 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
                   Duplica
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => toast.success("Esportazione scheda avviata")}
+                  onClick={() => {
+                    // "Semplice": stampa la pagina cosi' com'e', con sidebar
+                    // e pulsanti azione nascosti via CSS (.no-print, vedi
+                    // globals.css) — nessun layout PDF dedicato per ora.
+                    window.print()
+                  }}
                 >
                   <FileDown data-icon="inline-start" />
                   Esporta scheda PDF
@@ -190,17 +196,26 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDelete(false)}>
+            <Button variant="outline" onClick={() => setShowDelete(false)} disabled={deleting}>
               Annulla
             </Button>
             <Button
               variant="destructive"
-              onClick={() => {
-                setShowDelete(false)
-                router.push("/clienti")
+              disabled={deleting}
+              onClick={async () => {
+                setDeleting(true)
+                try {
+                  const res = await fetch(`/api/clienti/${cliente.id}`, { method: "DELETE" })
+                  if (!res.ok) throw new Error("Eliminazione non riuscita")
+                  toast.success("Cliente eliminato", { description: nome })
+                  router.push("/clienti")
+                } catch {
+                  toast.error("Errore nell'eliminazione del cliente")
+                  setDeleting(false)
+                }
               }}
             >
-              Elimina
+              {deleting ? "Eliminazione..." : "Elimina"}
             </Button>
           </DialogFooter>
         </DialogContent>

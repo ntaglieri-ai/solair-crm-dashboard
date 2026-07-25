@@ -1829,6 +1829,9 @@ export interface ClienteRecord {
 
   // --- Compiti collegati (record_tipo/correlato_tipo = "cliente") ---
   compiti?: ClienteCompito[]
+
+  /** Id dei tag assegnati (cliente_tags), popolato dal server. */
+  tagIds?: string[]
 }
 
 export interface ClienteCompito {

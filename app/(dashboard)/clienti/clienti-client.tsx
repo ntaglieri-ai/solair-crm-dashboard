@@ -1,12 +1,13 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react"
 import { IconSettings } from "@tabler/icons-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { usePermissions } from "@/lib/permissions/provider"
 import { useColumnPreferences } from "@/lib/shared/use-column-preferences"
+import { useClienteTags } from "@/lib/cliente-tag-store"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -56,6 +57,7 @@ import {
   useClientiQuery,
   useCreateCliente,
   useDeleteCliente,
+  useUpdateCliente,
   useDeleteClienti,
   bulkUpdateClienti,
   fetchClientiForExport,
@@ -162,6 +164,13 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
   })
 
   const pageRows = data?.rows ?? initialData.rows
+  const { hydrateClienteTagIds } = useClienteTags()
+  useEffect(() => {
+    const assignments = Object.fromEntries(
+      pageRows.map((cliente) => [cliente.id, cliente.tagIds ?? []]),
+    )
+    hydrateClienteTagIds(assignments)
+  }, [hydrateClienteTagIds, pageRows])
   const total = data?.total ?? initialData.total
   const totalPages = Math.max(1, Math.ceil(total / rowsPerPage))
   const rangeStart = total === 0 ? 0 : (page - 1) * rowsPerPage + 1
@@ -170,6 +179,7 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
   // --- Mutations ---
   const createCliente = useCreateCliente()
   const deleteSingle = useDeleteCliente()
+  const updateCliente = useUpdateCliente()
   const deleteBulk = useDeleteClienti()
 
   // --- Derived ---
@@ -506,6 +516,15 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
           onToggle={toggle}
           onToggleAll={toggleAll}
           onDelete={(cliente) => setDeleteTarget(cliente)}
+          onUpdate={(cliente, patch) =>
+            updateCliente.mutate(
+              { id: cliente.id, patch },
+              { onError: () => toast.error("Aggiornamento non riuscito") },
+            )
+          }
+          onRefresh={() => {
+            void qc.invalidateQueries({ queryKey: clientiKeys.lists() })
+          }}
           sortBy={sortBy}
           sortDir={sortDir}
           onSort={handleSort}

@@ -114,7 +114,7 @@ function ColorDropdown({
 /* -------------------------------------------------------------------------- */
 
 function TagRow({ tag }: { tag: ClienteTag }) {
-  const { renameTag, recolorTag, deleteTag } = useClienteTags()
+  const { renameTag, recolorTag, deleteTag, usageCount } = useClienteTags()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(tag.name)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -180,16 +180,22 @@ function TagRow({ tag }: { tag: ClienteTag }) {
           )}
 
           <span className="ml-1 hidden shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground group-hover:inline-block">
-            {tag.uso}
+            {usageCount(tag.id)}
           </span>
         </div>
 
-        {/* Ultima modifica */}
+        {/* Data di creazione (non tracciamo una data di "ultima modifica" reale) */}
         <div className="flex items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
           <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground">
             <IconUser size={14} stroke={1.8} />
           </span>
-          <span>{tag.modificato}</span>
+          <span>
+            {tag.createdAt
+              ? new Intl.DateTimeFormat("it-IT", { dateStyle: "medium" }).format(
+                  new Date(tag.createdAt),
+                )
+              : "—"}
+          </span>
         </div>
       </div>
 
@@ -200,7 +206,7 @@ function TagRow({ tag }: { tag: ClienteTag }) {
             <DialogDescription>
               Vuoi eliminare il tag{" "}
               <span className="font-medium text-foreground">{tag.name}</span>?
-              Verrà rimosso da {tag.uso} clienti. L&apos;azione non è
+              Verrà rimosso da {usageCount(tag.id)} clienti. L&apos;azione non è
               reversibile.
             </DialogDescription>
           </DialogHeader>

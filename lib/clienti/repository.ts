@@ -155,8 +155,18 @@ export async function queryClienti(
   const rows = (data ?? []).map((r) => mapRow(r as unknown as Record<string, unknown>))
   const pageIds = rows.map((r) => r.id)
   const withActivity = await clientiWithOpenCompiti(supabase, pageIds)
+  const tagAssignments = await supabase
+    .from("cliente_tags")
+    .select("cliente_id,tag_id")
+    .in("cliente_id", pageIds)
+  if (tagAssignments.error) {
+    console.error("[clienti/repository] cliente_tags:", tagAssignments.error.message)
+  }
   for (const row of rows) {
     row["Badge dell'attività"] = withActivity.has(row.id)
+    row.tagIds = (tagAssignments.data ?? [])
+      .filter((item) => item.cliente_id === row.id)
+      .map((item) => item.tag_id)
   }
 
   return {

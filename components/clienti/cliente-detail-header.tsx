@@ -17,7 +17,6 @@ import {
   CalendarDays,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,6 +37,7 @@ import { toast } from "sonner"
 import { type ClienteRecord } from "@/lib/mock-data"
 import { EditRecordDialog } from "@/components/shared/edit-record-dialog"
 import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
+import { ClienteTagBadges } from "./cliente-tag-controls"
 
 function val(v: string | number | null | undefined): string {
   if (v === null || v === undefined || v === "") return "—"
@@ -73,14 +73,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
             </h1>
             <div className="flex flex-wrap items-center gap-2">
               <StatoClienteBadge stato={cliente.Stato} />
-              {cliente.Tag.map((t) => (
-                <Badge
-                  key={t}
-                  className="rounded-full bg-navy/10 px-2.5 py-0.5 text-[11px] font-medium text-navy"
-                >
-                  {t}
-                </Badge>
-              ))}
+              <ClienteTagBadges clienteId={cliente.id} empty="" />
             </div>
           </div>
         </div>

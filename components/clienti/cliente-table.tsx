@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { DataTableShell } from "@/components/ui/data-table-shell"
+import { ClienteRowContextMenu } from "./cliente-row-context-menu"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import {
@@ -62,6 +63,8 @@ export function ClienteTable({
   onToggle,
   onToggleAll,
   onDelete,
+  onUpdate,
+  onRefresh,
   sortBy,
   sortDir,
   onSort,
@@ -76,6 +79,8 @@ export function ClienteTable({
   onToggle: (id: string) => void
   onToggleAll: () => void
   onDelete: (cliente: ClienteRecord) => void
+  onUpdate: (cliente: ClienteRecord, patch: Partial<ClienteRecord>) => void
+  onRefresh: () => void
   sortBy: ClienteColumnId | null
   sortDir: SortDir
   onSort: (col: ClienteColumnId) => void
@@ -245,6 +250,13 @@ export function ClienteTable({
       </TableHeader>
       <TableBody>
           {clienti.map((cliente) => (
+            <ClienteRowContextMenu
+              key={`ctx-${cliente.id}`}
+              cliente={cliente}
+              onDelete={onDelete}
+              onUpdate={onUpdate}
+              onRefresh={onRefresh}
+            >
             <TableRow
               key={cliente.id}
               onClick={() => router.push(`/clienti/${cliente.id}`)}
@@ -336,6 +348,7 @@ export function ClienteTable({
                 </DropdownMenu>
               </TableCell>
             </TableRow>
+            </ClienteRowContextMenu>
           ))}
 
           {clienti.length === 0 ? (

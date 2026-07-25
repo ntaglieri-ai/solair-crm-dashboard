@@ -5,6 +5,8 @@ import { toast } from "sonner"
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react"
 import { IconSettings } from "@tabler/icons-react"
 import { useQueryClient } from "@tanstack/react-query"
+import { usePermissions } from "@/lib/permissions/provider"
+import { useColumnPreferences } from "@/lib/shared/use-column-preferences"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -36,7 +38,6 @@ import {
 import {
   ClienteTable,
   type SortDir,
-  type Density,
 } from "@/components/clienti/cliente-table"
 import {
   ClienteSettingsSheet,
@@ -117,8 +118,24 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleteTarget, setDeleteTarget] = useState<ClienteRecord | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
-  const [visibleCols, setVisibleCols] = useState<ClienteColumnId[]>(DEFAULT_CLIENTE_COLUMNS)
-  const [density, setDensity] = useState<Density>("normale")
+  const permissions = usePermissions()
+  const preferenceOwner =
+    permissions.snapshot.subject.userId ??
+    permissions.snapshot.subject.authUserId ??
+    "anonymous"
+  const {
+    visibleCols,
+    setVisibleCols,
+    columnWidths,
+    setColumnWidths,
+    density,
+    setDensity,
+    reorderColumns,
+  } = useColumnPreferences<ClienteColumnId>({
+    storageKey: `solair:clienti:view:${preferenceOwner}:v1`,
+    validIds: new Set(CLIENTE_COLUMNS.map((c) => c.id)),
+    defaultVisibleCols: DEFAULT_CLIENTE_COLUMNS,
+  })
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] =
     useState<ClienteSettingsSectionId>("generali")
@@ -493,6 +510,11 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
           sortDir={sortDir}
           onSort={handleSort}
           density={density}
+          columnWidths={columnWidths}
+          onColumnWidthChange={(column, width) =>
+            setColumnWidths((current) => ({ ...current, [column]: width }))
+          }
+          onColumnReorder={reorderColumns}
         />
       )}
 

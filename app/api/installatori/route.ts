@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextResponse, after } from "next/server"
 import {
   createInstallatoreRecord,
   queryInstallatori,
@@ -6,6 +6,8 @@ import {
 } from "@/lib/installatori/repository"
 import { parseInstallatoriSearchParams } from "@/lib/installatori/api-types"
 import { requireApiRecord } from "@/lib/permissions/server"
+import { ensureFolder } from "@/lib/nextcloud/admin-webdav"
+import { folderPathForRecord } from "@/lib/allegati/paths"
 
 export async function GET(request: Request) {
   const guard = await requireApiRecord("installatori", "view")
@@ -44,5 +46,17 @@ export async function POST(request: Request) {
     proprietario_id: body.proprietario_id ?? null,
     note: body.note ?? null,
   })
+
+  // Cartella Nextcloud creata subito (non al primo upload) cosi' e'
+  // raggiungibile anche da PC/telefono senza passare dal CRM — sempre in
+  // background, mai bloccante (decisione 25/07, stesso pattern di Lead).
+  after(async () => {
+    const path = folderPathForRecord("installatore", created.id, created.nome)
+    const result = await ensureFolder(path)
+    if (!result.ok) {
+      console.error(`[allegati] creazione cartella installatore ${created.id} fallita:`, result.error)
+    }
+  })
+
   return NextResponse.json(created, { status: 201 })
 }

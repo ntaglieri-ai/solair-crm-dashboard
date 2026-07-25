@@ -301,6 +301,20 @@ export async function updateClienteRecord(
   if (patch.Installatore !== undefined) row.installatore_id = patch.Installatore
   if (patch.Descrizione !== undefined) row.descrizione = patch.Descrizione
 
+  // Supporto generico per tutti i campi importati da Zoho (inclusi i 6
+  // toggle Pagamenti/Iter/Documenti: Finanziamento approvato, Iva Reverse
+  // charge, Notifica pred. reg. esercizio, Disponibilità Fine lavori,
+  // Verifica documentale, Layout verificato — trovati tutti "finti" il
+  // 25/07, salvavano solo in locale). Stesso principio della lettura
+  // generica in mapRow: qualsiasi campo Zoho futuro funziona a scrittura
+  // senza dover aggiungere una riga esplicita qui ogni volta.
+  const patchRecord = patch as Record<string, unknown>
+  for (const field of CLIENTI_ZOHO_FIELDS) {
+    if (field.appField in patchRecord && !(field.column in row)) {
+      row[field.column] = patchRecord[field.appField]
+    }
+  }
+
   const { data, error } = await supabase
     .from("clienti")
     .update(row)

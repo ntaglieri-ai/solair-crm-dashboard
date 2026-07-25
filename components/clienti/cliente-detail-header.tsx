@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { type ClienteRecord } from "@/lib/mock-data"
+import { EditRecordDialog } from "@/components/shared/edit-record-dialog"
 import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
 
 function val(v: string | number | null | undefined): string {
@@ -47,6 +48,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
   const router = useRouter()
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
   const [showContract, setShowContract] = useState(false)
   const nome = cliente["Nome Clienti"]
 
@@ -91,7 +93,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
             <FileText data-icon="inline-start" />
             Genera contratto
           </Button>
-          <Button variant="outline" className="bg-card">
+          <Button variant="outline" className="bg-card" onClick={() => setEditOpen(true)}>
             <Pencil data-icon="inline-start" />
             Modifica
           </Button>
@@ -248,6 +250,31 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <EditRecordDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        title="Modifica cliente"
+        endpoint={`/api/clienti/${cliente.id}`}
+        fields={[
+          { key: "nome", label: "Nome", value: cliente.Nome ?? "" },
+          { key: "cognome", label: "Cognome", value: cliente.Cognome ?? "" },
+          { key: "cellulare", label: "Cellulare", value: cliente.Cellulare ?? "", type: "tel" },
+          { key: "email", label: "E-mail", value: cliente["E-mail"] ?? "", type: "email" },
+          {
+            key: "codiceFiscale",
+            label: "Codice fiscale",
+            value: cliente["Codice fiscale"] ?? "",
+          },
+        ]}
+        buildBody={(v) => ({
+          Nome: v.nome,
+          Cognome: v.cognome,
+          Cellulare: v.cellulare,
+          "E-mail": v.email,
+          "Codice fiscale": v.codiceFiscale,
+        })}
+      />
     </div>
   )
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { toast } from "sonner"
+import { AllegatiSection } from "@/components/shared/allegati-section"
 import {
   IconChevronDown,
   IconChevronRight,
@@ -23,9 +24,6 @@ import {
   IconBattery,
   IconTool,
   IconBuildingWarehouse,
-  IconFileText,
-  IconPhoto,
-  IconUpload,
   IconCalendarEvent,
   IconPlus,
 } from "@tabler/icons-react"
@@ -463,6 +461,21 @@ function Impianto({ cliente }: { cliente: ClienteRecord }) {
 function Pagamenti({ cliente }: { cliente: ClienteRecord }) {
   const [fin, setFin] = useState(Boolean(cliente["Finanziamento approvato"]))
   const [reverse, setReverse] = useState(Boolean(cliente["Iva Reverse charge"]))
+
+  async function saveToggle(field: string, value: boolean, onError: () => void) {
+    try {
+      const res = await fetch(`/api/clienti/${cliente.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      })
+      if (!res.ok) throw new Error("Aggiornamento non riuscito")
+    } catch {
+      onError()
+      toast.error("Errore nel salvataggio")
+    }
+  }
+
   const euro = (n: number | undefined) =>
     typeof n === "number"
       ? n.toLocaleString("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 })
@@ -513,6 +526,7 @@ function Pagamenti({ cliente }: { cliente: ClienteRecord }) {
             onCheckedChange={(v) => {
               setFin(v)
               toast.success(v ? "Finanziamento approvato" : "Finanziamento non approvato")
+              saveToggle("Finanziamento approvato", v, () => setFin(!v))
             }}
           />
         </DataField>
@@ -559,6 +573,7 @@ function Pagamenti({ cliente }: { cliente: ClienteRecord }) {
             onCheckedChange={(v) => {
               setReverse(v)
               toast.success("Aggiornato")
+              saveToggle("Iva Reverse charge", v, () => setReverse(!v))
             }}
           />
         </DataField>
@@ -620,6 +635,22 @@ function IterStepper({ cliente }: { cliente: ClienteRecord }) {
 function Iter({ cliente }: { cliente: ClienteRecord }) {
   const [notifica, setNotifica] = useState(Boolean(cliente["Notifica pred. reg. esercizio"]))
   const [disp, setDisp] = useState(Boolean(cliente["Disponibilità Fine lavori"]))
+
+  async function saveToggle(field: string, value: boolean, onError: () => void) {
+    try {
+      const res = await fetch(`/api/clienti/${cliente.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      })
+      if (!res.ok) throw new Error("Aggiornamento non riuscito")
+      toast.success("Aggiornato")
+    } catch {
+      onError()
+      toast.error("Errore nel salvataggio")
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <div className="rounded-xl border border-border bg-secondary/30 p-4">
@@ -645,10 +676,22 @@ function Iter({ cliente }: { cliente: ClienteRecord }) {
         <DataField label="Data interlocutorio">{val(cliente["Data interlocutorio"])}</DataField>
         <DataField label="Codice contratto PNRR">{val(cliente["Codice contratto PNRR"])}</DataField>
         <DataField label="Notifica pred. reg. esercizio">
-          <Switch checked={notifica} onCheckedChange={setNotifica} />
+          <Switch
+            checked={notifica}
+            onCheckedChange={(v) => {
+              setNotifica(v)
+              saveToggle("Notifica pred. reg. esercizio", v, () => setNotifica(!v))
+            }}
+          />
         </DataField>
         <DataField label="Disponibilità Fine lavori">
-          <Switch checked={disp} onCheckedChange={setDisp} />
+          <Switch
+            checked={disp}
+            onCheckedChange={(v) => {
+              setDisp(v)
+              saveToggle("Disponibilità Fine lavori", v, () => setDisp(!v))
+            }}
+          />
         </DataField>
       </div>
     </div>
@@ -706,100 +749,49 @@ function Documenti({ cliente }: { cliente: ClienteRecord }) {
   const [verifica, setVerifica] = useState(Boolean(cliente["Verifica documentale"]))
   const [layout, setLayout] = useState(Boolean(cliente["Layout verificato"]))
 
-  const docs: { label: string; value: string | undefined }[] = [
-    { label: "Mappa catastale", value: cliente["Mappa catastale"] },
-    { label: "Regolamento di esercizio", value: cliente["Regolamento di esecizio"] },
-    { label: "Attestato Terna", value: cliente["Attestato Terna"] },
-    { label: "Scheda ENEA", value: cliente["Scheda ENEA"] },
-    { label: "Fattura 1", value: cliente.Fattura1 },
-    { label: "Fattura 2", value: cliente.Fattura2 },
-  ]
-  const allegati = cliente.Allegati ?? []
-  const anyDoc = docs.some((d) => hasValue(d.value)) || allegati.length > 0
-
-  if (!anyDoc) {
-    return (
-      <p className="rounded-lg border border-dashed border-border bg-secondary/30 py-6 text-center text-sm text-muted-foreground">
-        Nessun documento caricato
-      </p>
-    )
+  async function saveToggle(field: string, value: boolean, onError: () => void) {
+    try {
+      const res = await fetch(`/api/clienti/${cliente.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      })
+      if (!res.ok) throw new Error("Aggiornamento non riuscito")
+      toast.success("Aggiornato")
+    } catch {
+      onError()
+      toast.error("Errore nel salvataggio")
+    }
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <ul className="flex flex-col gap-2">
-        {docs.map((d) => {
-          const present = hasValue(d.value)
-          return (
-            <li
-              key={d.label}
-              className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5"
-            >
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-navy">
-                <IconFileText size={18} stroke={1.8} />
-              </span>
-              <div className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-[13px] font-medium text-foreground">
-                  {d.label}
-                </span>
-                {present ? (
-                  <span className="truncate text-[11px] text-muted-foreground">{d.value}</span>
-                ) : null}
-              </div>
-              <Badge
-                className={cn(
-                  "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
-                  present ? "bg-success/10 text-success" : "bg-muted text-muted-foreground",
-                )}
-              >
-                {present ? "Presente" : "Mancante"}
-              </Badge>
-              <button
-                type="button"
-                aria-label={present ? "Visualizza" : "Carica"}
-                className="flex size-7 shrink-0 items-center justify-center rounded-md text-navy transition-colors hover:bg-secondary"
-              >
-                {present ? <IconPhoto size={16} stroke={1.8} /> : <IconUpload size={16} stroke={1.8} />}
-              </button>
-            </li>
-          )
-        })}
-      </ul>
-
-      <div className="flex flex-wrap gap-6 border-t border-border pt-4">
+      <div className="flex flex-wrap gap-6 border-b border-border pb-4">
         <DataField label="Verifica documentale">
-          <Switch checked={verifica} onCheckedChange={setVerifica} />
+          <Switch
+            checked={verifica}
+            onCheckedChange={(v) => {
+              setVerifica(v)
+              saveToggle("Verifica documentale", v, () => setVerifica(!v))
+            }}
+          />
         </DataField>
         <DataField label="Layout verificato">
-          <Switch checked={layout} onCheckedChange={setLayout} />
+          <Switch
+            checked={layout}
+            onCheckedChange={(v) => {
+              setLayout(v)
+              saveToggle("Layout verificato", v, () => setLayout(!v))
+            }}
+          />
         </DataField>
       </div>
 
-      {/* Allegati generici */}
-      <div className="flex flex-col gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-navy">
-          Allegati generici
-        </span>
-        {allegati.length > 0 ? (
-          <ul className="flex flex-col gap-2">
-            {allegati.map((a) => (
-              <li
-                key={a}
-                className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2"
-              >
-                <IconPaperclip size={16} stroke={1.8} className="text-navy" />
-                <span className="truncate text-[13px] text-foreground">{a}</span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        <div className="flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border bg-secondary/30 py-6 text-center">
-          <IconUpload size={22} stroke={1.6} className="text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">
-            Trascina qui i file o clicca per caricare
-          </span>
-        </div>
-      </div>
+      <AllegatiSection
+        recordTipo="cliente"
+        recordId={cliente.id}
+        nomeRecord={cliente["Nome Clienti"]}
+      />
     </div>
   )
 }

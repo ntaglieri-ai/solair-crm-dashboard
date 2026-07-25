@@ -19,8 +19,6 @@ import {
   IconTimeline,
   IconPlus,
   IconPhone,
-  IconDownload,
-  IconPhoto,
   IconSend,
   IconX,
   IconPencil,
@@ -51,13 +49,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import {
   type Lead,
@@ -66,6 +57,7 @@ import {
 } from "@/lib/mock-data"
 import { LeadAvatar } from "./lead-utils"
 import { QuickCompitoDialog } from "@/components/compiti/quick-compito-dialog"
+import { AllegatiSection } from "@/components/shared/allegati-section"
 
 /* ---------- Sezione collassabile ---------- */
 
@@ -676,50 +668,7 @@ function NoteSection({ lead }: { lead: Lead }) {
   )
 }
 
-/* ---------- Sezione Allegati ---------- */
-
-function Allegati({ lead }: { lead: Lead }) {
-  const docs = lead.documenti ?? []
-  if (docs.length === 0) {
-    return (
-      <p className="rounded-lg border border-dashed border-border bg-secondary/30 py-6 text-center text-sm text-muted-foreground">
-        Nessun allegato
-      </p>
-    )
-  }
-  return (
-    <ul className="flex flex-col gap-2">
-      {docs.map((doc) => {
-        const Icon = doc.formato === "jpg" || doc.formato === "png" ? IconPhoto : IconFileText
-        return (
-          <li
-            key={doc.id}
-            className="group flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5"
-          >
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-navy">
-              <Icon size={18} stroke={1.8} />
-            </span>
-            <div className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate text-[13px] font-medium text-foreground">
-                {doc.nome}
-              </span>
-              <span className="text-[11px] text-muted-foreground">
-                {doc.dimensione} · {doc.dataUpload}
-              </span>
-            </div>
-            <button
-              type="button"
-              aria-label="Scarica"
-              className="flex size-7 items-center justify-center rounded-md text-navy opacity-0 transition-all hover:bg-secondary group-hover:opacity-100"
-            >
-              <IconDownload size={16} stroke={1.8} />
-            </button>
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
+/* ---------- Sezione Allegati (vedi components/shared/allegati-section.tsx) ---------- */
 
 /* ---------- Sezioni Attività (aperte / chiuse) ---------- */
 
@@ -1212,7 +1161,6 @@ export function LeadDetailContent({
 
   const counts: Record<string, number> = {
     "section-note": 1,
-    "section-allegati": lead.documenti?.length ?? 0,
     "section-attivita-aperte": openTasks.length,
     "section-attivita-chiuse": 1,
     "section-email": 1,
@@ -1264,26 +1212,8 @@ export function LeadDetailContent({
         id="section-allegati"
         title="Allegati"
         icon={IconPaperclip}
-        action={
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button size="sm" variant="outline" className="h-7 bg-card text-xs">
-                  <IconPaperclip size={14} stroke={1.8} data-icon="inline-start" />
-                  Allega
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end">
-              <DropdownMenuGroup>
-                <DropdownMenuItem>Da computer</DropdownMenuItem>
-                <DropdownMenuItem>Da URL</DropdownMenuItem>
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        }
       >
-        <Allegati lead={lead} />
+        <AllegatiSection recordTipo="lead" recordId={lead.id} nomeRecord={lead["Nome Lead"]} />
       </Section>
 
       <Section

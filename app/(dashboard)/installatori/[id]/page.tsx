@@ -5,6 +5,7 @@ import { requirePage } from "@/lib/permissions/server"
 import { getInstallatoreById } from "@/lib/installatori/repository"
 import { Badge } from "@/components/ui/badge"
 import { InstallatoreDetailActions } from "@/components/installatori/installatore-detail-actions"
+import { AllegatiSection } from "@/components/shared/allegati-section"
 
 function value(text: string | null) {
   return text?.trim() || "—"
@@ -102,6 +103,14 @@ export default async function InstallatoreDetailPage({
             </dd>
           </div>
         </dl>
+      </section>
+
+      <section className="border-b border-border pb-5">
+        <AllegatiSection
+          recordTipo="installatore"
+          recordId={installatore.id}
+          nomeRecord={installatore.nome}
+        />
       </section>
     </div>
   )

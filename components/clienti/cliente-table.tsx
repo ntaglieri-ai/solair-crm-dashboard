@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { MoreHorizontal, ExternalLink, Trash2 } from "lucide-react"
+import { MoreHorizontal, ExternalLink, Trash2, GripVertical } from "lucide-react"
 import { IconArrowUp } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import {
@@ -66,6 +66,9 @@ export function ClienteTable({
   sortDir,
   onSort,
   density = "normale",
+  columnWidths = {},
+  onColumnWidthChange,
+  onColumnReorder,
 }: {
   clienti: ClienteRecord[]
   columns: ClienteColumn[]
@@ -77,15 +80,50 @@ export function ClienteTable({
   sortDir: SortDir
   onSort: (col: ClienteColumnId) => void
   density?: Density
+  /** Larghezze personalizzate per colonna (persistite dal chiamante); se assente, usa la larghezza di default di columnWidth(). */
+  columnWidths?: Partial<Record<ClienteColumnId, number>>
+  onColumnWidthChange?: (column: ClienteColumnId, width: number) => void
+  onColumnReorder?: (source: ClienteColumnId, target: ClienteColumnId) => void
 }) {
   const router = useRouter()
   const [stuck, setStuck] = useState(false)
+  const [draggingColumn, setDraggingColumn] = useState<ClienteColumnId | null>(null)
+  const [dragOverColumn, setDragOverColumn] = useState<ClienteColumnId | null>(null)
   const allSelected =
     clienti.length > 0 && clienti.every((c) => selected.has(c.id))
   const colSpan = columns.length + 2
   const cellPad = DENSITY_CELL[density]
+  const resolvedWidths = useMemo(() => {
+    const widths = {} as Record<ClienteColumnId, number>
+    for (const column of columns) {
+      widths[column.id] = columnWidths[column.id] ?? columnWidth(column.id)
+    }
+    return widths
+  }, [columns, columnWidths])
   const tableWidth =
-    44 + columns.reduce((sum, col) => sum + columnWidth(col.id), 0) + 64
+    44 + columns.reduce((sum, col) => sum + resolvedWidths[col.id], 0) + 64
+
+  const startResize = (
+    event: React.PointerEvent<HTMLButtonElement>,
+    column: ClienteColumnId,
+  ) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const startX = event.clientX
+    const startWidth = resolvedWidths[column]
+    const onMove = (moveEvent: PointerEvent) => {
+      onColumnWidthChange?.(
+        column,
+        Math.min(480, Math.max(72, startWidth + moveEvent.clientX - startX)),
+      )
+    }
+    const onEnd = () => {
+      window.removeEventListener("pointermove", onMove)
+      window.removeEventListener("pointerup", onEnd)
+    }
+    window.addEventListener("pointermove", onMove)
+    window.addEventListener("pointerup", onEnd)
+  }
 
   return (
     <DataTableShell
@@ -96,7 +134,7 @@ export function ClienteTable({
       <colgroup>
         <col style={{ width: 44 }} />
         {columns.map((column) => (
-          <col key={column.id} style={{ width: columnWidth(column.id) }} />
+          <col key={column.id} style={{ width: resolvedWidths[column.id] }} />
         ))}
         <col style={{ width: 64 }} />
       </colgroup>
@@ -121,38 +159,82 @@ export function ClienteTable({
               return (
                 <TableHead
                   key={col.id}
+                  draggable
+                  onDragStart={(event) => {
+                    event.dataTransfer.effectAllowed = "move"
+                    event.dataTransfer.setData("text/plain", col.id)
+                    setDraggingColumn(col.id)
+                  }}
+                  onDragEnd={() => {
+                    setDraggingColumn(null)
+                    setDragOverColumn(null)
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault()
+                    if (draggingColumn && draggingColumn !== col.id) {
+                      setDragOverColumn(col.id)
+                    }
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    const source = event.dataTransfer.getData(
+                      "text/plain",
+                    ) as ClienteColumnId
+                    if (source && source !== col.id) onColumnReorder?.(source, col.id)
+                    setDraggingColumn(null)
+                    setDragOverColumn(null)
+                  }}
                   className={cn(
-                    "overflow-hidden whitespace-nowrap border-r border-foreground/30",
+                    "group relative overflow-hidden whitespace-nowrap border-r border-foreground/30 transition-colors",
+                    draggingColumn === col.id && "opacity-45",
+                    dragOverColumn === col.id && "bg-teal/10",
                     left ? "text-left" : "text-center",
                   )}
                   style={{
-                    width: columnWidth(col.id),
-                    minWidth: columnWidth(col.id),
-                    maxWidth: columnWidth(col.id),
+                    width: resolvedWidths[col.id],
+                    minWidth: resolvedWidths[col.id],
+                    maxWidth: resolvedWidths[col.id],
                   }}
                 >
+                  <div className="flex min-w-0 items-center">
+                    <GripVertical
+                      className="mr-1 size-3.5 shrink-0 cursor-grab text-muted-foreground/45 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+                      aria-hidden="true"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => onSort(col.id)}
+                      className={cn(
+                        "inline-flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-xs font-semibold transition-colors hover:text-foreground",
+                        active ? "text-navy" : "text-muted-foreground",
+                        left ? "justify-start" : "justify-center",
+                      )}
+                    >
+                      <span className="truncate">{col.label}</span>
+                      <IconArrowUp
+                        size={14}
+                        stroke={2}
+                        className={cn(
+                          "shrink-0 transition-all duration-150",
+                          active
+                            ? "text-navy opacity-100"
+                            : "text-muted-foreground opacity-30",
+                          active && sortDir === "desc" && "rotate-180",
+                        )}
+                      />
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => onSort(col.id)}
-                    className={cn(
-                      "inline-flex w-full items-center gap-1 text-xs font-semibold transition-colors hover:text-foreground",
-                      active ? "text-navy" : "text-muted-foreground",
-                      left ? "justify-start" : "justify-center",
-                    )}
-                  >
-                    <span className="truncate">{col.label}</span>
-                    <IconArrowUp
-                      size={14}
-                      stroke={2}
-                      className={cn(
-                        "transition-all duration-150",
-                        active
-                          ? "text-navy opacity-100"
-                          : "text-muted-foreground opacity-30",
-                        active && sortDir === "desc" && "rotate-180",
-                      )}
-                    />
-                  </button>
+                    aria-label={`Ridimensiona colonna ${col.label}`}
+                    draggable={false}
+                    onPointerDown={(event) => startResize(event, col.id)}
+                    onDoubleClick={(event) => {
+                      event.stopPropagation()
+                      onColumnWidthChange?.(col.id, columnWidth(col.id))
+                    }}
+                    className="absolute inset-y-0 right-0 z-10 w-2 cursor-col-resize touch-none before:absolute before:inset-y-2 before:left-1/2 before:w-px before:bg-teal/0 before:transition-colors hover:before:bg-teal"
+                  />
                 </TableHead>
               )
             })}
@@ -196,9 +278,9 @@ export function ClienteTable({
                       left ? "text-left" : "text-center",
                     )}
                     style={{
-                      width: columnWidth(col.id),
-                      minWidth: columnWidth(col.id),
-                      maxWidth: columnWidth(col.id),
+                      width: resolvedWidths[col.id],
+                      minWidth: resolvedWidths[col.id],
+                      maxWidth: resolvedWidths[col.id],
                     }}
                   >
                     <div

@@ -50,5 +50,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ ok: true, email: utente.email })
+  const response = NextResponse.json({ ok: true, email: utente.email })
+  // Invalida subito la cache del middleware (scrm_mcp) — altrimenti il
+  // cookie resterebbe "1" (deve cambiare password) fino a scadenza,
+  // rimandando l'utente in loop su /cambia-password nonostante l'abbia
+  // gia' cambiata.
+  response.cookies.set("scrm_mcp", "0", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    maxAge: 60,
+    path: "/",
+  })
+  return response
 }

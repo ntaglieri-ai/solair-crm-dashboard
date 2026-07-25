@@ -73,27 +73,62 @@ export async function middleware(request: NextRequest) {
   const isCompletePasswordChangeRoute =
     request.nextUrl.pathname === "/api/auth/complete-password-change"
 
+  // Cache del flag "deve cambiare password" in un cookie, per evitare un
+  // giro reale al database a OGNI navigazione (trovato 25/07: il file era
+  // pronto da giorni ma mai distribuito in produzione — appena arrivato in
+  // produzione ha reso l'intera app lenta, perche' girava su ogni singola
+  // pagina). Cache breve (60s, non ore): oggi nessuna azione admin forza
+  // il reset della password di un utente già loggato, ma se in futuro
+  // venisse aggiunta una funzione simile, il disallineamento resterebbe
+  // comunque limitato a al massimo un minuto, non ore. Il cookie viene
+  // comunque invalidato subito dopo un cambio password riuscito (vedi
+  // app/api/auth/complete-password-change/route.ts).
+  const MCP_COOKIE = "scrm_mcp"
+  const cachedFlag = request.cookies.get(MCP_COOKIE)?.value
+
   // Solo dopo un login riuscito: se l'utente ha ancora la password temporanea
   // (must_change_password), blocca l'accesso a tutto il resto del CRM finche'
   // non la sostituisce. /login resta fuori da questo controllo (vedi sopra).
   if (isAuthenticated && !isPublicRoute && !isCompletePasswordChangeRoute) {
-    const { data: utente } = await supabase
-      .from("utenti")
-      .select("must_change_password")
-      .eq("auth_user_id", claimsData!.claims!.sub as string)
-      .maybeSingle()
-    const mustChangePassword = utente?.must_change_password === true
+    let mustChangePassword: boolean
+    let shouldCacheCookie = false
+
+    if (cachedFlag === "0" || cachedFlag === "1") {
+      mustChangePassword = cachedFlag === "1"
+    } else {
+      const { data: utente } = await supabase
+        .from("utenti")
+        .select("must_change_password")
+        .eq("auth_user_id", claimsData!.claims!.sub as string)
+        .maybeSingle()
+      mustChangePassword = utente?.must_change_password === true
+      shouldCacheCookie = true
+    }
+
+    const setCacheCookie = (response: NextResponse) => {
+      if (shouldCacheCookie) {
+        response.cookies.set(MCP_COOKIE, mustChangePassword ? "1" : "0", {
+          httpOnly: true,
+          secure: true,
+          sameSite: "lax",
+          maxAge: 60,
+          path: "/",
+        })
+      }
+      return response
+    }
 
     if (mustChangePassword && !isCambiaPasswordRoute) {
       const url = request.nextUrl.clone()
       url.pathname = "/cambia-password"
-      return NextResponse.redirect(url)
+      return setCacheCookie(NextResponse.redirect(url))
     }
     if (!mustChangePassword && isCambiaPasswordRoute) {
       const url = request.nextUrl.clone()
       url.pathname = "/"
-      return NextResponse.redirect(url)
+      return setCacheCookie(NextResponse.redirect(url))
     }
+    setCacheCookie(supabaseResponse)
   }
 
   return supabaseResponse

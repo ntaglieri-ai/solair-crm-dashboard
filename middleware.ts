@@ -45,7 +45,15 @@ export async function middleware(request: NextRequest) {
   // La pagina di consenso OIDC deve poter ricevere la richiesta anche senza
   // sessione: gestisce internamente il rinvio a /login preservando
   // authorization_id, cosi' il flusso riprende dopo l'autenticazione.
-  const publicRoutes = ["/login", "/oauth/consent", "/api/auth/password-reset"]
+  // /api/keep-warm e' pingato da Vercel Cron (nessuna sessione utente) —
+  // protetto dal proprio controllo sul segreto CRON_SECRET, non da questo
+  // gate di autenticazione.
+  const publicRoutes = [
+    "/login",
+    "/oauth/consent",
+    "/api/auth/password-reset",
+    "/api/keep-warm",
+  ]
   const isPublicRoute = publicRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route)
   )

@@ -355,20 +355,26 @@ export function LeadsClient({
     setPage(1)
   }, [])
 
-  // Crea un nuovo lead via API e torna alla prima pagina
+  // Crea un nuovo lead via API e torna alla prima pagina — SOLO se la
+  // creazione riesce davvero. Prima i filtri/pagina/ordinamento venivano
+  // azzerati subito al click, indipendentemente dall'esito: se la
+  // creazione falliva (es. il bug data 25/07), l'utente si ritrovava
+  // comunque con la vista resettata per un errore, sembrando che "la
+  // pagina si mischiasse" senza motivo.
   const handleCreateLead = (lead: Lead) => {
     createLead.mutate(lead, {
-      onSuccess: () =>
+      onSuccess: () => {
         toast.success("Lead creato", {
           description: `${lead["Nome Lead"]} aggiunto al CRM.`,
-        }),
+        })
+        setFilters(DEFAULT_FILTERS)
+        setAdvanced(EMPTY_ADVANCED)
+        setOnlyDuplicates(false)
+        setSortBy(null)
+        setPage(1)
+      },
       onError: () => toast.error("Creazione non riuscita"),
     })
-    setFilters(DEFAULT_FILTERS)
-    setAdvanced(EMPTY_ADVANCED)
-    setOnlyDuplicates(false)
-    setSortBy(null)
-    setPage(1)
   }
 
   // Controllo duplicati: usa il conteggio aggregato dalle statistiche

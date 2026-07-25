@@ -71,18 +71,14 @@ const EMPTY_FORM: FormState = {
   descrizione: "",
 }
 
+// Genera un timestamp in formato ISO (es. "2026-07-25T12:20:00.000Z"), non
+// il formato italiano GG/MM/AAAA — quest'ultimo mandava PostgreSQL in
+// errore ("date/time field value out of range") ogni volta che il giorno
+// del mese superava 12, perche' veniva letto come mese (es. "25/07" letto
+// come mese 25, invalido). Trovato e sistemato il 25/07 durante il test
+// della creazione lead.
 function nowStamp() {
-  const d = new Date()
-  const date = d.toLocaleDateString("it-IT", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  })
-  const time = d.toLocaleTimeString("it-IT", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-  return `${date} ${time}`
+  return new Date().toISOString()
 }
 
 export function NewLeadDialog({

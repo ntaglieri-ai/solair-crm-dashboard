@@ -225,12 +225,14 @@ export async function getAllLeads(filters?: {
     else if (filters.score === "freddo") query = query.lt("valutazione", 50)
   }
   if (filters?.search?.trim()) {
-    // Fulltext search con indice GIN
-    query = query.textSearch(
-      "idx_leads_search",
-      filters.search.trim(),
-      { type: "websearch", config: "italian" }
-    )
+    // Non esiste una colonna tsvector reale su leads (verificato 25/07 via
+    // information_schema — query vuota, nessun risultato): il precedente
+    // query.textSearch("idx_leads_search", ...) passava per errore il nome
+    // di un indice come se fosse una colonna, e comunque quella colonna
+    // non esiste. Stesso meccanismo ilike/or gia' usato in Cliente, niente
+    // migration necessaria.
+    const p = `%${filters.search.trim()}%`
+    query = query.or(`nome_lead.ilike.${p},email.ilike.${p},telefono.ilike.${p}`)
   }
 
   // Filtri avanzati "per campo" — applicati PRIMA di range/paginazione.
@@ -343,11 +345,8 @@ export async function getTotalCount(filters?: {
     else if (filters.score === "freddo") query = query.lt("valutazione", 50)
   }
   if (filters?.search?.trim()) {
-    query = query.textSearch(
-      "idx_leads_search",
-      filters.search.trim(),
-      { type: "websearch", config: "italian" }
-    )
+    const p = `%${filters.search.trim()}%`
+    query = query.or(`nome_lead.ilike.${p},email.ilike.${p},telefono.ilike.${p}`)
   }
 
   // Stessi filtri avanzati della lista, per un conteggio coerente.

@@ -34,7 +34,9 @@ export async function middleware(request: NextRequest) {
 
   // Verifica il JWT tramite JWKS in cache. Con chiavi asimmetriche evita il
   // roundtrip a Supabase Auth che getUser() esegue a ogni navigazione.
+  const tClaims = Date.now()
   const { data: claimsData } = await supabase.auth.getClaims()
+  console.log(`[perf] middleware getClaims: ${Date.now() - tClaims}ms`)
   const isAuthenticated = Boolean(claimsData?.claims?.sub)
 
   // Route pubbliche (non protette). Il reset password self-service e' invocato
@@ -96,11 +98,13 @@ export async function middleware(request: NextRequest) {
     if (cachedFlag === "0" || cachedFlag === "1") {
       mustChangePassword = cachedFlag === "1"
     } else {
+      const tMcp = Date.now()
       const { data: utente } = await supabase
         .from("utenti")
         .select("must_change_password")
         .eq("auth_user_id", claimsData!.claims!.sub as string)
         .maybeSingle()
+      console.log(`[perf] middleware must_change_password query: ${Date.now() - tMcp}ms`)
       mustChangePassword = utente?.must_change_password === true
       shouldCacheCookie = true
     }

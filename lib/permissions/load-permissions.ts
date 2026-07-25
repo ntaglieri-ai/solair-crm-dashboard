@@ -240,6 +240,7 @@ async function loadCurrentUser() {
 }
 
 async function loadCurrentPermissionSnapshotUncached(): Promise<PermissionSnapshot> {
+  const t0 = Date.now()
   const fastSupabase = await createClient()
   const { data: claimsData } = await fastSupabase.auth.getClaims()
   const claims = claimsData?.claims
@@ -258,8 +259,12 @@ async function loadCurrentPermissionSnapshotUncached(): Promise<PermissionSnapsh
     })
   }
 
+  const tAuth = Date.now()
   const { data: fastData, error: fastError } =
     await fastSupabase.rpc("get_permission_snapshot")
+  console.log(
+    `[perf] get_permission_snapshot: ${Date.now() - tAuth}ms, error=${fastError?.message ?? "none"}, hasData=${Boolean(fastData)}`,
+  )
   if (!fastError && fastData && typeof fastData === "object") {
     const payload = fastData as {
       utente?: UtenteRow
@@ -319,9 +324,11 @@ async function loadCurrentPermissionSnapshotUncached(): Promise<PermissionSnapsh
         snapshot.scopes[row.risorsa] = row.scope ?? "none"
     }
 
+    console.log(`[perf] loadCurrentPermissionSnapshot TOTALE (percorso veloce): ${Date.now() - t0}ms`)
     return snapshot
   }
 
+  console.warn("[perf] RPC fallita/assente, uso il FALLBACK LENTO (query multiple separate)")
   // Fallback compatibile finché la migration RPC non è stata applicata.
   const { supabase, authUser, utente } = await loadCurrentUser()
 
@@ -391,6 +398,7 @@ async function loadCurrentPermissionSnapshotUncached(): Promise<PermissionSnapsh
     snapshot.scopes[row.risorsa] = row.scope ?? "none"
   }
 
+  console.log(`[perf] loadCurrentPermissionSnapshot TOTALE (percorso lento/fallback): ${Date.now() - t0}ms`)
   return snapshot
 }
 

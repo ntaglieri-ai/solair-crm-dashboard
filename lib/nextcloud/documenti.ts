@@ -22,6 +22,7 @@ type CurrentUser = {
  * messaggio, cosi' la pagina mostra una CTA invece di dati finti.
  */
 export async function loadDocumentiData(user: CurrentUser): Promise<DocumentiData> {
+  const tStart = Date.now()
   const appPassword = await getNextcloudAppPassword(user.utenteId)
   if (!appPassword) {
     return {
@@ -41,6 +42,25 @@ export async function loadDocumentiData(user: CurrentUser): Promise<DocumentiDat
   const supabase = await createClient()
   const pathRules = await loadNcPathRules()
 
+  // "recentFiles" non dipende dai preferiti: la avviamo subito, in
+  // PARALLELO con la sincronizzazione preferiti qui sotto (che ha una sua
+  // chiamata WebDAV separata, listFavorites) — prima erano in sequenza,
+  // sommando due chiamate di rete verso Nextcloud invece di sovrapporle.
+  // Trovato 25/07 mentre si cercava la causa della lentezza generale.
+  const tRecentStart = Date.now()
+  const recentFilesPromise = recentFiles(username, appPassword, 20)
+    .then((files) => {
+      console.log(`[perf] nextcloud recentFiles: ${Date.now() - tRecentStart}ms`)
+      return files
+    })
+    .catch((e) => {
+      console.error(
+        `[nextcloud] recentFiles fallito dopo ${Date.now() - tRecentStart}ms:`,
+        e,
+      )
+      return null
+    })
+
   // Preferiti (RLS: l'utente vede solo i propri) + filtro path-based per ruolo.
   const { data: favRows } = await supabase
     .from("cartelle_preferite")
@@ -56,11 +76,13 @@ export async function loadDocumentiData(user: CurrentUser): Promise<DocumentiDat
   // cartelle marcate come preferite direttamente in Nextcloud che non sono
   // ancora nella tabella, cosi' persistono con una label. Best-effort: se il
   // REPORT fallisce mostriamo comunque i preferiti gia' salvati.
+  const tFavStart = Date.now()
   try {
     const existingPaths = new Set(favorites.map((f) => normalizeNcPath(f.path)))
     const ncFavFolders = (await listFavorites(username, appPassword)).filter(
       (e) => e.isDir && canAccessNcPath(e.path, user.roleCode, pathRules),
     )
+    console.log(`[perf] nextcloud listFavorites: ${Date.now() - tFavStart}ms`)
     const toImport = ncFavFolders.filter((e) => !existingPaths.has(normalizeNcPath(e.path)))
 
     if (toImport.length > 0) {
@@ -75,14 +97,16 @@ export async function loadDocumentiData(user: CurrentUser): Promise<DocumentiDat
     }
     favorites.sort((a, b) => a.label.localeCompare(b.label))
   } catch (e) {
-    console.error("[nextcloud] import favoriti nativi fallito:", e)
+    console.error(`[nextcloud] import favoriti nativi fallito dopo ${Date.now() - tFavStart}ms:`, e)
   }
 
-  // Recenti via WebDAV, poi filtro path-based server-side.
+  // Recenti: recupera il risultato della chiamata avviata in parallelo sopra.
   let recent: DocumentoRecente[] = []
   let message: string | null = null
-  try {
-    const files = await recentFiles(username, appPassword, 20)
+  const files = await recentFilesPromise
+  if (files === null) {
+    message = "Impossibile leggere i file recenti da Nextcloud."
+  } else {
     recent = files
       .filter((e) => canAccessNcPath(e.path, user.roleCode, pathRules))
       .slice(0, 8)
@@ -93,10 +117,8 @@ export async function loadDocumentiData(user: CurrentUser): Promise<DocumentiDat
         modified: e.lastModified,
         fileId: e.fileId,
       }))
-  } catch (e) {
-    message = "Impossibile leggere i file recenti da Nextcloud."
-    console.error("[nextcloud] recentFiles fallito:", e)
   }
 
+  console.log(`[perf] loadDocumentiData TOTALE: ${Date.now() - tStart}ms`)
   return { connected: true, message, favorites, recent }
 }

@@ -48,6 +48,7 @@ import {
 } from "@/lib/mock-data"
 import { TagPicker } from "./tag-controls"
 import { useTags } from "@/lib/tag-store"
+import { usePermissions } from "@/lib/permissions/provider"
 import { formatDMY } from "@/components/compiti/new-compito-dialog"
 
 const STATI: StatoLead[] = [
@@ -75,6 +76,7 @@ export function LeadRowContextMenu({
   onRefresh: () => void
 }) {
   const { owners } = useTags()
+  const permissions = usePermissions()
   const router = useRouter()
   const [tagOpen, setTagOpen] = useState(false)
   const [owner, setOwner] = useState(lead["Lead Proprietario"] ?? "")
@@ -304,10 +306,12 @@ export function LeadRowContextMenu({
             <IconDownload size={15} stroke={1.8} />
             Esporta questo lead
           </ContextMenuItem>
-          <ContextMenuItem variant="destructive" onClick={() => setConfirmDel(true)}>
-            <IconTrash size={15} stroke={1.8} />
-            Elimina
-          </ContextMenuItem>
+          {permissions.canRecord("lead", "delete") ? (
+            <ContextMenuItem variant="destructive" onClick={() => setConfirmDel(true)}>
+              <IconTrash size={15} stroke={1.8} />
+              Elimina
+            </ContextMenuItem>
+          ) : null}
         </ContextMenuContent>
       </ContextMenu>
 

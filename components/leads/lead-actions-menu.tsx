@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { usePermissions } from "@/lib/permissions/provider"
 import {
   IconDotsVertical,
   IconMail,
@@ -111,6 +112,7 @@ export function LeadActionsMenu({
   onBulkDelete: () => void
 }) {
   const { owners } = useTags()
+  const permissions = usePermissions()
   const [dialog, setDialog] = useState<Dialogs>("none")
   const hasSelection = selectedCount > 0
 
@@ -306,16 +308,20 @@ export function LeadActionsMenu({
                   Esporta selezione
                 </DropdownMenuItem>
               </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() => setDialog("delete")}
-                >
-                  <IconTrash size={16} stroke={1.8} data-icon="inline-start" />
-                  Eliminazione di massa
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
+              {permissions.canRecord("lead", "delete") ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => setDialog("delete")}
+                    >
+                      <IconTrash size={16} stroke={1.8} data-icon="inline-start" />
+                      Eliminazione di massa
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </>
+              ) : null}
             </>
           ) : (
             /* ---------------- STATO A: azioni generali ---------------- */

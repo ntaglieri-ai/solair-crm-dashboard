@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
+import { usePermissions } from "@/lib/permissions/provider"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -87,6 +88,16 @@ export function NewLeadDialog({
   onCreate,
 }: NewLeadDialogProps) {
   const { owners } = useTags()
+  const permissions = usePermissions()
+  const currentUserId = permissions.snapshot.subject.userId ?? ""
+  // Un Agente/Standard puo' inserire solo lead assegnati a se' stesso o non
+  // assegnati (regola di sicurezza a livello di database) — mostrargli
+  // l'intero elenco proprietari e' fuorviante, dato che scegliere chiunque
+  // altro fallirebbe comunque. Direttore+/Admin/Superadmin vedono tutti.
+  const assignableOwners =
+    permissions.getScope("lead") === "all"
+      ? owners
+      : owners.filter((owner) => owner.id === currentUserId)
   const ownerItems = useMemo(
     () => Object.fromEntries(owners.map((owner) => [owner.id, owner.nome])),
     [owners],
@@ -114,7 +125,7 @@ export function NewLeadDialog({
       "Badge di nota": false,
       Tag: [],
       "Nome Lead": nomeCompleto,
-      "Lead Proprietario": form.proprietario || owners[0]?.id || "",
+      "Lead Proprietario": form.proprietario || currentUserId,
       "Città": form.citta || "—",
       Provincia: form.provincia || "—",
       "Stato Lead": form.stato,
@@ -158,9 +169,6 @@ export function NewLeadDialog({
     }
 
     onCreate(lead)
-    toast.success("Lead creato", {
-      description: `${nomeCompleto} è stato aggiunto all'elenco.`,
-    })
     setForm(EMPTY_FORM)
     onOpenChange(false)
   }
@@ -304,7 +312,7 @@ export function NewLeadDialog({
             <Label>Proprietario</Label>
             <Select
               items={ownerItems}
-              value={form.proprietario || owners[0]?.id || ""}
+              value={form.proprietario || currentUserId}
               onValueChange={(v) => set("proprietario", v ?? "")}
             >
               <SelectTrigger className="bg-card">
@@ -312,7 +320,7 @@ export function NewLeadDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {owners.map((owner) => (
+                  {assignableOwners.map((owner) => (
                     <SelectItem key={owner.id} value={owner.id}>
                       {owner.nome}
                     </SelectItem>

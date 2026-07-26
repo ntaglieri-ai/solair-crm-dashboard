@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button"
 import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
 import { EditRecordDialog } from "@/components/shared/edit-record-dialog"
 import { useDeleteLead } from "@/lib/leads/hooks"
+import { usePermissions } from "@/lib/permissions/provider"
 import { IconPlus } from "@tabler/icons-react"
 import {
   DropdownMenu,
@@ -49,6 +50,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const deleteLead = useDeleteLead()
+  const permissions = usePermissions()
   const [showLost, setShowLost] = useState(false)
   const [markingLost, setMarkingLost] = useState(false)
   const [showConvert, setShowConvert] = useState(false)
@@ -140,11 +142,15 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
                   <XCircle data-icon="inline-start" />
                   Segna come perso
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onClick={() => setShowDelete(true)}>
-                  <Trash2 data-icon="inline-start" />
-                  Elimina
-                </DropdownMenuItem>
+                {permissions.canRecord("lead", "delete") ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem variant="destructive" onClick={() => setShowDelete(true)}>
+                      <Trash2 data-icon="inline-start" />
+                      Elimina
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>

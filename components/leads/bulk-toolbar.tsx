@@ -24,6 +24,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { STATO_LEAD_ORDER } from "@/lib/mock-data"
 import { useTags } from "@/lib/tag-store"
+import { usePermissions } from "@/lib/permissions/provider"
 
 const ICON_BTN =
   "flex size-9 items-center justify-center rounded-lg text-navy transition-transform duration-150 hover:scale-110 hover:bg-secondary"
@@ -44,6 +45,8 @@ export function BulkToolbar({
   onClear: () => void
 }) {
   const { owners } = useTags()
+  const permissions = usePermissions()
+  const canDelete = permissions.canRecord("lead", "delete")
   if (count === 0) return null
 
   return (
@@ -130,21 +133,23 @@ export function BulkToolbar({
         </Tooltip>
 
         {/* Elimina */}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <button
-                type="button"
-                aria-label="Elimina"
-                className="flex size-9 items-center justify-center rounded-lg text-destructive transition-transform duration-150 hover:scale-110 hover:bg-destructive/10"
-                onClick={onDelete}
-              >
-                <IconTrash size={18} stroke={1.8} />
-              </button>
-            }
-          />
-          <TooltipContent>Elimina</TooltipContent>
-        </Tooltip>
+        {canDelete ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label="Elimina"
+                  className="flex size-9 items-center justify-center rounded-lg text-destructive transition-transform duration-150 hover:scale-110 hover:bg-destructive/10"
+                  onClick={onDelete}
+                >
+                  <IconTrash size={18} stroke={1.8} />
+                </button>
+              }
+            />
+            <TooltipContent>Elimina</TooltipContent>
+          </Tooltip>
+        ) : null}
 
         <span className="mx-1 h-6 w-px bg-border" />
 

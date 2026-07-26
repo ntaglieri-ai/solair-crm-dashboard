@@ -51,6 +51,7 @@ import {
 } from "@/lib/mock-data"
 import { LeadCell, NUMERIC_COLUMNS } from "./lead-cell"
 import { LeadRowContextMenu } from "./lead-row-context-menu"
+import { usePermissions } from "@/lib/permissions/provider"
 
 export type SortDir = "asc" | "desc"
 export type Density = "comoda" | "normale" | "densa"
@@ -105,6 +106,8 @@ export function LeadTable({
   onScrollerScroll?: (el: HTMLDivElement) => void
 }) {
   const router = useRouter()
+  const permissions = usePermissions()
+  const canDelete = permissions.canRecord("lead", "delete")
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [stuck, setStuck] = useState(false)
   const [draggingColumn, setDraggingColumn] = useState<LeadColumnId | null>(null)
@@ -465,14 +468,18 @@ export function LeadTable({
                     <UserCheck data-icon="inline-start" />
                     Converti a cliente
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={() => onDelete(lead)}
-                  >
-                    <Trash2 data-icon="inline-start" />
-                    Elimina
-                  </DropdownMenuItem>
+                  {canDelete ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() => onDelete(lead)}
+                      >
+                        <Trash2 data-icon="inline-start" />
+                        Elimina
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>

@@ -17,6 +17,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react"
 import { StatoBadge, PrioritaBadge, CompitoAvatar, correlatoHref } from "./compito-utils"
+import { useDeleteCompito } from "@/lib/compiti/hooks"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -41,6 +42,7 @@ export function CompitoDetailHeader({ compito }: { compito: Compito }) {
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const deleteCompito = useDeleteCompito()
 
   // Dopo una modifica salvata router.refresh() riconsegna il compito
   // aggiornato: riallinea il badge di stato locale al valore del server.
@@ -50,20 +52,19 @@ export function CompitoDetailHeader({ compito }: { compito: Compito }) {
     setStato(compito.Stato)
   }
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (deleting) return
     setDeleting(true)
-    try {
-      const res = await fetch(`/api/compiti/${compito.id}`, {
-        method: "DELETE",
-      })
-      if (!res.ok) throw new Error("Eliminazione non riuscita")
-      toast.success("Compito eliminato", { description: compito.Oggetto })
-      router.push("/compiti")
-    } catch {
-      toast.error("Errore nell'eliminazione")
-      setDeleting(false)
-    }
+    deleteCompito.mutate(compito.id, {
+      onSuccess: () => {
+        toast.success("Compito eliminato", { description: compito.Oggetto })
+        router.push("/compiti")
+      },
+      onError: () => {
+        toast.error("Errore nell'eliminazione")
+        setDeleting(false)
+      },
+    })
   }
 
   const changeStato = async (s: StatoCompito) => {

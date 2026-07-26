@@ -36,6 +36,7 @@ import {
 import { toast } from "sonner"
 import { type ClienteRecord } from "@/lib/mock-data"
 import { EditRecordDialog } from "@/components/shared/edit-record-dialog"
+import { useDeleteCliente } from "@/lib/clienti/hooks"
 import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
 import { ClienteTagBadges } from "./cliente-tag-controls"
 
@@ -48,6 +49,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
   const router = useRouter()
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const deleteCliente = useDeleteCliente()
   const [editOpen, setEditOpen] = useState(false)
   const [showContract, setShowContract] = useState(false)
   const nome = cliente["Nome Clienti"]
@@ -197,17 +199,18 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
             <Button
               variant="destructive"
               disabled={deleting}
-              onClick={async () => {
+              onClick={() => {
                 setDeleting(true)
-                try {
-                  const res = await fetch(`/api/clienti/${cliente.id}`, { method: "DELETE" })
-                  if (!res.ok) throw new Error("Eliminazione non riuscita")
-                  toast.success("Cliente eliminato", { description: nome })
-                  router.push("/clienti")
-                } catch {
-                  toast.error("Errore nell'eliminazione del cliente")
-                  setDeleting(false)
-                }
+                deleteCliente.mutate(cliente.id, {
+                  onSuccess: () => {
+                    toast.success("Cliente eliminato", { description: nome })
+                    router.push("/clienti")
+                  },
+                  onError: () => {
+                    toast.error("Errore nell'eliminazione del cliente")
+                    setDeleting(false)
+                  },
+                })
               }}
             >
               {deleting ? "Eliminazione..." : "Elimina"}

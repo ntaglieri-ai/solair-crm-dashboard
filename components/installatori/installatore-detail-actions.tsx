@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog"
 import type { InstallatoreRecord } from "@/lib/installatori/repository"
 import { InstallatoreFormDialog } from "./new-installatore-dialog"
+import { useDeleteInstallatore } from "@/lib/installatori/hooks"
 
 /** Azioni modifica/elimina per l'header della scheda Installatore. */
 export function InstallatoreDetailActions({
@@ -26,22 +27,21 @@ export function InstallatoreDetailActions({
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const deleteInstallatore = useDeleteInstallatore()
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (deleting) return
     setDeleting(true)
-    try {
-      const res = await fetch(`/api/installatori/${installatore.id}`, {
-        method: "DELETE",
-      })
-      if (!res.ok) throw new Error("Eliminazione non riuscita")
-      toast.success("Installatore eliminato", { description: installatore.nome })
-      router.push("/installatori")
-      router.refresh()
-    } catch {
-      toast.error("Errore nell'eliminazione")
-      setDeleting(false)
-    }
+    deleteInstallatore.mutate(installatore.id, {
+      onSuccess: () => {
+        toast.success("Installatore eliminato", { description: installatore.nome })
+        router.push("/installatori")
+      },
+      onError: () => {
+        toast.error("Errore nell'eliminazione")
+        setDeleting(false)
+      },
+    })
   }
 
   return (

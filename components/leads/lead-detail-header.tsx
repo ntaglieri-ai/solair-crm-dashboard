@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
 import { EditRecordDialog } from "@/components/shared/edit-record-dialog"
+import { useDeleteLead } from "@/lib/leads/hooks"
 import { IconPlus } from "@tabler/icons-react"
 import {
   DropdownMenu,
@@ -47,6 +48,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
   const router = useRouter()
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const deleteLead = useDeleteLead()
   const [showLost, setShowLost] = useState(false)
   const [markingLost, setMarkingLost] = useState(false)
   const [showConvert, setShowConvert] = useState(false)
@@ -193,17 +195,18 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
             <Button
               variant="destructive"
               disabled={deleting}
-              onClick={async () => {
+              onClick={() => {
                 setDeleting(true)
-                try {
-                  const res = await fetch(`/api/leads/${lead.id}`, { method: "DELETE" })
-                  if (!res.ok) throw new Error("Eliminazione non riuscita")
-                  toast.success("Lead eliminato", { description: nome })
-                  router.push("/leads")
-                } catch {
-                  toast.error("Errore nell'eliminazione del lead")
-                  setDeleting(false)
-                }
+                deleteLead.mutate(lead.id, {
+                  onSuccess: () => {
+                    toast.success("Lead eliminato", { description: nome })
+                    router.push("/leads")
+                  },
+                  onError: () => {
+                    toast.error("Errore nell'eliminazione del lead")
+                    setDeleting(false)
+                  },
+                })
               }}
             >
               {deleting ? "Eliminazione..." : "Elimina"}

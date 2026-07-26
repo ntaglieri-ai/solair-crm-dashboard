@@ -227,7 +227,10 @@ export function useBulkLeads() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
-      if (!res.ok) throw new Error("Operazione di massa non riuscita")
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null
+        throw new Error(body?.error ?? "Operazione di massa non riuscita")
+      }
       return (await res.json()) as { affected: number }
     },
     onMutate: async (payload) => {

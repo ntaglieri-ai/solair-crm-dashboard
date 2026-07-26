@@ -433,25 +433,36 @@ export function LeadsClient({
 
   const handleBulkOwner = (owner: string) => {
     const n = selected.size
-    bulk.mutate({ action: "transfer", ids: selectedIds, value: owner })
-    toast.success("Proprietario aggiornato", {
-      description: `${n} lead assegnati a ${owner}.`,
-    })
-    setSelected(new Set())
+    bulk.mutate(
+      { action: "transfer", ids: selectedIds, value: owner },
+      {
+        onSuccess: () => {
+          toast.success("Proprietario aggiornato", {
+            description: `${n} lead assegnati a ${owner}.`,
+          })
+          setSelected(new Set())
+        },
+        onError: (error) =>
+          toast.error(error instanceof Error ? error.message : "Operazione non riuscita"),
+      },
+    )
   }
 
   const handleBulkStato = (stato: string) => {
     const n = selected.size
-    bulk.mutate({
-      action: "update",
-      ids: selectedIds,
-      field: "Stato Lead",
-      value: stato,
-    })
-    toast.success("Stato aggiornato", {
-      description: `${n} lead impostati su "${stato}".`,
-    })
-    setSelected(new Set())
+    bulk.mutate(
+      { action: "update", ids: selectedIds, field: "Stato Lead", value: stato },
+      {
+        onSuccess: () => {
+          toast.success("Stato aggiornato", {
+            description: `${n} lead impostati su "${stato}".`,
+          })
+          setSelected(new Set())
+        },
+        onError: (error) =>
+          toast.error(error instanceof Error ? error.message : "Operazione non riuscita"),
+      },
+    )
   }
 
   // Aggiornamento di massa generico su Stato Lead / Sede / Tag
@@ -460,20 +471,36 @@ export function LeadsClient({
     value: string,
   ) => {
     const n = selected.size
-    bulk.mutate({ action: "update", ids: selectedIds, field, value })
-    toast.success("Lead aggiornati", {
-      description: `${field} impostato su "${value}" per ${n} lead.`,
-    })
-    setSelected(new Set())
+    bulk.mutate(
+      { action: "update", ids: selectedIds, field, value },
+      {
+        onSuccess: () => {
+          toast.success("Lead aggiornati", {
+            description: `${field} impostato su "${value}" per ${n} lead.`,
+          })
+          setSelected(new Set())
+        },
+        onError: (error) =>
+          toast.error(error instanceof Error ? error.message : "Operazione non riuscita"),
+      },
+    )
   }
 
   const handleBulkConvert = () => {
     const n = selected.size
-    bulk.mutate({ action: "convert", ids: selectedIds })
-    toast.success("Lead convertiti", {
-      description: `${n} lead convertiti in clienti.`,
-    })
-    setSelected(new Set())
+    bulk.mutate(
+      { action: "convert", ids: selectedIds },
+      {
+        onSuccess: () => {
+          toast.success("Lead convertiti", {
+            description: `${n} lead convertiti in clienti.`,
+          })
+          setSelected(new Set())
+        },
+        onError: (error) =>
+          toast.error(error instanceof Error ? error.message : "Operazione non riuscita"),
+      },
+    )
   }
 
   const handleBulkApprove = () => {
@@ -488,11 +515,19 @@ export function LeadsClient({
       setSelected(new Set())
       return
     }
-    bulk.mutate({ action: "delete", ids: idsToRemove })
-    toast.success("Duplicati uniti", {
-      description: `${idsToRemove.length} record duplicati rimossi.`,
-    })
-    setSelected(new Set())
+    bulk.mutate(
+      { action: "delete", ids: idsToRemove },
+      {
+        onSuccess: () => {
+          toast.success("Duplicati uniti", {
+            description: `${idsToRemove.length} record duplicati rimossi.`,
+          })
+          setSelected(new Set())
+        },
+        onError: (error) =>
+          toast.error(error instanceof Error ? error.message : "Operazione non riuscita"),
+      },
+    )
   }
 
   const handleBulkExport = async () => {
@@ -523,10 +558,18 @@ export function LeadsClient({
 
   const confirmBulkDelete = () => {
     const n = selected.size
-    bulk.mutate({ action: "delete", ids: selectedIds })
-    toast.success("Lead eliminati", { description: `${n} lead rimossi.` })
-    setBulkDeleteOpen(false)
-    setSelected(new Set())
+    bulk.mutate(
+      { action: "delete", ids: selectedIds },
+      {
+        onSuccess: () => {
+          toast.success("Lead eliminati", { description: `${n} lead rimossi.` })
+          setBulkDeleteOpen(false)
+          setSelected(new Set())
+        },
+        onError: (error) =>
+          toast.error(error instanceof Error ? error.message : "Eliminazione non riuscita"),
+      },
+    )
   }
 
   const confirmDelete = () => {

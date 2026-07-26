@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog"
 import type { ScadenzaRecord } from "@/lib/scadenze/repository"
 import { ScadenzaFormDialog } from "./scadenza-form-dialog"
+import { useDeleteScadenza } from "@/lib/scadenze/hooks"
 
 /** Azioni modifica/elimina per l'header della scheda Scadenza. */
 export function ScadenzaDetailActions({
@@ -26,22 +27,21 @@ export function ScadenzaDetailActions({
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const deleteScadenza = useDeleteScadenza()
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (deleting) return
     setDeleting(true)
-    try {
-      const res = await fetch(`/api/scadenze/${scadenza.id}`, {
-        method: "DELETE",
-      })
-      if (!res.ok) throw new Error("Eliminazione non riuscita")
-      toast.success("Scadenza eliminata", { description: scadenza.nome })
-      router.push("/scadenze")
-      router.refresh()
-    } catch {
-      toast.error("Errore nell'eliminazione")
-      setDeleting(false)
-    }
+    deleteScadenza.mutate(scadenza.id, {
+      onSuccess: () => {
+        toast.success("Scadenza eliminata", { description: scadenza.nome })
+        router.push("/scadenze")
+      },
+      onError: () => {
+        toast.error("Errore nell'eliminazione")
+        setDeleting(false)
+      },
+    })
   }
 
   return (

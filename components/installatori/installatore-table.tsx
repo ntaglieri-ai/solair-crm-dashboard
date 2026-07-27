@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { InstallatoreRecord } from "@/lib/installatori/repository"
 import type { InstallatoreSortKey, SortDir } from "@/lib/installatori/api-types"
-import { InstallatoreTagChip } from "./installatore-tag-picker"
+import { InstallatoreTagBadges } from "./installatore-tag-controls"
 import { InstallatoreRowContextMenu } from "./installatore-row-context-menu"
 
 function formatDate(value: string | null) {
@@ -232,7 +232,7 @@ export function InstallatoreTable({
                 className="border-r border-border/70"
                 style={{ width: COLUMN_WIDTH.tag, minWidth: COLUMN_WIDTH.tag, maxWidth: COLUMN_WIDTH.tag }}
               >
-                <InstallatoreTagChip tag={i.tag} />
+                <InstallatoreTagBadges installatoreId={i.id} max={2} />
               </TableCell>
 
               <TableCell

@@ -114,6 +114,7 @@ export const ACTION_KEYS = [
   "lead.columns.customize_own",
   "lead.tags.edit",
   "clienti.tags.edit",
+  "installatori.tags.edit",
   "lead.default_values.manage",
   "lead.assignment_rules.manage",
   "lead.workflows.manage",
@@ -293,6 +294,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       "lead.columns.customize_own",
       "lead.tags.edit",
       "clienti.tags.edit",
+      "installatori.tags.edit",
       "lead.default_values.manage",
       "crm_settings.system.schema.manage",
       "crm_settings.system.default_values.manage",
@@ -319,7 +321,7 @@ export function buildDefaultPermissionSnapshot(params?: {
     // aziendali + personalizzazione aspetto proprio).
     grantPages("r", ["dashboard", "clienti", "documenti", "crm_settings.system.azienda", "crm_settings.system.sedi", "crm_settings.system.aspetto"])
     grantRecords(["lead", "clienti", "compiti", "scadenze"], ["view", "create", "edit"])
-    grantActions(["lead.columns.customize_own", "lead.tags.edit", "clienti.tags.edit", "company.profile.view", "company.sites.view", "appearance.personal.manage"])
+    grantActions(["lead.columns.customize_own", "lead.tags.edit", "clienti.tags.edit", "installatori.tags.edit", "company.profile.view", "company.sites.view", "appearance.personal.manage"])
     for (const moduleKey of MODULE_KEYS) {
       fields[moduleKey] = roleFields[moduleKey] ?? { "*": "editable" }
       scopes[moduleKey] = "assigned"
@@ -350,6 +352,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       "lead.columns.customize_own",
       "lead.tags.edit",
       "clienti.tags.edit",
+      "installatori.tags.edit",
       "company.profile.view",
       "company.profile.edit",
       "company.sites.view",

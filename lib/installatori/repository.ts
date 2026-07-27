@@ -18,6 +18,8 @@ export type InstallatoreRecord = {
   note: string | null
   created_at: string | null
   updated_at: string | null
+  /** Id dei tag reali assegnati (installatore_tags), popolato dal server. */
+  tagIds?: string[]
 }
 
 type InstallatoreRow = Omit<InstallatoreRecord, "proprietario_nome" | "attivo"> & {
@@ -121,8 +123,16 @@ export async function queryInstallatori(
     countQ = countQ.eq("proprietario_id", params.proprietario)
   }
   if (params.tag !== "all") {
-    listQ = listQ.eq("tag", params.tag)
-    countQ = countQ.eq("tag", params.tag)
+    // Filtro relazionale (tabella installatore_tags), non piu' sul vecchio
+    // campo singolo di testo libero installatori.tag — trovato ridondante
+    // e sostituito il 26/07 dal vero sistema multi-tag.
+    const { data: tagRows } = await supabase
+      .from("installatore_tags")
+      .select("installatore_id")
+      .eq("tag_id", params.tag)
+    const idsWithTag = (tagRows ?? []).map((r) => r.installatore_id as string)
+    listQ = listQ.in("id", idsWithTag.length > 0 ? idsWithTag : ["00000000-0000-0000-0000-000000000000"])
+    countQ = countQ.in("id", idsWithTag.length > 0 ? idsWithTag : ["00000000-0000-0000-0000-000000000000"])
   }
   if (params.stato !== "all") {
     listQ = listQ.eq("attivo", params.stato === "attivo")
@@ -176,6 +186,15 @@ export async function queryInstallatori(
     for (const user of users ?? []) ownerNames.set(user.id, user.nome)
   }
 
+  const pageIds = rows.map((row) => row.id)
+  const tagAssignments = await supabase
+    .from("installatore_tags")
+    .select("installatore_id,tag_id")
+    .in("installatore_id", pageIds)
+  if (tagAssignments.error) {
+    console.error("[installatori/repository] installatore_tags:", tagAssignments.error.message)
+  }
+
   return {
     rows: rows.map((row) => ({
       ...row,
@@ -183,6 +202,9 @@ export async function queryInstallatori(
       proprietario_nome: row.proprietario_id
         ? ownerNames.get(row.proprietario_id) ?? null
         : null,
+      tagIds: (tagAssignments.data ?? [])
+        .filter((item) => item.installatore_id === row.id)
+        .map((item) => item.tag_id),
     })),
     total: count ?? 0,
     page: params.page,

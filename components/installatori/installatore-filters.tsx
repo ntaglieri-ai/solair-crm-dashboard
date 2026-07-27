@@ -78,7 +78,7 @@ export function InstallatoreFilters({
   onReset: () => void
 }) {
   const { data: referenceData } = useInstallatoriReferenceData()
-  const proprietari = referenceData?.proprietari ?? []
+  const proprietari = referenceData?.owners ?? []
   const tags = referenceData?.tags ?? []
 
   const set = <K extends keyof InstallatoreFilterState>(
@@ -135,7 +135,7 @@ export function InstallatoreFilters({
         value={filters.tag}
         onValueChange={(v) => set("tag", v)}
         placeholder="Tag"
-        options={[["all", "Tutti i tag"], ...tags.map((t) => [t, t] as [string, string])]}
+        options={[["all", "Tutti i tag"], ...tags.map((t) => [t.id, t.name] as [string, string])]}
       />
 
       <Button variant="ghost" onClick={onReset} disabled={!hasActiveFilters} className="text-muted-foreground">

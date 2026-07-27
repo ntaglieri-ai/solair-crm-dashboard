@@ -102,7 +102,7 @@ function ColorDropdown({
 }
 
 function TagRow({ tag }: { tag: InstallatoreTag }) {
-  const { renameTag, recolorTag, deleteTag } = useInstallatoreTags()
+  const { renameTag, recolorTag, deleteTag, usageCount } = useInstallatoreTags()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(tag.name)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -166,7 +166,7 @@ function TagRow({ tag }: { tag: InstallatoreTag }) {
           )}
 
           <span className="ml-1 hidden shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground group-hover:inline-block">
-            {tag.uso}
+            {usageCount(tag.id)}
           </span>
         </div>
 
@@ -174,7 +174,13 @@ function TagRow({ tag }: { tag: InstallatoreTag }) {
           <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground">
             <IconUser size={14} stroke={1.8} />
           </span>
-          <span>{tag.modificato}</span>
+          <span>
+            {tag.createdAt
+              ? new Intl.DateTimeFormat("it-IT", { dateStyle: "medium" }).format(
+                  new Date(tag.createdAt),
+                )
+              : "—"}
+          </span>
         </div>
       </div>
 
@@ -185,7 +191,7 @@ function TagRow({ tag }: { tag: InstallatoreTag }) {
             <DialogDescription>
               Vuoi eliminare il tag{" "}
               <span className="font-medium text-foreground">{tag.name}</span>?
-              Verrà rimosso da {tag.uso} installatori. L&apos;azione non è
+              Verrà rimosso da {usageCount(tag.id)} installatori. L&apos;azione non è
               reversibile.
             </DialogDescription>
           </DialogHeader>
@@ -218,11 +224,11 @@ function AddTagDialog({
 }) {
   const { createTags } = useInstallatoreTags()
   const [value, setValue] = useState("")
-  const [color, setColor] = useState<string>(INSTALLATORE_TAG_PALETTE[13])
+  const [color, setColor] = useState<string>(INSTALLATORE_TAG_PALETTE[0])
 
   const reset = () => {
     setValue("")
-    setColor(INSTALLATORE_TAG_PALETTE[13])
+    setColor(INSTALLATORE_TAG_PALETTE[0])
   }
 
   const save = () => {

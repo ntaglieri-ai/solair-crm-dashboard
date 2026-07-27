@@ -25,9 +25,15 @@ export interface InstallatoreProprietario {
   nome: string
 }
 
+export interface InstallatoreTagOption {
+  id: string
+  name: string
+  color: string
+}
+
 export interface InstallatoriReferenceData {
-  proprietari: InstallatoreProprietario[]
-  tags: string[]
+  owners: InstallatoreProprietario[]
+  tags: InstallatoreTagOption[]
 }
 
 // Dati di riferimento (proprietari reali da `utenti` + tag distinti già

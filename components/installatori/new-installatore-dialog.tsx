@@ -43,10 +43,16 @@ export function InstallatoreFormDialog({
   const router = useRouter()
   const { data: referenceData } = useInstallatoriReferenceData()
   const proprietari = useMemo(
-    () => referenceData?.proprietari ?? [],
+    () => referenceData?.owners ?? [],
     [referenceData],
   )
-  const tagSuggestions = referenceData?.tags ?? []
+  // Suggerimenti per il campo tag singolo alla creazione (legacy, resta
+  // com'era) — ora presi dai nomi dei tag reali invece dei valori distinti
+  // del vecchio campo di testo libero.
+  const tagSuggestions = useMemo(
+    () => (referenceData?.tags ?? []).map((t) => t.name),
+    [referenceData],
+  )
   const isEdit = Boolean(installatore)
 
   const [nome, setNome] = useState("")

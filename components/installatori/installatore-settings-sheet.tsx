@@ -55,7 +55,7 @@ function initials(nome: string): string {
 // colonne/densità qui — il modulo non ne ha (a differenza di Compiti/Lead).
 function ProprietariSection() {
   const { data } = useInstallatoriReferenceData()
-  const proprietari = data?.proprietari ?? []
+  const proprietari = data?.owners ?? []
   if (proprietari.length === 0) {
     return <p className="py-8 text-center text-sm text-muted-foreground">Nessun utente attivo.</p>
   }
@@ -93,10 +93,11 @@ function TagSection() {
     <div className="flex flex-wrap gap-2">
       {tags.map((t) => (
         <span
-          key={t}
-          className="inline-flex items-center rounded-full bg-teal/10 px-2.5 py-1 text-xs font-bold text-teal"
+          key={t.id}
+          className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold"
+          style={{ backgroundColor: `${t.color}1A`, color: t.color }}
         >
-          {t}
+          {t.name}
         </span>
       ))}
     </div>

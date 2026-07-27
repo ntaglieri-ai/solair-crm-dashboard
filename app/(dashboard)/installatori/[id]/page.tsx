@@ -5,6 +5,7 @@ import { requirePage } from "@/lib/permissions/server"
 import { getInstallatoreById } from "@/lib/installatori/repository"
 import { Badge } from "@/components/ui/badge"
 import { InstallatoreDetailActions } from "@/components/installatori/installatore-detail-actions"
+import { InstallatoreTagBadges } from "@/components/installatori/installatore-tag-controls"
 import { AllegatiSection } from "@/components/shared/allegati-section"
 
 function value(text: string | null) {
@@ -47,9 +48,7 @@ export default async function InstallatoreDetailPage({
           <Badge variant={installatore.attivo ? "secondary" : "outline"}>
             {installatore.attivo ? "Attivo" : "Non attivo"}
           </Badge>
-          {installatore.tag ? (
-            <Badge variant="outline">{installatore.tag}</Badge>
-          ) : null}
+          <InstallatoreTagBadges installatoreId={installatore.id} empty="" />
         </div>
         <InstallatoreDetailActions installatore={installatore} />
       </header>

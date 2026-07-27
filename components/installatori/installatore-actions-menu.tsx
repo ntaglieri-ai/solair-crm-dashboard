@@ -44,7 +44,7 @@ export function InstallatoreActionsMenu({
   const hasSelection = selectedCount > 0
   const [transferOpen, setTransferOpen] = useState(false)
   const { data: referenceData } = useInstallatoriReferenceData()
-  const proprietari = referenceData?.proprietari ?? []
+  const proprietari = referenceData?.owners ?? []
   const [ownerId, setOwnerId] = useState("")
   const selectedOwner = proprietari.find((p) => p.id === ownerId) ?? proprietari[0] ?? null
 

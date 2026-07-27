@@ -20,7 +20,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
 import { EditRecordDialog } from "@/components/shared/edit-record-dialog"
-import { useDeleteLead } from "@/lib/leads/hooks"
+import { useDeleteLead, useCreateLead } from "@/lib/leads/hooks"
 import { usePermissions } from "@/lib/permissions/provider"
 import { IconPlus } from "@tabler/icons-react"
 import {
@@ -50,6 +50,9 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const deleteLead = useDeleteLead()
+  const createLead = useCreateLead()
+  const [showDuplicate, setShowDuplicate] = useState(false)
+  const [duplicating, setDuplicating] = useState(false)
   const permissions = usePermissions()
   const [showLost, setShowLost] = useState(false)
   const [markingLost, setMarkingLost] = useState(false)
@@ -134,7 +137,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
             />
             <DropdownMenuContent align="end">
               <DropdownMenuGroup>
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowDuplicate(true)}>
                   <Copy data-icon="inline-start" />
                   Duplica
                 </DropdownMenuItem>
@@ -182,6 +185,58 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
           Ultimo aggiornamento: {lead["Ora ultima attività"]}
         </span>
       </div>
+
+      {/* Dialog duplica */}
+      <Dialog open={showDuplicate} onOpenChange={setShowDuplicate}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Duplica lead</DialogTitle>
+            <DialogDescription>
+              Creare una copia di{" "}
+              <span className="font-medium text-foreground">{nome}</span>? La
+              copia conserverà tag e dati principali.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowDuplicate(false)}
+              disabled={duplicating}
+            >
+              Annulla
+            </Button>
+            <Button
+              disabled={duplicating}
+              onClick={() => {
+                setDuplicating(true)
+                const copy = {
+                  ...lead,
+                  id: crypto.randomUUID(),
+                  "Nome Lead": `Copia di ${lead["Nome Lead"]}`,
+                  "Badge dell'attività": false,
+                  "Badge di nota": false,
+                  attivita: [],
+                  documenti: [],
+                }
+                createLead.mutate(copy, {
+                  onSuccess: () => {
+                    toast.success("Lead duplicato")
+                    setShowDuplicate(false)
+                    setDuplicating(false)
+                    router.push(`/leads/${copy.id}`)
+                  },
+                  onError: () => {
+                    toast.error("Duplicazione non riuscita")
+                    setDuplicating(false)
+                  },
+                })
+              }}
+            >
+              {duplicating ? "Duplicazione..." : "Duplica"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog elimina */}
       <Dialog open={showDelete} onOpenChange={setShowDelete}>

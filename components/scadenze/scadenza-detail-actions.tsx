@@ -16,6 +16,7 @@ import {
 import type { ScadenzaRecord } from "@/lib/scadenze/repository"
 import { ScadenzaFormDialog } from "./scadenza-form-dialog"
 import { useDeleteScadenza } from "@/lib/scadenze/hooks"
+import { usePermissions } from "@/lib/permissions/provider"
 
 /** Azioni modifica/elimina per l'header della scheda Scadenza. */
 export function ScadenzaDetailActions({
@@ -28,6 +29,7 @@ export function ScadenzaDetailActions({
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const deleteScadenza = useDeleteScadenza()
+  const permissions = usePermissions()
 
   const handleDelete = () => {
     if (deleting) return
@@ -50,15 +52,17 @@ export function ScadenzaDetailActions({
         <IconPencil size={15} stroke={1.8} data-icon="inline-start" />
         Modifica
       </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="text-destructive hover:text-destructive"
-        onClick={() => setDeleteOpen(true)}
-      >
-        <IconTrash size={15} stroke={1.8} data-icon="inline-start" />
-        Elimina
-      </Button>
+      {permissions.canRecord("scadenze", "delete") ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-destructive hover:text-destructive"
+          onClick={() => setDeleteOpen(true)}
+        >
+          <IconTrash size={15} stroke={1.8} data-icon="inline-start" />
+          Elimina
+        </Button>
+      ) : null}
 
       <ScadenzaFormDialog
         open={editOpen}

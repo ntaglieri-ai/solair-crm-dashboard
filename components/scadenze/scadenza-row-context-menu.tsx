@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
+import { usePermissions } from "@/lib/permissions/provider"
 import { toast } from "sonner"
 import {
   IconExternalLink,
@@ -40,6 +41,7 @@ export function ScadenzaRowContextMenu({
   onDelete: (s: ScadenzaRecord) => void
 }) {
   const router = useRouter()
+  const permissions = usePermissions()
   const qc = useQueryClient()
   const { data: referenceData } = useScadenzeReferenceData()
   const proprietari = referenceData?.proprietari ?? []
@@ -127,10 +129,12 @@ export function ScadenzaRowContextMenu({
 
         <ContextMenuSeparator />
 
-        <ContextMenuItem variant="destructive" onClick={() => onDelete(scadenza)}>
-          <IconTrash size={15} stroke={1.8} />
-          Elimina
-        </ContextMenuItem>
+        {permissions.canRecord("scadenze", "delete") ? (
+          <ContextMenuItem variant="destructive" onClick={() => onDelete(scadenza)}>
+            <IconTrash size={15} stroke={1.8} />
+            Elimina
+          </ContextMenuItem>
+        ) : null}
       </ContextMenuContent>
     </ContextMenu>
 

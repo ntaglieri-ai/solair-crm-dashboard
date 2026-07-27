@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { usePermissions } from "@/lib/permissions/provider"
 import {
   IconDotsVertical,
   IconArrowsExchange,
@@ -59,6 +60,7 @@ export function CompitoActionsMenu({
 }) {
   const hasSelection = selectedCount > 0
   const [transferOpen, setTransferOpen] = useState(false)
+  const permissions = usePermissions()
   const { data: referenceData } = useCompitiReferenceData()
   const proprietari = referenceData?.proprietari ?? []
   const [ownerId, setOwnerId] = useState("")
@@ -114,13 +116,17 @@ export function CompitoActionsMenu({
                   Segna come completati
                 </DropdownMenuItem>
               </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuItem variant="destructive" onClick={onBulkDelete}>
-                  <IconTrash size={16} stroke={1.8} data-icon="inline-start" />
-                  Eliminazione di massa
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
+              {permissions.canRecord("compiti", "delete") ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem variant="destructive" onClick={onBulkDelete}>
+                      <IconTrash size={16} stroke={1.8} data-icon="inline-start" />
+                      Eliminazione di massa
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </>
+              ) : null}
             </>
           ) : (
             <DropdownMenuGroup>

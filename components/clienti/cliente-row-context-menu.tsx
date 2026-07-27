@@ -46,6 +46,7 @@ import { formatDMY } from "@/components/compiti/new-compito-dialog"
 import { type ClienteRecord, type StatoCliente } from "@/lib/mock-data"
 import { ClienteTagPicker } from "./cliente-tag-controls"
 import { useClienteTags } from "@/lib/cliente-tag-store"
+import { usePermissions } from "@/lib/permissions/provider"
 import { EditRecordDialog } from "@/components/shared/edit-record-dialog"
 
 // "Crea nota"/"Crea attività" — costruiti il 25/07 (endpoint note dedicato
@@ -78,6 +79,7 @@ export function ClienteRowContextMenu({
   onRefresh: () => void
 }) {
   const { owners } = useClienteTags()
+  const permissions = usePermissions()
   const router = useRouter()
   const [tagOpen, setTagOpen] = useState(false)
   const [owner, setOwner] = useState(cliente["Clienti Proprietario"] ?? "")
@@ -312,10 +314,12 @@ export function ClienteRowContextMenu({
             <IconDownload size={15} stroke={1.8} />
             Esporta questo cliente
           </ContextMenuItem>
-          <ContextMenuItem variant="destructive" onClick={() => setConfirmDel(true)}>
-            <IconTrash size={15} stroke={1.8} />
-            Elimina
-          </ContextMenuItem>
+          {permissions.canRecord("clienti", "delete") ? (
+            <ContextMenuItem variant="destructive" onClick={() => setConfirmDel(true)}>
+              <IconTrash size={15} stroke={1.8} />
+              Elimina
+            </ContextMenuItem>
+          ) : null}
         </ContextMenuContent>
       </ContextMenu>
 

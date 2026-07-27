@@ -18,6 +18,7 @@ import {
 } from "@tabler/icons-react"
 import { StatoBadge, PrioritaBadge, CompitoAvatar, correlatoHref } from "./compito-utils"
 import { useDeleteCompito } from "@/lib/compiti/hooks"
+import { usePermissions } from "@/lib/permissions/provider"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -43,6 +44,7 @@ export function CompitoDetailHeader({ compito }: { compito: Compito }) {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const deleteCompito = useDeleteCompito()
+  const permissions = usePermissions()
 
   // Dopo una modifica salvata router.refresh() riconsegna il compito
   // aggiornato: riallinea il badge di stato locale al valore del server.
@@ -118,13 +120,15 @@ export function CompitoDetailHeader({ compito }: { compito: Compito }) {
               }
             />
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() => setDeleteOpen(true)}
-              >
-                <IconTrash size={15} stroke={1.8} />
-                Elimina
-              </DropdownMenuItem>
+              {permissions.canRecord("compiti", "delete") ? (
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() => setDeleteOpen(true)}
+                >
+                  <IconTrash size={15} stroke={1.8} />
+                  Elimina
+                </DropdownMenuItem>
+              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

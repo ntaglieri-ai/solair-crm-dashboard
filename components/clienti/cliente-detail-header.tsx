@@ -37,6 +37,7 @@ import { toast } from "sonner"
 import { type ClienteRecord } from "@/lib/mock-data"
 import { EditRecordDialog } from "@/components/shared/edit-record-dialog"
 import { useDeleteCliente } from "@/lib/clienti/hooks"
+import { usePermissions } from "@/lib/permissions/provider"
 import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
 import { ClienteTagBadges } from "./cliente-tag-controls"
 
@@ -50,6 +51,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const deleteCliente = useDeleteCliente()
+  const permissions = usePermissions()
   const [editOpen, setEditOpen] = useState(false)
   const [showContract, setShowContract] = useState(false)
   const nome = cliente["Nome Clienti"]
@@ -141,14 +143,18 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
                   <FileDown data-icon="inline-start" />
                   Esporta scheda PDF
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() => setShowDelete(true)}
-                >
-                  <Trash2 data-icon="inline-start" />
-                  Elimina
-                </DropdownMenuItem>
+                {permissions.canRecord("clienti", "delete") ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => setShowDelete(true)}
+                    >
+                      <Trash2 data-icon="inline-start" />
+                      Elimina
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>

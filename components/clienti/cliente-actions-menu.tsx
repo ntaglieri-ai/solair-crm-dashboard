@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { usePermissions } from "@/lib/permissions/provider"
 import {
   IconDotsVertical,
   IconTags,
@@ -120,6 +121,7 @@ export function ClienteActionsMenu({
   onBulkDelete: () => void
 }) {
   const [dialog, setDialog] = useState<Dialogs>("none")
+  const permissions = usePermissions()
   const hasSelection = selectedCount > 0
 
   const [owner, setOwner] = useState(mockCommerciali[0])
@@ -241,16 +243,20 @@ export function ClienteActionsMenu({
                   Esporta selezione
                 </DropdownMenuItem>
               </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() => setDialog("delete")}
-                >
-                  <IconTrash size={16} stroke={1.8} data-icon="inline-start" />
-                  Eliminazione di massa
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
+              {permissions.canRecord("clienti", "delete") ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => setDialog("delete")}
+                    >
+                      <IconTrash size={16} stroke={1.8} data-icon="inline-start" />
+                      Eliminazione di massa
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </>
+              ) : null}
             </>
           ) : (
             /* ---------------- STATO A: azioni generali ---------------- */

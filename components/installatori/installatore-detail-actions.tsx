@@ -16,6 +16,7 @@ import {
 import type { InstallatoreRecord } from "@/lib/installatori/repository"
 import { InstallatoreFormDialog } from "./new-installatore-dialog"
 import { useDeleteInstallatore } from "@/lib/installatori/hooks"
+import { usePermissions } from "@/lib/permissions/provider"
 
 /** Azioni modifica/elimina per l'header della scheda Installatore. */
 export function InstallatoreDetailActions({
@@ -28,6 +29,7 @@ export function InstallatoreDetailActions({
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const deleteInstallatore = useDeleteInstallatore()
+  const permissions = usePermissions()
 
   const handleDelete = () => {
     if (deleting) return
@@ -50,15 +52,17 @@ export function InstallatoreDetailActions({
         <IconPencil size={15} stroke={1.8} data-icon="inline-start" />
         Modifica
       </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="text-destructive hover:text-destructive"
-        onClick={() => setDeleteOpen(true)}
-      >
-        <IconTrash size={15} stroke={1.8} data-icon="inline-start" />
-        Elimina
-      </Button>
+      {permissions.canRecord("installatori", "delete") ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-destructive hover:text-destructive"
+          onClick={() => setDeleteOpen(true)}
+        >
+          <IconTrash size={15} stroke={1.8} data-icon="inline-start" />
+          Elimina
+        </Button>
+      ) : null}
 
       <InstallatoreFormDialog
         open={editOpen}

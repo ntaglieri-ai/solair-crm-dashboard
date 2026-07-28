@@ -25,9 +25,11 @@ import {
   Users,
 } from "lucide-react"
 
+import { BachecaWidget } from "@/components/dashboard/bacheca-widget"
 import { LazyItalyMap } from "@/components/dashboard/lazy-italy-map"
-import { Noticeboard } from "@/components/dashboard/noticeboard"
 import { SystemRetryButton } from "@/components/dashboard/system-retry-actions"
+import { listBachecaMessaggiSafe } from "@/lib/bacheca/repository"
+import type { BachecaMessaggio } from "@/lib/bacheca/types"
 import { requirePage } from "@/lib/permissions/server"
 import {
   getAgentDashboardData,
@@ -44,7 +46,6 @@ import {
   type SystemSemaphoreData,
 } from "@/lib/dashboard/repository"
 
-const ROLE_MANAGERS = new Set(["SUPERADMIN", "ADMIN", "DIRECTOR"])
 const BUSINESS_ROLES = new Set(["STANDARD", "DIRECTOR", "ADMIN"])
 
 const CHART_COLORS = ["#315fc5", "#20a47a", "#f2b84b", "#ef6a47", "#8b6bd6", "#2b9fb3"]
@@ -56,11 +57,17 @@ function formatNumber(value: number) {
 function PremiumCard({
   children,
   className = "",
+  id,
 }: {
   children: React.ReactNode
   className?: string
+  id?: string
 }) {
-  return <section className={`dashboard-premium-card ${className}`}>{children}</section>
+  return (
+    <section id={id} className={`dashboard-premium-card ${className}`}>
+      {children}
+    </section>
+  )
 }
 
 function Greeting({
@@ -332,13 +339,13 @@ function SystemSemaphore({ data }: { data: SystemSemaphoreData }) {
 function BusinessDashboard({
   data,
   role,
-  author,
+  bacheca,
   economic,
   semaphore,
 }: {
   data: DashboardData
   role: string
-  author: string
+  bacheca: BachecaMessaggio[]
   economic?: EconomicWidgetData
   semaphore?: SystemSemaphoreData
 }) {
@@ -393,12 +400,9 @@ function BusinessDashboard({
           </div>
         </PremiumCard>
 
-        <Noticeboard
-          initialItems={data.noticeboard}
-          canManage={ROLE_MANAGERS.has(role)}
-          author={author}
-          compact
-        />
+        <PremiumCard className="flex flex-col">
+          <BachecaWidget initialItems={bacheca} />
+        </PremiumCard>
       </div>
 
       {economic || semaphore ? (
@@ -625,7 +629,13 @@ const SUPERADMIN_SHORTCUTS = [
   { title: "Bacheca", href: "#bacheca", icon: Megaphone, tone: "#f2b84b" },
 ]
 
-function SuperadminDashboard({ data, author }: { data: SuperadminDashboardData; author: string }) {
+function SuperadminDashboard({
+  data,
+  bacheca,
+}: {
+  data: SuperadminDashboardData
+  bacheca: BachecaMessaggio[]
+}) {
   return (
     <>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -647,9 +657,14 @@ function SuperadminDashboard({ data, author }: { data: SuperadminDashboardData; 
           )
         })}
       </div>
-      <Monitoring data={data} />
-      <div id="bacheca">
-        <Noticeboard initialItems={data.noticeboard} canManage author={author} />
+      {/* Monitoring e Bacheca affiancati alla stessa altezza (prima erano due
+          sezioni impilate a tutta larghezza): la Bacheca non ha bisogno di
+          1540px e la riga sola le rende leggibili insieme. */}
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(340px,1fr)]">
+        <Monitoring data={data} />
+        <PremiumCard id="bacheca" className="flex flex-col">
+          <BachecaWidget initialItems={bacheca} />
+        </PremiumCard>
       </div>
     </>
   )
@@ -661,20 +676,26 @@ export default async function DashboardPage() {
   const role = subject.ruoloCode.toUpperCase()
 
   if (role === "SUPERADMIN") {
-    const data = await getSuperadminDashboardData()
+    const [data, bacheca] = await Promise.all([
+      getSuperadminDashboardData(),
+      listBachecaMessaggiSafe(),
+    ])
     return (
       <div className="mx-auto flex max-w-[1540px] flex-col gap-6">
         <Greeting
           name={subject.nome}
           subtitle="Centro tecnico per account, permessi, automazioni e provisioning."
         />
-        <SuperadminDashboard data={data} author={subject.nome} />
+        <SuperadminDashboard data={data} bacheca={bacheca} />
       </div>
     )
   }
 
   if (role === "AGENT") {
-    const data = await getAgentDashboardData(permissions.snapshot)
+    const [data, bacheca] = await Promise.all([
+      getAgentDashboardData(permissions.snapshot),
+      listBachecaMessaggiSafe(),
+    ])
     return (
       <div className="mx-auto flex max-w-[1540px] flex-col gap-6">
         <Greeting
@@ -712,12 +733,9 @@ export default async function DashboardPage() {
             </div>
             <TaskList tasks={data.upcomingTasks} />
           </PremiumCard>
-          <Noticeboard
-            initialItems={data.noticeboard}
-            canManage={false}
-            author={subject.nome}
-            compact
-          />
+          <PremiumCard className="flex flex-col">
+            <BachecaWidget initialItems={bacheca} />
+          </PremiumCard>
         </div>
         <PremiumCard>
           <div className="mb-3 flex items-center justify-between">
@@ -743,8 +761,9 @@ export default async function DashboardPage() {
     )
   }
 
-  const [data, economic, semaphore] = await Promise.all([
+  const [data, bacheca, economic, semaphore] = await Promise.all([
     getDashboardData(),
+    listBachecaMessaggiSafe(),
     role === "DIRECTOR" || role === "ADMIN"
       ? getEconomicWidgetData(permissions.snapshot)
       : Promise.resolve(undefined),
@@ -766,7 +785,7 @@ export default async function DashboardPage() {
       <BusinessDashboard
         data={data}
         role={role}
-        author={subject.nome}
+        bacheca={bacheca}
         economic={economic}
         semaphore={semaphore}
       />

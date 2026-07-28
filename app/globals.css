@@ -293,33 +293,6 @@
     object-fit: contain;
   }
 
-  .dashboard-noticeboard {
-    position: relative;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: clamp(1.25rem, 2.4vw, 2rem);
-    background: var(--card);
-    box-shadow: 0 18px 45px rgb(31 41 55 / 0.07);
-  }
-
-  .dashboard-noticeboard::before {
-    content: "";
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 5px;
-    background: #f2b84b;
-  }
-
-  .dashboard-noticeboard--compact {
-    padding: 1.25rem;
-  }
-
-  .dashboard-noticeboard--compact .noticeboard-scroll {
-    scrollbar-width: thin;
-    scrollbar-color: #d8bb72 transparent;
-  }
-
   .dashboard-premium-card {
     position: relative;
     overflow: hidden;
@@ -562,6 +535,91 @@
   .dashboard-shortcut strong {
     font-size: 1rem;
     font-weight: 900;
+  }
+
+  /* --- Bacheca aziendale: ticker a scorrimento continuo -------------------
+     Il track e' traslato via requestAnimationFrame dal componente (nessuna
+     animazione CSS: serve poter mettere in pausa a meta' corsa senza scatti).
+     La mask sfuma le righe in entrata/uscita ai bordi dell'area visibile. */
+  .bacheca-ticker {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 11rem;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 15%,
+      #000 85%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 15%,
+      #000 85%,
+      transparent 100%
+    );
+  }
+
+  .bacheca-ticker-track,
+  .bacheca-ticker-group {
+    display: flex;
+    flex-direction: column;
+    /* Deve restare allineato a TICKER_GAP_PX in bacheca-widget.tsx: il calcolo
+       del punto di loop dipende da questo valore. */
+    gap: 8px;
+  }
+
+  /* Track fuori flusso apposta: cosi' l'altezza dell'elenco (che con le copie
+     duplicate e' il doppio del contenuto) non gonfia la card e non finisce per
+     dettare l'altezza della riga del grid — altrimenti il contenuto ci starebbe
+     sempre tutto e non scorrerebbe mai nulla. L'altezza visibile la decide solo
+     il flex/stretch verso la card "Provisioning e invii" accanto. */
+  .bacheca-ticker-track {
+    position: absolute;
+    inset: 0 0 auto 0;
+    will-change: transform;
+  }
+
+  .bacheca-row {
+    --bacheca-chip-bg: #eef3ff;
+    --bacheca-chip-fg: #315fc5;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    border: 1px solid rgb(226 232 240 / 0.9);
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 0.55rem 0.7rem;
+  }
+
+  .bacheca-row[data-livello="attenzione"] {
+    --bacheca-chip-bg: #fff1d6;
+    --bacheca-chip-fg: #a85e00;
+  }
+
+  .bacheca-row[data-livello="urgente"] {
+    --bacheca-chip-bg: #fff0ed;
+    --bacheca-chip-fg: #b83e35;
+  }
+
+  .bacheca-chip {
+    display: inline-flex;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: var(--bacheca-chip-bg);
+    color: var(--bacheca-chip-fg);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bacheca-ticker {
+      overflow-y: auto;
+    }
   }
 
   .profile-panel,

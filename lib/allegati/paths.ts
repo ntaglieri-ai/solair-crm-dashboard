@@ -22,7 +22,7 @@ const BASE_BY_TIPO: Record<AllegatoRecordTipo, string> = {
   installatore: `${TEAM_FOLDER_ROOT}/INSTALLATORI`,
 }
 
-function sanitizeName(name: string): string {
+export function sanitizeName(name: string): string {
   return name
     .trim()
     .replace(/[\\/:*?"<>|]/g, "")
@@ -47,6 +47,26 @@ export function folderPathForRecord(
   const base = BASE_BY_TIPO[tipo]
   const cartella = `${sanitizeName(nomeRecord)} - ${suffisso(recordId)}`
   return `${base}/${cartella}`
+}
+
+/**
+ * Il path appartiene davvero alla cartella di QUESTO record?
+ * Le route allegati operano con le credenziali ADMIN Nextcloud (vedono
+ * l'intera Team Folder), quindi un path arbitrario preso dalla query string
+ * va sempre validato prima di download/delete: senza questo controllo un
+ * utente con il solo permesso "view" sui Lead potrebbe leggere qualunque
+ * file dell'istanza. Rifiuta anche ogni tentativo di traversal ("..").
+ */
+export function isPathInsideRecordFolder(
+  tipo: AllegatoRecordTipo,
+  recordId: string,
+  nomeRecord: string,
+  path: string,
+): boolean {
+  const normalized = path.replace(/^\/+/, "").replace(/\/{2,}/g, "/").replace(/\/+$/, "")
+  if (!normalized) return false
+  if (normalized.split("/").some((seg) => seg === "." || seg === "..")) return false
+  return normalized.startsWith(`${folderPathForRecord(tipo, recordId, nomeRecord)}/`)
 }
 
 export function filePathForRecord(

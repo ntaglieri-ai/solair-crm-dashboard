@@ -9,6 +9,21 @@ import { nextcloudAdminConfig, basicAuth } from "./config"
 
 export type WebDavResult = { ok: boolean; status: number; error?: string }
 
+export type WebDavItem = {
+  nome: string
+  isFolder: boolean
+  dimensioneKb: number | null
+  modificato: string | null // ISO
+  path: string // path completo DAV admin (stessa forma di fullPath in input)
+}
+
+export type WebDavListResult = {
+  ok: boolean
+  status: number
+  items: WebDavItem[]
+  error?: string
+}
+
 function davUrl(path: string, baseUrl: string, adminUser: string): string {
   const encodedSegments = path
     .split("/")
@@ -63,6 +78,102 @@ export async function ensureFolder(fullPath: string): Promise<WebDavResult> {
     }
   }
   return { ok: true, status: 201 }
+}
+
+const PROPFIND_BODY = `<?xml version="1.0"?>
+<d:propfind xmlns:d="DAV:">
+  <d:prop>
+    <d:displayname/>
+    <d:getcontentlength/>
+    <d:getlastmodified/>
+    <d:resourcetype/>
+  </d:prop>
+</d:propfind>`
+
+// Parser regex tollerante, stesso approccio gia' usato in webdav.ts (utente):
+// Nextcloud restituisce PROPFIND stabile e cosi' evitiamo una dipendenza XML.
+function tag(block: string, name: string): string | null {
+  const m = block.match(
+    new RegExp(`<[a-z0-9]*:?${name}[^>]*>([\\s\\S]*?)<\\/[a-z0-9]*:?${name}>`, "i"),
+  )
+  return m ? m[1].trim() : null
+}
+
+/**
+ * Path relativo alla root DAV admin a partire dall'href PROPFIND
+ * (es. /remote.php/dav/files/admin/Solair/x.pdf -> Solair/x.pdf).
+ */
+function relPathFromHref(href: string, adminUser: string): string {
+  let decoded = href
+  try {
+    decoded = decodeURIComponent(href)
+  } catch {
+    /* href gia' decodificato */
+  }
+  // Nextcloud puo' canonicalizzare la capitalizzazione dello userid nell'href.
+  const marker = `/remote.php/dav/files/${adminUser}`
+  const idx = decoded.toLowerCase().indexOf(marker.toLowerCase())
+  const rest = idx >= 0 ? decoded.slice(idx + marker.length) : decoded
+  return rest.replace(/^\/+/, "").replace(/\/{2,}/g, "/").replace(/\/+$/, "")
+}
+
+/**
+ * Elenca il contenuto immediato (Depth:1) della cartella indicata. Fonte di
+ * verita' unica per la sezione "Documenti" degli allegati record: nessun dato
+ * duplicato su DB, si legge sempre cosa c'e' davvero su Nextcloud.
+ *
+ * 404 = cartella non ancora creata (es. provisioning in background non ancora
+ * completato): NON e' un errore per l'utente, si mostra semplicemente vuoto.
+ */
+export async function listFolder(fullPath: string): Promise<WebDavListResult> {
+  const cfg = nextcloudAdminConfig()
+  if (!cfg) {
+    return { ok: false, status: 0, items: [], error: "Credenziali admin Nextcloud non configurate" }
+  }
+
+  const { res, error } = await davRequest("PROPFIND", fullPath, PROPFIND_BODY, {
+    Depth: "1",
+    "Content-Type": "application/xml; charset=utf-8",
+  })
+  if (error || !res) {
+    return { ok: false, status: 0, items: [], error: error ?? "Errore di rete Nextcloud" }
+  }
+  if (res.status === 404) return { ok: true, status: 404, items: [] }
+  if (res.status !== 207) {
+    return { ok: false, status: res.status, items: [], error: `PROPFIND fallita (${res.status})` }
+  }
+
+  const xml = await res.text()
+  const basePath = relPathFromHref(`/${fullPath}`, cfg.adminUser)
+  const blocks = xml.match(/<[a-z0-9]*:?response[\s>][\s\S]*?<\/[a-z0-9]*:?response>/gi) ?? []
+  const items: WebDavItem[] = []
+
+  for (const block of blocks) {
+    const href = tag(block, "href")
+    if (!href) continue
+    const path = relPathFromHref(href, cfg.adminUser)
+    // La entry della cartella richiesta stessa (Depth:1 la include sempre).
+    if (path === "" || path === basePath) continue
+
+    const sizeRaw = tag(block, "getcontentlength")
+    const lastMod = tag(block, "getlastmodified")
+    const size = sizeRaw != null && sizeRaw !== "" ? Number(sizeRaw) : null
+
+    items.push({
+      nome: path.split("/").pop() ?? path,
+      isFolder: /<[a-z0-9]*:?collection\s*\/?>/i.test(block),
+      dimensioneKb: size != null && Number.isFinite(size) ? Math.round(size / 1024) : null,
+      modificato: lastMod ? new Date(lastMod).toISOString() : null,
+      path,
+    })
+  }
+
+  // Cartelle prima, poi file, entrambi in ordine alfabetico.
+  items.sort((a, b) =>
+    a.isFolder === b.isFolder ? a.nome.localeCompare(b.nome, "it") : a.isFolder ? -1 : 1,
+  )
+
+  return { ok: true, status: res.status, items }
 }
 
 export async function uploadFile(

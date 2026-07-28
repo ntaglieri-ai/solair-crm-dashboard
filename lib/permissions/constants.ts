@@ -153,6 +153,11 @@ export const ACTION_KEYS = [
   "installatori.default_values.manage",
   "installatori.assignment_rules.manage",
   "installatori.workflows.manage",
+  // Gestione della Bacheca aziendale (crea/elimina annuncio) nel widget di
+  // dashboard. Tenuta separata dal ruolo apposta: il futuro flag SUPERADMIN
+  // "solo tecnico" si implementera' negando questa chiave, senza toccare il
+  // componente.
+  "widget.bacheca.gestisci",
 ] as const
 
 export function normalizeRoleCode(value: string | null | undefined): RoleCode {
@@ -305,6 +310,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       "company.communication.view",
       "company.communication.manage",
       "appearance.personal.manage",
+      "widget.bacheca.gestisci",
     ])
     grantFieldManagement([...MODULE_KEYS])
     for (const moduleKey of MODULE_KEYS) {
@@ -360,6 +366,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       "company.communication.view",
       "company.communication.manage",
       "appearance.personal.manage",
+      "widget.bacheca.gestisci",
     ])
     for (const moduleKey of MODULE_KEYS) {
       fields[moduleKey] = roleFields[moduleKey] ?? { "*": "readonly" }

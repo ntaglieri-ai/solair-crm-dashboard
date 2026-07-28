@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import type { DashboardMapMarker } from "@/components/dashboard/italy-map"
 import type { SystemSede } from "@/lib/system-settings-data"
-import type { NoticeboardItem } from "@/components/dashboard/noticeboard"
 import { regionFromProvince } from "@/lib/dashboard/italy-regions"
 import type { PermissionSnapshot } from "@/lib/permissions/types"
 import { applyDashboardScope } from "@/lib/dashboard/scope"
@@ -32,7 +31,6 @@ export type DashboardData = {
   leadsByStatus: Array<{ label: string; count: number }>
   clientiByStatus: Array<{ label: string; count: number }>
   mapMarkers: DashboardMapMarker[]
-  noticeboard: NoticeboardItem[]
   leadsByRegion: Array<{ region: string; count: number }>
   unmappedLeadLocations: number
   leadTrend: Array<{ label: string; count: number }>
@@ -77,7 +75,6 @@ export type EconomicWidgetData = {
 }
 
 export type AgentDashboardData = {
-  noticeboard: NoticeboardItem[]
   counts: {
     activeLeads: number
     clients: number
@@ -91,8 +88,10 @@ export type SystemSemaphoreData = {
   regular: boolean
 }
 
+// Niente `noticeboard` in nessuno di questi tipi: tutte le dashboard usano
+// ormai la Bacheca vera (tabella bacheca_messaggi via BachecaWidget, che si
+// carica da sola), non piu' il blob jsonb su crm_settings.
 export type SuperadminDashboardData = {
-  noticeboard: NoticeboardItem[]
   nextcloudIssues: DashboardSystemIssue[]
   welcomeEmailIssues: DashboardSystemIssue[]
   health: DashboardHealthIndicator[]
@@ -145,60 +144,6 @@ type AggregateLocation = {
 }
 type AggregateTrend = { key: string; count: number }
 
-function noticeboardCutoff() {
-  const cutoff = new Date()
-  cutoff.setMonth(cutoff.getMonth() - 3)
-  return cutoff
-}
-
-function normalizeNoticeboardItems(value: unknown): NoticeboardItem[] {
-  if (!Array.isArray(value)) return []
-  const cutoff = noticeboardCutoff().getTime()
-  return value
-    .filter((item): item is NoticeboardItem => {
-      if (!item || typeof item !== "object") return false
-      const candidate = item as Record<string, unknown>
-      return (
-        typeof candidate.id === "string" &&
-        typeof candidate.title === "string" &&
-        typeof candidate.body === "string" &&
-        typeof candidate.author === "string" &&
-        typeof candidate.createdAt === "string" &&
-        typeof candidate.pinned === "boolean" &&
-        new Date(candidate.createdAt).getTime() >= cutoff
-      )
-    })
-    .sort(
-      (a, b) =>
-        Number(b.pinned) - Number(a.pinned) ||
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    )
-}
-
-async function loadNoticeboard(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-): Promise<NoticeboardItem[]> {
-  const { data } = await supabase
-    .from("crm_settings")
-    .select("valore")
-    .eq("chiave", "dashboard.noticeboard")
-    .maybeSingle()
-
-  const rawItems = Array.isArray(data?.valore) ? data.valore : []
-  const items = normalizeNoticeboardItems(rawItems)
-  if (items.length !== rawItems.length) {
-    await supabase.from("crm_settings").upsert(
-      {
-        chiave: "dashboard.noticeboard",
-        valore: items,
-        descrizione: "Comunicazioni della bacheca aziendale",
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "chiave" },
-    )
-  }
-  return items
-}
 
 function groupedCounts(
   rows: Array<Record<string, unknown>>,
@@ -295,7 +240,6 @@ export async function getDashboardData(): Promise<DashboardData> {
     aggregatesResult,
     settingsResult,
     usersResult,
-    noticeboard,
   ] = await Promise.all([
     supabase.from("leads").select("id", { count: "exact", head: true }),
     supabase.from("clienti").select("id", { count: "exact", head: true }),
@@ -320,7 +264,6 @@ export async function getDashboardData(): Promise<DashboardData> {
       .eq("chiave", "system.sedi")
       .maybeSingle(),
     supabase.from("utenti").select("sede").not("sede", "is", null),
-    loadNoticeboard(supabase),
   ])
 
   const requiredErrors = [
@@ -423,7 +366,6 @@ export async function getDashboardData(): Promise<DashboardData> {
     leadsByStatus: (aggregates.leadsByStatus ?? []) as AggregateCount[],
     clientiByStatus: (aggregates.clientiByStatus ?? []) as AggregateCount[],
     mapMarkers,
-    noticeboard,
     leadsByRegion: Array.from(regionCounts, ([region, count]) => ({ region, count }))
       .sort((a, b) => b.count - a.count),
     unmappedLeadLocations,
@@ -580,9 +522,8 @@ export async function getAgentDashboardData(
     "lead",
   )
 
-  const [noticeboard, activeLeads, clients, overdueTasks, upcomingTasks, staleLeads] =
+  const [activeLeads, clients, overdueTasks, upcomingTasks, staleLeads] =
     await Promise.all([
-      loadNoticeboard(supabase),
       leadsActiveQ,
       clientsQ,
       overdueTasksQ,
@@ -591,7 +532,6 @@ export async function getAgentDashboardData(
     ])
 
   return {
-    noticeboard,
     counts: {
       activeLeads: activeLeads.count ?? 0,
       clients: clients.count ?? 0,
@@ -604,8 +544,7 @@ export async function getAgentDashboardData(
 
 export async function getSuperadminDashboardData(): Promise<SuperadminDashboardData> {
   const supabase = await createClient()
-  const [noticeboard, nextcloud, welcome] = await Promise.all([
-    loadNoticeboard(supabase),
+  const [nextcloud, welcome] = await Promise.all([
     supabase
       .from("nextcloud_credentials")
       .select("utente_id,status,last_error,utenti:utente_id(nome)")
@@ -640,7 +579,6 @@ export async function getSuperadminDashboardData(): Promise<SuperadminDashboardD
   )
 
   return {
-    noticeboard,
     nextcloudIssues,
     welcomeEmailIssues,
     health: [

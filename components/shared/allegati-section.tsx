@@ -4,12 +4,15 @@ import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import {
   IconFileText,
+  IconFolder,
+  IconFolderPlus,
   IconPhoto,
   IconDownload,
   IconTrash,
   IconUpload,
   IconLink,
   IconPlus,
+  IconExternalLink,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,12 +31,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import type { AllegatoRecordTipo } from "@/lib/allegati/paths"
+// Stessa route deep-link (OIDC) usata dal modulo Documenti: il path viene
+// validato server-side contro path-permissions.ts.
+import { openNextcloudUrl } from "@/lib/documenti-data"
 
+// Voce reale della cartella Nextcloud del record: niente id DB, il path e'
+// l'identificatore (chiave React, download, delete, apertura sottocartella).
 type DocumentoRow = {
-  id: string
-  nome_file: string
-  dimensione_kb: number | null
-  created_at: string
+  nome: string
+  isFolder: boolean
+  dimensioneKb: number | null
+  modificato: string | null
+  path: string
 }
 type CollegamentoRow = {
   id: string
@@ -60,7 +69,10 @@ function isImage(nomeFile: string): boolean {
  * Sezione allegati generica — mostra semplicemente cosa contiene la
  * cartella Nextcloud del record, senza slot/categorie speciali (decisione
  * esplicita 25/07: "deve essere semplicemente la visualizzazione di cio'
- * che la cartella contiene"). Riusabile su Lead/Cliente/Installatore.
+ * che la cartella contiene"). Dal 27/07 Nextcloud e' l'UNICA fonte per i
+ * file: il contenuto arriva live dalla cartella, non dalla tabella
+ * `documenti`. I collegamenti (link esterni) restano DB-backed.
+ * Riusabile su Lead/Cliente/Installatore.
  */
 export function AllegatiSection({
   recordTipo,
@@ -73,26 +85,34 @@ export function AllegatiSection({
 }) {
   const [documenti, setDocumenti] = useState<DocumentoRow[]>([])
   const [collegamenti, setCollegamenti] = useState<CollegamentoRow[]>([])
+  const [folderPath, setFolderPath] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkTitolo, setLinkTitolo] = useState("")
   const [linkUrl, setLinkUrl] = useState("")
   const [savingLink, setSavingLink] = useState(false)
+  const [cartellaOpen, setCartellaOpen] = useState(false)
+  const [nomeCartella, setNomeCartella] = useState("")
+  const [savingCartella, setSavingCartella] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const recordQuery =
+    `recordTipo=${encodeURIComponent(recordTipo)}` +
+    `&recordId=${encodeURIComponent(recordId)}` +
+    `&nomeRecord=${encodeURIComponent(nomeRecord)}`
 
   async function refresh() {
     setLoading(true)
     try {
-      const res = await fetch(
-        `/api/allegati?recordTipo=${recordTipo}&recordId=${recordId}`,
-        { cache: "no-store" },
-      )
+      const res = await fetch(`/api/allegati?${recordQuery}`, { cache: "no-store" })
       if (!res.ok) throw new Error()
       const data = (await res.json()) as {
+        folderPath: string
         documenti: DocumentoRow[]
         collegamenti: CollegamentoRow[]
       }
+      setFolderPath(data.folderPath)
       setDocumenti(data.documenti)
       setCollegamenti(data.collegamenti)
     } catch {
@@ -105,7 +125,7 @@ export function AllegatiSection({
   useEffect(() => {
     refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recordTipo, recordId])
+  }, [recordTipo, recordId, nomeRecord])
 
   async function handleFileSelected(file: File) {
     setUploading(true)
@@ -124,6 +144,27 @@ export function AllegatiSection({
       toast.error(error instanceof Error ? error.message : "Caricamento non riuscito")
     } finally {
       setUploading(false)
+    }
+  }
+
+  async function handleCreateFolder() {
+    setSavingCartella(true)
+    try {
+      const res = await fetch("/api/allegati", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recordTipo, recordId, nomeRecord, nuovaCartella: nomeCartella }),
+      })
+      const result = (await res.json().catch(() => null)) as { error?: string } | null
+      if (!res.ok) throw new Error(result?.error ?? "Creazione non riuscita")
+      toast.success("Cartella creata")
+      setCartellaOpen(false)
+      setNomeCartella("")
+      await refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Creazione non riuscita")
+    } finally {
+      setSavingCartella(false)
     }
   }
 
@@ -149,11 +190,25 @@ export function AllegatiSection({
     }
   }
 
-  async function handleDelete(id: string, tipo: "documento" | "collegamento") {
+  async function handleDeleteDocumento(doc: DocumentoRow) {
     try {
-      const res = await fetch(`/api/allegati/${id}?tipo=${tipo}`, { method: "DELETE" })
+      const res = await fetch(
+        `/api/allegati/file?tipo=documento&path=${encodeURIComponent(doc.path)}&${recordQuery}`,
+        { method: "DELETE" },
+      )
       if (!res.ok) throw new Error()
-      toast.success(tipo === "documento" ? "File eliminato" : "Collegamento eliminato")
+      toast.success(doc.isFolder ? "Cartella eliminata" : "File eliminato")
+      await refresh()
+    } catch {
+      toast.error("Eliminazione non riuscita")
+    }
+  }
+
+  async function handleDeleteCollegamento(id: string) {
+    try {
+      const res = await fetch(`/api/allegati/${id}?tipo=collegamento`, { method: "DELETE" })
+      if (!res.ok) throw new Error()
+      toast.success("Collegamento eliminato")
       await refresh()
     } catch {
       toast.error("Eliminazione non riuscita")
@@ -164,30 +219,55 @@ export function AllegatiSection({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-navy">
           Documenti
         </span>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button size="sm" variant="outline" className="bg-card" disabled={uploading}>
-                <IconPlus size={15} stroke={1.8} data-icon="inline-start" />
-                {uploading ? "Caricamento..." : "Allega"}
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-              <IconUpload size={15} stroke={1.8} data-icon="inline-start" />
-              Da computer
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setLinkOpen(true)}>
-              <IconLink size={15} stroke={1.8} data-icon="inline-start" />
-              Da URL
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-1.5">
+          {folderPath ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-navy"
+              nativeButton={false}
+              render={
+                <a href={openNextcloudUrl(folderPath)} target="_blank" rel="noopener noreferrer" />
+              }
+            >
+              <IconExternalLink size={15} stroke={1.8} data-icon="inline-start" />
+              Apri in Nextcloud
+            </Button>
+          ) : null}
+          <Button
+            size="sm"
+            variant="outline"
+            className="bg-card"
+            onClick={() => setCartellaOpen(true)}
+          >
+            <IconFolderPlus size={15} stroke={1.8} data-icon="inline-start" />
+            Nuova cartella
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button size="sm" variant="outline" className="bg-card" disabled={uploading}>
+                  <IconPlus size={15} stroke={1.8} data-icon="inline-start" />
+                  {uploading ? "Caricamento..." : "Allega"}
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                <IconUpload size={15} stroke={1.8} data-icon="inline-start" />
+                Da computer
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setLinkOpen(true)}>
+                <IconLink size={15} stroke={1.8} data-icon="inline-start" />
+                Da URL
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
         <input
           ref={fileInputRef}
           type="file"
@@ -209,34 +289,52 @@ export function AllegatiSection({
       ) : (
         <ul className="flex flex-col gap-2">
           {documenti.map((doc) => {
-            const Icon = isImage(doc.nome_file) ? IconPhoto : IconFileText
+            const Icon = doc.isFolder ? IconFolder : isImage(doc.nome) ? IconPhoto : IconFileText
+            const meta = [
+              doc.isFolder ? "Cartella" : formatSize(doc.dimensioneKb),
+              doc.modificato ? formatDate(doc.modificato) : "",
+            ]
+              .filter(Boolean)
+              .join(" · ")
             return (
               <li
-                key={doc.id}
+                key={doc.path}
                 className="group flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5"
               >
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-navy">
                   <Icon size={18} stroke={1.8} />
                 </span>
                 <div className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-[13px] font-medium text-foreground">
-                    {doc.nome_file}
-                  </span>
-                  <span className="text-[11px] text-muted-foreground">
-                    {formatSize(doc.dimensione_kb)} · {formatDate(doc.created_at)}
-                  </span>
+                  {doc.isFolder ? (
+                    // Le sottocartelle si aprono direttamente su Nextcloud.
+                    <a
+                      href={openNextcloudUrl(doc.path)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="truncate text-[13px] font-medium text-foreground hover:underline"
+                    >
+                      {doc.nome}
+                    </a>
+                  ) : (
+                    <span className="truncate text-[13px] font-medium text-foreground">
+                      {doc.nome}
+                    </span>
+                  )}
+                  <span className="text-[11px] text-muted-foreground">{meta}</span>
                 </div>
-                <a
-                  href={`/api/allegati/${doc.id}/download`}
-                  aria-label="Scarica"
-                  className="flex size-7 items-center justify-center rounded-md text-navy opacity-0 transition-all hover:bg-secondary group-hover:opacity-100"
-                >
-                  <IconDownload size={16} stroke={1.8} />
-                </a>
+                {doc.isFolder ? null : (
+                  <a
+                    href={`/api/allegati/file/download?path=${encodeURIComponent(doc.path)}&${recordQuery}`}
+                    aria-label="Scarica"
+                    className="flex size-7 items-center justify-center rounded-md text-navy opacity-0 transition-all hover:bg-secondary group-hover:opacity-100"
+                  >
+                    <IconDownload size={16} stroke={1.8} />
+                  </a>
+                )}
                 <button
                   type="button"
                   aria-label="Elimina"
-                  onClick={() => handleDelete(doc.id, "documento")}
+                  onClick={() => handleDeleteDocumento(doc)}
                   className="flex size-7 items-center justify-center rounded-md text-destructive opacity-0 transition-all hover:bg-destructive/10 group-hover:opacity-100"
                 >
                   <IconTrash size={16} stroke={1.8} />
@@ -268,7 +366,7 @@ export function AllegatiSection({
               <button
                 type="button"
                 aria-label="Elimina"
-                onClick={() => handleDelete(link.id, "collegamento")}
+                onClick={() => handleDeleteCollegamento(link.id)}
                 className="flex size-7 items-center justify-center rounded-md text-destructive opacity-0 transition-all hover:bg-destructive/10 group-hover:opacity-100"
               >
                 <IconTrash size={16} stroke={1.8} />
@@ -277,6 +375,35 @@ export function AllegatiSection({
           ))}
         </ul>
       )}
+
+      <Dialog open={cartellaOpen} onOpenChange={setCartellaOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nuova cartella</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5 py-1">
+            <Label htmlFor="cartella-nome">Nome cartella</Label>
+            <Input
+              id="cartella-nome"
+              value={nomeCartella}
+              onChange={(e) => setNomeCartella(e.target.value)}
+              placeholder="Es. Documenti tecnici"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setCartellaOpen(false)}
+              disabled={savingCartella}
+            >
+              Annulla
+            </Button>
+            <Button onClick={handleCreateFolder} disabled={savingCartella || !nomeCartella.trim()}>
+              {savingCartella ? "Creazione..." : "Crea"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={linkOpen} onOpenChange={setLinkOpen}>
         <DialogContent className="sm:max-w-md">

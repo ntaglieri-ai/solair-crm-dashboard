@@ -2,12 +2,8 @@ import { NextResponse } from "next/server"
 import { requireApiRecord } from "@/lib/permissions/server"
 import { createClient } from "@/lib/supabase/server"
 import { deleteFile } from "@/lib/nextcloud/admin-webdav"
-import {
-  getDocumentoById,
-  deleteDocumentoRow,
-  deleteCollegamentoRow,
-} from "@/lib/allegati/repository"
-import type { AllegatoRecordTipo } from "@/lib/allegati/paths"
+import { deleteCollegamentoRow } from "@/lib/allegati/repository"
+import { isPathInsideRecordFolder, type AllegatoRecordTipo } from "@/lib/allegati/paths"
 
 const PERMISSION_MODULE: Record<AllegatoRecordTipo, string> = {
   lead: "lead",
@@ -15,6 +11,18 @@ const PERMISSION_MODULE: Record<AllegatoRecordTipo, string> = {
   installatore: "installatori",
 }
 
+function isValidTipo(value: string | null): value is AllegatoRecordTipo {
+  return value === "lead" || value === "cliente" || value === "installatore"
+}
+
+/**
+ * tipo=documento -> il file vive solo su Nextcloud, quindi si identifica con il
+ * suo `path` (query param), non piu' con un id DB: il segmento [id] dell'URL e'
+ * ignorato in questo caso. recordTipo/recordId/nomeRecord servono a verificare
+ * i permessi E che il path appartenga davvero alla cartella di quel record —
+ * senza quel controllo un path arbitrario girerebbe con le credenziali admin.
+ * tipo=collegamento resta invariato (DB-backed, per id).
+ */
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -24,20 +32,33 @@ export async function DELETE(
   const tipo = searchParams.get("tipo") // "documento" | "collegamento"
 
   if (tipo === "documento") {
-    const documento = await getDocumentoById(id)
-    if (!documento) return NextResponse.json({ error: "Non trovato" }, { status: 404 })
+    const path = searchParams.get("path")
+    const recordTipo = searchParams.get("recordTipo")
+    const recordId = searchParams.get("recordId")
+    const nomeRecord = searchParams.get("nomeRecord")
 
-    const guard = await requireApiRecord(PERMISSION_MODULE[documento.record_tipo], "delete")
-    if (guard.response) return guard.response
-
-    const removed = await deleteFile(documento.url_storage)
-    if (!removed.ok) {
-      console.error(
-        `[allegati] impossibile eliminare il file Nextcloud ${documento.url_storage}:`,
-        removed.error,
+    if (!path || !isValidTipo(recordTipo) || !recordId || !nomeRecord) {
+      return NextResponse.json(
+        { error: "path, recordTipo, recordId e nomeRecord richiesti" },
+        { status: 400 },
       )
     }
-    await deleteDocumentoRow(id)
+
+    const guard = await requireApiRecord(PERMISSION_MODULE[recordTipo], "delete")
+    if (guard.response) return guard.response
+
+    if (!isPathInsideRecordFolder(recordTipo, recordId, nomeRecord, path)) {
+      return NextResponse.json({ error: "Percorso non consentito" }, { status: 403 })
+    }
+
+    const removed = await deleteFile(path)
+    if (!removed.ok) {
+      console.error(`[allegati] impossibile eliminare il file Nextcloud ${path}:`, removed.error)
+      return NextResponse.json(
+        { error: removed.error ?? `Eliminazione su Nextcloud fallita (${removed.status})` },
+        { status: 502 },
+      )
+    }
     return NextResponse.json({ ok: true })
   }
 

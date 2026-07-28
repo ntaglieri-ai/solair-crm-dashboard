@@ -58,6 +58,7 @@ import {
   STATO_CLIENTE_VALUES,
   SEDE_LABELS,
 } from "@/lib/mock-data"
+import { BulkEmailMenuItem } from "@/components/shared/bulk-email-triggers"
 import type { ClienteSettingsSectionId } from "./cliente-settings-sheet"
 
 type Dialogs =
@@ -104,6 +105,7 @@ export function ClienteActionsMenu({
   onBulkTransfer,
   onBulkUpdate,
   onBulkDedup,
+  onBulkEmail,
   onBulkDelete,
 }: {
   selectedCount: number
@@ -118,6 +120,8 @@ export function ClienteActionsMenu({
   onBulkTransfer: (owner: string) => void
   onBulkUpdate: (field: UpdateField, value: string) => void
   onBulkDedup: (idsToRemove: string[]) => void
+  /** Apre il dialog di invio email di massa (gestito da clienti-client). */
+  onBulkEmail: () => void
   onBulkDelete: () => void
 }) {
   const [dialog, setDialog] = useState<Dialogs>("none")
@@ -231,6 +235,7 @@ export function ClienteActionsMenu({
                   <IconPencil size={16} stroke={1.8} data-icon="inline-start" />
                   Aggiornamento di massa
                 </DropdownMenuItem>
+                <BulkEmailMenuItem selectedCount={selectedCount} onSelect={onBulkEmail} />
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>

@@ -30,16 +30,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { BulkEmailMenuItem } from "@/components/shared/bulk-email-triggers"
 import { useInstallatoriReferenceData } from "@/lib/installatori/hooks"
 import type { InstallatoreProprietario } from "@/lib/installatori/hooks"
 
 export function InstallatoreActionsMenu({
   selectedCount,
   onBulkTransfer,
+  onBulkEmail,
   onBulkDelete,
 }: {
   selectedCount: number
   onBulkTransfer: (owner: InstallatoreProprietario) => void
+  /** Apre il dialog di invio email di massa (gestito da installatori-client). */
+  onBulkEmail: () => void
   onBulkDelete: () => void
 }) {
   const hasSelection = selectedCount > 0
@@ -74,6 +78,7 @@ export function InstallatoreActionsMenu({
                   <IconArrowsExchange size={16} stroke={1.8} data-icon="inline-start" />
                   Trasferimento di massa
                 </DropdownMenuItem>
+                <BulkEmailMenuItem selectedCount={selectedCount} onSelect={onBulkEmail} />
               </DropdownMenuGroup>
               {permissions.canRecord("installatori", "delete") ? (
                 <>

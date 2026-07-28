@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
+import { BulkEmailBarButton } from "@/components/shared/bulk-email-triggers"
 import { STATO_LEAD_ORDER } from "@/lib/mock-data"
 import { useTags } from "@/lib/tag-store"
 import { usePermissions } from "@/lib/permissions/provider"
@@ -34,6 +35,7 @@ export function BulkToolbar({
   onChangeOwner,
   onChangeStato,
   onExport,
+  onEmail,
   onDelete,
   onClear,
 }: {
@@ -41,6 +43,7 @@ export function BulkToolbar({
   onChangeOwner: (owner: string) => void
   onChangeStato: (stato: string) => void
   onExport: () => void
+  onEmail: () => void
   onDelete: () => void
   onClear: () => void
 }) {
@@ -131,6 +134,9 @@ export function BulkToolbar({
           />
           <TooltipContent>Esporta CSV</TooltipContent>
         </Tooltip>
+
+        {/* Invia email di massa */}
+        <BulkEmailBarButton selectedCount={count} onSelect={onEmail} />
 
         {/* Elimina */}
         {canDelete ? (

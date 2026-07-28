@@ -58,6 +58,7 @@ import {
   SEDE_LABELS,
 } from "@/lib/mock-data"
 import { useTags } from "@/lib/tag-store"
+import { BulkEmailMenuItem } from "@/components/shared/bulk-email-triggers"
 import type { SettingsSectionId } from "./lead-settings-sheet"
 import { LeadTagSection } from "./lead-tag-section"
 
@@ -93,6 +94,7 @@ export function LeadActionsMenu({
   onBulkConvert,
   onBulkApprove,
   onBulkDedup,
+  onBulkEmail,
   onBulkDelete,
 }: {
   selectedCount: number
@@ -109,6 +111,8 @@ export function LeadActionsMenu({
   onBulkConvert: () => void
   onBulkApprove: () => void
   onBulkDedup: (idsToRemove: string[]) => void
+  /** Apre il dialog di invio email di massa (gestito da leads-client). */
+  onBulkEmail: () => void
   onBulkDelete: () => void
 }) {
   const { owners } = useTags()
@@ -289,6 +293,7 @@ export function LeadActionsMenu({
                   <IconUserCheck size={16} stroke={1.8} data-icon="inline-start" />
                   Converti in massa
                 </DropdownMenuItem>
+                <BulkEmailMenuItem selectedCount={selectedCount} onSelect={onBulkEmail} />
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>

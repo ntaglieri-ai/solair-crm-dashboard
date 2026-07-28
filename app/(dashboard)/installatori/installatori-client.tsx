@@ -31,6 +31,9 @@ import {
 } from "@/components/installatori/installatore-filters"
 import { InstallatoreTable } from "@/components/installatori/installatore-table"
 import { InstallatoreActionsMenu } from "@/components/installatori/installatore-actions-menu"
+import { BulkEmailDialog } from "@/components/shared/bulk-email-dialog"
+import { BulkEmailBarButton } from "@/components/shared/bulk-email-triggers"
+import { BulkSelectionBar } from "@/components/shared/bulk-selection-bar"
 import { InstallatoreFormDialog } from "@/components/installatori/new-installatore-dialog"
 import {
   InstallatoreSettingsSheet,
@@ -83,6 +86,8 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkEmailOpen, setBulkEmailOpen] = useState(false)
+  const selectedIds = useMemo(() => Array.from(selected), [selected])
   const [newOpen, setNewOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<InstallatoreRecord | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
@@ -245,6 +250,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
           <InstallatoreActionsMenu
             selectedCount={selected.size}
             onBulkTransfer={handleBulkTransfer}
+            onBulkEmail={() => setBulkEmailOpen(true)}
             onBulkDelete={() => setBulkDeleteOpen(true)}
           />
 
@@ -478,6 +484,27 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Barra azioni di massa (in basso, sulla selezione) */}
+      <BulkSelectionBar
+        count={selected.size}
+        singolare="installatore selezionato"
+        plurale="installatori selezionati"
+        onClear={() => setSelected(new Set())}
+      >
+        <BulkEmailBarButton
+          selectedCount={selected.size}
+          onSelect={() => setBulkEmailOpen(true)}
+        />
+      </BulkSelectionBar>
+
+      {/* Dialog invio email di massa */}
+      <BulkEmailDialog
+        open={bulkEmailOpen}
+        onOpenChange={setBulkEmailOpen}
+        recordTipo="installatore"
+        recordIds={selectedIds}
+      />
 
       <InstallatoreFormDialog open={newOpen} onOpenChange={setNewOpen} />
       <InstallatoreFormDialog

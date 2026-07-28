@@ -45,6 +45,9 @@ import {
   type ClienteSettingsSectionId,
 } from "@/components/clienti/cliente-settings-sheet"
 import { ClienteActionsMenu } from "@/components/clienti/cliente-actions-menu"
+import { BulkEmailDialog } from "@/components/shared/bulk-email-dialog"
+import { BulkEmailBarButton } from "@/components/shared/bulk-email-triggers"
+import { BulkSelectionBar } from "@/components/shared/bulk-selection-bar"
 import { LeadImportDialog } from "@/components/leads/lead-import-dialog"
 import { NewClienteDialog } from "@/components/clienti/new-cliente-dialog"
 import {
@@ -120,6 +123,7 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleteTarget, setDeleteTarget] = useState<ClienteRecord | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkEmailOpen, setBulkEmailOpen] = useState(false)
   const permissions = usePermissions()
   const preferenceOwner =
     permissions.snapshot.subject.userId ??
@@ -219,6 +223,8 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
     () => visibleRows.filter((c) => selected.has(c.id)),
     [visibleRows, selected],
   )
+
+  const selectedIds = useMemo(() => Array.from(selected), [selected])
 
   const ALL_TAGS = useMemo(
     () => Array.from(new Set(pageRows.flatMap((c) => c.Tag))).sort(),
@@ -451,6 +457,7 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
             onBulkTransfer={handleBulkOwner}
             onBulkUpdate={handleBulkUpdate}
             onBulkDedup={handleBulkDedup}
+            onBulkEmail={() => setBulkEmailOpen(true)}
             onBulkDelete={() => setBulkDeleteOpen(true)}
           />
 
@@ -602,6 +609,27 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
           </div>
         </div>
       )}
+
+      {/* Barra azioni di massa (in basso, sulla selezione) */}
+      <BulkSelectionBar
+        count={selected.size}
+        singolare="cliente selezionato"
+        plurale="clienti selezionati"
+        onClear={() => setSelected(new Set())}
+      >
+        <BulkEmailBarButton
+          selectedCount={selected.size}
+          onSelect={() => setBulkEmailOpen(true)}
+        />
+      </BulkSelectionBar>
+
+      {/* Dialog invio email di massa */}
+      <BulkEmailDialog
+        open={bulkEmailOpen}
+        onOpenChange={setBulkEmailOpen}
+        recordTipo="cliente"
+        recordIds={selectedIds}
+      />
 
       {/* Dialog elimina bulk */}
       <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>

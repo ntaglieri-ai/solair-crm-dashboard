@@ -53,6 +53,9 @@ export async function middleware(request: NextRequest) {
     "/oauth/consent",
     "/api/auth/password-reset",
     "/api/keep-warm",
+    // Webhook Meta Lead Ads: la route gestisce internamente verifica
+    // hub.challenge e firma X-Hub-Signature-256.
+    "/api/meta/webhook",
     // Ingestion pubblica lead (chatbot/Meta Ads/configuratore) — nessuna
     // sessione CRM: si autentica da sola via API key per sorgente
     // (vedi app/api/public/lead-intake/route.ts), come /api/keep-warm sopra.

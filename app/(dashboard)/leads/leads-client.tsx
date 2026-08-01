@@ -38,6 +38,7 @@ import {
   type Density,
 } from "@/components/leads/lead-table"
 import { BulkToolbar } from "@/components/leads/bulk-toolbar"
+import { BulkEmailDialog } from "@/components/shared/bulk-email-dialog"
 import { NewLeadDialog } from "@/components/leads/new-lead-dialog"
 import {
   LeadSettingsSheet,
@@ -156,6 +157,7 @@ export function LeadsClient({
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [density, setDensity] = useState<Density>("normale")
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkEmailOpen, setBulkEmailOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] =
     useState<SettingsSectionId>("generali")
@@ -669,6 +671,7 @@ export function LeadsClient({
             onBulkConvert={handleBulkConvert}
             onBulkApprove={handleBulkApprove}
             onBulkDedup={handleBulkDedup}
+            onBulkEmail={() => setBulkEmailOpen(true)}
             onBulkDelete={() => setBulkDeleteOpen(true)}
           />
 
@@ -884,8 +887,17 @@ export function LeadsClient({
         onChangeOwner={handleBulkOwner}
         onChangeStato={handleBulkStato}
         onExport={handleBulkExport}
+        onEmail={() => setBulkEmailOpen(true)}
         onDelete={() => setBulkDeleteOpen(true)}
         onClear={() => setSelected(new Set())}
+      />
+
+      {/* Dialog invio email di massa */}
+      <BulkEmailDialog
+        open={bulkEmailOpen}
+        onOpenChange={setBulkEmailOpen}
+        recordTipo="lead"
+        recordIds={selectedIds}
       />
 
       {/* Dialog elimina bulk */}

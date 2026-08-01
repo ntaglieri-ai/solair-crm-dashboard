@@ -11,11 +11,14 @@
 // casella personale dell'agente.
 
 import nodemailer from "nodemailer"
+import type { Transporter } from "nodemailer"
 
 const ARUBA_HOST = "smtps.aruba.it"
 const ARUBA_PORT = 465
-const PACING_MS = 400
 const MAX_RECIPIENTS_PER_REQUEST = 200
+
+/** Pausa tra un destinatario e l'altro — vedi nota in testa al file. */
+export const PACING_MS = 400
 
 export type LeadEmailResult = {
   to: string
@@ -23,8 +26,21 @@ export type LeadEmailResult = {
   error: string | null
 }
 
-function sleep(ms: number) {
+export function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * Transport SMTP sulla casella Aruba personale dell'agente. Condiviso con
+ * lib/email/bulk-mailer.ts: host/porta/TLS vivono solo qui.
+ */
+export function createPersonalTransport(smtpUser: string, smtpPassword: string): Transporter {
+  return nodemailer.createTransport({
+    host: ARUBA_HOST,
+    port: ARUBA_PORT,
+    secure: true,
+    auth: { user: smtpUser, pass: smtpPassword },
+  })
 }
 
 export async function sendLeadEmails(params: {
@@ -37,12 +53,7 @@ export async function sendLeadEmails(params: {
   const truncated = params.recipients.length > MAX_RECIPIENTS_PER_REQUEST
   const recipients = params.recipients.slice(0, MAX_RECIPIENTS_PER_REQUEST)
 
-  const transport = nodemailer.createTransport({
-    host: ARUBA_HOST,
-    port: ARUBA_PORT,
-    secure: true,
-    auth: { user: params.smtpUser, pass: params.smtpPassword },
-  })
+  const transport = createPersonalTransport(params.smtpUser, params.smtpPassword)
 
   const results: LeadEmailResult[] = []
   for (const to of recipients) {

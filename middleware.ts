@@ -53,6 +53,10 @@ export async function middleware(request: NextRequest) {
     "/oauth/consent",
     "/api/auth/password-reset",
     "/api/keep-warm",
+    // Ingestion pubblica lead (chatbot/Meta Ads/configuratore) — nessuna
+    // sessione CRM: si autentica da sola via API key per sorgente
+    // (vedi app/api/public/lead-intake/route.ts), come /api/keep-warm sopra.
+    "/api/public",
   ]
   const isPublicRoute = publicRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route)

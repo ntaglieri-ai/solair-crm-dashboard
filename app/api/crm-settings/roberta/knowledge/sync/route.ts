@@ -16,13 +16,13 @@ const SOURCES_SETTING_KEY = "roberta.knowledge.sources"
 async function loadSources(supabase: ReturnType<typeof createAdminClient>) {
   if (!supabase) return DEFAULT_ROBERTA_SOURCES
   const { data } = await supabase
-    .from("system_settings")
-    .select("value")
-    .eq("key", SOURCES_SETTING_KEY)
+    .from("crm_settings")
+    .select("valore")
+    .eq("chiave", SOURCES_SETTING_KEY)
     .maybeSingle()
 
-  return Array.isArray(data?.value) && data.value.length > 0
-    ? (data.value as RobertaKnowledgeSourceConfig[])
+  return Array.isArray(data?.valore) && data.valore.length > 0
+    ? (data.valore as RobertaKnowledgeSourceConfig[])
     : DEFAULT_ROBERTA_SOURCES
 }
 

@@ -47,14 +47,14 @@ export async function GET() {
   }
 
   const { data, error } = await supabase
-    .from("system_settings")
-    .select("value")
-    .eq("key", SETTING_KEY)
+    .from("crm_settings")
+    .select("valore")
+    .eq("chiave", SETTING_KEY)
     .maybeSingle()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const stored = Array.isArray(data?.value)
-    ? data.value.map(normalizeSource).filter(Boolean)
+  const stored = Array.isArray(data?.valore)
+    ? data.valore.map(normalizeSource).filter(Boolean)
     : null
 
   return NextResponse.json({
@@ -82,14 +82,15 @@ export async function PUT(request: Request) {
   }
 
   const { error } = await supabase
-    .from("system_settings")
+    .from("crm_settings")
     .upsert(
       {
-        key: SETTING_KEY,
-        value: sources,
+        chiave: SETTING_KEY,
+        valore: sources,
+        descrizione: "Fonti documentali controllate per Roberta",
         updated_at: new Date().toISOString(),
       },
-      { onConflict: "key" },
+      { onConflict: "chiave" },
     )
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

@@ -39,7 +39,7 @@ function settingsGroupForItem(item: ReturnType<typeof crmSettingsItemForPath> | 
   if (item.id === "communication") {
     return { label: "Comunicazioni", layer: "communication" as CrmSettingsLayer }
   }
-  if (["attributes", "default-values", "assignment-rules", "workflows", "import-export"].includes(item.id)) {
+  if (["attributes", "default-values", "assignment-rules", "workflows", "roberta", "import-export"].includes(item.id)) {
     return { label: "Configurazione CRM", layer: "crm-config" as CrmSettingsLayer }
   }
   if (["make", "nextcloud"].includes(item.id)) {

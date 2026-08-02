@@ -31,6 +31,7 @@ export const PAGE_KEYS = [
   "crm_settings.system.valori",
   "crm_settings.system.regole",
   "crm_settings.system.flussi",
+  "crm_settings.system.roberta",
   "crm_settings.system.import_export",
   "crm_settings.system.make",
   "crm_settings.system.backup",
@@ -62,6 +63,7 @@ export const ROUTE_PAGE_MAP: Record<string, string> = {
   "/crm-settings/system/valori": "crm_settings.system.valori",
   "/crm-settings/system/regole": "crm_settings.system.regole",
   "/crm-settings/system/flussi": "crm_settings.system.flussi",
+  "/crm-settings/system/roberta": "crm_settings.system.roberta",
   "/crm-settings/system/import-export": "crm_settings.system.import_export",
   "/crm-settings/system/make": "crm_settings.system.make",
   "/crm-settings/system/backup": "crm_settings.system.backup",
@@ -289,6 +291,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       "crm_settings.system.valori",
       "crm_settings.system.regole",
       "crm_settings.system.flussi",
+      "crm_settings.system.roberta",
       "crm_settings.system.make",
       "crm_settings.system.import_export",
     ])

@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react"
 import {
   Activity,
   ArrowLeftRight,
+  Bot,
   Building,
   Building2,
   DatabaseBackup,
@@ -182,6 +183,16 @@ export const CRM_SETTINGS_CATALOG: CrmSettingsCatalogItem[] = [
     href: "/crm-settings/system/flussi",
     pageKey: "crm_settings.system.flussi",
     icon: Workflow,
+    status: "active",
+  },
+  {
+    id: "roberta",
+    section: "organization",
+    title: "Roberta",
+    description: "Conoscenza chatbot da listini, offerte e documenti",
+    href: "/crm-settings/system/roberta",
+    pageKey: "crm_settings.system.roberta",
+    icon: Bot,
     status: "active",
   },
   {

@@ -8,6 +8,7 @@ export const SYSTEM_SETTING_KEYS = [
   "company.profile",
   "company.integrations.make",
   "maintenance.nextcloud",
+  "roberta.knowledge.sources",
 ] as const
 
 export type SystemSettingKey = (typeof SYSTEM_SETTING_KEYS)[number]

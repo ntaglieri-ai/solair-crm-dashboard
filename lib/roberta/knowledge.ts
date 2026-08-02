@@ -1,11 +1,30 @@
 import { createHash } from "node:crypto"
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { downloadFile, listFolder, type WebDavItem } from "@/lib/nextcloud/admin-webdav"
+import { estraiTestoDaPdf } from "@/lib/listino/pdf-testo"
 
 export type ListinoDocumento = {
   nome: string
   cartella: string
+  categoria?: RobertaSourceCategory
   testo?: string
   contenuto_base64?: string
+}
+
+export type RobertaSourceCategory =
+  | "listini"
+  | "componenti"
+  | "offerte"
+  | "prezzi"
+  | "finanziarie"
+  | "varie"
+
+export type RobertaKnowledgeSourceConfig = {
+  id: string
+  label: string
+  categoria: RobertaSourceCategory
+  path: string
+  active: boolean
 }
 
 export type RobertaSyncResult = {
@@ -45,6 +64,12 @@ type CatalogInsert = {
   aggiornato_at: string
 }
 
+type ExtractedDocumentCacheRow = {
+  path: string
+  fingerprint: string
+  testo_estratto: string | null
+}
+
 export type RobertaKnowledgeResult = {
   query: string
   chunks: {
@@ -69,6 +94,35 @@ export type RobertaKnowledgeResult = {
 const DEFAULT_INGEST_MODEL = "claude-sonnet-5"
 const MAX_CHUNK_CHARS = 1800
 const MIN_TOKEN_LENGTH = 3
+
+export const ROBERTA_SOURCE_CATEGORIES: {
+  value: RobertaSourceCategory
+  label: string
+}[] = [
+  { value: "listini", label: "Listini" },
+  { value: "componenti", label: "Componenti" },
+  { value: "offerte", label: "Offerte" },
+  { value: "prezzi", label: "Prezzi" },
+  { value: "finanziarie", label: "Finanziarie" },
+  { value: "varie", label: "Varie ed eventuali" },
+]
+
+export const DEFAULT_ROBERTA_SOURCES: RobertaKnowledgeSourceConfig[] = [
+  {
+    id: "vendita-digitale-listini",
+    label: "Vendita Digitale - Listini",
+    categoria: "listini",
+    path: "Solair/Vendita-Digitale/LISTINI",
+    active: true,
+  },
+  {
+    id: "agenti-listini",
+    label: "Agenti - Listini",
+    categoria: "listini",
+    path: "Solair/Solair-Agenti/LISTINI",
+    active: true,
+  },
+]
 
 const CATEGORY_RULES: { categoria: string; terms: string[] }[] = [
   { categoria: "fotovoltaico_accumulo", terms: ["fotovoltaico", "kwp", "accumulo", "kwh", "inverter"] },
@@ -103,7 +157,116 @@ function fingerprint(documento: ListinoDocumento) {
     .digest("hex")
 }
 
+function isPdf(nome: string) {
+  return nome.toLowerCase().endsWith(".pdf")
+}
+
+function fingerprintDi(item: WebDavItem) {
+  if (item.etag) return `etag:${item.etag}`
+  return `size-mtime:${item.dimensioneKb ?? "?"}-${item.modificato ?? "?"}`
+}
+
+async function extractPdfContent(path: string) {
+  const result = await downloadFile(path)
+  if (!result.ok || !result.body) {
+    throw new Error(result.error ?? `Download fallito (${result.status})`)
+  }
+
+  const buffer = new Uint8Array(await new Response(result.body).arrayBuffer())
+  const testo = await estraiTestoDaPdf(buffer)
+  if (testo) return { testo, contenuto_base64: undefined }
+  return { testo: "", contenuto_base64: Buffer.from(buffer).toString("base64") }
+}
+
+export async function fetchRobertaConfiguredDocuments(
+  supabase: SupabaseClient,
+  sources: RobertaKnowledgeSourceConfig[],
+): Promise<ListinoDocumento[]> {
+  const activeSources = sources.filter((source) => source.active)
+  const filesBySource = await Promise.all(
+    activeSources.map(async (source) => {
+      const listing = await listFolder(source.path)
+      if (!listing.ok) {
+        throw new Error(
+          `${source.label}: ${listing.error ?? `lettura fallita (${listing.status})`}`,
+        )
+      }
+      return listing.items
+        .filter((item) => !item.isFolder && isPdf(item.nome))
+        .map((item) => ({
+          source,
+          item,
+          fingerprint: fingerprintDi(item),
+        }))
+    }),
+  )
+  const files = filesBySource.flat()
+  if (files.length === 0) return []
+
+  const { data: cacheRows } = await supabase
+    .from("listino_cache")
+    .select("path, fingerprint, testo_estratto")
+    .in(
+      "path",
+      files.map((file) => file.item.path),
+    )
+  const cache = new Map(
+    ((cacheRows as ExtractedDocumentCacheRow[] | null) ?? []).map((row) => [
+      row.path,
+      row,
+    ]),
+  )
+  const now = new Date().toISOString()
+  const cacheUpserts: {
+    path: string
+    nome: string
+    cartella: string
+    fingerprint: string
+    testo_estratto: string | null
+    aggiornato_at: string
+  }[] = []
+
+  const documenti = await Promise.all(
+    files.map(async ({ source, item, fingerprint: itemFingerprint }) => {
+      const cached = cache.get(item.path)
+      if (cached?.fingerprint === itemFingerprint && cached.testo_estratto) {
+        return {
+          nome: item.nome,
+          cartella: source.label,
+          categoria: source.categoria,
+          testo: cached.testo_estratto,
+        } satisfies ListinoDocumento
+      }
+
+      const extracted = await extractPdfContent(item.path)
+      cacheUpserts.push({
+        path: item.path,
+        nome: item.nome,
+        cartella: source.label,
+        fingerprint: itemFingerprint,
+        testo_estratto: extracted.testo || null,
+        aggiornato_at: now,
+      })
+      return {
+        nome: item.nome,
+        cartella: source.label,
+        categoria: source.categoria,
+        testo: extracted.testo,
+        contenuto_base64: extracted.contenuto_base64,
+      } satisfies ListinoDocumento
+    }),
+  )
+
+  if (cacheUpserts.length > 0) {
+    await supabase.from("listino_cache").upsert(cacheUpserts, { onConflict: "path" })
+  }
+
+  return documenti
+}
+
 function categoriaPer(documento: ListinoDocumento, testo: string) {
+  if (documento.categoria) return documento.categoria
+
   const haystack = normalize(`${documento.nome} ${documento.cartella} ${testo.slice(0, 4000)}`)
   let best = { categoria: "generale", score: 0 }
 

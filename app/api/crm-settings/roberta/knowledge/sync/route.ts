@@ -2,12 +2,29 @@ import { NextResponse } from "next/server"
 import { requireApiPage } from "@/lib/permissions/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import {
-  fetchListinoDocuments,
+  DEFAULT_ROBERTA_SOURCES,
+  fetchRobertaConfiguredDocuments,
   syncRobertaKnowledge,
+  type RobertaKnowledgeSourceConfig,
 } from "@/lib/roberta/knowledge"
 
 export const runtime = "nodejs"
 export const maxDuration = 120
+
+const SOURCES_SETTING_KEY = "roberta.knowledge.sources"
+
+async function loadSources(supabase: ReturnType<typeof createAdminClient>) {
+  if (!supabase) return DEFAULT_ROBERTA_SOURCES
+  const { data } = await supabase
+    .from("system_settings")
+    .select("value")
+    .eq("key", SOURCES_SETTING_KEY)
+    .maybeSingle()
+
+  return Array.isArray(data?.value) && data.value.length > 0
+    ? (data.value as RobertaKnowledgeSourceConfig[])
+    : DEFAULT_ROBERTA_SOURCES
+}
 
 export async function GET() {
   const guard = await requireApiPage("crm_settings.system.roberta")
@@ -66,7 +83,8 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as { force?: boolean }
 
   try {
-    const documenti = await fetchListinoDocuments(request.url)
+    const sources = await loadSources(supabase)
+    const documenti = await fetchRobertaConfiguredDocuments(supabase, sources)
     const result = await syncRobertaKnowledge(supabase, documenti, {
       force: body.force === true,
     })

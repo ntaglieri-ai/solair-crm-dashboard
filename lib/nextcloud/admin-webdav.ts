@@ -15,6 +15,12 @@ export type WebDavItem = {
   dimensioneKb: number | null
   modificato: string | null // ISO
   path: string // path completo DAV admin (stessa forma di fullPath in input)
+  // ETag Nextcloud, virgolette rimosse. Cambia ad ogni modifica del contenuto:
+  // e' il modo piu' affidabile per capire se un file e' cambiato, piu' preciso
+  // di dimensione+data (`dimensioneKb` e' arrotondato al KB). Usato da
+  // /api/public/listino per la cache del testo estratto. Null se il server non
+  // lo restituisce.
+  etag: string | null
 }
 
 export type WebDavListResult = {
@@ -86,6 +92,7 @@ const PROPFIND_BODY = `<?xml version="1.0"?>
     <d:displayname/>
     <d:getcontentlength/>
     <d:getlastmodified/>
+    <d:getetag/>
     <d:resourcetype/>
   </d:prop>
 </d:propfind>`
@@ -158,6 +165,10 @@ export async function listFolder(fullPath: string): Promise<WebDavListResult> {
     const sizeRaw = tag(block, "getcontentlength")
     const lastMod = tag(block, "getlastmodified")
     const size = sizeRaw != null && sizeRaw !== "" ? Number(sizeRaw) : null
+    // Nextcloud restituisce l'ETag tra virgolette, a volte HTML-escaped
+    // (&quot;): si normalizza qui perche' finisce in un confronto stringa.
+    const etagRaw = tag(block, "getetag")
+    const etag = etagRaw ? etagRaw.replace(/&quot;/g, "").replace(/"/g, "").trim() : null
 
     items.push({
       nome: path.split("/").pop() ?? path,
@@ -165,6 +176,7 @@ export async function listFolder(fullPath: string): Promise<WebDavListResult> {
       dimensioneKb: size != null && Number.isFinite(size) ? Math.round(size / 1024) : null,
       modificato: lastMod ? new Date(lastMod).toISOString() : null,
       path,
+      etag: etag && etag.length > 0 ? etag : null,
     })
   }
 

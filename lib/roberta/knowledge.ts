@@ -7,6 +7,7 @@ export type ListinoDocumento = {
   nome: string
   cartella: string
   categoria?: RobertaSourceCategory
+  publicUrl?: string
   testo?: string
   contenuto_base64?: string
 }
@@ -24,6 +25,7 @@ export type RobertaKnowledgeSourceConfig = {
   label: string
   categoria: RobertaSourceCategory
   path: string
+  publicUrl?: string
   active: boolean
 }
 
@@ -74,6 +76,7 @@ export type RobertaKnowledgeResult = {
   query: string
   chunks: {
     source: string
+    sourceUrl: string | null
     categoria: string
     titolo: string
     contenuto: string
@@ -81,6 +84,7 @@ export type RobertaKnowledgeResult = {
   }[]
   catalogo: {
     source: string
+    sourceUrl: string | null
     categoria: string
     nome: string
     descrizione: string
@@ -150,6 +154,8 @@ function fingerprint(documento: ListinoDocumento) {
     .update(documento.nome)
     .update("\n")
     .update(documento.cartella)
+    .update("\n")
+    .update(documento.publicUrl ?? "")
     .update("\n")
     .update(documento.testo ?? "")
     .update("\n")
@@ -234,6 +240,7 @@ export async function fetchRobertaConfiguredDocuments(
           nome: item.nome,
           cartella: source.label,
           categoria: source.categoria,
+          publicUrl: source.publicUrl,
           testo: cached.testo_estratto,
         } satisfies ListinoDocumento
       }
@@ -251,6 +258,7 @@ export async function fetchRobertaConfiguredDocuments(
         nome: item.nome,
         cartella: source.label,
         categoria: source.categoria,
+        publicUrl: source.publicUrl,
         testo: extracted.testo,
         contenuto_base64: extracted.contenuto_base64,
       } satisfies ListinoDocumento
@@ -353,7 +361,12 @@ function catalogItems(documento: ListinoDocumento, testo: string, categoria: str
       prezzo,
       potenza_kw: parseKw(line),
       accumulo_kwh: parseKwh(line),
-      metadata: { documento: documento.nome, cartella: documento.cartella, line_index: index },
+      metadata: {
+        documento: documento.nome,
+        cartella: documento.cartella,
+        line_index: index,
+        source_url: documento.publicUrl ?? null,
+      },
       aggiornato_at: now,
     }))
 }
@@ -524,6 +537,7 @@ export async function syncRobertaKnowledge(
         fingerprint: fp,
         stato,
         testo_chars: testo.length,
+        public_url: documento.publicUrl ?? null,
         errore,
         synced_at: now,
       },
@@ -580,16 +594,24 @@ export async function searchRobertaKnowledge(
 ): Promise<RobertaKnowledgeResult> {
   const queryTokens = tokens(query).slice(0, 20)
 
-  const [{ data: chunksData }, { data: catalogData }] = await Promise.all([
+  const [{ data: chunksData }, { data: catalogData }, { data: sourcesData }] = await Promise.all([
     supabase
       .from("roberta_knowledge_chunks")
       .select("source_key, categoria, titolo, contenuto, keywords")
       .limit(600),
     supabase
       .from("roberta_catalog_items")
-      .select("source_key, categoria, nome, descrizione, prezzo, potenza_kw, accumulo_kwh")
+      .select("source_key, categoria, nome, descrizione, prezzo, potenza_kw, accumulo_kwh, metadata")
       .limit(300),
+    supabase
+      .from("roberta_knowledge_sources")
+      .select("source_key, public_url"),
   ])
+  const sourceUrls = new Map(
+    ((sourcesData as { source_key: string; public_url: string | null }[] | null) ?? []).map(
+      (row) => [row.source_key, row.public_url],
+    ),
+  )
 
   const chunks = ((chunksData as {
     source_key: string
@@ -600,6 +622,7 @@ export async function searchRobertaKnowledge(
   }[] | null) ?? [])
     .map((row) => ({
       source: row.source_key,
+      sourceUrl: sourceUrls.get(row.source_key) ?? null,
       categoria: row.categoria,
       titolo: row.titolo,
       contenuto: row.contenuto,
@@ -617,9 +640,11 @@ export async function searchRobertaKnowledge(
     prezzo: number | null
     potenza_kw: number | null
     accumulo_kwh: number | null
+    metadata?: { source_url?: string | null } | null
   }[] | null) ?? [])
     .map((row) => ({
       source: row.source_key,
+      sourceUrl: row.metadata?.source_url ?? sourceUrls.get(row.source_key) ?? null,
       categoria: row.categoria,
       nome: row.nome,
       descrizione: row.descrizione,

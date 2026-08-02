@@ -54,6 +54,7 @@ type RobertaSource = {
   label: string
   categoria: RobertaSourceCategory
   path: string
+  publicUrl?: string
   active: boolean
 }
 
@@ -87,6 +88,7 @@ export default function RobertaKnowledgePage() {
     label: "",
     categoria: "listini" as RobertaSourceCategory,
     path: "",
+    publicUrl: "",
   })
 
   async function loadSources() {
@@ -146,11 +148,12 @@ export default function RobertaKnowledgePage() {
         label: newSource.label.trim(),
         categoria: newSource.categoria,
         path: newSource.path.trim().replace(/^\/+|\/+$/g, ""),
+        publicUrl: newSource.publicUrl.trim(),
         active: true,
       },
     ]
     setSources(next)
-    setNewSource({ label: "", categoria: "listini", path: "" })
+    setNewSource({ label: "", categoria: "listini", path: "", publicUrl: "" })
     void saveSources(next)
   }
 
@@ -239,7 +242,7 @@ export default function RobertaKnowledgePage() {
           {sources.map((source) => (
             <article
               key={source.id}
-              className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(180px,1fr)_180px_minmax(280px,1.4fr)_auto_auto]"
+              className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(160px,1fr)_160px_minmax(240px,1fr)_minmax(240px,1fr)_auto_auto]"
             >
               <Input
                 value={source.label}
@@ -286,6 +289,18 @@ export default function RobertaKnowledgePage() {
                 }
                 aria-label="Path Nextcloud"
               />
+              <Input
+                value={source.publicUrl ?? ""}
+                onChange={(event) =>
+                  setSources((current) =>
+                    current.map((item) =>
+                      item.id === source.id ? { ...item, publicUrl: event.target.value } : item,
+                    ),
+                  )
+                }
+                aria-label="Link pubblico"
+                placeholder="https://solairgroup.it/..."
+              />
               <Switch
                 checked={source.active}
                 onCheckedChange={(active) =>
@@ -312,7 +327,7 @@ export default function RobertaKnowledgePage() {
             </article>
           ))}
 
-          <div className="grid gap-3 px-4 py-4 lg:grid-cols-[minmax(180px,1fr)_180px_minmax(280px,1.4fr)_auto]">
+          <div className="grid gap-3 px-4 py-4 lg:grid-cols-[minmax(160px,1fr)_160px_minmax(240px,1fr)_minmax(240px,1fr)_auto]">
             <div className="flex flex-col gap-2">
               <Label htmlFor="roberta-source-label">Nome</Label>
               <Input
@@ -356,6 +371,17 @@ export default function RobertaKnowledgePage() {
                   setNewSource((current) => ({ ...current, path: event.target.value }))
                 }
                 placeholder="Solair/Vendita-Digitale/OFFERTE"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="roberta-source-public-url">Link pubblico</Label>
+              <Input
+                id="roberta-source-public-url"
+                value={newSource.publicUrl}
+                onChange={(event) =>
+                  setNewSource((current) => ({ ...current, publicUrl: event.target.value }))
+                }
+                placeholder="https://solairgroup.it/offerte"
               />
             </div>
             <div className="flex items-end">

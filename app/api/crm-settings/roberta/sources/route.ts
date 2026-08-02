@@ -33,6 +33,7 @@ function normalizeSource(value: unknown): RobertaKnowledgeSourceConfig | null {
     label: source.label.trim(),
     categoria: source.categoria,
     path: source.path.trim().replace(/^\/+|\/+$/g, ""),
+    publicUrl: typeof source.publicUrl === "string" ? source.publicUrl.trim() : "",
     active: source.active !== false,
   }
 }

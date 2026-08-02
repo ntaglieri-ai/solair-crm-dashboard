@@ -13,7 +13,20 @@ export interface LeadIntakePayload {
   email?: string
   provincia?: string
   citta?: string
+  codicePostale?: string
+  residenteInSicilia?: boolean
   tipoProprieta?: "privata" | "commerciale"
+  campaignName?: string
+  kwp?: number | string
+  kwh?: number | string
+  potenzaKw?: number | string
+  accumuloKwh?: number | string
+  modelloPannello?: string
+  wallboxRichiesto?: boolean
+  interesse?: string
+  offertaNome?: string
+  offertaUrl?: string
+  consumoAnnuoKwh?: number | string
   note?: string
   consensoWhatsapp?: boolean
   consensoMarketingEmail?: boolean
@@ -32,6 +45,36 @@ function normalizePhone(phone: string): string {
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase()
+}
+
+function normalizeText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null
+}
+
+function normalizeNumber(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null
+  if (typeof value !== "string" || !value.trim()) return null
+  const parsed = Number(value.trim().replace(/\./g, "").replace(",", "."))
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function buildDescription(payload: LeadIntakePayload) {
+  const parts: string[] = []
+  if (payload.note?.trim()) parts.push(payload.note.trim())
+
+  const interesse = normalizeText(payload.interesse)
+  const offertaNome = normalizeText(payload.offertaNome)
+  const offertaUrl = normalizeText(payload.offertaUrl)
+  const consumoAnnuo = normalizeNumber(payload.consumoAnnuoKwh)
+  const tipoProprieta = normalizeText(payload.tipoProprieta)
+
+  if (interesse) parts.push(`Interesse chatbot: ${interesse}`)
+  if (offertaNome) parts.push(`Offerta citata: ${offertaNome}`)
+  if (offertaUrl) parts.push(`Link offerta: ${offertaUrl}`)
+  if (tipoProprieta) parts.push(`Tipo proprieta': ${tipoProprieta}`)
+  if (consumoAnnuo != null) parts.push(`Consumo annuo indicato: ${consumoAnnuo} kWh`)
+
+  return parts.length ? parts.join("\n") : null
 }
 
 export interface LeadIntakeResult {
@@ -68,13 +111,16 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
 
   const telefonoNorm = normalizePhone(payload.telefono)
   const emailNorm = payload.email ? normalizeEmail(payload.email) : null
+  const kwp = normalizeNumber(payload.kwp ?? payload.potenzaKw)
+  const kwh = normalizeNumber(payload.kwh ?? payload.accumuloKwh)
+  const description = buildDescription(payload)
 
   const existing = await findExistingLead(telefonoNorm, emailNorm)
 
   if (existing) {
     const timestamp = new Date().toLocaleString("it-IT")
     const notaIngresso = `[${timestamp}] Nuovo contatto da ${ORIGINE_LABELS[payload.origine]}${
-      payload.note ? `: ${payload.note}` : ""
+      description ? `:\n${description}` : ""
     }`
     const descrizioneAggiornata = existing.descrizione
       ? `${existing.descrizione}\n${notaIngresso}`
@@ -98,9 +144,16 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       email: emailNorm || null,
       provincia: payload.provincia || null,
       citta: payload.citta || null,
+      codice_postale: payload.codicePostale || null,
+      residente_in_sicilia: payload.residenteInSicilia ?? false,
       stato_lead: "Non contattato",
       origine_lead: ORIGINE_LABELS[payload.origine],
-      descrizione: payload.note || null,
+      campaign_name: payload.campaignName || null,
+      kwp,
+      kwh,
+      modello_pannello: payload.modelloPannello || null,
+      wallbox_richiesto: payload.wallboxRichiesto ?? false,
+      descrizione: description,
       paese: "Italia",
     })
     .select("id, nome_lead")

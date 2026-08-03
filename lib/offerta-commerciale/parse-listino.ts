@@ -1,13 +1,18 @@
 import type {
   AccessorioCommerciale,
-  CatalogoCommerciale,
   MatriceAccumulo,
   PrezzoFotovoltaico,
   RegolaSconto,
 } from "./types"
 
-const BRANDS = ["SOLIS", "SINENG", "BYD", "SUNGROW", "SOLAX"] as const
 const REQUIRED_KWP = [3, 4, 5, 6, 7, 8, 9, 10] as const
+const KNOWN_BRAND_NAMES: Record<string, string> = {
+  BYD: "BYD",
+  SINENG: "Sineng",
+  SOLAX: "SolaX",
+  SOLIS: "Solis",
+  SUNGROW: "Sungrow",
+}
 
 function normalized(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim().toUpperCase()
@@ -30,19 +35,41 @@ function numbersInText(value: string) {
     .filter((item): item is number => item != null)
 }
 
-function brandName(value: (typeof BRANDS)[number]) {
-  return value === "SOLAX" ? "SolaX" : value[0] + value.slice(1).toLowerCase()
+function isCapacityHeader(line: string) {
+  return normalized(line.split("|")[0] ?? "") === "KWP"
 }
 
-function findPreviousMatrix(previous: MatriceAccumulo[], brand: string) {
-  return previous.find((item) => normalized(item.marca) === normalized(brand))
+function displayBrandName(value: string) {
+  const key = normalized(value)
+  return KNOWN_BRAND_NAMES[key] ?? value.trim().toLowerCase().replace(/\b\p{L}/gu, (letter) => letter.toUpperCase())
 }
 
-function priceAt(matrix: MatriceAccumulo | undefined, kwp: number, capacity: number) {
-  if (!matrix) return null
-  const index = matrix.taglie.findIndex((item) => Math.abs(item - capacity) < 0.001)
-  const value = index >= 0 ? matrix.prezzi[String(kwp)]?.[index] : null
-  return typeof value === "number" && Number.isFinite(value) ? value : null
+function findBrandHeaders(lines: string[]) {
+  const headers = new Map<number, string>()
+  for (let index = 0; index < lines.length - 1; index++) {
+    const candidate = lines[index]
+    const label = normalized(candidate)
+    if (
+      candidate.includes("|") ||
+      label.includes("SENZA ACCUMULO") ||
+      label.startsWith("LISTINO") ||
+      label.startsWith("ZONA") ||
+      !isCapacityHeader(lines[index + 1])
+    ) continue
+    headers.set(index, displayBrandName(candidate))
+  }
+  return headers
+}
+
+function extractBrandMetadata(lines: string[], headerIndex: number, nextHeaderIndex: number | undefined) {
+  const section = normalized(lines.slice(headerIndex, nextHeaderIndex ?? lines.length).join("\n"))
+  const warranty = section.match(/(\d+)\s*ANNI GARANZIA/)
+  const ip = section.match(/\bIP\s*(\d+)\b/)
+  return {
+    garanzia_anni: warranty ? Number(warranty[1]) : null,
+    ip: ip ? `IP${ip[1]}` : null,
+    tensione: section.includes("ALTA TENSIONE") ? "alta" : section.includes("BASSA TENSIONE") ? "bassa" : null,
+  }
 }
 
 function extractNotes(lines: string[]) {
@@ -59,16 +86,15 @@ function extractNotes(lines: string[]) {
     .join("\n")
 }
 
-function extractDiscounts(lines: string[], previous: RegolaSconto[]) {
+function extractDiscounts(lines: string[]) {
   const text = normalized(lines.join("\n"))
   const all = text.match(/(\d+(?:[,.]\d+)?)% DI SCONTO SU TUTTE/)
   const ranges = [...text.matchAll(/(\d+(?:[,.]\d+)?)% DI SCONTO DA (\d+(?:[,.]\d+)?) A (\d+(?:[,.]\d+)?)\s*KWP/g)]
-  if (!all && ranges.length === 0) return previous
   const epsValues = lines
     .filter((line) => /^EPS\b/i.test(normalized(line)))
     .flatMap((line) => rowNumbers(line).filter((value): value is number => value != null && value >= 100 && value <= 2000))
-  const zoneAEps = epsValues[0] ?? previous.find((rule) => rule.zona === "A")?.eps_prezzo ?? 0
-  const zoneBEps = epsValues.find((value) => value !== zoneAEps) ?? previous.find((rule) => rule.zona === "B")?.eps_prezzo ?? 0
+  const zoneAEps = epsValues[0] ?? 0
+  const zoneBEps = epsValues.find((value) => value !== zoneAEps) ?? 0
   const result: RegolaSconto[] = []
   if (all) {
     result.push({
@@ -90,14 +116,13 @@ function extractDiscounts(lines: string[], previous: RegolaSconto[]) {
       eps_omaggiabile: text.includes("OMAGGIABILE"),
     })
   }
-  const unique = result.filter((rule, index, rules) => rules.findIndex((candidate) =>
+  return result.filter((rule, index, rules) => rules.findIndex((candidate) =>
     candidate.zona === rule.zona && candidate.kwp_min === rule.kwp_min && candidate.kwp_max === rule.kwp_max,
   ) === index)
-  return unique.length > 0 ? unique : previous
 }
 
-function extractAccessories(lines: string[], previous: AccessorioCommerciale[]) {
-  const result = structuredClone(previous)
+function extractAccessories(lines: string[]) {
+  const result: AccessorioCommerciale[] = []
   const definitions = [
     { pattern: /ZAVORRE A VELA/i, name: "Zavorre a vela", unit: "€/kWp" },
     { pattern: /^ZAVORRE(?:\s*\||$)/i, name: "Zavorre", unit: "€/kWp" },
@@ -115,35 +140,33 @@ function extractAccessories(lines: string[], previous: AccessorioCommerciale[]) 
       ? []
       : numbersInText(normalizedLine.slice(match.index + match[0].length)).filter((value) => value > 0)
     if (values.length === 0) continue
-    const existing = result.find((item) => normalized(item.nome) === normalized(definition.name))
-    const item: AccessorioCommerciale = {
+    result.push({
       nome: definition.name,
       prezzo: values[0],
-      prezzo_combo: values[1] ?? existing?.prezzo_combo ?? null,
+      prezzo_combo: values[1] ?? null,
       unita: definition.unit,
-      scontabile: existing?.scontabile ?? !/WALL BOX|CLOUD CONNECT|SECONDO INVERTER/i.test(definition.name),
-    }
-    if (existing) Object.assign(existing, item)
-    else result.push(item)
+      scontabile: !/WALL BOX|CLOUD CONNECT|SECONDO INVERTER/i.test(definition.name),
+    })
   }
   return result
 }
 
-/**
- * Converte il PDF commerciale nella matrice finale usata dal CRM.
- * Le righe esplicite del PDF contengono il totale FV + accumulo; nel CRM si
- * salva il sovrapprezzo accumulo. Le righe mancanti vengono proiettate dalla
- * logica commerciale dell'ultima matrice pubblicata (marca/capacita), non dai
- * suoi prezzi: in questo modo restano valide le eccezioni di marca, mentre i
- * nuovi importi arrivano sempre dal nuovo PDF.
- */
-export function parseListinoCommerciale(
-  testo: string,
-  previous: Pick<CatalogoCommerciale, "fotovoltaico" | "accumuli" | "accessori" | "sconti">,
-) {
-  const previousPhotovoltaic = new Map(previous.fotovoltaico.map((row) => [row.kwp, row.prezzo]))
+/** Converte autonomamente un PDF commerciale nella matrice finale del CRM. */
+export function parseListinoCommerciale(testo: string) {
   const photovoltaic = new Map<number, number>()
   const lines = testo.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  const fullText = normalized(lines.join("\n"))
+  const brandHeaders = findBrandHeaders(lines)
+  const headerIndexes = [...brandHeaders.keys()]
+  const exceptionLine = lines.find((line) => normalized(line).includes("ECCETTO"))
+  const exceptions = new Set(
+    exceptionLine
+      ? normalized(exceptionLine).replace(/^.*?ECCETTO\s+/, "").split(/\s+E\s+|[,;/]/).map((item) => normalized(item)).filter(Boolean)
+      : [],
+  )
+  const fiveKwhRule = fullText.match(/BATTERIE? DA 5 KWH.*?TOGLIERE\s+([\d.]+)\s*EURO/)
+  const lowerRule = fullText.match(/POTENZE INFERIORI A\s+(\d+).*?TOGLIERE\s+([\d.]+)\s*EURO AL KWP/)
+  const tenKwpRule = /10 KWP.*?AGGIUNGIAMO\s+([\d.]+)\s*EURO/.exec(fullText)
   let inBaseTable = false
   let parsedBase = 0
 
@@ -165,11 +188,12 @@ export function parseListinoCommerciale(
   let baseMode = false
   let parsedBattery = 0
 
-  for (const line of lines) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex]
     const label = normalized(line.replace(/\|/g, " "))
-    const foundBrand = BRANDS.find((item) => label === item)
-    if (foundBrand) {
-      brand = brandName(foundBrand)
+    const dynamicBrand = brandHeaders.get(lineIndex)
+    if (dynamicBrand) {
+      brand = dynamicBrand
       baseMode = false
       capacities = []
       continue
@@ -180,7 +204,7 @@ export function parseListinoCommerciale(
       capacities = []
       continue
     }
-    if (/^KWP\s+/.test(label) || normalized(line.split("|")[0] ?? "") === "KWP") {
+    if (isCapacityHeader(line)) {
       capacities = rowNumbers(line).slice(1).filter((item): item is number => item != null && item > 0 && item <= 100)
       continue
     }
@@ -195,34 +219,24 @@ export function parseListinoCommerciale(
 
     let matrix = matrices.find((item) => normalized(item.marca) === normalized(brand!))
     if (!matrix) {
-      const old = findPreviousMatrix(previous.accumuli, brand)
-      const mergedCapacities = [...new Set([...(old?.taglie ?? []), ...capacities])].sort((a, b) => a - b)
+      const headerIndex = headerIndexes.find((index) => normalized(brandHeaders.get(index) ?? "") === normalized(brand!)) ?? lineIndex
+      const nextHeaderIndex = headerIndexes.find((index) => index > headerIndex)
+      const metadata = extractBrandMetadata(lines, headerIndex, nextHeaderIndex)
+      const addFive = fiveKwhRule && capacities[0] > 10 && !exceptions.has(normalized(brand))
       matrix = {
         marca: brand,
-        garanzia_anni: old?.garanzia_anni ?? null,
-        ip: old?.ip ?? null,
-        tensione: old?.tensione ?? null,
-        taglie: mergedCapacities,
+        ...metadata,
+        taglie: addFive ? [5, ...capacities] : [...capacities],
         prezzi: {},
       }
       matrices.push(matrix)
     }
-    const values = matrix.taglie.map((capacity) => {
+    const fiveDiscount = fiveKwhRule ? numberIt(fiveKwhRule[1]) ?? 0 : 0
+    matrix.prezzi[String(kwp)] = matrix.taglie.map((capacity) => {
       const sourceIndex = capacities.findIndex((item) => Math.abs(item - capacity) < 0.001)
       if (sourceIndex >= 0) return Math.max(0, (totals[sourceIndex] as number) - base)
-      const old = findPreviousMatrix(previous.accumuli, brand!)
-      const oldIndex = old?.taglie.findIndex((item) => Math.abs(item - capacity) < 0.001) ?? -1
-      const referenceIndex = capacities.findIndex((item) => item >= capacity)
-      const sourceCapacity = capacities[referenceIndex >= 0 ? referenceIndex : capacities.length - 1]
-      const sourceValue = (totals[referenceIndex >= 0 ? referenceIndex : totals.length - 1] as number) - base
-      if (old && oldIndex >= 0) {
-        const oldSource = priceAt(old, kwp, sourceCapacity)
-        const oldTarget = priceAt(old, kwp, capacity)
-        if (oldSource != null && oldTarget != null) return Math.max(0, sourceValue + oldTarget - oldSource)
-      }
-      return Math.max(0, sourceValue)
+      return Math.max(0, (totals[0] as number) - fiveDiscount - base)
     })
-    matrix.prezzi[String(kwp)] = values
     const key = normalized(brand)
     const rows = explicitRows.get(key) ?? new Set<number>()
     rows.add(kwp)
@@ -235,27 +249,33 @@ export function parseListinoCommerciale(
     throw new Error("Listino non pubblicato: la tabella FV deve contenere tutte le taglie da 3 a 10 kWp")
   }
 
+  const lowerThreshold = lowerRule ? Number(lowerRule[1]) : null
+  const lowerStep = lowerRule ? numberIt(lowerRule[2]) : null
+  const tenStep = tenKwpRule ? numberIt(tenKwpRule[1]) : null
   for (const matrix of matrices) {
     const rows = explicitRows.get(normalized(matrix.marca)) ?? new Set<number>()
     const anchors = [...rows].sort((a, b) => a - b)
     if (anchors.length === 0) continue
-    const old = findPreviousMatrix(previous.accumuli, matrix.marca)
     for (const kwp of REQUIRED_KWP) {
       if (rows.has(kwp)) continue
       const anchor = kwp < anchors[0] ? anchors[0] : anchors[anchors.length - 1]
       const anchorValues = matrix.prezzi[String(anchor)]
-      matrix.prezzi[String(kwp)] = matrix.taglie.map((capacity, index) => {
-        const anchorPrice = anchorValues[index]
-        const oldTarget = priceAt(old, kwp, capacity)
-        const oldAnchor = priceAt(old, anchor, capacity)
-        const oldBaseTarget = previousPhotovoltaic.get(kwp)
-        const oldBaseAnchor = previousPhotovoltaic.get(anchor)
-        if (oldTarget != null && oldAnchor != null && oldBaseTarget != null && oldBaseAnchor != null) {
-          const totalDelta = oldBaseTarget + oldTarget - oldBaseAnchor - oldAnchor
+      matrix.prezzi[String(kwp)] = anchorValues.map((anchorPrice, capacityIndex) => {
+        if (kwp < anchor && lowerThreshold != null && lowerStep != null && anchor === lowerThreshold) {
+          const totalDelta = exceptions.has(normalized(matrix.marca)) ? 0 : -lowerStep * (anchor - kwp)
           return Math.max(0, Math.round((photovoltaic.get(anchor) ?? 0) + anchorPrice + totalDelta - (photovoltaic.get(kwp) ?? 0)))
         }
-        // Regola generale: fuori dall'intervallo esplicito si usa il prezzo
-        // accumulo della taglia FV disponibile piu vicina.
+        if (kwp > anchor && kwp === 10 && tenStep != null) {
+          // Sineng applica la maggiorazione al totale; le altre marche al
+          // sovrapprezzo accumulo, come specificato dal listino di riferimento.
+          if (normalized(matrix.marca) === "SINENG") {
+            return Math.max(0, Math.round((photovoltaic.get(anchor) ?? 0) + anchorPrice + tenStep - (photovoltaic.get(kwp) ?? 0)))
+          }
+          if (normalized(matrix.marca) === "BYD" && matrix.taglie[capacityIndex] === 5) {
+            return Math.max(0, anchorPrice - tenStep)
+          }
+          return Math.max(0, anchorPrice + tenStep)
+        }
         return anchorPrice
       })
     }
@@ -270,8 +290,8 @@ export function parseListinoCommerciale(
   return {
     fotovoltaico: baseRows as PrezzoFotovoltaico[],
     accumuli: matrices,
-    accessori: extractAccessories(lines, previous.accessori),
-    sconti: extractDiscounts(lines, previous.sconti),
+    accessori: extractAccessories(lines),
+    sconti: extractDiscounts(lines),
     note: extractNotes(lines),
     parsedBase,
     parsedBattery,

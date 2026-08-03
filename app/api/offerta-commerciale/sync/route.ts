@@ -2,13 +2,7 @@ import { NextResponse } from "next/server"
 import { requireApiAction } from "@/lib/permissions/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { downloadFile, ensureFolder, listFolder, type NcEntry } from "@/lib/nextcloud/webdav"
-import {
-  normalizeAccessori,
-  normalizeAccumuli,
-  normalizeFotovoltaico,
-  normalizeSconti,
-  OFFERTA_COMMERCIALE_ROOT,
-} from "@/lib/offerta-commerciale/store"
+import { OFFERTA_COMMERCIALE_ROOT } from "@/lib/offerta-commerciale/store"
 import { estraiTestoDaPdf } from "@/lib/listino/pdf-testo"
 import { parseListinoCommerciale } from "@/lib/offerta-commerciale/parse-listino"
 import { commercialNextcloudUser } from "@/lib/offerta-commerciale/nextcloud-user"
@@ -92,18 +86,11 @@ export async function POST() {
         .limit(1)
         .maybeSingle()
       if (existing && existing.stato !== "bozza") continue
-      const { data: published } = await supabase.from("offerta_commerciale_cataloghi").select("fotovoltaico, accumuli, accessori, sconti, note").eq("stato", "pubblicato").maybeSingle()
-      if (!published) throw new Error("Listino non pubblicato: manca un catalogo di riferimento nel CRM")
       const downloaded = await downloadFile(nextcloud.username, nextcloud.appPassword, file.path)
       const bytes = new Uint8Array(await downloaded.arrayBuffer())
       const testo = await estraiTestoDaPdf(bytes)
       if (!testo) throw new Error(`Listino non pubblicato: ${file.name} non contiene testo estraibile`)
-      const parsed = parseListinoCommerciale(testo, {
-        fotovoltaico: normalizeFotovoltaico(published.fotovoltaico),
-        accumuli: normalizeAccumuli(published.accumuli),
-        accessori: normalizeAccessori(published.accessori),
-        sconti: normalizeSconti(published.sconti),
-      })
+      const parsed = parseListinoCommerciale(testo)
       const importNote = `Importazione automatica completata: ${parsed.parsedBase} prezzi FV e ${parsed.parsedBattery} prezzi espliciti elaborati.`
       const catalogValues = {
         nome: withoutExtension(file.name),

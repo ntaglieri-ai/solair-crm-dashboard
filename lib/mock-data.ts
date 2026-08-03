@@ -429,6 +429,7 @@ export interface NavItem {
     | "scadenze"
     | "documenti"
     | "installatori"
+    | "offerta_commerciale"
     | "impostazioni"
   badge?: { count: number; tone: "destructive" | "muted" }
   active?: boolean

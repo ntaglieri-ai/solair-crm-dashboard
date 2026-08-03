@@ -15,6 +15,7 @@ import {
   FileSignature,
   Clock,
   ArrowRightLeft,
+  BadgeEuro,
   type LucideIcon,
 } from "lucide-react"
 
@@ -28,6 +29,7 @@ export const NAV_ICONS: Record<NavItem["icon"], LucideIcon> = {
   scadenze: CalendarClock,
   documenti: FileText,
   installatori: Wrench,
+  offerta_commerciale: BadgeEuro,
   impostazioni: Settings,
 }
 

@@ -29,6 +29,7 @@ export type PaginaId =
   | "scadenze"
   | "documenti"
   | "installatori"
+  | "offerta_commerciale"
   | "crm_settings"
 
 export const PAGINE: { id: PaginaId; label: string }[] = [
@@ -39,6 +40,7 @@ export const PAGINE: { id: PaginaId; label: string }[] = [
   { id: "scadenze", label: "Scadenze" },
   { id: "documenti", label: "Documenti" },
   { id: "installatori", label: "Installatori" },
+  { id: "offerta_commerciale", label: "Offerta Commerciale" },
   { id: "crm_settings", label: "CRM Settings & Admin" },
 ]
 
@@ -110,6 +112,7 @@ export const mockRuoli: Ruolo[] = [
         scadenze: true,
         documenti: true,
         installatori: true,
+        offerta_commerciale: true,
         crm_settings: true,
       },
       record: {
@@ -137,6 +140,7 @@ export const mockRuoli: Ruolo[] = [
         scadenze: true,
         documenti: true,
         installatori: false,
+        offerta_commerciale: true,
         crm_settings: false,
       },
       record: {
@@ -164,6 +168,7 @@ export const mockRuoli: Ruolo[] = [
         scadenze: true,
         documenti: true,
         installatori: true,
+        offerta_commerciale: true,
         crm_settings: false,
       },
       record: {

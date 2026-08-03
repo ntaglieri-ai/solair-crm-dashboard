@@ -132,7 +132,7 @@ async function loadRolePermissionRows(
   const cached = rolePermissionCache.get(roleId)
   if (cached && cached.expiresAt > Date.now()) return cached
 
-  const [pagesRes, recordsRes, uiRes, fields] = await Promise.all([
+  const [pagesRes, recordsRes, uiRes, fields, actions, scopes] = await Promise.all([
     supabase
       .from("permessi_pagina")
       .select("pagina, accesso")
@@ -151,6 +151,18 @@ async function loadRolePermissionRows(
       "modulo, campo, accesso",
       roleId,
     ),
+    selectOptionalPermissionRows<PermessoAzioneRow>(
+      supabase,
+      "permessi_azione",
+      "azione, abilitato",
+      roleId,
+    ),
+    selectOptionalPermissionRows<PermessoScopeRow>(
+      supabase,
+      "permessi_scope",
+      "risorsa, scope",
+      roleId,
+    ),
   ])
   // permessi_azione/permessi_scope confermate ASSENTI dallo schema remoto
   // (25/07, durante la diagnosi di lentezza) — interrogarle costava un
@@ -159,8 +171,6 @@ async function loadRolePermissionRows(
   // mancante" a livello di processo. Risultato comunque sempre vuoto sia
   // prima che ora: nessun cambiamento di comportamento, solo niente piu'
   // sprecato a chiamarle.
-  const actions: PermessoAzioneRow[] = []
-  const scopes: PermessoScopeRow[] = []
 
   const rows: CachedRolePermissions = {
     expiresAt: Date.now() + rolePermissionCacheMs,

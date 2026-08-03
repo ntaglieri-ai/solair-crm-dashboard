@@ -16,6 +16,7 @@ export const PAGE_KEYS = [
   "scadenze",
   "documenti",
   "installatori",
+  "offerta_commerciale",
   "crm_settings",
   "crm_settings.account",
   "crm_settings.account.utenti",
@@ -48,6 +49,7 @@ export const ROUTE_PAGE_MAP: Record<string, string> = {
   "/scadenze": "scadenze",
   "/documenti": "documenti",
   "/installatori": "installatori",
+  "/offerta-commerciale": "offerta_commerciale",
   "/crm-settings": "crm_settings",
   "/crm-settings/account": "crm_settings.account",
   "/crm-settings/account/utenti": "crm_settings.account.utenti",
@@ -160,6 +162,7 @@ export const ACTION_KEYS = [
   // "solo tecnico" si implementera' negando questa chiave, senza toccare il
   // componente.
   "widget.bacheca.gestisci",
+  "offerta_commerciale.manage",
 ] as const
 
 export function normalizeRoleCode(value: string | null | undefined): RoleCode {
@@ -278,6 +281,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       "scadenze",
       "documenti",
       "installatori",
+      "offerta_commerciale",
       "crm_settings",
       "crm_settings.account",
       "crm_settings.account.utenti",
@@ -314,6 +318,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       "company.communication.manage",
       "appearance.personal.manage",
       "widget.bacheca.gestisci",
+      "offerta_commerciale.manage",
     ])
     grantFieldManagement([...MODULE_KEYS])
     for (const moduleKey of MODULE_KEYS) {
@@ -326,6 +331,7 @@ export function buildDefaultPermissionSnapshot(params?: {
     }
   } else if (roleCode === "AGENT") {
     grantPages("rw", ["lead", "compiti", "scadenze", "installatori"])
+    grantPages("r", ["offerta_commerciale"])
     // CRM Settings negato: restano leggibili solo azienda/sedi/aspetto (info
     // aziendali + personalizzazione aspetto proprio).
     grantPages("r", ["dashboard", "clienti", "documenti", "crm_settings.system.azienda", "crm_settings.system.sedi", "crm_settings.system.aspetto"])
@@ -343,6 +349,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       "compiti",
       "scadenze",
       "installatori",
+      "offerta_commerciale",
       "crm_settings.system.azienda",
       "crm_settings.system.sedi",
       "crm_settings.system.comunicazioni",
@@ -379,7 +386,7 @@ export function buildDefaultPermissionSnapshot(params?: {
     grantPages("rw", ["lead", "clienti", "compiti", "scadenze", "installatori"])
     // CRM Settings negato tranne azienda/sedi/aspetto leggibili; Documenti in
     // sola lettura; Automazioni e Manutenzione negate.
-    grantPages("r", ["dashboard", "documenti", "crm_settings.system.azienda", "crm_settings.system.sedi", "crm_settings.system.aspetto"])
+    grantPages("r", ["dashboard", "documenti", "offerta_commerciale", "crm_settings.system.azienda", "crm_settings.system.sedi", "crm_settings.system.aspetto"])
     grantRecords(["lead", "clienti", "compiti", "scadenze"], ["view"])
     grantActions(["lead.columns.customize_own", "company.profile.view", "company.sites.view", "appearance.personal.manage"])
     for (const moduleKey of MODULE_KEYS) {

@@ -6,6 +6,7 @@ export type NavIcon =
   | "scadenze"
   | "documenti"
   | "installatori"
+  | "offerta_commerciale"
   | "impostazioni"
 
 export type NavItem = {
@@ -22,6 +23,7 @@ export const NAV_PRINCIPALE: NavItem[] = [
 ]
 
 export const NAV_GESTIONE: NavItem[] = [
+  { label: "Offerta Commerciale", href: "/offerta-commerciale", icon: "offerta_commerciale" },
   { label: "Scadenze", href: "/scadenze", icon: "scadenze" },
   { label: "Documenti", href: "/documenti", icon: "documenti" },
   { label: "Installatori", href: "/installatori", icon: "installatori" },

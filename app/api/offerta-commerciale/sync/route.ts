@@ -33,6 +33,13 @@ async function walk(username: string, appPassword: string, path: string, depth =
   return [...listing.filter((item) => !item.isDir), ...nested.flat()]
 }
 
+function uniqueFilesByPath(files: NcEntry[]) {
+  // Alcune installazioni Nextcloud includono lo stesso file sia nella
+  // risposta della cartella sia in quella ricorsiva. PostgreSQL non consente
+  // che un singolo UPSERT aggiorni due volte la stessa chiave `path`.
+  return [...new Map(files.map((file) => [file.path, file])).values()]
+}
+
 export async function POST() {
   const guard = await requireApiAction("offerta_commerciale.manage")
   if (guard.response) return guard.response
@@ -43,7 +50,10 @@ export async function POST() {
     for (const folder of ["Listini", "Offerte-del-periodo", "Schede-tecniche"]) {
       await ensureFolder(nextcloud.username, nextcloud.appPassword, `${OFFERTA_COMMERCIALE_ROOT}/${folder}`)
     }
-    const files = (await walk(nextcloud.username, nextcloud.appPassword, OFFERTA_COMMERCIALE_ROOT)).filter((file) => DOCUMENT_EXTENSIONS.test(file.name))
+    const files = uniqueFilesByPath(
+      (await walk(nextcloud.username, nextcloud.appPassword, OFFERTA_COMMERCIALE_ROOT))
+        .filter((file) => DOCUMENT_EXTENSIONS.test(file.name)),
+    )
     const now = new Date().toISOString()
     const documents = files.map((file) => {
       const path = file.path.toLowerCase()

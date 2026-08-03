@@ -105,7 +105,7 @@ insert into public.offerta_commerciale_cataloghi (
   ]'::jsonb,
   '[{"nome":"Zavorre","prezzo":100,"unita":"€/kWp","scontabile":true},{"nome":"Zavorre a vela","prezzo":150,"unita":"€/kWp","scontabile":true},{"nome":"Wall Box SolaxPower / Sungrow","prezzo":1500,"prezzo_combo":1000,"unita":"€","scontabile":false},{"nome":"Ottimizzatori Tigo","prezzo":150,"unita":"€/kWp","scontabile":true},{"nome":"Tigo Cloud Connect","prezzo":600,"unita":"€","scontabile":false},{"nome":"Secondo inverter in parallelo","prezzo":1500,"unita":"€","scontabile":false}]'::jsonb,
   '[{"zona":"A","kwp_min":3,"kwp_max":10,"percentuale":5,"eps_prezzo":500,"eps_omaggiabile":false},{"zona":"B","kwp_min":3,"kwp_max":7,"percentuale":5,"eps_prezzo":250,"eps_omaggiabile":true},{"zona":"B","kwp_min":8,"kwp_max":10,"percentuale":10,"eps_prezzo":250,"eps_omaggiabile":true}]'::jsonb,
-  'Import iniziale: Listino LUGLIO MONOFASE + matrici accumuli precedentemente presenti su Sanity. Verificare prima dell uso commerciale.',
+  'Import iniziale: Listino LUGLIO MONOFASE. Verificare prima dell uso commerciale.',
   now()
 ) on conflict (id) do nothing;
 

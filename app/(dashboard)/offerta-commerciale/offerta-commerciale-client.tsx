@@ -2,7 +2,7 @@
 /* eslint-disable react-hooks/set-state-in-effect, @next/next/no-img-element */
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { BadgeEuro, BatteryCharging, Calculator, FileText, Loader2, PackageOpen, RefreshCw, Save, ShieldCheck, SolarPanel, Tag } from "lucide-react"
+import { BadgeEuro, BatteryCharging, Calculator, FileText, Loader2, PackageOpen, RefreshCw, Save, ShieldCheck, SolarPanel, Tag, Upload } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -33,6 +33,7 @@ export function OffertaCommercialeClient() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [quoteKwp, setQuoteKwp] = useState(6)
   const [quoteBrand, setQuoteBrand] = useState("Sineng")
   const [quoteKwh, setQuoteKwh] = useState(10.6)
@@ -94,6 +95,24 @@ export function OffertaCommercialeClient() {
       await load()
     } catch (error) { toast.error(error instanceof Error ? error.message : "Errore pubblicazione") }
     finally { setSaving(false) }
+  }
+
+  const uploadFiles = async (category: "listini" | "offerte" | "schede", files: FileList | null) => {
+    if (!files?.length) return
+    setUploading(true)
+    try {
+      for (const file of Array.from(files)) {
+        const form = new FormData()
+        form.set("category", category)
+        form.set("file", file)
+        const response = await fetch("/api/offerta-commerciale/upload", { method: "POST", body: form })
+        const body = await response.json()
+        if (!response.ok) throw new Error(`${file.name}: ${body.error ?? "Upload non riuscito"}`)
+      }
+      toast.success(`${files.length} file caricati su Nextcloud`)
+      await syncNextcloud()
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Errore upload") }
+    finally { setUploading(false) }
   }
 
   const saveOffer = async (offer: OffertaPeriodo) => {
@@ -162,7 +181,7 @@ export function OffertaCommercialeClient() {
 
       <TabsContent value="offerte" className="pt-5">{data.offerte.length === 0 ? <Empty>Carica PDF e copertine in “Offerte-del-periodo” su Nextcloud, poi avvia la sincronizzazione.</Empty> : <div className="grid gap-4 lg:grid-cols-2">{data.offerte.map((offer) => <article key={offer.id} className="overflow-hidden rounded-xl border border-border bg-card">{offer.cover_path ? <img src={`/api/offerta-commerciale/offerte/${offer.id}/asset?kind=cover`} alt="" className="h-52 w-full object-cover" /> : <div className="flex h-36 items-center justify-center bg-muted"><FileText className="size-10 text-muted-foreground" /></div>}<div className="space-y-3 p-4"><Input value={offer.titolo} disabled={!canManage} onChange={(e) => setOffer(offer.id,{titolo:e.target.value})} /><Textarea value={offer.descrizione ?? ""} disabled={!canManage} onChange={(e) => setOffer(offer.id,{descrizione:e.target.value})} placeholder="Descrizione breve" /><div className="grid grid-cols-2 gap-2"><Input type="date" value={offer.valido_dal ?? ""} disabled={!canManage} onChange={(e) => setOffer(offer.id,{valido_dal:e.target.value || null})} /><Input type="date" value={offer.valido_al ?? ""} disabled={!canManage} onChange={(e) => setOffer(offer.id,{valido_al:e.target.value || null})} /></div><div className="flex items-center justify-between gap-2"><label className="flex items-center gap-2 text-sm"><Switch checked={offer.pubblicata} disabled={!canManage} onCheckedChange={(checked) => setOffer(offer.id,{pubblicata:checked})} />Pubblicata</label><div className="flex gap-2">{offer.pdf_path ? <Button variant="outline" size="sm" render={<a href={`/api/offerta-commerciale/offerte/${offer.id}/asset`} target="_blank" rel="noreferrer" />}>Apri PDF</Button> : null}{canManage ? <Button size="sm" onClick={() => saveOffer(offer)}>Salva</Button> : null}</div></div></div></article>)}</div>}</TabsContent>
 
-      <TabsContent value="documenti" className="space-y-5 pt-5"><section className="overflow-hidden rounded-xl border border-border bg-card"><div className="border-b border-border p-4"><h2 className="font-semibold">Storico listini</h2></div><table className="w-full text-sm"><tbody>{data.versioni.map((version) => <tr key={version.id} className="border-t border-border first:border-t-0"><td className="px-4 py-3 font-medium">{version.nome}</td><td className="px-4 py-3"><Badge variant={version.stato === "pubblicato" ? "default" : "outline"}>{version.stato}</Badge></td><td className="px-4 py-3 text-right text-muted-foreground">{new Date(version.aggiornato_at).toLocaleDateString("it-IT")}</td></tr>)}</tbody></table></section>{data.documenti.length === 0 ? <Empty>Nessun documento sincronizzato da Nextcloud.</Empty> : <section className="overflow-hidden rounded-xl border border-border bg-card"><div className="border-b border-border p-4"><h2 className="font-semibold">Documenti Nextcloud</h2></div><table className="w-full text-sm"><thead className="bg-muted/50 text-left"><tr><th className="px-4 py-3">Documento</th><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">Modificato</th></tr></thead><tbody>{data.documenti.map((doc) => <tr key={doc.id} className="border-t border-border"><td className="px-4 py-3"><div className="font-medium">{doc.nome}</div><div className="text-xs text-muted-foreground">{doc.path}</div></td><td className="px-4 py-3"><Badge variant="outline">{doc.tipo}</Badge></td><td className="px-4 py-3 text-muted-foreground">{doc.modificato_at ? new Date(doc.modificato_at).toLocaleDateString("it-IT") : "—"}</td></tr>)}</tbody></table></section>}</TabsContent>
+      <TabsContent value="documenti" className="space-y-5 pt-5">{canManage ? <section className="rounded-xl border border-border bg-card p-4"><div className="mb-4 flex items-center gap-2"><Upload className="size-5 text-primary" /><div><h2 className="font-semibold">Carica su Nextcloud</h2><p className="text-sm text-muted-foreground">Massimo 25 MB per file. Per le offerte usa lo stesso nome per PDF e copertina.</p></div>{uploading ? <Loader2 className="ml-auto size-5 animate-spin text-primary" /> : null}</div><div className="grid gap-3 md:grid-cols-3"><label className="cursor-pointer rounded-lg border border-dashed border-border p-4 text-sm transition-colors hover:bg-muted/50"><span className="font-medium">Listini</span><span className="mt-1 block text-xs text-muted-foreground">Solo PDF</span><input className="sr-only" type="file" accept="application/pdf,.pdf" disabled={uploading} onChange={(e) => { void uploadFiles("listini", e.target.files); e.target.value="" }} /></label><label className="cursor-pointer rounded-lg border border-dashed border-border p-4 text-sm transition-colors hover:bg-muted/50"><span className="font-medium">Offerte del periodo</span><span className="mt-1 block text-xs text-muted-foreground">PDF, JPG, PNG o WebP · selezione multipla</span><input className="sr-only" type="file" multiple accept="application/pdf,image/png,image/jpeg,image/webp,.pdf,.png,.jpg,.jpeg,.webp" disabled={uploading} onChange={(e) => { void uploadFiles("offerte", e.target.files); e.target.value="" }} /></label><label className="cursor-pointer rounded-lg border border-dashed border-border p-4 text-sm transition-colors hover:bg-muted/50"><span className="font-medium">Schede tecniche</span><span className="mt-1 block text-xs text-muted-foreground">Solo PDF</span><input className="sr-only" type="file" multiple accept="application/pdf,.pdf" disabled={uploading} onChange={(e) => { void uploadFiles("schede", e.target.files); e.target.value="" }} /></label></div></section> : null}<section className="overflow-hidden rounded-xl border border-border bg-card"><div className="border-b border-border p-4"><h2 className="font-semibold">Storico listini</h2></div><table className="w-full text-sm"><tbody>{data.versioni.map((version) => <tr key={version.id} className="border-t border-border first:border-t-0"><td className="px-4 py-3 font-medium">{version.nome}</td><td className="px-4 py-3"><Badge variant={version.stato === "pubblicato" ? "default" : "outline"}>{version.stato}</Badge></td><td className="px-4 py-3 text-right text-muted-foreground">{new Date(version.aggiornato_at).toLocaleDateString("it-IT")}</td></tr>)}</tbody></table></section>{data.documenti.length === 0 ? <Empty>Nessun documento sincronizzato da Nextcloud.</Empty> : <section className="overflow-hidden rounded-xl border border-border bg-card"><div className="border-b border-border p-4"><h2 className="font-semibold">Documenti Nextcloud</h2></div><table className="w-full text-sm"><thead className="bg-muted/50 text-left"><tr><th className="px-4 py-3">Documento</th><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">Modificato</th></tr></thead><tbody>{data.documenti.map((doc) => <tr key={doc.id} className="border-t border-border"><td className="px-4 py-3"><div className="font-medium">{doc.nome}</div><div className="text-xs text-muted-foreground">{doc.path}</div></td><td className="px-4 py-3"><Badge variant="outline">{doc.tipo}</Badge></td><td className="px-4 py-3 text-muted-foreground">{doc.modificato_at ? new Date(doc.modificato_at).toLocaleDateString("it-IT") : "—"}</td></tr>)}</tbody></table></section>}</TabsContent>
     </Tabs>
   </div>
 }

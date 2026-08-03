@@ -123,6 +123,68 @@ function davUrl(username: string, path: string): string {
     : davRoot(username)
 }
 
+/** Crea una cartella e tutte le intermedie con l'app-password dell'utente. */
+export async function ensureFolder(
+  username: string,
+  appPassword: string,
+  path: string,
+): Promise<void> {
+  const segments = normalizeNcPath(path).split("/").filter(Boolean)
+  let current = ""
+  for (const segment of segments) {
+    current = current ? `${current}/${segment}` : segment
+    const res = await fetch(davUrl(username, current), {
+      method: "MKCOL",
+      headers: { Authorization: basicAuth(username, appPassword) },
+    })
+    if (res.status === 401 || res.status === 403) {
+      throw new Error("Autenticazione Nextcloud non valida o cartella non modificabile")
+    }
+    if (res.status !== 201 && res.status !== 405) {
+      throw new Error(`Creazione cartella ${current} fallita (HTTP ${res.status})`)
+    }
+  }
+}
+
+export async function uploadFile(
+  username: string,
+  appPassword: string,
+  path: string,
+  content: Buffer,
+  contentType?: string,
+): Promise<void> {
+  const clean = normalizeNcPath(path)
+  const folder = clean.split("/").slice(0, -1).join("/")
+  if (folder) await ensureFolder(username, appPassword, folder)
+  const res = await fetch(davUrl(username, clean), {
+    method: "PUT",
+    headers: {
+      Authorization: basicAuth(username, appPassword),
+      ...(contentType ? { "Content-Type": contentType } : {}),
+    },
+    body: content as unknown as BodyInit,
+  })
+  if (res.status === 401 || res.status === 403) {
+    throw new Error("Autenticazione Nextcloud non valida o cartella non modificabile")
+  }
+  if (!res.ok) throw new Error(`Upload Nextcloud fallito (HTTP ${res.status})`)
+}
+
+export async function downloadFile(
+  username: string,
+  appPassword: string,
+  path: string,
+): Promise<Response> {
+  const res = await fetch(davUrl(username, path), {
+    headers: { Authorization: basicAuth(username, appPassword) },
+  })
+  if (res.status === 401 || res.status === 403) {
+    throw new Error("Autenticazione Nextcloud non valida o file non accessibile")
+  }
+  if (!res.ok) throw new Error(`Download Nextcloud fallito (HTTP ${res.status})`)
+  return res
+}
+
 /**
  * Marca (o smarca) una cartella/file come preferito nativo Nextcloud
  * (oc:favorite), la stessa stella dell'interfaccia web. Via PROPPATCH.

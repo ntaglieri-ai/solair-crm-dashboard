@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { requireApiAction } from "@/lib/permissions/server"
-import { ensureFolder, uploadFile } from "@/lib/nextcloud/admin-webdav"
+import { ensureFolder, uploadFile } from "@/lib/nextcloud/webdav"
 import { OFFERTA_COMMERCIALE_ROOT } from "@/lib/offerta-commerciale/store"
+import { commercialNextcloudUser } from "@/lib/offerta-commerciale/nextcloud-user"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -27,6 +28,12 @@ function safeFileName(value: string) {
 export async function POST(request: Request) {
   const guard = await requireApiAction("offerta_commerciale.manage")
   if (guard.response) return guard.response
+  let nextcloud: Awaited<ReturnType<typeof commercialNextcloudUser>>
+  try {
+    nextcloud = await commercialNextcloudUser(guard.permissions.snapshot.subject)
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Account Nextcloud non disponibile" }, { status: 409 })
+  }
 
   const form = await request.formData().catch(() => null)
   const category = form?.get("category")
@@ -49,17 +56,11 @@ export async function POST(request: Request) {
   }
 
   const folder = `${OFFERTA_COMMERCIALE_ROOT}/${config.folder}`
-  const ensured = await ensureFolder(folder)
-  if (!ensured.ok) {
-    return NextResponse.json({ error: ensured.error ?? "Cartella Nextcloud non disponibile" }, { status: 502 })
-  }
-  const result = await uploadFile(
-    `${folder}/${name}`,
-    Buffer.from(await file.arrayBuffer()),
-    file.type || undefined,
-  )
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error ?? `Upload fallito (${result.status})` }, { status: 502 })
+  try {
+    await ensureFolder(nextcloud.username, nextcloud.appPassword, folder)
+    await uploadFile(nextcloud.username, nextcloud.appPassword, `${folder}/${name}`, Buffer.from(await file.arrayBuffer()), file.type || undefined)
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Upload Nextcloud fallito" }, { status: 502 })
   }
   return NextResponse.json({ ok: true, nome: name, path: `${folder}/${name}` }, { status: 201 })
 }

@@ -1,30 +1,30 @@
 import { NextResponse } from "next/server"
 import { requireApiAction } from "@/lib/permissions/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { downloadFile, ensureFolder, listFolder, type WebDavItem } from "@/lib/nextcloud/admin-webdav"
+import { downloadFile, ensureFolder, listFolder, type NcEntry } from "@/lib/nextcloud/webdav"
 import { normalizeAccumuli, normalizeFotovoltaico, OFFERTA_COMMERCIALE_ROOT } from "@/lib/offerta-commerciale/store"
 import { estraiTestoDaPdf } from "@/lib/listino/pdf-testo"
 import { parseListinoCommerciale } from "@/lib/offerta-commerciale/parse-listino"
+import { commercialNextcloudUser } from "@/lib/offerta-commerciale/nextcloud-user"
 
 const DOCUMENT_EXTENSIONS = /\.(pdf|png|jpe?g|webp)$/i
 const COVER_EXTENSIONS = /\.(png|jpe?g|webp)$/i
 
-function fingerprint(item: WebDavItem) {
-  return item.etag ? `etag:${item.etag}` : `size-mtime:${item.dimensioneKb ?? "?"}-${item.modificato ?? "?"}`
+function fingerprint(item: NcEntry) {
+  return `size-mtime:${item.size ?? "?"}-${item.lastModified ?? "?"}`
 }
 
 function withoutExtension(name: string) {
   return name.replace(/\.[^.]+$/, "").trim()
 }
 
-async function walk(path: string, depth = 0): Promise<WebDavItem[]> {
+async function walk(username: string, appPassword: string, path: string, depth = 0): Promise<NcEntry[]> {
   if (depth > 4) return []
-  const listing = await listFolder(path)
-  if (!listing.ok) throw new Error(`${path}: ${listing.error ?? `HTTP ${listing.status}`}`)
+  const listing = await listFolder(username, appPassword, path)
   const nested = await Promise.all(
-    listing.items.filter((item) => item.isFolder).map((item) => walk(item.path, depth + 1)),
+    listing.filter((item) => item.isDir).map((item) => walk(username, appPassword, item.path, depth + 1)),
   )
-  return [...listing.items.filter((item) => !item.isFolder), ...nested.flat()]
+  return [...listing.filter((item) => !item.isDir), ...nested.flat()]
 }
 
 export async function POST() {
@@ -33,24 +33,24 @@ export async function POST() {
   const supabase = createAdminClient()
   if (!supabase) return NextResponse.json({ error: "Supabase admin non configurato" }, { status: 503 })
   try {
+    const nextcloud = await commercialNextcloudUser(guard.permissions.snapshot.subject)
     for (const folder of ["Listini", "Offerte-del-periodo", "Schede-tecniche"]) {
-      const ensured = await ensureFolder(`${OFFERTA_COMMERCIALE_ROOT}/${folder}`)
-      if (!ensured.ok) throw new Error(`Creazione cartella ${folder}: ${ensured.error ?? `HTTP ${ensured.status}`}`)
+      await ensureFolder(nextcloud.username, nextcloud.appPassword, `${OFFERTA_COMMERCIALE_ROOT}/${folder}`)
     }
-    const files = (await walk(OFFERTA_COMMERCIALE_ROOT)).filter((file) => DOCUMENT_EXTENSIONS.test(file.nome))
+    const files = (await walk(nextcloud.username, nextcloud.appPassword, OFFERTA_COMMERCIALE_ROOT)).filter((file) => DOCUMENT_EXTENSIONS.test(file.name))
     const now = new Date().toISOString()
     const documents = files.map((file) => {
       const path = file.path.toLowerCase()
       const tipo = path.includes("offerte-del-periodo")
-        ? (COVER_EXTENSIONS.test(file.nome) ? "copertina" : "locandina")
+        ? (COVER_EXTENSIONS.test(file.name) ? "copertina" : "locandina")
         : path.includes("listin") ? "listino" : "altro"
       return {
         path: file.path,
-        nome: file.nome,
+        nome: file.name,
         tipo,
         fingerprint: fingerprint(file),
-        dimensione_kb: file.dimensioneKb,
-        modificato_at: file.modificato,
+        dimensione_kb: file.size == null ? null : Math.round(file.size / 1024),
+        modificato_at: file.lastModified,
         sincronizzato_at: now,
       }
     })
@@ -60,8 +60,8 @@ export async function POST() {
     }
 
     const listini = files
-      .filter((file) => file.path.toLowerCase().includes("listin") && file.nome.toLowerCase().endsWith(".pdf"))
-      .sort((a, b) => (b.modificato ?? "").localeCompare(a.modificato ?? ""))
+      .filter((file) => file.path.toLowerCase().includes("listin") && file.name.toLowerCase().endsWith(".pdf"))
+      .sort((a, b) => (b.lastModified ?? "").localeCompare(a.lastModified ?? ""))
     let drafts = 0
     for (const file of listini) {
       const { data: existing } = await supabase.from("offerta_commerciale_cataloghi").select("id").eq("fonte_path", file.path).maybeSingle()
@@ -70,9 +70,9 @@ export async function POST() {
       let fotovoltaico = published?.fotovoltaico ?? []
       let accumuli = published?.accumuli ?? []
       let parseNote = "Documento rilevato da Nextcloud. Verificare i prezzi prima della pubblicazione."
-      const downloaded = await downloadFile(file.path)
-      if (downloaded.ok && downloaded.body && published) {
-        const bytes = new Uint8Array(await new Response(downloaded.body).arrayBuffer())
+      const downloaded = await downloadFile(nextcloud.username, nextcloud.appPassword, file.path)
+      if (downloaded.body && published) {
+        const bytes = new Uint8Array(await downloaded.arrayBuffer())
         const testo = await estraiTestoDaPdf(bytes)
         if (testo) {
           const parsed = parseListinoCommerciale(testo, {
@@ -85,7 +85,7 @@ export async function POST() {
         }
       }
       const { error } = await supabase.from("offerta_commerciale_cataloghi").insert({
-        nome: withoutExtension(file.nome),
+        nome: withoutExtension(file.name),
         stato: "bozza",
         fonte_path: file.path,
         fonte_fingerprint: fingerprint(file),
@@ -102,12 +102,12 @@ export async function POST() {
 
     const offerFiles = files.filter((file) => file.path.toLowerCase().includes("offerte-del-periodo"))
     const covers = new Map(
-      offerFiles.filter((file) => COVER_EXTENSIONS.test(file.nome)).map((file) => [withoutExtension(file.nome).toLowerCase(), file.path]),
+      offerFiles.filter((file) => COVER_EXTENSIONS.test(file.name)).map((file) => [withoutExtension(file.name).toLowerCase(), file.path]),
     )
-    const offers = offerFiles.filter((file) => file.nome.toLowerCase().endsWith(".pdf")).map((file, index) => ({
-      titolo: withoutExtension(file.nome),
+    const offers = offerFiles.filter((file) => file.name.toLowerCase().endsWith(".pdf")).map((file, index) => ({
+      titolo: withoutExtension(file.name),
       pdf_path: file.path,
-      cover_path: covers.get(withoutExtension(file.nome).toLowerCase()) ?? null,
+      cover_path: covers.get(withoutExtension(file.name).toLowerCase()) ?? null,
       ordinamento: index,
       aggiornato_at: now,
     }))

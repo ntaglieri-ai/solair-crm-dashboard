@@ -185,6 +185,23 @@ export async function downloadFile(
   return res
 }
 
+/** Elimina un file tramite WebDAV. Un file gia assente e considerato eliminato. */
+export async function deleteFile(
+  username: string,
+  appPassword: string,
+  path: string,
+): Promise<void> {
+  const res = await fetch(davUrl(username, path), {
+    method: "DELETE",
+    headers: { Authorization: basicAuth(username, appPassword) },
+  })
+  if (res.status === 404) return
+  if (res.status === 401 || res.status === 403) {
+    throw new Error("Autenticazione Nextcloud non valida o file non eliminabile")
+  }
+  if (!res.ok) throw new Error(`Eliminazione Nextcloud fallita (HTTP ${res.status})`)
+}
+
 /**
  * Marca (o smarca) una cartella/file come preferito nativo Nextcloud
  * (oc:favorite), la stessa stella dell'interfaccia web. Via PROPPATCH.

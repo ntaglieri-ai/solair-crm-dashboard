@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { requireApiAction, requireApiPage } from "@/lib/permissions/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { deleteFile } from "@/lib/nextcloud/webdav"
+import { commercialNextcloudUser } from "@/lib/offerta-commerciale/nextcloud-user"
 import {
   loadOffertaCommerciale,
   normalizeAccessori,
@@ -72,4 +74,50 @@ export async function PATCH(request: Request) {
   }).eq("id", catalogo.id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true, aggiornato_at: now })
+}
+
+export async function DELETE(request: Request) {
+  const guard = await requireApiAction("offerta_commerciale.manage")
+  if (guard.response) return guard.response
+  const id = new URL(request.url).searchParams.get("id")
+  if (!id) return NextResponse.json({ error: "Listino non valido" }, { status: 400 })
+  const supabase = createAdminClient()
+  if (!supabase) return NextResponse.json({ error: "Supabase admin non configurato" }, { status: 503 })
+
+  const { data: catalogo, error: catalogError } = await supabase
+    .from("offerta_commerciale_cataloghi")
+    .select("id, nome, stato, fonte_path")
+    .eq("id", id)
+    .maybeSingle()
+  if (catalogError) return NextResponse.json({ error: catalogError.message }, { status: 500 })
+  if (!catalogo) return NextResponse.json({ error: "Listino non trovato" }, { status: 404 })
+  if (catalogo.stato !== "archiviato") {
+    return NextResponse.json({ error: "È possibile eliminare soltanto un listino archiviato" }, { status: 409 })
+  }
+
+  let sourceDeleted = false
+  if (catalogo.fonte_path) {
+    const { count, error: countError } = await supabase
+      .from("offerta_commerciale_cataloghi")
+      .select("id", { count: "exact", head: true })
+      .eq("fonte_path", catalogo.fonte_path)
+      .neq("id", catalogo.id)
+    if (countError) return NextResponse.json({ error: countError.message }, { status: 500 })
+    if ((count ?? 0) === 0) {
+      try {
+        const nextcloud = await commercialNextcloudUser(guard.permissions.snapshot.subject)
+        await deleteFile(nextcloud.username, nextcloud.appPassword, catalogo.fonte_path)
+        sourceDeleted = true
+      } catch (error) {
+        return NextResponse.json({ error: error instanceof Error ? error.message : "Eliminazione Nextcloud fallita" }, { status: 502 })
+      }
+    }
+  }
+
+  const { error: deleteError } = await supabase.from("offerta_commerciale_cataloghi").delete().eq("id", id)
+  if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 })
+  if (sourceDeleted && catalogo.fonte_path) {
+    await supabase.from("offerta_commerciale_documenti").delete().eq("path", catalogo.fonte_path)
+  }
+  return NextResponse.json({ ok: true, sourceDeleted })
 }

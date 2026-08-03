@@ -18,8 +18,8 @@ export async function GET() {
   try {
     const data = await loadOffertaCommerciale(supabase)
     const canManage = guard.permissions.canAction("offerta_commerciale.manage")
-    const catalogo = (canManage ? data.cataloghi.find((item) => item.stato === "bozza") : null)
-      ?? data.cataloghi.find((item) => item.stato === "pubblicato")
+    const catalogo = data.cataloghi.find((item) => item.stato === "pubblicato")
+      ?? (canManage ? data.cataloghi.find((item) => item.stato === "bozza") : null)
       ?? data.cataloghi[0]
       ?? null
     return NextResponse.json({

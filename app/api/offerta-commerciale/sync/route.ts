@@ -2,7 +2,13 @@ import { NextResponse } from "next/server"
 import { requireApiAction } from "@/lib/permissions/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { downloadFile, ensureFolder, listFolder, type NcEntry } from "@/lib/nextcloud/webdav"
-import { normalizeAccumuli, normalizeFotovoltaico, OFFERTA_COMMERCIALE_ROOT } from "@/lib/offerta-commerciale/store"
+import {
+  normalizeAccessori,
+  normalizeAccumuli,
+  normalizeFotovoltaico,
+  normalizeSconti,
+  OFFERTA_COMMERCIALE_ROOT,
+} from "@/lib/offerta-commerciale/store"
 import { estraiTestoDaPdf } from "@/lib/listino/pdf-testo"
 import { parseListinoCommerciale } from "@/lib/offerta-commerciale/parse-listino"
 import { commercialNextcloudUser } from "@/lib/offerta-commerciale/nextcloud-user"
@@ -61,43 +67,54 @@ export async function POST() {
 
     const listini = files
       .filter((file) => file.path.toLowerCase().includes("listin") && file.name.toLowerCase().endsWith(".pdf"))
-      .sort((a, b) => (b.lastModified ?? "").localeCompare(a.lastModified ?? ""))
-    let drafts = 0
+      // Se Nextcloud contiene piu file nuovi, si pubblicano in ordine
+      // cronologico: al termine resta attivo quello piu recente.
+      .sort((a, b) => (a.lastModified ?? "").localeCompare(b.lastModified ?? ""))
+    let publishedCount = 0
     for (const file of listini) {
-      const { data: existing } = await supabase.from("offerta_commerciale_cataloghi").select("id").eq("fonte_path", file.path).maybeSingle()
-      if (existing) continue
+      const sourceFingerprint = fingerprint(file)
+      const { data: existing } = await supabase
+        .from("offerta_commerciale_cataloghi")
+        .select("id, stato")
+        .eq("fonte_path", file.path)
+        .eq("fonte_fingerprint", sourceFingerprint)
+        .order("aggiornato_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (existing && existing.stato !== "bozza") continue
       const { data: published } = await supabase.from("offerta_commerciale_cataloghi").select("fotovoltaico, accumuli, accessori, sconti, note").eq("stato", "pubblicato").maybeSingle()
-      let fotovoltaico = published?.fotovoltaico ?? []
-      let accumuli = published?.accumuli ?? []
-      let parseNote = "Documento rilevato da Nextcloud. Verificare i prezzi prima della pubblicazione."
+      if (!published) throw new Error("Listino non pubblicato: manca un catalogo di riferimento nel CRM")
       const downloaded = await downloadFile(nextcloud.username, nextcloud.appPassword, file.path)
-      if (downloaded.body && published) {
-        const bytes = new Uint8Array(await downloaded.arrayBuffer())
-        const testo = await estraiTestoDaPdf(bytes)
-        if (testo) {
-          const parsed = parseListinoCommerciale(testo, {
-            fotovoltaico: normalizeFotovoltaico(published.fotovoltaico),
-            accumuli: normalizeAccumuli(published.accumuli),
-          })
-          fotovoltaico = parsed.fotovoltaico
-          accumuli = parsed.accumuli
-          parseNote = `Import automatico: ${parsed.parsedBase} prezzi FV e ${parsed.parsedBattery} combinazioni aggiornate. Verificare prima della pubblicazione.`
-        }
-      }
-      const { error } = await supabase.from("offerta_commerciale_cataloghi").insert({
+      const bytes = new Uint8Array(await downloaded.arrayBuffer())
+      const testo = await estraiTestoDaPdf(bytes)
+      if (!testo) throw new Error(`Listino non pubblicato: ${file.name} non contiene testo estraibile`)
+      const parsed = parseListinoCommerciale(testo, {
+        fotovoltaico: normalizeFotovoltaico(published.fotovoltaico),
+        accumuli: normalizeAccumuli(published.accumuli),
+        accessori: normalizeAccessori(published.accessori),
+        sconti: normalizeSconti(published.sconti),
+      })
+      const importNote = `Importazione automatica completata: ${parsed.parsedBase} prezzi FV e ${parsed.parsedBattery} prezzi espliciti elaborati.`
+      const catalogValues = {
         nome: withoutExtension(file.name),
         stato: "bozza",
         fonte_path: file.path,
-        fonte_fingerprint: fingerprint(file),
-        fotovoltaico,
-        accumuli,
-        accessori: published?.accessori ?? [],
-        sconti: published?.sconti ?? [],
-        note: `${published?.note ?? ""}\n${parseNote}`.trim(),
+        fonte_fingerprint: sourceFingerprint,
+        fotovoltaico: parsed.fotovoltaico,
+        accumuli: parsed.accumuli,
+        accessori: parsed.accessori,
+        sconti: parsed.sconti,
+        note: `${parsed.note}\n${importNote}`.trim(),
         aggiornato_at: now,
-      })
+      }
+      const catalogQuery = existing
+        ? supabase.from("offerta_commerciale_cataloghi").update(catalogValues).eq("id", existing.id)
+        : supabase.from("offerta_commerciale_cataloghi").insert(catalogValues)
+      const { data: inserted, error } = await catalogQuery.select("id").single()
       if (error) throw new Error(error.message)
-      drafts++
+      const { error: publishError } = await supabase.rpc("pubblica_catalogo_offerta_commerciale", { p_id: inserted.id })
+      if (publishError) throw new Error(`Listino elaborato ma non pubblicato: ${publishError.message}`)
+      publishedCount++
     }
 
     const offerFiles = files.filter((file) => file.path.toLowerCase().includes("offerte-del-periodo"))
@@ -115,7 +132,7 @@ export async function POST() {
       const { error } = await supabase.from("offerta_commerciale_offerte").upsert(offers, { onConflict: "pdf_path", ignoreDuplicates: false })
       if (error) throw new Error(error.message)
     }
-    return NextResponse.json({ files: documents.length, offerte: offers.length, drafts, root: OFFERTA_COMMERCIALE_ROOT })
+    return NextResponse.json({ files: documents.length, offerte: offers.length, published: publishedCount, root: OFFERTA_COMMERCIALE_ROOT })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Sincronizzazione Nextcloud fallita"
     return NextResponse.json({ error: message }, { status: 500 })

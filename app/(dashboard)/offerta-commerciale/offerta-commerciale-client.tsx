@@ -75,26 +75,11 @@ export function OffertaCommercialeClient() {
       const response = await fetch("/api/offerta-commerciale/sync", { method: "POST" })
       const body = await response.json()
       if (!response.ok) throw new Error(body.error ?? "Sincronizzazione non riuscita")
-      toast.success(`Nextcloud sincronizzato: ${body.files} documenti, ${body.offerte} locandine`)
+      const listini = body.published === 1 ? "1 listino pubblicato" : `${body.published ?? 0} listini pubblicati`
+      toast.success(`Nextcloud sincronizzato: ${body.files} documenti, ${body.offerte} locandine, ${listini}`)
       await load()
     } catch (error) { toast.error(error instanceof Error ? error.message : "Errore sincronizzazione") }
     finally { setSyncing(false) }
-  }
-
-  const publishCatalog = async () => {
-    if (!catalogo || catalogo.stato !== "bozza") return
-    setSaving(true)
-    try {
-      const saveResponse = await fetch("/api/offerta-commerciale", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ catalogo }) })
-      const saveBody = await saveResponse.json()
-      if (!saveResponse.ok) throw new Error(saveBody.error ?? "Salvataggio non riuscito")
-      const response = await fetch("/api/offerta-commerciale", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: catalogo.id, action: "publish" }) })
-      const body = await response.json()
-      if (!response.ok) throw new Error(body.error ?? "Pubblicazione non riuscita")
-      toast.success("Nuovo listino pubblicato; il precedente è nello storico")
-      await load()
-    } catch (error) { toast.error(error instanceof Error ? error.message : "Errore pubblicazione") }
-    finally { setSaving(false) }
   }
 
   const uploadFiles = async (category: "listini" | "offerte" | "schede", files: FileList | null) => {
@@ -145,7 +130,7 @@ export function OffertaCommercialeClient() {
   return <div className="flex flex-col gap-6">
     <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
       <div><div className="mb-2 flex items-center gap-2"><BadgeEuro className="size-5 text-primary" /><span className="text-sm font-semibold uppercase tracking-wide text-primary">Catalogo aziendale</span></div><h1 className="text-3xl font-semibold tracking-tight text-foreground">Offerta Commerciale</h1><p className="mt-2 max-w-3xl text-sm text-muted-foreground">Listini, accumuli, regole commerciali e offerte del periodo. I documenti originali restano su Nextcloud.</p></div>
-      {canManage ? <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={syncNextcloud} disabled={syncing}>{syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}Sincronizza Nextcloud</Button><Button variant="outline" onClick={saveCatalog} disabled={saving}>{saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}Salva</Button>{catalogo.stato === "bozza" ? <Button onClick={publishCatalog} disabled={saving}><ShieldCheck className="size-4" />Pubblica listino</Button> : null}</div> : <Badge variant="secondary" className="w-fit"><ShieldCheck className="size-3.5" />Sola lettura</Badge>}
+      {canManage ? <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={syncNextcloud} disabled={syncing}>{syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}Sincronizza Nextcloud</Button><Button variant="outline" onClick={saveCatalog} disabled={saving}>{saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}Salva</Button></div> : <Badge variant="secondary" className="w-fit"><ShieldCheck className="size-3.5" />Sola lettura</Badge>}
     </header>
 
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -161,7 +146,7 @@ export function OffertaCommercialeClient() {
         <Input type="date" value={catalogo.valido_dal ?? ""} disabled={!canManage} onChange={(event) => setCatalogo({ ...catalogo, valido_dal: event.target.value || null })} aria-label="Valido dal" />
         <Input type="date" value={catalogo.valido_al ?? ""} disabled={!canManage} onChange={(event) => setCatalogo({ ...catalogo, valido_al: event.target.value || null })} aria-label="Valido al" />
       </div>
-      <p className="mt-3 text-xs text-muted-foreground">Fonte Nextcloud: {data.nextcloudRoot} · Stato: {catalogo.stato}</p>
+      <p className="mt-3 text-xs text-muted-foreground">Fonte Nextcloud: {data.nextcloudRoot} · Stato: {catalogo.stato} · I nuovi listini validi vengono pubblicati automaticamente</p>
     </section>
 
     <Tabs defaultValue="calcolo">

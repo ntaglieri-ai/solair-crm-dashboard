@@ -28,6 +28,7 @@ export default function MaintenanceLayout({ children }: { children: ReactNode })
   const current = links.find((item) => item.href === pathname)
   const drawerGroup =
     pathname === "/crm-settings/maintenance/make" ||
+    pathname === "/crm-settings/maintenance/meta" ||
     pathname === "/crm-settings/maintenance/file-manager"
       ? { label: "Integrazioni", layer: "integrations" as const }
       : { label: "Manutenzione", layer: "maintenance" as const }

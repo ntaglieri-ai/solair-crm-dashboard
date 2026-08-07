@@ -42,7 +42,7 @@ function settingsGroupForItem(item: ReturnType<typeof crmSettingsItemForPath> | 
   if (["attributes", "default-values", "assignment-rules", "workflows", "roberta", "import-export"].includes(item.id)) {
     return { label: "Configurazione CRM", layer: "crm-config" as CrmSettingsLayer }
   }
-  if (["make", "nextcloud"].includes(item.id)) {
+  if (["make", "meta", "nextcloud"].includes(item.id)) {
     return { label: "Integrazioni", layer: "integrations" as CrmSettingsLayer }
   }
   if (["health", "backup"].includes(item.id)) {

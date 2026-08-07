@@ -131,7 +131,7 @@ const CRM_CONFIG_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
   }))
 
 const INTEGRATION_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
-  .filter((item) => ["make", "nextcloud"].includes(item.id))
+  .filter((item) => ["make", "meta", "nextcloud"].includes(item.id))
   .map((item) => ({
     icon: item.icon,
     title: item.title,

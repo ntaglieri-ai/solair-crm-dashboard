@@ -35,6 +35,7 @@ export const PAGE_KEYS = [
   "crm_settings.system.roberta",
   "crm_settings.system.import_export",
   "crm_settings.system.make",
+  "crm_settings.system.meta",
   "crm_settings.system.backup",
   "crm_settings.maintenance",
   "crm_settings.maintenance.health",
@@ -72,6 +73,7 @@ export const ROUTE_PAGE_MAP: Record<string, string> = {
   "/crm-settings/maintenance": "crm_settings.maintenance",
   "/crm-settings/maintenance/health": "crm_settings.maintenance.health",
   "/crm-settings/maintenance/make": "crm_settings.system.make",
+  "/crm-settings/maintenance/meta": "crm_settings.system.meta",
   "/crm-settings/maintenance/backup": "crm_settings.system.backup",
   "/crm-settings/maintenance/file-manager": "crm_settings.file_manager",
   "/crm-settings/maintenance/storage": "crm_settings.file_manager",
@@ -297,6 +299,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       "crm_settings.system.flussi",
       "crm_settings.system.roberta",
       "crm_settings.system.make",
+      "crm_settings.system.meta",
       "crm_settings.system.import_export",
     ])
     grantRecords([...MODULE_KEYS], ["view", "create", "edit", "delete", "export", "assign"])

@@ -23,11 +23,16 @@ export const PROVINCE_SICILIANE = [
   "TP",
 ] as const
 
+// A DB il tag esiste gia' scritto "ITALIA" (ereditato da Zoho). La ricerca lo
+// trova lo stesso perche' e' fatta con ilike, case-insensitive: non nasce un
+// secondo tag "Italia" accanto a quello storico.
 export const TAG_ITALIA_NOME = "Italia"
 
-// Verde della palette tag dell'app (stesso set di 20260726_installatore_tags),
-// non un colore inventato qui: il tag deve sembrare uno dei tag esistenti.
-export const TAG_ITALIA_COLORE = "#22C55E"
+// Colore reale del tag "ITALIA" gia' a DB, non un verde preso dalla palette
+// dell'app: verificato l'08/08/2026, il tag c'e' con questo colore e 12 clienti
+// assegnati. Serve solo se un giorno venisse cancellato e ricreato — allineato
+// qui, la ricreazione non ne cambierebbe l'aspetto in lista.
+export const TAG_ITALIA_COLORE = "#2F6B3C"
 
 const SIGLE_SICILIANE = new Set<string>(PROVINCE_SICILIANE)
 

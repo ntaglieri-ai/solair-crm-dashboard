@@ -61,12 +61,20 @@ function requireEnv(name) {
   return v
 }
 
-/** Legge una tabella a pagine finche' non finisce. Ordine per id: stabile. */
-async function leggiTutto(admin, tabella, colonne, applicaFiltri = (q) => q) {
+/**
+ * Legge una tabella a pagine finche' non finisce.
+ *
+ * `ordinaPer` e' esplicito e non fisso su "id" perche' cliente_tags non ha una
+ * colonna id: e' una tabella ponte con chiave primaria composta
+ * (cliente_id, tag_id), come installatore_tags. Ordinare per "id" li' dava
+ * "column cliente_tags.id does not exist". Serve comunque un ordinamento, se no
+ * la paginazione non e' deterministica e una riga puo' saltare o ripetersi.
+ */
+async function leggiTutto(admin, tabella, colonne, ordinaPer, applicaFiltri = (q) => q) {
   const righe = []
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await applicaFiltri(
-      admin.from(tabella).select(colonne).order("id", { ascending: true }),
+      admin.from(tabella).select(colonne).order(ordinaPer, { ascending: true }),
     ).range(from, from + PAGE_SIZE - 1)
     if (error) {
       console.error(`❌ Lettura ${tabella} fallita:`, error.message)
@@ -116,6 +124,7 @@ async function main() {
     admin,
     "clienti",
     "id, nome_clienti, provincia_indirizzo_postale",
+    "id",
   )
   const daTaggare = clienti.filter((c) => richiedeTagItalia(c.provincia_indirizzo_postale))
   console.log(
@@ -162,8 +171,14 @@ async function main() {
 
   // Chi ce l'ha gia': una sola lettura di cliente_tags filtrata sul tag,
   // invece di una verifica per cliente.
-  const assegnazioni = await leggiTutto(admin, "cliente_tags", "cliente_id", (q) =>
-    q.eq("tag_id", tagIdEffettivo),
+  // Ordine per cliente_id: la lettura e' gia' filtrata su un solo tag_id,
+  // quindi cliente_id da solo identifica la riga (la PK e' la coppia).
+  const assegnazioni = await leggiTutto(
+    admin,
+    "cliente_tags",
+    "cliente_id",
+    "cliente_id",
+    (q) => q.eq("tag_id", tagIdEffettivo),
   )
   const giaTaggati = new Set(assegnazioni.map((a) => a.cliente_id))
   const mancanti = daTaggare.filter((c) => !giaTaggati.has(c.id))

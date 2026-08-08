@@ -1,11 +1,13 @@
-// Tag "Italia" automatico sul Cliente (spec FASE 2, punto 2.3).
+// Applicazione del tag "Italia" al Cliente (spec FASE 2, punto 2.3).
 //
 // Regola: se la provincia postale del cliente NON e' una delle nove siciliane,
 // il cliente e' "fuori area" e va marcato con il tag "Italia" — cosi' chi apre
 // la lista vede subito le pratiche lontane senza dover aprire l'indirizzo.
+// La regola in se' (sigle, nome e colore del tag) sta in ./tag-italia-regola,
+// modulo puro condiviso con lo script di backfill.
 //
 // PERCHE' UN HOOK APPLICATIVO E NON UN TRIGGER SUL DB
-// 1. In supabase/migrations non esiste un solo trigger: le funzioni SQL
+// 1. In supabase/migrations non c'e' un solo trigger: le funzioni SQL
 //    presenti sono RPC (get_dashboard_aggregates, pubblica_catalogo_*) o
 //    helper per le policy RLS (bacheca_can_manage, nc_path_perms_can_write).
 //    Tutte le regole di business automatiche stanno in TypeScript — il gate
@@ -27,63 +29,20 @@
 //    app/ e lib/. L'unico altro writer e' scripts/migrations/
 //    import-zoho-clienti.mjs, script una tantum di import storico gia' girato.
 import { createClient } from "@/lib/supabase/server"
-import { regionFromProvince } from "@/lib/dashboard/italy-regions"
+import {
+  TAG_ITALIA_COLORE,
+  TAG_ITALIA_NOME,
+  richiedeTagItalia,
+} from "@/lib/clienti/tag-italia-regola"
 
-/** Le nove sigle siciliane: le uniche province considerate "in area". */
-export const PROVINCE_SICILIANE = [
-  "AG",
-  "CL",
-  "CT",
-  "EN",
-  "ME",
-  "PA",
-  "RG",
-  "SR",
-  "TP",
-] as const
-
-export const TAG_ITALIA_NOME = "Italia"
-
-// Verde della palette tag dell'app (stesso set di 20260726_installatore_tags),
-// non un colore inventato qui: il tag deve sembrare uno dei tag esistenti.
-const TAG_ITALIA_COLORE = "#22C55E"
-
-const SIGLE_SICILIANE = new Set<string>(PROVINCE_SICILIANE)
+export {
+  PROVINCE_SICILIANE,
+  TAG_ITALIA_NOME,
+  isProvinciaSiciliana,
+  richiedeTagItalia,
+} from "@/lib/clienti/tag-italia-regola"
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>
-
-function normalizza(value: unknown): string {
-  return typeof value === "string" ? value.trim().toUpperCase() : ""
-}
-
-export function isProvinciaSiciliana(value: unknown): boolean {
-  const provincia = normalizza(value)
-  if (!provincia) return false
-  if (SIGLE_SICILIANE.has(provincia)) return true
-
-  // I dati ereditati da Zoho usano le sigle ("CT", "TV"), ma la colonna e'
-  // testo libero: se qualcuno scrive "Palermo" per esteso deve valere lo
-  // stesso. regionFromProvince conosce sigle e nomi completi di tutte le
-  // province (la usa la mappa della dashboard), quindi la riusiamo invece di
-  // duplicare qui l'elenco lungo.
-  return regionFromProvince(provincia) === "Sicilia"
-}
-
-/**
- * True quando il cliente va taggato "Italia".
- *
- * Provincia vuota = non sappiamo dove sta il cliente, quindi non si tagga:
- * meglio nessun tag che un tag sbagliato da smontare a mano.
- *
- * Qualsiasi altro valore non siciliano fa scattare il tag, anche se non e' una
- * sigla italiana riconosciuta. E' la lettura letterale della spec ("NON tra
- * quelle siciliane") ed e' la scelta piu' sicura: pretendere una provincia
- * italiana valida farebbe saltare silenziosamente i valori scritti male, che
- * sono proprio quelli su cui serve l'automazione.
- */
-export function richiedeTagItalia(value: unknown): boolean {
-  return normalizza(value) !== "" && !isProvinciaSiciliana(value)
-}
 
 async function trovaTagItalia(supabase: ServerClient): Promise<string | null> {
   // limit(1) e non maybeSingle(): se in passato qualcuno ha creato a mano sia
@@ -131,11 +90,11 @@ async function trovaOCreaTagItalia(supabase: ServerClient): Promise<string | nul
  * cliente non deve fallire per un tag.
  *
  * Nota di scope: il tag viene solo aggiunto, mai rimosso. Se una provincia
- * sbagliata viene corretta in una siciliana il tag resta e va togliere a mano —
+ * sbagliata viene corretta in una siciliana il tag resta e va tolto a mano —
  * la spec 2.3 chiede solo l'applicazione, e una rimozione automatica
  * cancellerebbe anche il tag messo a mano da un operatore.
  *
- * @returns true se il tag risulta assegnato ora dopo questa chiamata.
+ * @returns true se il tag risulta assegnato dopo questa chiamata.
  */
 export async function applicaTagItalia(
   clienteId: string,

@@ -24,6 +24,12 @@ export async function POST(
   const duplicated = await createClienteRecord({
     ...source,
     "Nome Clienti": `${source["Nome Clienti"]} (copia)`,
+    // Provincia postale esclusa di proposito, anche se `source` la contiene:
+    // la superficie di questa route resta quella descritta sopra. Di
+    // conseguenza il duplicato non fa scattare nemmeno il tag "Italia"
+    // automatico (spec 2.3), che sarebbe un dato dedotto da un indirizzo mai
+    // confermato su questo nuovo record.
+    "Provincia indirizzo postale": undefined,
   })
 
   return NextResponse.json(duplicated, { status: 201 })

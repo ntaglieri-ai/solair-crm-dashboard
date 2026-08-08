@@ -53,7 +53,14 @@ export async function getSpokiSettings(): Promise<SpokiSettings | null> {
     .eq("chiave", "system.communication")
     .maybeSingle()
 
-  if (error || !data?.valore) return null
+  // Un errore di query qui degraderebbe altrimenti in un silenzioso
+  // "not_configured" lato sendSpokiMessage, indistinguibile da un account
+  // Spoki semplicemente non ancora impostato.
+  if (error) {
+    console.error("[spoki] lettura crm_settings(system.communication) fallita:", error.message)
+    return null
+  }
+  if (!data?.valore) return null
 
   const valore = data.valore as { spoki?: Partial<SpokiSettings> }
   if (!valore.spoki) return null

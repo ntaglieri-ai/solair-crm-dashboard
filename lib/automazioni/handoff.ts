@@ -29,28 +29,46 @@ async function resolveResponsabile(
 ): Promise<{ id: string; nome: string; email: string } | null> {
   const supabase = await createClient()
 
-  const { data: settingsRow } = await supabase
+  const { data: settingsRow, error: settingsError } = await supabase
     .from("crm_settings")
     .select("valore")
     .eq("chiave", "system.communication")
     .maybeSingle()
+
+  // Stesso motivo del log sulla query utenti sotto: senza questo, un errore di
+  // lettura dei settings sembrerebbe "responsabile non configurato".
+  if (settingsError) {
+    console.error(
+      `[handoff] lettura crm_settings(system.communication) fallita per ruolo ${ruolo}:`,
+      settingsError.message,
+    )
+    return null
+  }
 
   const automazioni = (settingsRow?.valore as { automazioni?: Record<string, string> })
     ?.automazioni
   const email = automazioni?.[ruolo]
   if (!email) return null
 
-  const { data: utente } = await supabase
+  // utenti non ha una colonna cognome: nome contiene già il nome completo
+  // (vedi lib/profile/personal-profile.ts, che deriva nome/cognome da qui).
+  const { data: utente, error } = await supabase
     .from("utenti")
-    .select("id, nome, cognome, email")
+    .select("id, nome, email")
     .ilike("email", email)
     .maybeSingle()
 
+  // Senza questo log un errore di query (colonna mancante, RLS) sarebbe
+  // indistinguibile da "responsabile non configurato" per il chiamante.
+  if (error) {
+    console.error(`[handoff] query utenti fallita per ruolo ${ruolo}:`, error.message)
+    return null
+  }
   if (!utente) return null
 
   return {
     id: utente.id as string,
-    nome: [utente.nome, utente.cognome].filter(Boolean).join(" ") || (utente.email as string),
+    nome: (utente.nome as string) || (utente.email as string),
     email: utente.email as string,
   }
 }

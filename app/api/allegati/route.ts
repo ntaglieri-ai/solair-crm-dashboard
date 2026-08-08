@@ -20,6 +20,33 @@ function isValidTipo(value: string | null): value is AllegatoRecordTipo {
 }
 
 /**
+ * Sottocartella opzionale dentro la cartella del record: serve alla sezione
+ * "Documenti obbligatori" del Lead, che e' la stessa UI puntata un livello
+ * piu' in basso. Stessa sanitizzazione dei nomi cartella creati a mano, con
+ * il rifiuto esplicito dei soli punti (sanitizeName non li tocca e "." /
+ * ".." darebbero traversal sul path DAV).
+ *
+ * Ritorna undefined se il valore e' assente, null se e' invalido — cosi' il
+ * chiamante distingue "nessuna sottocartella" da "sottocartella sbagliata".
+ */
+function sottocartellaValida(value: string | null): string | null | undefined {
+  if (value === null || value === "") return undefined
+  const nome = sanitizeName(value)
+  if (!nome || /^\.+$/.test(nome)) return null
+  return nome
+}
+
+function pathConSottocartella(
+  tipo: AllegatoRecordTipo,
+  recordId: string,
+  nomeRecord: string,
+  sottocartella: string | undefined,
+): string {
+  const base = folderPathForRecord(tipo, recordId, nomeRecord)
+  return sottocartella ? `${base}/${sottocartella}` : base
+}
+
+/**
  * Sezione "Documenti" degli allegati record: la fonte di verita' e' SOLO la
  * cartella Nextcloud del record (decisione confermata 27/07 con Nando). La
  * tabella `documenti` non viene piu' letta ne' scritta da questo flusso — resta
@@ -39,14 +66,22 @@ export async function GET(request: Request) {
     )
   }
 
+  const sottocartella = sottocartellaValida(searchParams.get("sottocartella"))
+  if (sottocartella === null) {
+    return NextResponse.json({ error: "Sottocartella non valida" }, { status: 400 })
+  }
+
   const guard = await requireApiRecord(PERMISSION_MODULE[recordTipo], "view")
   if (guard.response) return guard.response
 
   try {
-    const folderPath = folderPathForRecord(recordTipo, recordId, nomeRecord)
+    const folderPath = pathConSottocartella(recordTipo, recordId, nomeRecord, sottocartella)
+    // I collegamenti (link esterni) sono legati al RECORD, non a una cartella:
+    // ripeterli dentro la vista di una sottocartella li mostrerebbe due volte
+    // sulla stessa pagina. Restano quindi solo nella sezione principale.
     const [listing, collegamenti] = await Promise.all([
       listFolder(folderPath),
-      listCollegamenti(recordTipo, recordId),
+      sottocartella ? Promise.resolve([]) : listCollegamenti(recordTipo, recordId),
     ])
 
     if (!listing.ok) {
@@ -118,12 +153,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Parametri mancanti" }, { status: 400 })
   }
 
+  const sottocartella = sottocartellaValida(formData.get("sottocartella") as string | null)
+  if (sottocartella === null) {
+    return NextResponse.json({ error: "Sottocartella non valida" }, { status: 400 })
+  }
+
   const guard = await requireApiRecord(PERMISSION_MODULE[recordTipo], "edit")
   if (guard.response) return guard.response
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer())
-    const fullPath = filePathForRecord(recordTipo, recordId, nomeRecord, file.name)
+    // Senza sottocartella resta il comportamento di prima (filePathForRecord);
+    // con sottocartella il file va un livello piu' in basso — e' quello che
+    // rende contabile il gate dei documenti obbligatori.
+    const fullPath = sottocartella
+      ? `${pathConSottocartella(recordTipo, recordId, nomeRecord, sottocartella)}/${sanitizeName(file.name)}`
+      : filePathForRecord(recordTipo, recordId, nomeRecord, file.name)
 
     // Nessuna riga su `documenti`: il file compare perche' la GET rilegge
     // sempre il contenuto reale della cartella Nextcloud.

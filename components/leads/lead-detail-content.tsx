@@ -58,6 +58,8 @@ import {
 import { LeadAvatar } from "./lead-utils"
 import { QuickCompitoDialog } from "@/components/compiti/quick-compito-dialog"
 import { AllegatiSection } from "@/components/shared/allegati-section"
+import { DOCUMENTI_OBBLIGATORI_FOLDER } from "@/lib/allegati/paths"
+import { notificaDocumentiObbligatoriCambiati } from "@/lib/allegati/hooks"
 
 /* ---------- Sezione collassabile ---------- */
 
@@ -178,6 +180,7 @@ function CopyField({
 
 const NAV_ITEMS = [
   { id: "section-note", label: "Note" },
+  { id: "section-documenti-obbligatori", label: "Documenti obbligatori" },
   { id: "section-allegati", label: "Allegati" },
   { id: "section-attivita-aperte", label: "Attività aperte" },
   { id: "section-attivita-chiuse", label: "Attività chiuse" },
@@ -1206,6 +1209,25 @@ export function LeadDetailContent({
         }
       >
         <NoteSection lead={lead} />
+      </Section>
+
+      <Section
+        id="section-documenti-obbligatori"
+        title="Documenti obbligatori"
+        icon={IconClipboardCheck}
+      >
+        {/* Stessa UI allegati puntata sulla sottocartella dedicata: sono
+            questi tre file, e solo questi, a sbloccare la conversione a
+            cliente (il conteggio nell'intestazione legge la stessa
+            cartella). */}
+        <AllegatiSection
+          recordTipo="lead"
+          recordId={lead.id}
+          nomeRecord={lead["Nome Lead"]}
+          sottocartella={DOCUMENTI_OBBLIGATORI_FOLDER}
+          titolo="Documenti obbligatori per la conversione"
+          onChanged={notificaDocumentiObbligatoriCambiati}
+        />
       </Section>
 
       <Section

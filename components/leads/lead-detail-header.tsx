@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -43,6 +43,49 @@ import { type Lead } from "@/lib/mock-data"
 import { LeadAvatar, StatoLeadBadge, ScoreBar } from "./lead-utils"
 import { LeadTagBadges, TagAssignPopover } from "./tag-controls"
 import { useTags } from "@/lib/tag-store"
+import {
+  DOCUMENTI_OBBLIGATORI_CHANGED,
+  useDocumentiObbligatori,
+} from "@/lib/allegati/hooks"
+
+/**
+ * Stato del gate accanto al pulsante "Converti a cliente": dice sempre a che
+ * punto si e', cosi' un pulsante disabilitato non resta senza spiegazione.
+ */
+function GateDocumentiLabel({
+  stato,
+}: {
+  stato: ReturnType<typeof useDocumentiObbligatori>
+}) {
+  if (stato.isPending) {
+    return <span className="text-xs text-muted-foreground">Verifica documenti…</span>
+  }
+
+  // Nextcloud irraggiungibile: il conteggio non e' noto e la conversione
+  // sarebbe comunque respinta (502) — meglio dirlo che lasciare il pulsante
+  // spento e muto.
+  if (stato.isError || !stato.data) {
+    return (
+      <span className="text-xs text-destructive">
+        Documenti obbligatori non verificabili
+      </span>
+    )
+  }
+
+  const { count, richiesti, completo } = stato.data
+  if (completo) {
+    return (
+      <span className="text-xs text-success">
+        {richiesti} documenti obbligatori caricati
+      </span>
+    )
+  }
+  return (
+    <span className="text-xs text-muted-foreground">
+      Servono {richiesti} documenti obbligatori (caricati: {count}/{richiesti})
+    </span>
+  )
+}
 
 export function LeadDetailHeader({ lead }: { lead: Lead }) {
   const { owners } = useTags()
@@ -60,6 +103,26 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
   const [converting, setConverting] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const nome = lead["Nome Lead"]
+
+  // Gate dei tre documenti obbligatori (spec FASE 1.3): il conteggio arriva
+  // dalla sottocartella Nextcloud del lead. Qui serve solo a guidare l'utente
+  // — se il pulsante viene attivato lo stesso (tastiera, automazione), la
+  // route di conversione risponde 400 e il messaggio finisce nel toast.
+  const documenti = useDocumentiObbligatori(lead.id)
+  const gateSoddisfatto = documenti.data?.completo === true
+
+  // La sezione allegati sta su un altro ramo della pagina: avvisa via evento
+  // quando si carica o elimina un documento, cosi' il conteggio qui si
+  // aggiorna senza ricaricare.
+  useEffect(() => {
+    const refetch = () => {
+      documenti.refetch()
+    }
+    window.addEventListener(DOCUMENTI_OBBLIGATORI_CHANGED, refetch)
+    return () => window.removeEventListener(DOCUMENTI_OBBLIGATORI_CHANGED, refetch)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead.id])
+
   const ownerName =
     owners.find((owner) => owner.id === lead["Lead Proprietario"])?.nome ||
     lead["Lead Proprietario"] ||
@@ -107,8 +170,12 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Il conteggio sta a sinistra del pulsante: spiega perche' e'
+              disabilitato senza spostare la riga delle azioni. */}
+          <GateDocumentiLabel stato={documenti} />
           <Button
             className="bg-teal text-teal-foreground hover:bg-teal/90"
+            disabled={!gateSoddisfatto}
             onClick={() => setShowConvert(true)}
           >
             <UserCheck data-icon="inline-start" />
@@ -347,7 +414,13 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
                     | { clienteId?: string; error?: string }
                     | null
                   if (!res.ok || !result?.clienteId) {
+                    // Include il 400 del gate ("Servono esattamente 3
+                    // documenti obbligatori..."): il messaggio del server
+                    // arriva all'utente invece di sparire in silenzio.
                     toast.error(result?.error ?? "Conversione non riuscita")
+                    // Il conteggio mostrato era evidentemente vecchio: si
+                    // rilegge, cosi' la label torna coerente col server.
+                    documenti.refetch()
                     return
                   }
                   toast.success("Lead convertito in cliente")

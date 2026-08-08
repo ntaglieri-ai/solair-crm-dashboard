@@ -78,10 +78,24 @@ export function AllegatiSection({
   recordTipo,
   recordId,
   nomeRecord,
+  sottocartella,
+  titolo = "Documenti",
+  onChanged,
 }: {
   recordTipo: AllegatoRecordTipo
   recordId: string
   nomeRecord: string
+  /**
+   * Punta la sezione a una sottocartella della cartella record invece che
+   * alla radice (usata dai "Documenti obbligatori" del Lead). In questa
+   * modalita' si carica e basta: niente sottocartelle annidate e niente
+   * collegamenti, che sono legati al record e restano nella sezione
+   * principale.
+   */
+  sottocartella?: string
+  titolo?: string
+  /** Notifica il chiamante dopo ogni modifica reale (upload/eliminazione). */
+  onChanged?: () => void
 }) {
   const [documenti, setDocumenti] = useState<DocumentoRow[]>([])
   const [collegamenti, setCollegamenti] = useState<CollegamentoRow[]>([])
@@ -97,10 +111,15 @@ export function AllegatiSection({
   const [savingCartella, setSavingCartella] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Modalita' sottocartella: solo file, nessuna cartella annidata e nessun
+  // collegamento (vedi commento sul prop).
+  const soloFile = Boolean(sottocartella)
+
   const recordQuery =
     `recordTipo=${encodeURIComponent(recordTipo)}` +
     `&recordId=${encodeURIComponent(recordId)}` +
-    `&nomeRecord=${encodeURIComponent(nomeRecord)}`
+    `&nomeRecord=${encodeURIComponent(nomeRecord)}` +
+    (sottocartella ? `&sottocartella=${encodeURIComponent(sottocartella)}` : "")
 
   async function refresh() {
     setLoading(true)
@@ -125,7 +144,7 @@ export function AllegatiSection({
   useEffect(() => {
     refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recordTipo, recordId, nomeRecord])
+  }, [recordTipo, recordId, nomeRecord, sottocartella])
 
   async function handleFileSelected(file: File) {
     setUploading(true)
@@ -135,11 +154,13 @@ export function AllegatiSection({
       formData.append("recordTipo", recordTipo)
       formData.append("recordId", recordId)
       formData.append("nomeRecord", nomeRecord)
+      if (sottocartella) formData.append("sottocartella", sottocartella)
       const res = await fetch("/api/allegati", { method: "POST", body: formData })
       const result = (await res.json().catch(() => null)) as { error?: string } | null
       if (!res.ok) throw new Error(result?.error ?? "Caricamento non riuscito")
       toast.success("File caricato")
       await refresh()
+      onChanged?.()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Caricamento non riuscito")
     } finally {
@@ -199,6 +220,7 @@ export function AllegatiSection({
       if (!res.ok) throw new Error()
       toast.success(doc.isFolder ? "Cartella eliminata" : "File eliminato")
       await refresh()
+      onChanged?.()
     } catch {
       toast.error("Eliminazione non riuscita")
     }
@@ -221,7 +243,7 @@ export function AllegatiSection({
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-navy">
-          Documenti
+          {titolo}
         </span>
         <div className="flex items-center gap-1.5">
           {folderPath ? (
@@ -238,35 +260,52 @@ export function AllegatiSection({
               Apri in Nextcloud
             </Button>
           ) : null}
-          <Button
-            size="sm"
-            variant="outline"
-            className="bg-card"
-            onClick={() => setCartellaOpen(true)}
-          >
-            <IconFolderPlus size={15} stroke={1.8} data-icon="inline-start" />
-            Nuova cartella
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button size="sm" variant="outline" className="bg-card" disabled={uploading}>
-                  <IconPlus size={15} stroke={1.8} data-icon="inline-start" />
-                  {uploading ? "Caricamento..." : "Allega"}
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                <IconUpload size={15} stroke={1.8} data-icon="inline-start" />
-                Da computer
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setLinkOpen(true)}>
-                <IconLink size={15} stroke={1.8} data-icon="inline-start" />
-                Da URL
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {soloFile ? null : (
+            <Button
+              size="sm"
+              variant="outline"
+              className="bg-card"
+              onClick={() => setCartellaOpen(true)}
+            >
+              <IconFolderPlus size={15} stroke={1.8} data-icon="inline-start" />
+              Nuova cartella
+            </Button>
+          )}
+          {soloFile ? (
+            // Un solo modo di aggiungere: caricare un file. Senza menu a
+            // tendina, cosi' il gesto giusto e' anche l'unico disponibile.
+            <Button
+              size="sm"
+              variant="outline"
+              className="bg-card"
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <IconUpload size={15} stroke={1.8} data-icon="inline-start" />
+              {uploading ? "Caricamento..." : "Carica documento"}
+            </Button>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button size="sm" variant="outline" className="bg-card" disabled={uploading}>
+                    <IconPlus size={15} stroke={1.8} data-icon="inline-start" />
+                    {uploading ? "Caricamento..." : "Allega"}
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                  <IconUpload size={15} stroke={1.8} data-icon="inline-start" />
+                  Da computer
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setLinkOpen(true)}>
+                  <IconLink size={15} stroke={1.8} data-icon="inline-start" />
+                  Da URL
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
         <input
           ref={fileInputRef}
@@ -284,7 +323,7 @@ export function AllegatiSection({
         <p className="py-4 text-center text-sm text-muted-foreground">Caricamento...</p>
       ) : isEmpty ? (
         <p className="rounded-lg border border-dashed border-border bg-secondary/30 py-6 text-center text-sm text-muted-foreground">
-          Nessun allegato
+          {soloFile ? "Nessun documento caricato" : "Nessun allegato"}
         </p>
       ) : (
         <ul className="flex flex-col gap-2">

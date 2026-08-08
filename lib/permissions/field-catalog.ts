@@ -133,6 +133,7 @@ const MODULE_FIELDS: Record<FieldModuleKey, string[]> = {
     "e_mail_enel_gaudi", "cognome_intestatario_utenza_elettrica",
     "titolarita_impianto", "desidera_installare_impianto_su",
     "tipologia_proprietario", "potenza_sistema_di_accumulo",
+    "flag_eps", "flag_cer",
   ],
   compiti: [
     "id", "oggetto", "priorita", "stato", "scadenza", "proprietario_id",

@@ -6,7 +6,7 @@ import type {
   ClientiListParams,
   ClientiListResponse,
 } from "@/lib/clienti/api-types"
-import { CLIENTI_ZOHO_COLUMNS, CLIENTI_ZOHO_FIELDS } from "@/lib/clienti/zoho-fields"
+import { CLIENTI_RECORD_COLUMNS, CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
 
 // Colonne proiettate in lettura — mai SELECT *.
 const LIST_COLUMNS = [
@@ -27,7 +27,7 @@ const LIST_COLUMNS = [
 ].join(",")
 
 const DETAIL_COLUMNS = [
-  ...new Set(["id", "created_at", "updated_at", ...CLIENTI_ZOHO_COLUMNS]),
+  ...new Set(["id", "created_at", "updated_at", ...CLIENTI_RECORD_COLUMNS]),
 ].join(",")
 
 // Whitelist ordinamento: campo UI → colonna DB. Fallback su updated_at.
@@ -86,7 +86,7 @@ function mapRow(row: Record<string, unknown>): ClienteRecord {
       (row.ora_creazione as string) || (row.created_at as string) || undefined,
   }
 
-  for (const field of CLIENTI_ZOHO_FIELDS) {
+  for (const field of CLIENTI_RECORD_FIELDS) {
     const value = row[field.column]
     if (
       value !== null &&
@@ -311,15 +311,16 @@ export async function updateClienteRecord(
   if (patch.Installatore !== undefined) row.installatore_id = patch.Installatore
   if (patch.Descrizione !== undefined) row.descrizione = patch.Descrizione
 
-  // Supporto generico per tutti i campi importati da Zoho (inclusi i 6
-  // toggle Pagamenti/Iter/Documenti: Finanziamento approvato, Iva Reverse
-  // charge, Notifica pred. reg. esercizio, Disponibilità Fine lavori,
-  // Verifica documentale, Layout verificato — trovati tutti "finti" il
-  // 25/07, salvavano solo in locale). Stesso principio della lettura
-  // generica in mapRow: qualsiasi campo Zoho futuro funziona a scrittura
-  // senza dover aggiungere una riga esplicita qui ogni volta.
+  // Supporto generico per tutti i campi del record — quelli importati da Zoho
+  // piu' i nativi CRM di CLIENTI_CRM_FIELDS (inclusi i 6 toggle
+  // Pagamenti/Iter/Documenti: Finanziamento approvato, Iva Reverse charge,
+  // Notifica pred. reg. esercizio, Disponibilità Fine lavori, Verifica
+  // documentale, Layout verificato — trovati tutti "finti" il 25/07,
+  // salvavano solo in locale). Stesso principio della lettura generica in
+  // mapRow: qualsiasi campo futuro funziona a scrittura senza dover
+  // aggiungere una riga esplicita qui ogni volta.
   const patchRecord = patch as Record<string, unknown>
-  for (const field of CLIENTI_ZOHO_FIELDS) {
+  for (const field of CLIENTI_RECORD_FIELDS) {
     if (field.appField in patchRecord && !(field.column in row)) {
       row[field.column] = patchRecord[field.appField]
     }

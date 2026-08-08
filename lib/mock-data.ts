@@ -1729,7 +1729,15 @@ export interface ClienteRecord {
   "Tot Potenza AC KW"?: number
   Tipologia?: string
   Retrofit?: boolean
+  /** Valore storico importato da Zoho (colonna testuale `eps`), sola lettura. */
   EPS?: boolean
+  /**
+   * Flag booleani CRM della procedura Vito (Fase 2.5), colonne `flag_eps` /
+   * `flag_cer`. Tri-stato: undefined = non ancora valutato, quindi non
+   * collassare mai a `false` in lettura.
+   */
+  "EPS previsto"?: boolean
+  "Adesione CER prevista"?: boolean
   "Impianto in edilizia libera"?: boolean
   "Area vincolata"?: boolean
   ">20kW Pot. Nom."?: boolean

@@ -175,3 +175,32 @@ export const CLIENTI_ZOHO_FIELDS = [
 ] as const satisfies readonly ClienteZohoField[]
 
 export const CLIENTI_ZOHO_COLUMNS = CLIENTI_ZOHO_FIELDS.map((field) => field.column)
+
+// Campi nativi del CRM: non esistono nell'export Zoho, quindi non hanno
+// un'etichetta `zoho` e non devono finire in un import/export CSV — per
+// questo stanno in una lista separata invece che dentro CLIENTI_ZOHO_FIELDS.
+// Hanno pero' la stessa forma column/appField perche' il repository Clienti
+// legge (mapRow) e scrive (updateClienteRecord) ciclando su queste voci:
+// aggiungerli qui li rende disponibili end-to-end senza righe dedicate.
+export interface ClienteCrmField {
+  column: string
+  type: ClienteZohoFieldType
+  appField: string
+}
+
+export const CLIENTI_CRM_FIELDS = [
+  // Flag booleani della procedura Vito (Fase 2.5). Volutamente distinti dalle
+  // colonne testuali storiche `eps` / `cer` importate da Zoho, che restano di
+  // sola lettura — vedi 20260808_clienti_flag_eps_cer.sql.
+  { column: "flag_eps", type: "boolean", appField: "EPS previsto" },
+  { column: "flag_cer", type: "boolean", appField: "Adesione CER prevista" },
+] as const satisfies readonly ClienteCrmField[]
+
+// Insieme completo dei campi del record Cliente (Zoho + nativi CRM): e' questo
+// che il repository usa per proiezione, lettura e scrittura.
+export const CLIENTI_RECORD_FIELDS: readonly ClienteCrmField[] = [
+  ...CLIENTI_ZOHO_FIELDS,
+  ...CLIENTI_CRM_FIELDS,
+]
+
+export const CLIENTI_RECORD_COLUMNS = CLIENTI_RECORD_FIELDS.map((field) => field.column)

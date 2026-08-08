@@ -378,6 +378,57 @@ function ImpiantoCard({
   )
 }
 
+/**
+ * Switch per i flag di previsione EPS/CER (procedura Vito, Fase 2.5).
+ *
+ * Componente dedicato invece del solito `saveToggle` locale perche' questi due
+ * campi sono tri-stato: `undefined` (colonna null) significa "non ancora
+ * valutato" ed e' un'informazione diversa da "valutato, non previsto". Lo
+ * Switch resta binario, ma finche' nessuno ha deciso lo dichiariamo accanto
+ * al controllo invece di far sembrare un "no" quello che e' un "non lo so".
+ */
+function FlagPrevisione({
+  clienteId,
+  label,
+  field,
+  iniziale,
+}: {
+  clienteId: string
+  label: string
+  field: "EPS previsto" | "Adesione CER prevista"
+  iniziale: boolean | undefined
+}) {
+  const [valore, setValore] = useState(iniziale)
+
+  async function handleChange(v: boolean) {
+    const precedente = valore
+    setValore(v)
+    try {
+      const res = await fetch(`/api/clienti/${clienteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: v }),
+      })
+      if (!res.ok) throw new Error("Aggiornamento non riuscito")
+      toast.success("Aggiornato")
+    } catch {
+      setValore(precedente)
+      toast.error("Errore nel salvataggio")
+    }
+  }
+
+  return (
+    <DataField label={label}>
+      <div className="flex items-center gap-2">
+        <Switch checked={valore === true} onCheckedChange={handleChange} />
+        {valore === undefined ? (
+          <span className="text-[11px] text-muted-foreground">Non ancora valutato</span>
+        ) : null}
+      </div>
+    </DataField>
+  )
+}
+
 function Impianto({ cliente }: { cliente: ClienteRecord }) {
   const attivo = cliente["Impianto Attivo"]
   return (
@@ -451,6 +502,23 @@ function Impianto({ cliente }: { cliente: ClienteRecord }) {
         <BoolChip label="Edilizia libera" on={cliente["Impianto in edilizia libera"]} />
         <BoolChip label="Area vincolata" on={cliente["Area vincolata"]} />
         <BoolChip label=">20kW Pot. Nom." on={cliente[">20kW Pot. Nom."]} />
+      </div>
+
+      {/* Flag EPS/CER: modificabili, a differenza dei chip qui sopra che
+          mostrano i valori storici importati da Zoho in sola lettura. */}
+      <div className="grid grid-cols-1 gap-x-8 gap-y-4 border-t border-border pt-4 sm:grid-cols-2">
+        <FlagPrevisione
+          clienteId={cliente.id}
+          label="EPS previsto"
+          field="EPS previsto"
+          iniziale={cliente["EPS previsto"]}
+        />
+        <FlagPrevisione
+          clienteId={cliente.id}
+          label="Adesione CER prevista"
+          field="Adesione CER prevista"
+          iniziale={cliente["Adesione CER prevista"]}
+        />
       </div>
     </div>
   )

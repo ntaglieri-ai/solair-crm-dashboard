@@ -3,6 +3,10 @@ import { getFullLeadById } from "@/lib/leads/repository"
 import { patchLead } from "@/lib/leads/server-store"
 import { createClienteRecord } from "@/lib/clienti/repository"
 import { requireApiRecord } from "@/lib/permissions/server"
+import {
+  contaDocumentiObbligatori,
+  messaggioGateNonSoddisfatto,
+} from "@/lib/allegati/documenti-obbligatori"
 
 // Conversione reale Lead -> Cliente: prima "Converti a cliente" chiudeva
 // solo il dialog, nessuna azione reale (audit "funzionalità finte" 24/07).
@@ -24,6 +28,26 @@ export async function POST(
   const lead = await getFullLeadById(id)
   if (!lead) {
     return NextResponse.json({ error: "Lead non trovato" }, { status: 404 })
+  }
+
+  // Gate dei tre documenti obbligatori (spec FASE 1.3). Controllato QUI e non
+  // solo nella UI: il pulsante disabilitato e' un aiuto, non una garanzia —
+  // la route resta chiamabile direttamente.
+  const documenti = await contaDocumentiObbligatori(lead.id, lead["Nome Lead"] ?? "")
+  if (!documenti.ok) {
+    // Nextcloud irraggiungibile: non sappiamo se i documenti ci sono, quindi
+    // NON convertiamo (una conversione e' difficile da annullare, un retry no).
+    console.error(`[converti] conteggio documenti obbligatori lead ${id} fallito:`, documenti.error)
+    return NextResponse.json(
+      { error: "Impossibile verificare i documenti obbligatori su Nextcloud, riprova" },
+      { status: 502 },
+    )
+  }
+  if (!documenti.completo) {
+    return NextResponse.json(
+      { error: messaggioGateNonSoddisfatto(documenti.count), count: documenti.count },
+      { status: 400 },
+    )
   }
 
   const cliente = await createClienteRecord(

@@ -4,7 +4,10 @@ import { parseLeadsSearchParams } from "@/lib/leads/api-types"
 import { queryLeads, createLeadRecord } from "@/lib/leads/repository"
 import { requireApiRecord } from "@/lib/permissions/server"
 import { ensureFolder } from "@/lib/nextcloud/admin-webdav"
-import { folderPathForRecord } from "@/lib/allegati/paths"
+import {
+  documentiObbligatoriFolderPath,
+  folderPathForRecord,
+} from "@/lib/allegati/paths"
 
 export async function GET(request: Request) {
   const guard = await requireApiRecord("lead", "view")
@@ -43,10 +46,25 @@ export async function POST(request: Request) {
   // background, mai bloccante: se Nextcloud e' giu' la creazione del lead
   // non deve fallire per questo (decisione 25/07).
   after(async () => {
-    const path = folderPathForRecord("lead", created.id, created["Nome Lead"] ?? "")
+    const nomeLead = created["Nome Lead"] ?? ""
+    const path = folderPathForRecord("lead", created.id, nomeLead)
     const result = await ensureFolder(path)
     if (!result.ok) {
       console.error(`[allegati] creazione cartella lead ${created.id} fallita:`, result.error)
+      return
+    }
+
+    // Sottocartella dei tre documenti obbligatori (spec FASE 1.3): creata
+    // subito insieme alla cartella lead cosi' il commerciale trova gia' il
+    // posto dove caricarli, anche caricando direttamente da Nextcloud senza
+    // passare dal CRM. ensureFolder e' idempotente (405 = esiste gia').
+    const docsPath = documentiObbligatoriFolderPath(created.id, nomeLead)
+    const docsResult = await ensureFolder(docsPath)
+    if (!docsResult.ok) {
+      console.error(
+        `[allegati] creazione sottocartella documenti obbligatori lead ${created.id} fallita:`,
+        docsResult.error,
+      )
     }
   })
 

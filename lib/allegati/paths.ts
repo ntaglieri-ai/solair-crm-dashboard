@@ -69,6 +69,27 @@ export function isPathInsideRecordFolder(
   return normalized.startsWith(`${folderPathForRecord(tipo, recordId, nomeRecord)}/`)
 }
 
+/**
+ * Nome fisso della sottocartella che raccoglie i tre documenti obbligatori
+ * del lead (spec FASE 1.3). Fisso e non configurabile perche' e' anche il
+ * riferimento che i commerciali vedono da Nextcloud: se cambia qui, le
+ * cartelle gia' create restano orfane.
+ */
+export const DOCUMENTI_OBBLIGATORI_FOLDER = "Documenti obbligatori"
+
+/**
+ * Sottocartella "Documenti obbligatori" dentro la cartella del lead. Il gate
+ * di conversione Lead -> Cliente conta i file QUI dentro e non nella cartella
+ * lead principale: cosi' gli allegati liberi (foto, mail, preventivi vari)
+ * non falsano il conteggio, e non serve nessun parsing del nome file.
+ */
+export function documentiObbligatoriFolderPath(
+  recordId: string,
+  nomeRecord: string,
+): string {
+  return `${folderPathForRecord("lead", recordId, nomeRecord)}/${DOCUMENTI_OBBLIGATORI_FOLDER}`
+}
+
 export function filePathForRecord(
   tipo: AllegatoRecordTipo,
   recordId: string,

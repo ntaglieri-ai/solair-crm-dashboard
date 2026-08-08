@@ -19,6 +19,22 @@ import { sendSpokiMessage } from "@/lib/whatsapp/spoki-client"
 type HandoffRuolo = "responsabile_fatturazione" | "responsabile_passaggio_pratica"
 
 /**
+ * Nome del tag cliente che fa scattare la 4.4, come sta scritto a DB
+ * (verificato 08/08/2026: "Emettere fattura", minuscolo, ereditato da Zoho).
+ */
+export const TAG_EMETTERE_FATTURA = "Emettere fattura"
+
+/**
+ * Confronto esatto case-insensitive, NON "contiene fattura": tra i tag cliente
+ * esiste anche "Emessa fattura" (fattura gia' emessa), che e' il significato
+ * opposto e non deve creare nessun Compito.
+ */
+export function isTagEmettereFattura(nomeTag: string | null | undefined): boolean {
+  return (nomeTag ?? "").trim().toLocaleLowerCase("it") ===
+    TAG_EMETTERE_FATTURA.toLocaleLowerCase("it")
+}
+
+/**
  * Risolve l'utente responsabile di un ruolo di handoff (Giulia = fatturazione,
  * Paola = passaggio pratica) leggendo l'email configurata in crm_settings e
  * cercandola in utenti. Ritorna null se non configurato o non trovato —
@@ -87,8 +103,28 @@ async function creaCompitoHandoff(params: {
   descrizione: string
   clienteId: string
   clienteNome: string
-}): Promise<void> {
+}): Promise<boolean> {
   const supabase = await createClient()
+
+  // Entrambi i trigger partono da azioni ripetibili (un tag si toglie e si
+  // rimette, il pulsante si puo' premere due volte): senza questo controllo
+  // il responsabile si ritroverebbe un Compito identico per ogni clic. Se ne
+  // esiste gia' uno aperto per lo stesso cliente e lo stesso oggetto, non se
+  // ne crea un altro. Un Compito gia' completato non blocca: se la pratica
+  // ripassa davvero dalla stessa fase, il nuovo Compito ci vuole.
+  const { data: esistente, error: lookupError } = await supabase
+    .from("compiti")
+    .select("id")
+    .eq("correlato_tipo", "cliente")
+    .eq("correlato_id", params.clienteId)
+    .eq("oggetto", params.oggetto)
+    .neq("stato", "Completato")
+    .limit(1)
+  if (lookupError) {
+    throw new Error(`creaCompitoHandoff (verifica duplicati): ${lookupError.message}`)
+  }
+  if (esistente && esistente.length > 0) return false
+
   const { error } = await supabase.from("compiti").insert({
     oggetto: params.oggetto,
     descrizione: params.descrizione,
@@ -101,25 +137,61 @@ async function creaCompitoHandoff(params: {
     correlato_tipo: "cliente",
   })
   if (error) throw new Error(`creaCompitoHandoff: ${error.message}`)
+  return true
 }
 
 /**
- * Fase 4.4 — trigger: tag "Emettere Fattura" applicato su un Cliente.
+ * Esito di un trigger di handoff.
+ *
+ * I due trigger NON lanciano mai: girano agganciati a un'azione utente gia'
+ * andata a buon fine (il tag e' scritto, la documentazione e' confermata) e
+ * un'automazione fallita non deve far credere che l'azione principale sia
+ * fallita. Il chiamante decide cosa mostrare leggendo questo esito.
+ *
+ * `creato: false` con `ok: true` significa "c'era gia' un Compito aperto
+ * identico": nulla da fare, nessun avviso da dare.
+ */
+export type HandoffTriggerEsito =
+  | { ok: true; creato: boolean; responsabile: string }
+  | { ok: false; motivo: "non_configurato" }
+  | { ok: false; motivo: "errore"; detail: string }
+
+async function eseguiTriggerHandoff(
+  ruolo: HandoffRuolo,
+  compito: { oggetto: string; descrizione: string; clienteId: string; clienteNome: string },
+): Promise<HandoffTriggerEsito> {
+  try {
+    const responsabile = await resolveResponsabile(ruolo)
+    if (!responsabile) {
+      console.warn(
+        `[handoff] ${ruolo} non configurato in Impostazioni > Comunicazioni > Automazioni handoff — Compito non creato`,
+      )
+      return { ok: false, motivo: "non_configurato" }
+    }
+    const creato = await creaCompitoHandoff({
+      proprietarioId: responsabile.id,
+      proprietarioNome: responsabile.nome,
+      ...compito,
+    })
+    return { ok: true, creato, responsabile: responsabile.nome }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "errore sconosciuto"
+    console.error(`[handoff] trigger ${ruolo} fallito per cliente ${compito.clienteId}:`, detail)
+    return { ok: false, motivo: "errore", detail }
+  }
+}
+
+/**
+ * Fase 4.4 — trigger: tag "Emettere fattura" applicato su un Cliente.
  * Crea Compito per il responsabile fatturazione (Giulia, via config).
  */
-export async function triggerEmettiFattura(clienteId: string, clienteNome: string): Promise<void> {
-  const responsabile = await resolveResponsabile("responsabile_fatturazione")
-  if (!responsabile) {
-    console.warn(
-      "[handoff] responsabile_fatturazione non configurato in Impostazioni > Comunicazioni > Automazioni — Compito non creato",
-    )
-    return
-  }
-  await creaCompitoHandoff({
-    proprietarioId: responsabile.id,
-    proprietarioNome: responsabile.nome,
+export async function triggerEmettiFattura(
+  clienteId: string,
+  clienteNome: string,
+): Promise<HandoffTriggerEsito> {
+  return eseguiTriggerHandoff("responsabile_fatturazione", {
     oggetto: `Emettere fattura — ${clienteNome}`,
-    descrizione: "Tag \"Emettere Fattura\" applicato: verificare e procedere con l'emissione.",
+    descrizione: `Tag "${TAG_EMETTERE_FATTURA}" applicato: verificare e procedere con l'emissione.`,
     clienteId,
     clienteNome,
   })
@@ -132,17 +204,8 @@ export async function triggerEmettiFattura(clienteId: string, clienteNome: strin
 export async function triggerDocumentazioneCompleta(
   clienteId: string,
   clienteNome: string,
-): Promise<void> {
-  const responsabile = await resolveResponsabile("responsabile_passaggio_pratica")
-  if (!responsabile) {
-    console.warn(
-      "[handoff] responsabile_passaggio_pratica non configurato in Impostazioni > Comunicazioni > Automazioni — Compito non creato",
-    )
-    return
-  }
-  await creaCompitoHandoff({
-    proprietarioId: responsabile.id,
-    proprietarioNome: responsabile.nome,
+): Promise<HandoffTriggerEsito> {
+  return eseguiTriggerHandoff("responsabile_passaggio_pratica", {
     oggetto: `Passaggio pratica — ${clienteNome}`,
     descrizione: "Documentazione completa ricevuta e caricata: procedere con il passaggio pratica.",
     clienteId,

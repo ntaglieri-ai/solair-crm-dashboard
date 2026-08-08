@@ -13,6 +13,7 @@ import {
   Server,
   ShieldCheck,
   Webhook,
+  Workflow,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -81,6 +82,15 @@ type CommunicationSettings = {
     inboundUrl: string
     signingSecret: string
   }
+  /**
+   * Responsabili delle automazioni di handoff (procedura Vito 4.4 e 5.5).
+   * Le chiavi sono snake_case perche' lib/automazioni/handoff.ts le legge
+   * per nome esatto (HandoffRuolo): rinominarle qui spegne i trigger.
+   */
+  automazioni: {
+    responsabile_fatturazione: string
+    responsabile_passaggio_pratica: string
+  }
   notes: string
 }
 
@@ -143,6 +153,10 @@ const EMPTY_SETTINGS: CommunicationSettings = {
     enabled: false,
     inboundUrl: "",
     signingSecret: "",
+  },
+  automazioni: {
+    responsabile_fatturazione: "",
+    responsabile_passaggio_pratica: "",
   },
   notes: "",
 }
@@ -362,6 +376,50 @@ export default function CommunicationsPage() {
         </ConfigCard>
       </div>
 
+      {/*
+        Sezione senza interruttore, a differenza delle ConfigCard qui sopra:
+        handoff.ts non legge nessun flag "enabled", quindi un toggle darebbe
+        l'idea di poter spegnere le automazioni senza in realta' fermarle.
+        Per disattivarle si svuota il campo del responsabile.
+      */}
+      <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
+        <div className="mb-3 flex items-center gap-2">
+          <Workflow className="size-5 text-navy" />
+          <h3 className="text-base font-black text-foreground">Automazioni handoff</h3>
+        </div>
+        <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
+          A chi assegnare i Compiti creati in automatico dal CRM. L&apos;email deve
+          coincidere con quella dell&apos;utente in Impostazioni &gt; Utenti: se non
+          corrisponde a nessun utente, il Compito non viene creato e l&apos;azione
+          resta comunque completata.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <TextField
+            label="Responsabile fatturazione (Giulia)"
+            value={form.automazioni.responsabile_fatturazione}
+            disabled={!canEdit}
+            onChange={(responsabile_fatturazione) =>
+              update("automazioni", { responsabile_fatturazione })
+            }
+            placeholder="giulia.marano@solairgroup.it"
+          />
+          <TextField
+            label="Responsabile passaggio pratica (Paola)"
+            value={form.automazioni.responsabile_passaggio_pratica}
+            disabled={!canEdit}
+            onChange={(responsabile_passaggio_pratica) =>
+              update("automazioni", { responsabile_passaggio_pratica })
+            }
+            placeholder="paola.polimeni@solairgroup.it"
+          />
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          Fatturazione: Compito creato quando sul Cliente viene applicato il tag
+          «Emettere fattura». Passaggio pratica: Compito creato con il pulsante
+          «Documentazione completa» nella scheda Documenti del Cliente.
+        </p>
+      </section>
+
       <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
         <div className="mb-3 flex items-center gap-2">
           <KeyRound className="size-5 text-navy" />
@@ -404,6 +462,7 @@ function mergeSettings(value: CommunicationSettings): CommunicationSettings {
     sms: { ...EMPTY_SETTINGS.sms, ...value.sms },
     webchat: { ...EMPTY_SETTINGS.webchat, ...value.webchat },
     webhook: { ...EMPTY_SETTINGS.webhook, ...value.webhook },
+    automazioni: { ...EMPTY_SETTINGS.automazioni, ...value.automazioni },
   }
 }
 

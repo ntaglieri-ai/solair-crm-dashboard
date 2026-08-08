@@ -814,6 +814,30 @@ function Logistica({ cliente }: { cliente: ClienteRecord }) {
 function Documenti({ cliente }: { cliente: ClienteRecord }) {
   const [verifica, setVerifica] = useState(Boolean(cliente["Verifica documentale"]))
   const [layout, setLayout] = useState(Boolean(cliente["Layout verificato"]))
+  const [confermando, setConfermando] = useState(false)
+
+  // Fase 5.5 — conferma manuale: crea il Compito di passaggio pratica per il
+  // responsabile configurato. L'azione non cambia nulla sul cliente, quindi
+  // qui non c'e' stato da ribaltare in caso di errore: si riporta solo l'esito.
+  async function confermaDocumentazioneCompleta() {
+    setConfermando(true)
+    try {
+      const res = await fetch(`/api/clienti/${cliente.id}/documentazione-completa`, {
+        method: "POST",
+      })
+      const payload = (await res.json().catch(() => null)) as
+        | { ok?: boolean; messaggio?: string; error?: string }
+        | null
+      if (!res.ok) throw new Error(payload?.error ?? "Richiesta non riuscita")
+      const messaggio = payload?.messaggio ?? "Operazione completata."
+      if (payload?.ok) toast.success("Documentazione completa", { description: messaggio })
+      else toast.warning("Documentazione completa", { description: messaggio })
+    } catch {
+      toast.error("Errore nella conferma della documentazione")
+    } finally {
+      setConfermando(false)
+    }
+  }
 
   async function saveToggle(field: string, value: boolean, onError: () => void) {
     try {
@@ -851,6 +875,18 @@ function Documenti({ cliente }: { cliente: ClienteRecord }) {
             }}
           />
         </DataField>
+        <div className="ml-auto flex items-center">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={confermando}
+            onClick={confermaDocumentazioneCompleta}
+            className="h-8 gap-1.5 text-[12px]"
+          >
+            <IconCircleCheck size={15} stroke={1.8} />
+            {confermando ? "Invio…" : "Documentazione completa"}
+          </Button>
+        </div>
       </div>
 
       <AllegatiSection

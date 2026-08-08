@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react"
 import { usePathname } from "next/navigation"
+import { toast } from "sonner"
 
 export interface ClienteTag {
   id: string
@@ -109,6 +110,12 @@ const EMPTY: ClienteReferencePayload = {
 
 const Ctx = createContext<ClienteTagContextValue | null>(null)
 
+/**
+ * Esito dell'automazione handoff 4.4 che la route allega alla risposta quando
+ * il tag applicato e' "Emettere fattura" (vedi app/api/clienti/reference-data).
+ */
+type EsitoAutomazione = { avviso?: string; info?: string } | null
+
 async function mutate(body: Record<string, unknown>) {
   const response = await fetch("/api/clienti/reference-data", {
     method: "POST",
@@ -120,6 +127,17 @@ async function mutate(body: Record<string, unknown>) {
     throw new Error(payload?.error ?? "Aggiornamento tag non riuscito")
   }
   return response.json()
+}
+
+/**
+ * L'automazione non e' mai bloccante: il tag e' gia' applicato in ogni caso,
+ * qui si riporta solo cosa e' successo al Compito collegato.
+ */
+function segnalaAutomazione(payload: { automazione?: EsitoAutomazione } | null | undefined) {
+  const esito = payload?.automazione
+  if (!esito) return
+  if (esito.avviso) toast.warning("Automazione handoff", { description: esito.avviso })
+  else if (esito.info) toast.success("Automazione handoff", { description: esito.info })
 }
 
 /**
@@ -195,12 +213,14 @@ export function ClienteTagProvider({
           [clienteId]: enabled ? [...current, tagId] : current.filter((id) => id !== tagId),
         },
       }))
-      void mutate({ action: "toggle", clienteId, tagId, enabled }).catch(() => {
-        setData((previous) => ({
-          ...previous,
-          clienteTagIds: { ...previous.clienteTagIds, [clienteId]: current },
-        }))
-      })
+      void mutate({ action: "toggle", clienteId, tagId, enabled })
+        .then(segnalaAutomazione)
+        .catch(() => {
+          setData((previous) => ({
+            ...previous,
+            clienteTagIds: { ...previous.clienteTagIds, [clienteId]: current },
+          }))
+        })
     },
     [data.clienteTagIds],
   )
@@ -228,7 +248,8 @@ export function ClienteTagProvider({
     const normalized = name.trim()
     if (!normalized) return
     void mutate({ action: "create_assign", clienteId, name: normalized, color }).then(
-      ({ tag }: { tag: ClienteTag }) => {
+      (payload: { tag: ClienteTag; automazione?: EsitoAutomazione }) => {
+        const { tag } = payload
         setData((previous) => ({
           ...previous,
           tags: previous.tags.some((item) => item.id === tag.id)
@@ -239,6 +260,7 @@ export function ClienteTagProvider({
             [clienteId]: [...new Set([...(previous.clienteTagIds[clienteId] ?? []), tag.id])],
           },
         }))
+        segnalaAutomazione(payload)
       },
     )
   }, [])

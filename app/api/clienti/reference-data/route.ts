@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { loadClienteReferenceData } from "@/lib/clienti/reference-data"
 import { requireApiAction, requireApiPage } from "@/lib/permissions/server"
+import { isTagEmettereFattura, triggerEmettiFattura } from "@/lib/automazioni/handoff"
 
 type TagAction =
   | { action: "toggle"; clienteId: string; tagId: string; enabled: boolean }
@@ -9,6 +10,52 @@ type TagAction =
   | { action: "create_assign"; clienteId: string; name: string; color: string }
   | { action: "update"; tagId: string; name?: string; color?: string }
   | { action: "delete"; tagId: string }
+
+/**
+ * Esito dell'automazione 4.4 riportato al client. `null` = niente da dire
+ * (tag non pertinente, oppure Compito creato/gia' presente senza problemi).
+ */
+type EsitoAutomazione = { avviso: string } | { info: string } | null
+
+/**
+ * Fase 4.4 — se il tag appena applicato e' "Emettere fattura", crea il Compito
+ * per il responsabile fatturazione.
+ *
+ * Non blocca mai il tag: quando questa funzione parte l'assegnazione e' gia'
+ * scritta, quindi qualsiasi problema qui diventa un avviso, mai un errore che
+ * farebbe credere all'utente che il tag non sia stato applicato.
+ */
+async function automazioneTagFattura(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  clienteId: string,
+  nomeTag: string,
+): Promise<EsitoAutomazione> {
+  if (!isTagEmettereFattura(nomeTag)) return null
+
+  const { data: cliente, error } = await supabase
+    .from("clienti")
+    .select("nome_clienti")
+    .eq("id", clienteId)
+    .maybeSingle()
+  if (error) {
+    console.error(`[automazioni] lettura cliente ${clienteId} fallita:`, error.message)
+    return { avviso: "Tag applicato. Compito di fatturazione non creato: cliente non leggibile." }
+  }
+
+  const esito = await triggerEmettiFattura(
+    clienteId,
+    (cliente?.nome_clienti as string) || "Cliente",
+  )
+  if (esito.ok) {
+    return esito.creato ? { info: `Compito di fatturazione assegnato a ${esito.responsabile}.` } : null
+  }
+  return {
+    avviso:
+      esito.motivo === "non_configurato"
+        ? "Tag applicato. Nessun Compito creato: responsabile fatturazione non configurato in Impostazioni > Comunicazioni > Automazioni handoff."
+        : "Tag applicato, ma la creazione del Compito di fatturazione è fallita. Riprova o controlla i log.",
+  }
+}
 
 export async function GET() {
   const guard = await requireApiPage("clienti")
@@ -89,7 +136,28 @@ export async function POST(request: Request) {
           )
       : await query
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ok: true })
+
+    // Automazione 4.4 solo in applicazione: togliere il tag non deve creare
+    // nessun Compito. Il nome del tag si legge ora perche' il client manda
+    // solo l'id.
+    let automazione: EsitoAutomazione = null
+    if (body.enabled) {
+      const { data: tag, error: tagError } = await supabase
+        .from("tag")
+        .select("nome")
+        .eq("id", body.tagId)
+        .maybeSingle()
+      if (tagError) {
+        console.error(`[automazioni] lettura tag ${body.tagId} fallita:`, tagError.message)
+      } else {
+        automazione = await automazioneTagFattura(
+          supabase,
+          body.clienteId,
+          (tag?.nome as string) ?? "",
+        )
+      }
+    }
+    return NextResponse.json({ ok: true, automazione })
   }
 
   if (body.action === "create_assign") {
@@ -126,8 +194,13 @@ export async function POST(request: Request) {
     if (assigned.error) {
       return NextResponse.json({ error: assigned.error.message }, { status: 500 })
     }
+    // Anche questo ramo assegna un tag: se qualcuno riusa qui il nome
+    // "Emettere fattura" (il tag esiste gia', quindi il lookup lo ritrova e
+    // lo assegna) l'automazione deve scattare come nel toggle.
+    const automazione = await automazioneTagFattura(supabase, body.clienteId, tag.nome as string)
     return NextResponse.json({
       tag: { id: tag.id, name: tag.nome, color: tag.colore, createdAt: tag.created_at },
+      automazione,
     })
   }
 

@@ -6,6 +6,7 @@
 // Uso:
 //   node --env-file=.env.local scripts/backfill-documenti-obbligatori.mjs
 //   node --env-file=.env.local scripts/backfill-documenti-obbligatori.mjs --dry-run
+//   node --env-file=.env.local scripts/backfill-documenti-obbligatori.mjs --ids=<uuid>,<uuid>
 //
 // Sicuro da rilanciare quante volte si vuole: ensureFolder fa MKCOL e
 // considera 405 ("esiste gia'") un successo, quindi non tocca nulla di
@@ -40,6 +41,38 @@ const PAGE_SIZE = 500
 // Poche richieste in parallelo: ogni ensureFolder fa una MKCOL per segmento
 // di path, non vogliamo martellare Nextcloud con migliaia di richieste.
 const CONCURRENCY = 4
+// Su una passata da ~9k lead qualche richiesta cade per motivi di rete
+// ("fetch failed" da undici, tipicamente ECONNRESET/ETIMEDOUT): visto dal
+// vivo su 2 lead vicini nell'ordine di elaborazione, quindi una finestra
+// sfortunata e non un problema dei dati. Un paio di retry con attesa
+// crescente li recupera senza dover rilanciare tutto.
+const TENTATIVI = 3
+const ATTESA_MS = 800
+
+function attendi(ms) {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+/**
+ * Riprova un'operazione WebDAV che torna { ok, error }. Ritenta solo gli
+ * errori di rete/5xx: un 4xx e' una risposta definitiva del server e
+ * rifarla non cambia nulla.
+ */
+async function conRetry(etichetta, fn) {
+  let ultimo
+  for (let tentativo = 1; tentativo <= TENTATIVI; tentativo++) {
+    const res = await fn()
+    if (res.ok) return res
+    ultimo = res
+    const ritentabile = res.status === 0 || res.status >= 500
+    if (!ritentabile || tentativo === TENTATIVI) break
+    console.error(
+      `   ↻ ${etichetta}: tentativo ${tentativo}/${TENTATIVI} fallito (${res.error ?? res.status}), riprovo…`,
+    )
+    await attendi(ATTESA_MS * tentativo)
+  }
+  return ultimo
+}
 
 function requireEnv(name) {
   const v = process.env[name]
@@ -50,14 +83,18 @@ function requireEnv(name) {
   return v
 }
 
-async function fetchAllLeads(admin) {
+async function fetchAllLeads(admin, soloIds) {
   const leads = []
   for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await admin
+    let query = admin
       .from("leads")
       .select("id, nome_lead")
       .order("id", { ascending: true })
       .range(from, from + PAGE_SIZE - 1)
+    // --ids serve a ripassare solo i lead falliti in una run precedente,
+    // senza rifare l'intera passata.
+    if (soloIds) query = query.in("id", soloIds)
+    const { data, error } = await query
     if (error) {
       console.error("❌ Lettura leads fallita:", error.message)
       process.exit(1)
@@ -71,6 +108,14 @@ async function fetchAllLeads(admin) {
 
 async function main() {
   const dryRun = process.argv.includes("--dry-run")
+  const argIds = process.argv.find((a) => a.startsWith("--ids="))
+  const soloIds = argIds
+    ? argIds
+        .slice("--ids=".length)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : null
   requireEnv("NEXTCLOUD_URL")
   requireEnv("NEXTCLOUD_ADMIN_USER")
   requireEnv("NEXTCLOUD_ADMIN_PASSWORD")
@@ -79,8 +124,16 @@ async function main() {
 
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
 
-  const leads = await fetchAllLeads(admin)
-  console.log(`📋 Lead trovati: ${leads.length}${dryRun ? "  (DRY RUN, nessuna scrittura)" : ""}`)
+  const leads = await fetchAllLeads(admin, soloIds)
+  console.log(
+    `📋 Lead trovati: ${leads.length}` +
+      (soloIds ? `  (filtro --ids: ${soloIds.length} richiesti)` : "") +
+      (dryRun ? "  (DRY RUN, nessuna scrittura)" : ""),
+  )
+  if (soloIds && leads.length !== soloIds.length) {
+    const mancanti = soloIds.filter((id) => !leads.some((l) => l.id === id))
+    console.error(`⚠️  Id non trovati a DB: ${mancanti.join(", ")}`)
+  }
 
   let creati = 0
   let giaPresenti = 0
@@ -103,16 +156,18 @@ async function main() {
       // OGNI segmento del path (5 richieste), mentre questa PROPFIND ne costa
       // una sola e sui rilanci (caso normale, lo script e' idempotente) evita
       // del tutto le MKCOL. 404 sulla cartella lead = lista vuota = si crea.
-      const listing = await listFolder(folderPathForRecord("lead", lead.id, nomeLead))
+      const listing = await conRetry(`PROPFIND ${lead.id}`, () =>
+        listFolder(folderPathForRecord("lead", lead.id, nomeLead)),
+      )
       if (listing.ok && listing.items.some((i) => i.isFolder && i.nome === DOCUMENTI_OBBLIGATORI_FOLDER)) {
         giaPresenti++
       } else {
-        const result = await ensureFolder(path)
+        const result = await conRetry(`MKCOL ${lead.id}`, () => ensureFolder(path))
         if (result.ok) {
           creati++
         } else {
           falliti.push({ id: lead.id, path, error: result.error ?? `HTTP ${result.status}` })
-          console.error(`   ⚠️  ${lead.id} — ${path}: ${result.error ?? result.status}`)
+          console.error(`   ⚠️  ${lead.id} — ${path}: ${result.error ?? `HTTP ${result.status}`}`)
         }
       }
 

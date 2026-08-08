@@ -39,6 +39,34 @@ function davUrl(path: string, baseUrl: string, adminUser: string): string {
   return `${baseUrl}/remote.php/dav/files/${encodeURIComponent(adminUser)}/${encodedSegments}`
 }
 
+/**
+ * undici riduce QUALSIASI problema di rete a un generico "fetch failed": il
+ * motivo vero (ECONNRESET, ETIMEDOUT, EAI_AGAIN, certificato...) sta nella
+ * catena `cause`. Senza srotolarla i log non dicono nulla di utile — cosa
+ * costata un'indagine a mano sul backfill dei documenti obbligatori.
+ */
+function describeFetchError(e: unknown): string {
+  if (!(e instanceof Error)) return "Errore di rete Nextcloud"
+  const parti: string[] = [e.message]
+  let cause: unknown = e.cause
+  for (let depth = 0; cause instanceof Error && depth < 3; depth++) {
+    const code = (cause as { code?: string }).code
+    parti.push(`${cause.message}${code ? ` (${code})` : ""}`)
+    // AggregateError (es. Happy Eyeballs: piu' tentativi falliti insieme).
+    const sub = (cause as { errors?: unknown }).errors
+    if (Array.isArray(sub)) {
+      parti.push(
+        sub
+          .filter((s): s is Error => s instanceof Error)
+          .map((s) => `${s.message}${(s as { code?: string }).code ? ` (${(s as { code?: string }).code})` : ""}`)
+          .join("; "),
+      )
+    }
+    cause = cause.cause
+  }
+  return parti.filter(Boolean).join(" — ")
+}
+
 async function davRequest(
   method: string,
   path: string,
@@ -58,7 +86,7 @@ async function davRequest(
     })
     return { res, error: null }
   } catch (e) {
-    return { res: null, error: e instanceof Error ? e.message : "Errore di rete Nextcloud" }
+    return { res: null, error: describeFetchError(e) }
   }
 }
 

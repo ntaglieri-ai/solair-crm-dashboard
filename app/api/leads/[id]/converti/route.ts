@@ -59,6 +59,11 @@ export async function POST(
       Cellulare: lead.Telefono || undefined,
       Sede: lead.Sede,
       "Clienti Proprietario": lead["Lead Proprietario"] || undefined,
+      // La provincia del lead diventa la provincia postale del cliente: e' il
+      // dato su cui createClienteRecord applica il tag "Italia" automatico
+      // (spec 2.3). Senza questa riga il cliente nascerebbe senza provincia e
+      // la regola non potrebbe scattare al momento della conversione.
+      "Provincia indirizzo postale": lead.Provincia || undefined,
     },
     lead.id,
   )

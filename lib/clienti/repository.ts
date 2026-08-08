@@ -7,6 +7,7 @@ import type {
   ClientiListResponse,
 } from "@/lib/clienti/api-types"
 import { CLIENTI_RECORD_COLUMNS, CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
+import { applicaTagItalia } from "@/lib/clienti/tag-italia"
 
 // Colonne proiettate in lettura — mai SELECT *.
 const LIST_COLUMNS = [
@@ -281,12 +282,23 @@ export async function createClienteRecord(
       sede: body.Sede || null,
       clienti_proprietario_id: body["Clienti Proprietario"] || null,
       installatore_id: body.Installatore || null,
+      // Serve alla regola 2.3 (tag "Italia"): la conversione Lead->Cliente
+      // porta con se' la provincia del lead, quindi va scritta subito invece
+      // di aspettare che qualcuno riapra il cliente e la ricompili a mano.
+      provincia_indirizzo_postale: body["Provincia indirizzo postale"] || null,
       lead_id: leadId ?? null,
     })
     .select(LIST_COLUMNS)
     .single()
   if (error) throw new Error(`createClienteRecord: ${error.message}`)
-  return mapRow(data as unknown as Record<string, unknown>)
+  const cliente = mapRow(data as unknown as Record<string, unknown>)
+
+  // Tag "Italia" automatico (spec 2.3) valutato gia' alla creazione: e' il
+  // momento della conversione, quando il cliente nasce con la provincia del
+  // lead. Non blocca: applicaTagItalia logga e tira avanti.
+  await applicaTagItalia(cliente.id, body["Provincia indirizzo postale"])
+
+  return cliente
 }
 
 export async function updateClienteRecord(
@@ -333,6 +345,16 @@ export async function updateClienteRecord(
     .select(LIST_COLUMNS)
     .single()
   if (error || !data) return null
+
+  // Tag "Italia" (spec 2.3) rivalutato a ogni modifica della provincia — la
+  // colonna e' scritta dal ciclo generico qui sopra, quindi il controllo va
+  // fatto sul patch e non su `row`. `in` e non `!== undefined`: un patch che
+  // svuota il campo passa comunque, e applicaTagItalia decide che non c'e'
+  // nulla da taggare.
+  if ("Provincia indirizzo postale" in patchRecord) {
+    await applicaTagItalia(id, patchRecord["Provincia indirizzo postale"])
+  }
+
   return mapRow(data as unknown as Record<string, unknown>)
 }
 

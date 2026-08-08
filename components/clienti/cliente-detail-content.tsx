@@ -36,6 +36,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { type ClienteRecord, type Compito, OPEN_TASK_STATI } from "@/lib/mock-data"
 import { ClienteAvatar } from "./cliente-utils"
+import { InstallatoreAssegnatoSelect } from "./installatore-assegnato-select"
 import { QuickCompitoDialog } from "@/components/compiti/quick-compito-dialog"
 
 /* ---------- Helpers ---------- */
@@ -797,16 +798,13 @@ function Logistica({ cliente }: { cliente: ClienteRecord }) {
         <DataField label="Intervento 1">{val(cliente["Intervento 1"])}</DataField>
         <DataField label="Intervento 2">{val(cliente["Intervento 2"])}</DataField>
       </div>
-      {hasValue(cliente.Installatore) ? (
-        <div className="flex items-center gap-2 border-t border-border pt-4">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Installatore assegnato
-          </span>
-          <Badge className="rounded-full bg-warning/10 px-2.5 py-0.5 text-[11px] font-medium text-warning">
-            {cliente.Installatore}
-          </Badge>
-        </div>
-      ) : null}
+      <div className="border-t border-border pt-4">
+        <InstallatoreAssegnatoSelect
+          clienteId={cliente.id}
+          provincia={cliente["Provincia indirizzo postale"]}
+          installatoreAttuale={cliente.Installatore}
+        />
+      </div>
     </div>
   )
 }

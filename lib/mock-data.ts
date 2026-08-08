@@ -1718,6 +1718,8 @@ export interface ClienteRecord {
   "COD. STORAGE"?: string
   "DISPONIBILITA' MAGAZZINO"?: string
   Installatore?: string
+  /** FK uuid verso installatori.id (clienti.installatore_id); Installatore resta il nome. */
+  InstallatoreId?: string | null
   "Nr. Inverter"?: number
   "Nr. Moduli"?: number
   "Potenza Moduli Wp"?: number

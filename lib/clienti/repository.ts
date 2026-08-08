@@ -21,6 +21,7 @@ const LIST_COLUMNS = [
   "tag",
   "stato",
   "sede",
+  "installatore",
   "installatore_id",
   "clienti_proprietario_id",
   "created_at",
@@ -28,7 +29,9 @@ const LIST_COLUMNS = [
 ].join(",")
 
 const DETAIL_COLUMNS = [
-  ...new Set(["id", "created_at", "updated_at", ...CLIENTI_RECORD_COLUMNS]),
+  // installatore_id (FK uuid verso installatori) non e' tra le colonne Zoho:
+  // va chiesto esplicitamente, serve al selettore "Installatore assegnato".
+  ...new Set(["id", "created_at", "updated_at", "installatore_id", ...CLIENTI_RECORD_COLUMNS]),
 ].join(",")
 
 // Whitelist ordinamento: campo UI → colonna DB. Fallback su updated_at.
@@ -42,7 +45,9 @@ const SORT_COLUMN: Record<string, string> = {
   Stato: "stato",
   Sede: "sede",
   "Clienti Proprietario": "clienti_proprietario_id",
-  Installatore: "installatore_id",
+  // Ordina sul nome (colonna testo, popolata da Zoho): installatore_id e' un
+  // uuid quasi sempre null, ordinava di fatto per niente.
+  Installatore: "installatore",
   "Ora modifica": "updated_at",
   "Ora creazione": "created_at",
 }
@@ -81,8 +86,8 @@ function mapRow(row: Record<string, unknown>): ClienteRecord {
       (row.clienti_proprietario as string) ||
       (row.clienti_proprietario_id as string) ||
       undefined,
-    Installatore:
-      (row.installatore as string) || (row.installatore_id as string) || undefined,
+    Installatore: (row.installatore as string) || undefined,
+    InstallatoreId: (row.installatore_id as string) || undefined,
     "Ora creazione":
       (row.ora_creazione as string) || (row.created_at as string) || undefined,
   }
@@ -141,8 +146,10 @@ export async function queryClienti(
     countQ = countQ.eq("clienti_proprietario_id", params.proprietario)
   }
   if (params.installatore !== "all") {
-    listQ = listQ.eq("installatore_id", params.installatore)
-    countQ = countQ.eq("installatore_id", params.installatore)
+    // Il filtro arriva come nome (colonna testo): installatore_id e' un uuid
+    // quasi sempre null e un valore non-uuid faceva errare l'intera query.
+    listQ = listQ.eq("installatore", params.installatore)
+    countQ = countQ.eq("installatore", params.installatore)
   }
 
   const [{ data, error }, { count, error: countError }] = await Promise.all([
@@ -281,7 +288,10 @@ export async function createClienteRecord(
       stato: body.Stato || null,
       sede: body.Sede || null,
       clienti_proprietario_id: body["Clienti Proprietario"] || null,
-      installatore_id: body.Installatore || null,
+      // installatore = nome (testo), installatore_id = FK uuid: scrivere il
+      // nome nell'uuid faceva fallire l'intera insert.
+      installatore: body.Installatore || null,
+      installatore_id: body.InstallatoreId || null,
       // Serve alla regola 2.3 (tag "Italia"): la conversione Lead->Cliente
       // porta con se' la provincia del lead, quindi va scritta subito invece
       // di aspettare che qualcuno riapra il cliente e la ricompili a mano.
@@ -320,7 +330,10 @@ export async function updateClienteRecord(
   if (patch.Sede !== undefined) row.sede = patch.Sede
   if (patch["Clienti Proprietario"] !== undefined)
     row.clienti_proprietario_id = patch["Clienti Proprietario"]
-  if (patch.Installatore !== undefined) row.installatore_id = patch.Installatore
+  // installatore = nome (testo), installatore_id = FK uuid: scrivere il nome
+  // nell'uuid faceva fallire l'intero update.
+  if (patch.Installatore !== undefined) row.installatore = patch.Installatore
+  if (patch.InstallatoreId !== undefined) row.installatore_id = patch.InstallatoreId
   if (patch.Descrizione !== undefined) row.descrizione = patch.Descrizione
 
   // Supporto generico per tutti i campi del record — quelli importati da Zoho

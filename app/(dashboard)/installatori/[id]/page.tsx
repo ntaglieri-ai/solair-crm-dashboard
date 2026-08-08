@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 import { ChevronRight } from "lucide-react"
 import { requirePage } from "@/lib/permissions/server"
 import { getInstallatoreById } from "@/lib/installatori/repository"
+import { CANALE_PREFERITO_LABELS } from "@/lib/installatori/api-types"
 import { Badge } from "@/components/ui/badge"
 import { InstallatoreDetailActions } from "@/components/installatori/installatore-detail-actions"
 import { InstallatoreTagBadges } from "@/components/installatori/installatore-tag-controls"
@@ -73,6 +74,14 @@ export default async function InstallatoreDetailPage({
             <dt className="text-xs font-medium text-muted-foreground">Telefono</dt>
             <dd className="mt-1 text-sm text-foreground">
               {value(installatore.telefono)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-muted-foreground">
+              Canale preferito
+            </dt>
+            <dd className="mt-1 text-sm text-foreground">
+              {CANALE_PREFERITO_LABELS[installatore.canale_preferito]}
             </dd>
           </div>
           <div>

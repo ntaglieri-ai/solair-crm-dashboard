@@ -153,7 +153,7 @@ const MODULE_FIELDS: Record<FieldModuleKey, string[]> = {
   installatori: [
     "id", "nome", "email", "email_secondaria", "attivo", "proprietario_id",
     "note", "created_at", "updated_at", "zoho_id", "telefono", "tag",
-    "connesso_a_id", "connesso_a_tipo",
+    "canale_preferito", "connesso_a_id", "connesso_a_tipo",
   ],
 }
 

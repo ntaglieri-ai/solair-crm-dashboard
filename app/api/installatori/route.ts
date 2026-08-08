@@ -4,7 +4,10 @@ import {
   queryInstallatori,
   type InstallatoreInput,
 } from "@/lib/installatori/repository"
-import { parseInstallatoriSearchParams } from "@/lib/installatori/api-types"
+import {
+  normalizeCanalePreferito,
+  parseInstallatoriSearchParams,
+} from "@/lib/installatori/api-types"
 import { requireApiRecord } from "@/lib/permissions/server"
 import { ensureFolder } from "@/lib/nextcloud/admin-webdav"
 import { folderPathForRecord } from "@/lib/allegati/paths"
@@ -43,6 +46,7 @@ export async function POST(request: Request) {
     telefono: body.telefono ?? null,
     tag: body.tag ?? null,
     attivo: body.attivo ?? true,
+    canale_preferito: normalizeCanalePreferito(body.canale_preferito),
     proprietario_id: body.proprietario_id ?? null,
     note: body.note ?? null,
   })

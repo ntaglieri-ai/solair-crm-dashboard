@@ -2,9 +2,10 @@
 // - creazione Compito assegnato a una persona specifica (Giulia/Paola),
 //   trigger su applicazione tag "Emettere Fattura" e su conferma
 //   "documentazione completa";
-// - inoltro scheda sopralluogo all'installatore: email se Diesse (canale
-//   già reale), WhatsApp via Spoki per tutti gli altri (pronto, in attesa
-//   di account attivo — vedi lib/whatsapp/spoki-client.ts).
+// - inoltro scheda sopralluogo all'installatore, sul canale che l'installatore
+//   ha impostato (installatori.canale_preferito): email — oggi l'unico canale
+//   davvero operativo, ed è il default — oppure WhatsApp via Spoki (pronto, in
+//   attesa di account attivo — vedi lib/whatsapp/spoki-client.ts).
 //
 // L'identificazione di "chi è Giulia"/"chi è Paola" è per email, letta da
 // crm_settings (chiave "system.communication", ramo "automazioni") — non
@@ -15,6 +16,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createPersonalTransport } from "@/lib/email/lead-mailer"
 import { getPersonalEmailPassword, getPersonalEmailStatus } from "@/lib/email/personal-credentials"
 import { sendSpokiMessage } from "@/lib/whatsapp/spoki-client"
+import { normalizeCanalePreferito } from "@/lib/installatori/api-types"
 
 type HandoffRuolo = "responsabile_fatturazione" | "responsabile_passaggio_pratica"
 
@@ -213,68 +215,84 @@ export async function triggerDocumentazioneCompleta(
   })
 }
 
+/**
+ * Esito dell'inoltro scheda.
+ *
+ * Nessun esito ok:false comporta un invio "in qualche altro modo": se il
+ * canale preferito non è disponibile la scheda NON parte e il chiamante deve
+ * creare un Compito di inoltro manuale. `canale: null` è il caso in cui non si
+ * è nemmeno riusciti a leggere l'installatore (id sbagliato, errore query):
+ * distinto dagli altri perché lì non c'è niente da riprovare sul canale.
+ */
 export type InoltroSchedaResult =
   | { canale: "email"; ok: true }
   | { canale: "email"; ok: false; detail: string }
   | { canale: "whatsapp"; ok: true }
-  | { canale: "whatsapp"; ok: false; reason: string; detail?: string }
+  | {
+      canale: "whatsapp"
+      ok: false
+      reason: "no_phone" | "not_configured" | "disabled" | "request_failed"
+      detail?: string
+    }
+  | { canale: null; ok: false; detail: string }
 
-/**
- * Fase 3.4 — inoltro scheda sopralluogo all'installatore assegnato.
- * Diesse: email (canale reale, usa la casella personale dell'agente che
- * esegue l'azione). Tutti gli altri: WhatsApp via Spoki (pronto, in attesa
- * di account attivo — se non configurato, ritorna reason "not_configured" e
- * il chiamante può creare comunque un Compito di inoltro manuale come
- * fallback).
- */
-export async function inoltraSchedaAInstallatore(params: {
+async function inviaSchedaViaEmail(params: {
   installatoreNome: string
   installatoreEmail: string | null
-  installatoreTelefono: string | null
   clienteNome: string
   linkSchedaNextcloud: string
   agenteUserId: string
 }): Promise<InoltroSchedaResult> {
-  const isDiesse = params.installatoreNome.trim().toLowerCase() === "diesse"
-
-  if (isDiesse) {
-    if (!params.installatoreEmail) {
-      return { canale: "email", ok: false, detail: "Nessuna email configurata per Diesse" }
-    }
-    const emailStatus = await getPersonalEmailStatus(params.agenteUserId)
-    if (!emailStatus.configured || !emailStatus.smtpUser) {
-      return {
-        canale: "email",
-        ok: false,
-        detail: "Casella email personale dell'agente non configurata (Profilo)",
-      }
-    }
-    const smtpPassword = await getPersonalEmailPassword(params.agenteUserId)
-    if (!smtpPassword) {
-      return { canale: "email", ok: false, detail: "Password casella email non disponibile" }
-    }
-    try {
-      const transport = createPersonalTransport(emailStatus.smtpUser, smtpPassword)
-      await transport.sendMail({
-        from: emailStatus.smtpUser,
-        to: params.installatoreEmail,
-        subject: `Scheda sopralluogo — ${params.clienteNome}`,
-        text: `Scheda pratica per ${params.clienteNome}: ${params.linkSchedaNextcloud}`,
-      })
-      return { canale: "email", ok: true }
-    } catch (err) {
-      return {
-        canale: "email",
-        ok: false,
-        detail: err instanceof Error ? err.message : "Errore invio email",
-      }
+  if (!params.installatoreEmail) {
+    return {
+      canale: "email",
+      ok: false,
+      detail: `Nessuna email configurata per ${params.installatoreNome}`,
     }
   }
+  const emailStatus = await getPersonalEmailStatus(params.agenteUserId)
+  if (!emailStatus.configured || !emailStatus.smtpUser) {
+    return {
+      canale: "email",
+      ok: false,
+      detail: "Casella email personale dell'agente non configurata (Profilo)",
+    }
+  }
+  const smtpPassword = await getPersonalEmailPassword(params.agenteUserId)
+  if (!smtpPassword) {
+    return { canale: "email", ok: false, detail: "Password casella email non disponibile" }
+  }
+  try {
+    const transport = createPersonalTransport(emailStatus.smtpUser, smtpPassword)
+    await transport.sendMail({
+      from: emailStatus.smtpUser,
+      to: params.installatoreEmail,
+      subject: `Scheda sopralluogo — ${params.clienteNome}`,
+      text: `Scheda pratica per ${params.clienteNome}: ${params.linkSchedaNextcloud}`,
+    })
+    return { canale: "email", ok: true }
+  } catch (err) {
+    return {
+      canale: "email",
+      ok: false,
+      detail: err instanceof Error ? err.message : "Errore invio email",
+    }
+  }
+}
 
-  // Non-Diesse: canale WhatsApp.
+async function inviaSchedaViaWhatsapp(params: {
+  installatoreNome: string
+  installatoreTelefono: string | null
+  clienteNome: string
+  linkSchedaNextcloud: string
+}): Promise<InoltroSchedaResult> {
   if (!params.installatoreTelefono) {
+    console.warn(
+      `[handoff] ${params.installatoreNome} ha canale preferito WhatsApp ma nessun telefono — scheda "${params.clienteNome}" NON inviata, serve inoltro manuale`,
+    )
     return { canale: "whatsapp", ok: false, reason: "no_phone" }
   }
+
   const result = await sendSpokiMessage({
     telefono: params.installatoreTelefono,
     variabili: {
@@ -284,5 +302,76 @@ export async function inoltraSchedaAInstallatore(params: {
     },
   })
   if (result.ok) return { canale: "whatsapp", ok: true }
+
+  // Spoki spento o non configurato: NON si ripiega sull'email di nascosto —
+  // sarebbe un cambio di canale silenzioso, per un installatore che ha scelto
+  // WhatsApp. Si logga e si restituisce la reason di sendSpokiMessage così
+  // com'è, così il chiamante crea il Compito di inoltro manuale.
+  if (result.reason === "not_configured" || result.reason === "disabled") {
+    console.warn(
+      `[handoff] canale WhatsApp non disponibile (${result.reason}) per ${params.installatoreNome} — scheda "${params.clienteNome}" NON inviata, serve inoltro manuale. Configurare Spoki in Impostazioni CRM > Comunicazioni.`,
+    )
+  }
   return { canale: "whatsapp", ok: false, reason: result.reason, detail: result.detail }
+}
+
+/**
+ * Fase 3.4 — inoltro scheda sopralluogo all'installatore assegnato, sul canale
+ * che l'installatore ha impostato (installatori.canale_preferito, modificabile
+ * dalla sua scheda).
+ *
+ * - email: casella personale dell'agente che esegue l'azione (canale reale,
+ *   oggi l'unico operativo — è il default della colonna);
+ * - whatsapp: Spoki, pronto ma in attesa di account attivo. Finché non è
+ *   configurato l'inoltro fallisce esplicitamente con reason "not_configured" /
+ *   "disabled": nessun ripiego automatico su email.
+ *
+ * Prende l'id e rilegge nome/email/telefono da DB invece di riceverli come
+ * parametri: il canale e i recapiti su cui inviare devono venire dalla stessa
+ * riga, altrimenti un chiamante con dati in cache potrebbe inviare sul canale
+ * giusto al recapito vecchio.
+ */
+export async function inoltraSchedaAInstallatore(params: {
+  installatoreId: string
+  clienteNome: string
+  linkSchedaNextcloud: string
+  agenteUserId: string
+}): Promise<InoltroSchedaResult> {
+  const supabase = await createClient()
+  const { data: installatore, error } = await supabase
+    .from("installatori")
+    .select("nome, email, telefono, canale_preferito")
+    .eq("id", params.installatoreId)
+    .maybeSingle()
+
+  if (error) {
+    console.error(
+      `[handoff] lettura installatore ${params.installatoreId} fallita:`,
+      error.message,
+    )
+    return { canale: null, ok: false, detail: `Lettura installatore: ${error.message}` }
+  }
+  if (!installatore) {
+    return { canale: null, ok: false, detail: "Installatore non trovato" }
+  }
+
+  const installatoreNome = (installatore.nome as string | null) ?? "installatore"
+  const canale = normalizeCanalePreferito(installatore.canale_preferito)
+
+  if (canale === "whatsapp") {
+    return inviaSchedaViaWhatsapp({
+      installatoreNome,
+      installatoreTelefono: installatore.telefono as string | null,
+      clienteNome: params.clienteNome,
+      linkSchedaNextcloud: params.linkSchedaNextcloud,
+    })
+  }
+
+  return inviaSchedaViaEmail({
+    installatoreNome,
+    installatoreEmail: installatore.email as string | null,
+    clienteNome: params.clienteNome,
+    linkSchedaNextcloud: params.linkSchedaNextcloud,
+    agenteUserId: params.agenteUserId,
+  })
 }

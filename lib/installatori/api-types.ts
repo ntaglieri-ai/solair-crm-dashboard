@@ -2,6 +2,31 @@ import type { InstallatoreRecord } from "@/lib/installatori/repository"
 
 export type SortDir = "asc" | "desc"
 
+/**
+ * Canale su cui l'installatore riceve la scheda sopralluogo (spec 3.4).
+ * Vive qui e non in repository.ts perche' serve anche ai form client, che non
+ * possono importare valori da un modulo che tira dentro il client Supabase
+ * server-side.
+ */
+export type CanalePreferito = "email" | "whatsapp"
+
+/** Stesso default della colonna installatori.canale_preferito. */
+export const CANALE_PREFERITO_DEFAULT: CanalePreferito = "email"
+
+export const CANALE_PREFERITO_LABELS: Record<CanalePreferito, string> = {
+  email: "Email",
+  whatsapp: "WhatsApp",
+}
+
+/**
+ * Riporta al default un valore non riconosciuto invece di lanciare: la check
+ * constraint a DB gia' impedisce valori fuori lista, questa e' solo la rete di
+ * sicurezza per righe lette prima della migration o payload API malformati.
+ */
+export function normalizeCanalePreferito(value: unknown): CanalePreferito {
+  return value === "whatsapp" || value === "email" ? value : CANALE_PREFERITO_DEFAULT
+}
+
 export type InstallatoreSortKey = "nome" | "email" | "updated_at"
 
 export interface InstallatoriListParams {

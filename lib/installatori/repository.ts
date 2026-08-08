@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
+import { normalizeCanalePreferito } from "@/lib/installatori/api-types"
 import type {
+  CanalePreferito,
   InstallatoriListParams,
   InstallatoriListResponse,
   InstallatoreSortKey,
@@ -13,6 +15,8 @@ export type InstallatoreRecord = {
   telefono: string | null
   tag: string | null
   attivo: boolean
+  /** Canale di inoltro scheda sopralluogo (spec 3.4). */
+  canale_preferito: CanalePreferito
   proprietario_id: string | null
   proprietario_nome: string | null
   note: string | null
@@ -22,12 +26,18 @@ export type InstallatoreRecord = {
   tagIds?: string[]
 }
 
-type InstallatoreRow = Omit<InstallatoreRecord, "proprietario_nome" | "attivo"> & {
+type InstallatoreRow = Omit<
+  InstallatoreRecord,
+  "proprietario_nome" | "attivo" | "canale_preferito"
+> & {
   attivo: boolean | null
+  // A DB e' text: la check constraint garantisce i due valori validi solo sulle
+  // righe scritte dopo la migration, quindi si normalizza in lettura.
+  canale_preferito: string | null
 }
 
 const INSTALLATORE_COLUMNS =
-  "id,nome,email,email_secondaria,telefono,tag,attivo,proprietario_id,note,created_at,updated_at"
+  "id,nome,email,email_secondaria,telefono,tag,attivo,canale_preferito,proprietario_id,note,created_at,updated_at"
 
 const SORT_COLUMN: Record<InstallatoreSortKey, string> = {
   nome: "nome",
@@ -52,6 +62,7 @@ async function mapOwner(row: InstallatoreRow): Promise<InstallatoreRecord> {
   return {
     ...row,
     attivo: row.attivo !== false,
+    canale_preferito: normalizeCanalePreferito(row.canale_preferito),
     proprietario_nome: ownerName,
   }
 }
@@ -88,6 +99,7 @@ export async function getInstallatori(): Promise<InstallatoreRecord[]> {
   return rows.map((row) => ({
     ...row,
     attivo: row.attivo !== false,
+    canale_preferito: normalizeCanalePreferito(row.canale_preferito),
     proprietario_nome: row.proprietario_id
       ? ownerNames.get(row.proprietario_id) ?? null
       : null,
@@ -199,6 +211,7 @@ export async function queryInstallatori(
     rows: rows.map((row) => ({
       ...row,
       attivo: row.attivo !== false,
+      canale_preferito: normalizeCanalePreferito(row.canale_preferito),
       proprietario_nome: row.proprietario_id
         ? ownerNames.get(row.proprietario_id) ?? null
         : null,
@@ -236,6 +249,7 @@ export type InstallatoreInput = {
   telefono: string | null
   tag: string | null
   attivo: boolean
+  canale_preferito: CanalePreferito
   proprietario_id: string | null
   note: string | null
 }
@@ -253,6 +267,7 @@ export async function createInstallatoreRecord(
       telefono: input.telefono,
       tag: input.tag,
       attivo: input.attivo,
+      canale_preferito: input.canale_preferito,
       proprietario_id: input.proprietario_id,
       note: input.note,
     })
@@ -277,6 +292,9 @@ export async function updateInstallatoreRecord(
   if (patch.telefono !== undefined) row.telefono = patch.telefono
   if (patch.tag !== undefined) row.tag = patch.tag
   if (patch.attivo !== undefined) row.attivo = patch.attivo
+  if (patch.canale_preferito !== undefined) {
+    row.canale_preferito = normalizeCanalePreferito(patch.canale_preferito)
+  }
   if (patch.proprietario_id !== undefined) row.proprietario_id = patch.proprietario_id
   if (patch.note !== undefined) row.note = patch.note
 

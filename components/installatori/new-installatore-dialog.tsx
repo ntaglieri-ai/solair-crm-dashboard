@@ -24,6 +24,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useInstallatoriReferenceData } from "@/lib/installatori/hooks"
+import {
+  CANALE_PREFERITO_DEFAULT,
+  CANALE_PREFERITO_LABELS,
+  normalizeCanalePreferito,
+  type CanalePreferito,
+} from "@/lib/installatori/api-types"
 import type { InstallatoreRecord } from "@/lib/installatori/repository"
 import { InstallatoreTagField } from "./installatore-tag-picker"
 
@@ -61,6 +67,9 @@ export function InstallatoreFormDialog({
   const [telefono, setTelefono] = useState("")
   const [tag, setTag] = useState("")
   const [attivo, setAttivo] = useState(true)
+  const [canalePreferito, setCanalePreferito] = useState<CanalePreferito>(
+    CANALE_PREFERITO_DEFAULT,
+  )
   const [proprietarioId, setProprietarioId] = useState("")
   const [note, setNote] = useState("")
   const [submitting, setSubmitting] = useState(false)
@@ -72,6 +81,7 @@ export function InstallatoreFormDialog({
     setTelefono("")
     setTag("")
     setAttivo(true)
+    setCanalePreferito(CANALE_PREFERITO_DEFAULT)
     setProprietarioId("")
     setNote("")
   }
@@ -86,6 +96,7 @@ export function InstallatoreFormDialog({
         setTelefono(installatore.telefono ?? "")
         setTag(installatore.tag ?? "")
         setAttivo(installatore.attivo)
+        setCanalePreferito(normalizeCanalePreferito(installatore.canale_preferito))
         setProprietarioId(installatore.proprietario_id ?? "")
         setNote(installatore.note ?? "")
       } else {
@@ -108,6 +119,7 @@ export function InstallatoreFormDialog({
       telefono: telefono.trim() || null,
       tag: tag.trim() || null,
       attivo,
+      canale_preferito: canalePreferito,
       proprietario_id: proprietarioId || null,
       note: note.trim() || null,
     }
@@ -209,6 +221,31 @@ export function InstallatoreFormDialog({
               placeholder="+39 ..."
             />
           </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Canale preferito</Label>
+            <Select
+              items={CANALE_PREFERITO_LABELS}
+              value={canalePreferito}
+              onValueChange={(v) => setCanalePreferito(normalizeCanalePreferito(v))}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="email">{CANALE_PREFERITO_LABELS.email}</SelectItem>
+                  <SelectItem value="whatsapp">
+                    {CANALE_PREFERITO_LABELS.whatsapp}
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Canale su cui riceve la scheda sopralluogo. WhatsApp resta bloccato
+              finché Spoki non è configurato in Impostazioni CRM → Comunicazioni.
+            </p>
+          </div>
+
           <div className="flex flex-col gap-1.5">
             <Label>Tag</Label>
             <InstallatoreTagField value={tag} onChange={setTag} suggestions={tagSuggestions} />

@@ -102,12 +102,12 @@ export function OffertaCommercialeClient() {
     finally { setUploading(false) }
   }
 
-  const saveOffer = async (offer: OffertaPeriodo) => {
+  const saveOffer = async (offer: OffertaPeriodo, successMessage = `Offerta ${offer.titolo} salvata`) => {
     try {
       const response = await fetch("/api/offerta-commerciale/offerte", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(offer) })
       const body = await response.json()
       if (!response.ok) throw new Error(body.error ?? "Salvataggio offerta non riuscito")
-      toast.success(`Offerta ${offer.titolo} salvata`)
+      toast.success(successMessage)
       await load()
     } catch (error) { toast.error(error instanceof Error ? error.message : "Errore salvataggio") }
   }
@@ -208,56 +208,32 @@ export function OffertaCommercialeClient() {
             <div className="divide-y divide-border">
               {data.offerte.map((offer) => (
                 <div key={offer.id} className="p-4">
-                  <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-3">
                         <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                           <FileText className="size-5" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <Input value={offer.titolo} disabled={!canManage} onChange={(e) => setOffer(offer.id, { titolo: e.target.value })} aria-label="Titolo offerta" />
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-medium text-foreground">{offer.titolo}</h3>
+                            <Badge variant="outline">{offer.tipo ?? "locandina"}</Badge>
+                            <Badge variant={offer.testo_estratto ? "secondary" : "outline"}>
+                              {offer.testo_estratto ? `${offer.testo_estratto.length.toLocaleString("it-IT")} caratteri letti` : "solo PDF"}
+                            </Badge>
+                          </div>
                           <p className="mt-1 truncate text-xs text-muted-foreground">{offer.pdf_path ?? offer.url_pubblico ?? "Nessun file collegato"}</p>
                         </div>
-                        <Badge variant={offer.pubblicata ? "default" : "outline"}>{offer.pubblicata ? "Pubblicata" : "Bozza"}</Badge>
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 xl:justify-end">
                       <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
-                        <Switch checked={offer.pubblicata} disabled={!canManage} onCheckedChange={(checked) => setOffer(offer.id, { pubblicata: checked })} />
-                        Visibile
+                        <Switch checked={offer.pubblicata} disabled={!canManage} onCheckedChange={(checked) => { const updated = { ...offer, pubblicata: checked }; setOffer(offer.id, { pubblicata: checked }); void saveOffer(updated, checked ? "Roberta puo usare questo PDF" : "PDF nascosto a Roberta") }} />
+                        Roberta
                       </label>
                       {!offer.pdf_path && offer.url_pubblico ? <Button variant="outline" size="sm" nativeButton={false} render={<a href={offer.url_pubblico} target="_blank" rel="noreferrer" />}>Apri link</Button> : null}
                       {offer.pdf_path ? <Button variant="outline" size="sm" nativeButton={false} render={<a href={`/api/offerta-commerciale/offerte/${offer.id}/asset`} target="_blank" rel="noreferrer" />}>PDF</Button> : null}
                       {offer.pdf_path && offer.pubblicata ? <Button variant="outline" size="sm" nativeButton={false} render={<a href={`/api/public/offerte-periodo/${offer.id}/pdf`} target="_blank" rel="noreferrer" />}>Link pubblico</Button> : null}
-                      {canManage ? <Button size="sm" onClick={() => saveOffer(offer)}>Salva</Button> : null}
-                    </div>
-                  </div>
-                  <div className="mt-4 grid gap-3 lg:grid-cols-[180px_minmax(280px,1fr)_300px]">
-                    <label className="space-y-1 text-xs font-medium text-muted-foreground">
-                      Tipo
-                      <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm font-normal text-foreground" value={offer.tipo ?? "offerta"} disabled={!canManage} onChange={(e) => setOffer(offer.id, { tipo: e.target.value as OffertaPeriodo["tipo"] })}>
-                        <option value="offerta">Offerta</option>
-                        <option value="locandina">Locandina</option>
-                        <option value="brochure">Brochure</option>
-                        <option value="finanziaria">Finanziaria</option>
-                        <option value="pagina">Pagina</option>
-                      </select>
-                    </label>
-                    <div className="space-y-1 text-xs font-medium text-muted-foreground">
-                      Lettura PDF
-                      <div className="flex min-h-10 items-center rounded-md border border-border bg-muted/30 px-3 text-sm font-normal text-foreground">
-                        {offer.testo_estratto ? `Testo letto automaticamente: ${offer.testo_estratto.length.toLocaleString("it-IT")} caratteri` : "Testo non estratto: Roberta potra comunque inviare il link al PDF"}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <label className="space-y-1 text-xs font-medium text-muted-foreground">
-                        Dal
-                        <Input type="date" value={offer.valido_dal ?? ""} disabled={!canManage} onChange={(e) => setOffer(offer.id, { valido_dal: e.target.value || null })} />
-                      </label>
-                      <label className="space-y-1 text-xs font-medium text-muted-foreground">
-                        Al
-                        <Input type="date" value={offer.valido_al ?? ""} disabled={!canManage} onChange={(e) => setOffer(offer.id, { valido_al: e.target.value || null })} />
-                      </label>
                     </div>
                   </div>
                 </div>

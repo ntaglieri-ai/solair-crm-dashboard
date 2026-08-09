@@ -161,14 +161,21 @@ export async function POST(request: Request) {
   const guard = await requireApiRecord(PERMISSION_MODULE[recordTipo], "edit")
   if (guard.response) return guard.response
 
+  // Nome scelto nel dialog della convenzione 5.3 ({Tipo}_{Cognome}_{AAAAMMGG},
+  // estensione inclusa). Il fallback sul nome originale non e' teorico: e' il
+  // caso di tutti gli upload che la convenzione non copre (Lead, documenti
+  // obbligatori, installatori), che continuano a passare da qui.
+  const nomeScelto = sanitizeName((formData.get("nomeFile") as string | null) ?? "")
+  const nomeFile = nomeScelto && !/^\.+$/.test(nomeScelto) ? nomeScelto : file.name
+
   try {
     const buffer = Buffer.from(await file.arrayBuffer())
     // Senza sottocartella resta il comportamento di prima (filePathForRecord);
     // con sottocartella il file va un livello piu' in basso — e' quello che
     // rende contabile il gate dei documenti obbligatori.
     const fullPath = sottocartella
-      ? `${pathConSottocartella(recordTipo, recordId, nomeRecord, sottocartella)}/${sanitizeName(file.name)}`
-      : filePathForRecord(recordTipo, recordId, nomeRecord, file.name)
+      ? `${pathConSottocartella(recordTipo, recordId, nomeRecord, sottocartella)}/${sanitizeName(nomeFile)}`
+      : filePathForRecord(recordTipo, recordId, nomeRecord, nomeFile)
 
     // Nessuna riga su `documenti`: il file compare perche' la GET rilegge
     // sempre il contenuto reale della cartella Nextcloud.

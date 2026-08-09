@@ -30,6 +30,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { NomeDocumentoDialog } from "@/components/shared/nome-documento-dialog"
 import type { AllegatoRecordTipo } from "@/lib/allegati/paths"
 // Stessa route deep-link (OIDC) usata dal modulo Documenti: il path viene
 // validato server-side contro path-permissions.ts.
@@ -81,6 +82,7 @@ export function AllegatiSection({
   sottocartella,
   titolo = "Documenti",
   onChanged,
+  cognomeConvenzione,
 }: {
   recordTipo: AllegatoRecordTipo
   recordId: string
@@ -96,6 +98,14 @@ export function AllegatiSection({
   titolo?: string
   /** Notifica il chiamante dopo ogni modifica reale (upload/eliminazione). */
   onChanged?: () => void
+  /**
+   * Attiva il dialog che propone il nome secondo la convenzione della spec
+   * 5.3 ({TipoDocumento}_{Cognome}_{AAAAMMGG}) prima di caricare. Opt-in per
+   * decisione esplicita: vale solo per gli allegati generici del Cliente —
+   * i Lead e la sottocartella "Documenti obbligatori" (1.3) hanno regole
+   * proprie e continuano a caricare col nome originale del file.
+   */
+  cognomeConvenzione?: string
 }) {
   const [documenti, setDocumenti] = useState<DocumentoRow[]>([])
   const [collegamenti, setCollegamenti] = useState<CollegamentoRow[]>([])
@@ -109,6 +119,9 @@ export function AllegatiSection({
   const [cartellaOpen, setCartellaOpen] = useState(false)
   const [nomeCartella, setNomeCartella] = useState("")
   const [savingCartella, setSavingCartella] = useState(false)
+  // File scelto e in attesa che l'agente confermi il nome (solo quando la
+  // convenzione e' attiva); null quando non c'e' nessun dialog aperto.
+  const [fileDaNominare, setFileDaNominare] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Modalita' sottocartella: solo file, nessuna cartella annidata e nessun
@@ -146,7 +159,20 @@ export function AllegatiSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordTipo, recordId, nomeRecord, sottocartella])
 
-  async function handleFileSelected(file: File) {
+  /**
+   * Con la convenzione attiva il file non parte subito: si apre il dialog che
+   * propone il nome. Senza convenzione resta il comportamento di sempre,
+   * upload immediato col nome originale.
+   */
+  function handleFileSelected(file: File) {
+    if (cognomeConvenzione === undefined) {
+      uploadFile(file)
+      return
+    }
+    setFileDaNominare(file)
+  }
+
+  async function uploadFile(file: File, nomeFile?: string) {
     setUploading(true)
     try {
       const formData = new FormData()
@@ -155,10 +181,15 @@ export function AllegatiSection({
       formData.append("recordId", recordId)
       formData.append("nomeRecord", nomeRecord)
       if (sottocartella) formData.append("sottocartella", sottocartella)
+      // Il nome scelto nel dialog viaggia a parte: il File originale resta
+      // intatto, cosi' il nome di partenza e' ancora leggibile lato server se
+      // dovesse servire per un errore.
+      if (nomeFile) formData.append("nomeFile", nomeFile)
       const res = await fetch("/api/allegati", { method: "POST", body: formData })
       const result = (await res.json().catch(() => null)) as { error?: string } | null
       if (!res.ok) throw new Error(result?.error ?? "Caricamento non riuscito")
       toast.success("File caricato")
+      setFileDaNominare(null)
       await refresh()
       onChanged?.()
     } catch (error) {
@@ -483,6 +514,16 @@ export function AllegatiSection({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <NomeDocumentoDialog
+        file={fileDaNominare}
+        cognome={cognomeConvenzione ?? ""}
+        uploading={uploading}
+        onConfirm={(nomeFile) => {
+          if (fileDaNominare) uploadFile(fileDaNominare, nomeFile)
+        }}
+        onCancel={() => setFileDaNominare(null)}
+      />
     </div>
   )
 }

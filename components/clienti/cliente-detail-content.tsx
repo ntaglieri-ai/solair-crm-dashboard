@@ -991,13 +991,26 @@ function Documenti({ cliente }: { cliente: ClienteRecord }) {
         </div>
       </div>
 
+      {/* cognomeConvenzione attiva il dialog nomi documenti (spec 5.3) qui e
+          solo qui: e' la sezione allegati generica del Cliente. Fallback
+          sull'ultima parola di "Nome Clienti" perche' Cognome e' vuoto sui
+          clienti aziendali importati da Zoho, dove il nominativo sta tutto
+          nel campo unico. */}
       <AllegatiSection
         recordTipo="cliente"
         recordId={cliente.id}
         nomeRecord={cliente["Nome Clienti"]}
+        cognomeConvenzione={cognomePerNomeFile(cliente)}
       />
     </div>
   )
+}
+
+function cognomePerNomeFile(cliente: ClienteRecord): string {
+  const cognome = cliente.Cognome?.trim()
+  if (cognome) return cognome
+  const parole = (cliente["Nome Clienti"] ?? "").trim().split(/\s+/).filter(Boolean)
+  return parole.length > 0 ? parole[parole.length - 1] : ""
 }
 
 /* ---------- Comunicazioni automatiche ---------- */

@@ -463,14 +463,15 @@ export function CrmSettingsSidebar() {
             {/* Contenuto animato per layer */}
             <div className="relative flex-1 overflow-hidden">
               <AnimatePresence mode="wait" initial={false}>
+                {/*
+                  Colonna singola su tutti i layer: nel drawer da 640px due colonne
+                  lasciano ~130px al testo e mandano a capo titoli e meta.
+                  pt-1: lo scroller clippa al padding box, quindi senza spazio in
+                  alto la prima card perde il lift in hover sotto il taglio.
+                */}
                 <motion.div
                   key={layer}
-                  className={cn(
-                    // pt-1: lo scroller clippa al padding box, quindi senza spazio
-                    // in alto la prima card perde il lift in hover sotto il taglio.
-                    "grid h-full content-start gap-4 overflow-y-auto px-7 pb-5 pt-1",
-                    isRoot ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1",
-                  )}
+                  className="grid h-full grid-cols-1 content-start gap-4 overflow-y-auto px-7 pb-5 pt-1"
                   initial={{ x: isRoot ? "-100%" : "100%" }}
                   animate={{ x: 0 }}
                   exit={{ x: isRoot ? "100%" : "-100%" }}

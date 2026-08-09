@@ -181,41 +181,68 @@ export function OffertaCommercialeClient() {
       <TabsContent value="offerte" className="pt-5">
         {data.offerte.length === 0 ? <Empty>Carica i PDF da Documenti, riquadro “Offerte del periodo”.</Empty> : (
           <section className="overflow-hidden rounded-xl border border-border bg-card">
-            <div className="border-b border-border px-4 py-3">
-              <h2 className="font-semibold">Offerte del periodo</h2>
-              <p className="text-sm text-muted-foreground">Pubblica solo i PDF che Roberta puo proporre ai clienti.</p>
+            <div className="flex flex-col gap-3 border-b border-border px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="font-semibold">Materiale commerciale</h2>
+                <p className="text-sm text-muted-foreground">PDF caricati da Documenti. Pubblica solo quelli da rendere disponibili.</p>
+              </div>
+              <div className="flex gap-2">
+                <Badge variant="outline">{data.offerte.length} totali</Badge>
+                <Badge>{activeOffers} pubblicati</Badge>
+              </div>
             </div>
             <div className="divide-y divide-border">
               {data.offerte.map((offer) => (
-                <div key={offer.id} className="grid gap-3 p-4 xl:grid-cols-[minmax(240px,1fr)_150px_220px_220px_auto] xl:items-start">
-                  <div className="min-w-0 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <FileText className="size-4 shrink-0 text-muted-foreground" />
-                      <Input value={offer.titolo} disabled={!canManage} onChange={(e) => setOffer(offer.id, { titolo: e.target.value })} aria-label="Titolo offerta" />
+                <div key={offer.id} className="p-4">
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-3">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                          <FileText className="size-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <Input value={offer.titolo} disabled={!canManage} onChange={(e) => setOffer(offer.id, { titolo: e.target.value })} aria-label="Titolo offerta" />
+                          <p className="mt-1 truncate text-xs text-muted-foreground">{offer.pdf_path ?? offer.url_pubblico ?? "Nessun file collegato"}</p>
+                        </div>
+                        <Badge variant={offer.pubblicata ? "default" : "outline"}>{offer.pubblicata ? "Pubblicata" : "Bozza"}</Badge>
+                      </div>
                     </div>
-                    <div className="truncate pl-6 text-xs text-muted-foreground">{offer.pdf_path ?? offer.url_pubblico ?? "Nessun file collegato"}</div>
+                    <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                      <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+                        <Switch checked={offer.pubblicata} disabled={!canManage} onCheckedChange={(checked) => setOffer(offer.id, { pubblicata: checked })} />
+                        Visibile
+                      </label>
+                      {!offer.pdf_path && offer.url_pubblico ? <Button variant="outline" size="sm" render={<a href={offer.url_pubblico} target="_blank" rel="noreferrer" />}>Apri link</Button> : null}
+                      {offer.pdf_path ? <Button variant="outline" size="sm" render={<a href={`/api/offerta-commerciale/offerte/${offer.id}/asset`} target="_blank" rel="noreferrer" />}>PDF</Button> : null}
+                      {offer.pdf_path && offer.pubblicata ? <Button variant="outline" size="sm" render={<a href={`/api/public/offerte-periodo/${offer.id}/pdf`} target="_blank" rel="noreferrer" />}>Link pubblico</Button> : null}
+                      {canManage ? <Button size="sm" onClick={() => saveOffer(offer)}>Salva</Button> : null}
+                    </div>
                   </div>
-                  <select className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground" value={offer.tipo ?? "offerta"} disabled={!canManage} onChange={(e) => setOffer(offer.id, { tipo: e.target.value as OffertaPeriodo["tipo"] })}>
-                    <option value="offerta">Offerta</option>
-                    <option value="locandina">Locandina</option>
-                    <option value="brochure">Brochure</option>
-                    <option value="finanziaria">Finanziaria</option>
-                    <option value="pagina">Pagina</option>
-                  </select>
-                  <Textarea className="min-h-10" value={offer.descrizione ?? ""} disabled={!canManage} onChange={(e) => setOffer(offer.id, { descrizione: e.target.value })} placeholder="Descrizione breve" />
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input type="date" value={offer.valido_dal ?? ""} disabled={!canManage} onChange={(e) => setOffer(offer.id, { valido_dal: e.target.value || null })} aria-label="Valido dal" />
-                    <Input type="date" value={offer.valido_al ?? ""} disabled={!canManage} onChange={(e) => setOffer(offer.id, { valido_al: e.target.value || null })} aria-label="Valido al" />
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    <label className="mr-auto flex items-center gap-2 text-sm xl:mr-0">
-                      <Switch checked={offer.pubblicata} disabled={!canManage} onCheckedChange={(checked) => setOffer(offer.id, { pubblicata: checked })} />
-                      Pubblicata
+                  <div className="mt-4 grid gap-3 lg:grid-cols-[180px_minmax(280px,1fr)_300px]">
+                    <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                      Tipo
+                      <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm font-normal text-foreground" value={offer.tipo ?? "offerta"} disabled={!canManage} onChange={(e) => setOffer(offer.id, { tipo: e.target.value as OffertaPeriodo["tipo"] })}>
+                        <option value="offerta">Offerta</option>
+                        <option value="locandina">Locandina</option>
+                        <option value="brochure">Brochure</option>
+                        <option value="finanziaria">Finanziaria</option>
+                        <option value="pagina">Pagina</option>
+                      </select>
                     </label>
-                    {!offer.pdf_path && offer.url_pubblico ? <Button variant="outline" size="sm" render={<a href={offer.url_pubblico} target="_blank" rel="noreferrer" />}>Apri link</Button> : null}
-                    {offer.pdf_path ? <Button variant="outline" size="sm" render={<a href={`/api/offerta-commerciale/offerte/${offer.id}/asset`} target="_blank" rel="noreferrer" />}>PDF</Button> : null}
-                    {offer.pdf_path && offer.pubblicata ? <Button variant="outline" size="sm" render={<a href={`/api/public/offerte-periodo/${offer.id}/pdf`} target="_blank" rel="noreferrer" />}>Pubblico</Button> : null}
-                    {canManage ? <Button size="sm" onClick={() => saveOffer(offer)}>Salva</Button> : null}
+                    <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                      Descrizione
+                      <Textarea className="min-h-10" value={offer.descrizione ?? ""} disabled={!canManage} onChange={(e) => setOffer(offer.id, { descrizione: e.target.value })} placeholder="Breve nota per il bot" />
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                        Dal
+                        <Input type="date" value={offer.valido_dal ?? ""} disabled={!canManage} onChange={(e) => setOffer(offer.id, { valido_dal: e.target.value || null })} />
+                      </label>
+                      <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                        Al
+                        <Input type="date" value={offer.valido_al ?? ""} disabled={!canManage} onChange={(e) => setOffer(offer.id, { valido_al: e.target.value || null })} />
+                      </label>
+                    </div>
                   </div>
                 </div>
               ))}

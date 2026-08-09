@@ -212,9 +212,9 @@ export function OffertaCommercialeClient() {
                         <Switch checked={offer.pubblicata} disabled={!canManage} onCheckedChange={(checked) => setOffer(offer.id, { pubblicata: checked })} />
                         Visibile
                       </label>
-                      {!offer.pdf_path && offer.url_pubblico ? <Button variant="outline" size="sm" render={<a href={offer.url_pubblico} target="_blank" rel="noreferrer" />}>Apri link</Button> : null}
-                      {offer.pdf_path ? <Button variant="outline" size="sm" render={<a href={`/api/offerta-commerciale/offerte/${offer.id}/asset`} target="_blank" rel="noreferrer" />}>PDF</Button> : null}
-                      {offer.pdf_path && offer.pubblicata ? <Button variant="outline" size="sm" render={<a href={`/api/public/offerte-periodo/${offer.id}/pdf`} target="_blank" rel="noreferrer" />}>Link pubblico</Button> : null}
+                      {!offer.pdf_path && offer.url_pubblico ? <Button variant="outline" size="sm" nativeButton={false} render={<a href={offer.url_pubblico} target="_blank" rel="noreferrer" />}>Apri link</Button> : null}
+                      {offer.pdf_path ? <Button variant="outline" size="sm" nativeButton={false} render={<a href={`/api/offerta-commerciale/offerte/${offer.id}/asset`} target="_blank" rel="noreferrer" />}>PDF</Button> : null}
+                      {offer.pdf_path && offer.pubblicata ? <Button variant="outline" size="sm" nativeButton={false} render={<a href={`/api/public/offerte-periodo/${offer.id}/pdf`} target="_blank" rel="noreferrer" />}>Link pubblico</Button> : null}
                       {canManage ? <Button size="sm" onClick={() => saveOffer(offer)}>Salva</Button> : null}
                     </div>
                   </div>

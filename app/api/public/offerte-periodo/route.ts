@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const today = new Date().toISOString().slice(0, 10)
   const { data, error } = await supabase
     .from("offerta_commerciale_offerte")
-    .select("id, titolo, descrizione, tipo, url_pubblico, pdf_path, valido_dal, valido_al, ordinamento, configurazioni, aggiornato_at")
+    .select("id, titolo, descrizione, testo_estratto, tipo, url_pubblico, pdf_path, valido_dal, valido_al, ordinamento, configurazioni, aggiornato_at")
     .eq("pubblicata", true)
     .or(`valido_dal.is.null,valido_dal.lte.${today}`)
     .or(`valido_al.is.null,valido_al.gte.${today}`)
@@ -43,6 +43,7 @@ export async function GET(request: Request) {
           id: offerta.id,
           titolo: offerta.titolo,
           descrizione: offerta.descrizione,
+          testo: offerta.testo_estratto,
           tipo: offerta.tipo,
           url: offerta.url_pubblico,
           pdfUrl,

@@ -118,13 +118,29 @@ export async function POST() {
     const covers = new Map(
       offerFiles.filter((file) => COVER_EXTENSIONS.test(file.name)).map((file) => [withoutExtension(file.name).toLowerCase(), file.path]),
     )
-    const offers = offerFiles.filter((file) => file.name.toLowerCase().endsWith(".pdf")).map((file, index) => ({
-      titolo: withoutExtension(file.name),
-      tipo: "locandina",
-      pdf_path: file.path,
-      cover_path: covers.get(withoutExtension(file.name).toLowerCase()) ?? null,
-      ordinamento: index,
-      aggiornato_at: now,
+    const offers = await Promise.all(offerFiles.filter((file) => file.name.toLowerCase().endsWith(".pdf")).map(async (file, index) => {
+      const sourceFingerprint = fingerprint(file)
+      let extractedText: string | null = null
+      try {
+        const downloaded = await downloadFile(nextcloud.username, nextcloud.appPassword, file.path)
+        const bytes = new Uint8Array(await downloaded.arrayBuffer())
+        extractedText = await estraiTestoDaPdf(bytes)
+      } catch (error) {
+        console.warn(`[offerta-commerciale/sync] testo non estratto da ${file.path}`, error)
+      }
+      return {
+        titolo: withoutExtension(file.name),
+        tipo: "locandina",
+        pdf_path: file.path,
+        cover_path: covers.get(withoutExtension(file.name).toLowerCase()) ?? null,
+        ...(extractedText ? {
+          testo_estratto: extractedText,
+          testo_fingerprint: sourceFingerprint,
+          testo_estratto_at: now,
+        } : {}),
+        ordinamento: index,
+        aggiornato_at: now,
+      }
     }))
     if (offers.length) {
       const { error } = await supabase.from("offerta_commerciale_offerte").upsert(offers, { onConflict: "pdf_path", ignoreDuplicates: false })

@@ -229,10 +229,12 @@ export function OffertaCommercialeClient() {
                         <option value="pagina">Pagina</option>
                       </select>
                     </label>
-                    <label className="space-y-1 text-xs font-medium text-muted-foreground">
-                      Descrizione
-                      <Textarea className="min-h-10" value={offer.descrizione ?? ""} disabled={!canManage} onChange={(e) => setOffer(offer.id, { descrizione: e.target.value })} placeholder="Breve nota per il bot" />
-                    </label>
+                    <div className="space-y-1 text-xs font-medium text-muted-foreground">
+                      Lettura PDF
+                      <div className="flex min-h-10 items-center rounded-md border border-border bg-muted/30 px-3 text-sm font-normal text-foreground">
+                        {offer.testo_estratto ? `Testo letto automaticamente: ${offer.testo_estratto.length.toLocaleString("it-IT")} caratteri` : "Testo non estratto: Roberta potra comunque inviare il link al PDF"}
+                      </div>
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
                       <label className="space-y-1 text-xs font-medium text-muted-foreground">
                         Dal

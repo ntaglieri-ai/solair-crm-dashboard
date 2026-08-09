@@ -90,11 +90,50 @@ export function documentiObbligatoriFolderPath(
   return `${folderPathForRecord("lead", recordId, nomeRecord)}/${DOCUMENTI_OBBLIGATORI_FOLDER}`
 }
 
-export function filePathForRecord(
-  tipo: AllegatoRecordTipo,
-  recordId: string,
-  nomeRecord: string,
+/**
+ * Separa il nome dall'estensione. L'estensione non e' mai parte del nome
+ * "modificabile": e' cio' che rende apribile il file, e un nome corretto a
+ * mano e' esattamente il posto in cui si perde per sbaglio.
+ *
+ * Un punto in posizione 0 (".gitignore") non e' un'estensione ma un file
+ * nascosto: resta tutto nel nome.
+ */
+export function splitEstensione(nomeFile: string): { base: string; estensione: string } {
+  const punto = nomeFile.lastIndexOf(".")
+  if (punto <= 0) return { base: nomeFile, estensione: "" }
+  return { base: nomeFile.slice(0, punto), estensione: nomeFile.slice(punto) }
+}
+
+/**
+ * Nome libero nella cartella: `nomeFile` se non e' gia' preso, altrimenti
+ * `base_2.ext`, `base_3.ext` e cosi' via (spec 5.3 — il suffisso va sul nome,
+ * non dopo l'estensione).
+ *
+ * Serve perche' l'upload WebDAV e' un PUT: due file con lo stesso nome non
+ * danno errore, il secondo sostituisce il primo senza dire niente. Con la
+ * convenzione {Tipo}_{Cognome}_{AAAAMMGG} il rischio smette di essere teorico,
+ * perche' due documenti dello stesso tipo caricati lo stesso giorno per lo
+ * stesso cliente producono per costruzione lo stesso nome.
+ *
+ * Confronto case-insensitive: il backend potrebbe essere case-sensitive e
+ * tenerli entrambi, ma "Fattura_Rossi_20260815.pdf" accanto a
+ * "fattura_rossi_20260815.pdf" e' comunque un doppione da leggere a occhio.
+ *
+ * Funzione pura sui nomi: la usano sia il dialog (anteprima mentre si scrive,
+ * sulla lista gia' caricata) sia la route di upload (verifica sulla cartella
+ * reale, subito prima del PUT). Una regola sola, in un posto solo.
+ */
+export function nomeSenzaCollisioni(
   nomeFile: string,
+  esistenti: readonly string[],
 ): string {
-  return `${folderPathForRecord(tipo, recordId, nomeRecord)}/${sanitizeName(nomeFile)}`
+  const presi = new Set(esistenti.map((nome) => nome.toLowerCase()))
+  if (!presi.has(nomeFile.toLowerCase())) return nomeFile
+
+  const { base, estensione } = splitEstensione(nomeFile)
+  // Termina sempre: `presi` e' finito e ogni giro prova un nome diverso.
+  for (let progressivo = 2; ; progressivo++) {
+    const tentativo = `${base}_${progressivo}${estensione}`
+    if (!presi.has(tentativo.toLowerCase())) return tentativo
+  }
 }

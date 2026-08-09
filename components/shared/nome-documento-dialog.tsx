@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { nomeSenzaCollisioni, splitEstensione } from "@/lib/allegati/paths"
 
 /**
  * Convenzione nomi documenti (spec FASE 5.3):
@@ -60,17 +61,6 @@ export const TIPI_DOCUMENTO = [
 const TIPI_ITEMS = Object.fromEntries(TIPI_DOCUMENTO.map((t) => [t, t]))
 
 /**
- * Separa il nome dall'estensione. L'estensione non entra mai nel campo
- * modificabile: e' cio' che rende apribile il file, e un nome corretto a mano
- * e' esattamente il posto in cui si perde per sbaglio.
- */
-export function splitEstensione(nomeFile: string): { base: string; estensione: string } {
-  const punto = nomeFile.lastIndexOf(".")
-  if (punto <= 0) return { base: nomeFile, estensione: "" }
-  return { base: nomeFile.slice(0, punto), estensione: nomeFile.slice(punto) }
-}
-
-/**
  * Ripulisce un pezzo del nome: via i caratteri illegali su file system e via
  * gli spazi (uniti in PascalCase). Gli underscore sono i separatori dei tre
  * campi, quindi non possono sopravvivere dentro un campo: "De Luca" diventa
@@ -104,6 +94,7 @@ function oggiIso(): string {
 export function NomeDocumentoDialog({
   file,
   cognome,
+  nomiEsistenti,
   uploading,
   onConfirm,
   onCancel,
@@ -111,6 +102,8 @@ export function NomeDocumentoDialog({
   /** File scelto dall'utente, in attesa di conferma del nome. null = dialog chiuso. */
   file: File | null
   cognome: string
+  /** Nomi gia' presenti nella cartella, per l'anteprima del suffisso progressivo. */
+  nomiEsistenti: readonly string[]
   uploading: boolean
   /** Riceve il nome completo di estensione, pronto per l'upload. */
   onConfirm: (nomeFile: string) => void
@@ -145,7 +138,13 @@ export function NomeDocumentoDialog({
   const suggerito = buildNomeDocumento(tipo, cognomeDraft, data)
   const manuale = nomeManuale !== null
   const nome = nomeManuale ?? suggerito
-  const nomeFinale = `${nome.trim()}${estensione}`
+  const nomeRichiesto = `${nome.trim()}${estensione}`
+  // Il nome che finira' davvero su Nextcloud: se in cartella c'e' gia' un file
+  // cosi', il progressivo scatta e va mostrato PRIMA della conferma — un file
+  // che si chiama diversamente da come l'hai chiamato tu, scoperto dopo, e' il
+  // modo migliore per non fidarsi piu' della cartella.
+  const nomeFinale = nomeSenzaCollisioni(nomeRichiesto, nomiEsistenti)
+  const conSuffisso = nomeFinale !== nomeRichiesto
 
   return (
     <Dialog
@@ -223,6 +222,14 @@ export function NomeDocumentoDialog({
               </span>
             )}
           </div>
+          {conSuffisso ? (
+            <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[12px] text-foreground">
+              In cartella c&apos;è già <span className="font-medium">{nomeRichiesto}</span>.
+              Verrà caricato come{" "}
+              <span className="font-semibold">{nomeFinale}</span>, senza sostituire
+              quello esistente.
+            </p>
+          ) : null}
           {file ? (
             <span className="truncate text-[11px] text-muted-foreground">
               File originale: {file.name}

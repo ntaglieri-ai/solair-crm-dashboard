@@ -186,9 +186,22 @@ export function AllegatiSection({
       // dovesse servire per un errore.
       if (nomeFile) formData.append("nomeFile", nomeFile)
       const res = await fetch("/api/allegati", { method: "POST", body: formData })
-      const result = (await res.json().catch(() => null)) as { error?: string } | null
+      const result = (await res.json().catch(() => null)) as {
+        path?: string
+        error?: string
+      } | null
       if (!res.ok) throw new Error(result?.error ?? "Caricamento non riuscito")
-      toast.success("File caricato")
+      // Il nome definitivo lo decide il server sul contenuto reale della
+      // cartella: se qualcun altro ha caricato lo stesso nome dopo l'ultimo
+      // refresh, il progressivo che vede l'utente non e' quello finito su
+      // Nextcloud, e va detto invece di lasciarlo scoprire dalla lista.
+      const nomeCaricato = result?.path?.split("/").pop()
+      toast.success(
+        "File caricato",
+        nomeFile && nomeCaricato && nomeCaricato !== nomeFile
+          ? { description: `Salvato come ${nomeCaricato}` }
+          : undefined,
+      )
       setFileDaNominare(null)
       await refresh()
       onChanged?.()
@@ -518,6 +531,9 @@ export function AllegatiSection({
       <NomeDocumentoDialog
         file={fileDaNominare}
         cognome={cognomeConvenzione ?? ""}
+        // Anche le cartelle: un PUT sul path di una cartella esistente non
+        // crea un file, fallisce.
+        nomiEsistenti={documenti.map((doc) => doc.nome)}
         uploading={uploading}
         onConfirm={(nomeFile) => {
           if (fileDaNominare) uploadFile(fileDaNominare, nomeFile)

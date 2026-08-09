@@ -2,8 +2,8 @@ import { NextResponse } from "next/server"
 import { requireApiRecord } from "@/lib/permissions/server"
 import { ensureFolder, listFolder, uploadFile } from "@/lib/nextcloud/admin-webdav"
 import {
-  filePathForRecord,
   folderPathForRecord,
+  nomeSenzaCollisioni,
   sanitizeName,
   type AllegatoRecordTipo,
 } from "@/lib/allegati/paths"
@@ -138,6 +138,38 @@ async function creaSottocartella(request: Request) {
   return NextResponse.json({ ok: true, path: fullPath }, { status: 201 })
 }
 
+/**
+ * Nome libero nella cartella di destinazione, verificato sul contenuto reale
+ * subito prima del PUT (l'anteprima nel dialog gira su una lista caricata
+ * prima, che nel frattempo puo' essere invecchiata).
+ *
+ * Solo per il flusso della convenzione 5.3 (`convenzione = true`, cioe' nome
+ * scelto nel dialog). Gli altri upload conservano di proposito il vecchio
+ * comportamento "stesso nome = sostituisci": i "Documenti obbligatori" del
+ * Lead hanno un gate che pretende ESATTAMENTE tre file, e ricaricare la
+ * versione corretta di un documento diventerebbe un quarto file che blocca la
+ * conversione invece di sostituire il precedente.
+ *
+ * Se la lettura della cartella fallisce si procede col nome richiesto invece
+ * di bloccare: e' una protezione, non una precondizione, e in quel caso il PUT
+ * successivo fallirebbe comunque per lo stesso motivo.
+ */
+async function nomeDisponibile(
+  cartella: string,
+  nomeFile: string,
+  convenzione: boolean,
+): Promise<string> {
+  if (!convenzione) return nomeFile
+  const listing = await listFolder(cartella)
+  if (!listing.ok) {
+    console.warn(
+      `[allegati] lettura cartella per anti-collisione fallita (${listing.status}): ${cartella}`,
+    )
+    return nomeFile
+  }
+  return nomeSenzaCollisioni(nomeFile, listing.items.map((item) => item.nome))
+}
+
 export async function POST(request: Request) {
   if (request.headers.get("content-type")?.includes("application/json")) {
     return creaSottocartella(request)
@@ -170,12 +202,11 @@ export async function POST(request: Request) {
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer())
-    // Senza sottocartella resta il comportamento di prima (filePathForRecord);
-    // con sottocartella il file va un livello piu' in basso — e' quello che
-    // rende contabile il gate dei documenti obbligatori.
-    const fullPath = sottocartella
-      ? `${pathConSottocartella(recordTipo, recordId, nomeRecord, sottocartella)}/${sanitizeName(nomeFile)}`
-      : filePathForRecord(recordTipo, recordId, nomeRecord, nomeFile)
+    // Senza sottocartella si carica nella cartella del record; con
+    // sottocartella il file va un livello piu' in basso — e' quello che rende
+    // contabile il gate dei documenti obbligatori.
+    const cartella = pathConSottocartella(recordTipo, recordId, nomeRecord, sottocartella)
+    const fullPath = `${cartella}/${await nomeDisponibile(cartella, sanitizeName(nomeFile), Boolean(nomeScelto))}`
 
     // Nessuna riga su `documenti`: il file compare perche' la GET rilegge
     // sempre il contenuto reale della cartella Nextcloud.

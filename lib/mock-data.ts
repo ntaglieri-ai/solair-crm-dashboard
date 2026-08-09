@@ -1812,6 +1812,13 @@ export interface ClienteRecord {
   "Data sopralluogo"?: string
   "Data affidamento sopralluogo"?: string
   "Stato sopralluogo"?: string
+  /**
+   * Costi extra rilevati in sopralluogo (Fase 4.1), colonna
+   * `costi_extra_sopralluogo`. undefined = non ancora rilevato, diverso da 0
+   * ("nessun costo extra"): non collassare i due casi in lettura. Distinto
+   * dalla colonna testuale storica Zoho `importi_extra`.
+   */
+  "Costi extra sopralluogo"?: number
   "Data conferma Iter E-distribuzione"?: string
   "Notifica pred. reg. esercizio"?: boolean
   "Disponibilità Fine lavori"?: boolean

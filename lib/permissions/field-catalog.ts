@@ -133,7 +133,7 @@ const MODULE_FIELDS: Record<FieldModuleKey, string[]> = {
     "e_mail_enel_gaudi", "cognome_intestatario_utenza_elettrica",
     "titolarita_impianto", "desidera_installare_impianto_su",
     "tipologia_proprietario", "potenza_sistema_di_accumulo",
-    "flag_eps", "flag_cer",
+    "flag_eps", "flag_cer", "costi_extra_sopralluogo",
   ],
   compiti: [
     "id", "oggetto", "priorita", "stato", "scadenza", "proprietario_id",
@@ -166,6 +166,10 @@ const ECON_INTERNAL = new Set([
 ])
 
 const ECON_CLIENT = new Set([
+  // costi_extra_sopralluogo sta qui e non fra i tecnici (dove lo porterebbe
+  // isTechnical per via di "sopralluogo"): e' un importo che si somma a
+  // importo_contrattuale, quindi deve seguirne la stessa visibilita'.
+  "costi_extra_sopralluogo",
   "di_cui_ct3", "di_cui_ftv", "importo_contrattuale", "importo_da_listino",
   "importo_tica", "incentivoatteso", "iva", "iva_reverse_charge",
   "n_rate_e_importo_rata", "sconto_combo", "tot_contratto",

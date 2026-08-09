@@ -194,6 +194,10 @@ export const CLIENTI_CRM_FIELDS = [
   // sola lettura — vedi 20260808_clienti_flag_eps_cer.sql.
   { column: "flag_eps", type: "boolean", appField: "EPS previsto" },
   { column: "flag_cer", type: "boolean", appField: "Adesione CER prevista" },
+  // Costi extra rilevati in sopralluogo (Fase 4.1). Nessun rapporto con la
+  // colonna testuale storica `importi_extra` importata da Zoho, che resta di
+  // sola lettura — vedi 20260809_clienti_costi_extra_sopralluogo.sql.
+  { column: "costi_extra_sopralluogo", type: "numeric", appField: "Costi extra sopralluogo" },
 ] as const satisfies readonly ClienteCrmField[]
 
 // Insieme completo dei campi del record Cliente (Zoho + nativi CRM): e' questo

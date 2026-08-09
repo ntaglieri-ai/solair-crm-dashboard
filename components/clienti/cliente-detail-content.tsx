@@ -701,6 +701,107 @@ function IterStepper({ cliente }: { cliente: ClienteRecord }) {
   )
 }
 
+/**
+ * Costi extra emersi dal sopralluogo (procedura Vito, Fase 4.1).
+ *
+ * Il totale accanto al campo e' solo calcolato a schermo (importo
+ * contrattuale + extra) e non viene mai salvato: e' una somma di due valori
+ * che cambiano ognuno per conto proprio, quindi persisterla significherebbe
+ * conservare un numero che smette di essere vero appena uno dei due si muove.
+ *
+ * Campo vuoto = null in colonna = "non ancora rilevato", che e' diverso da 0
+ * ("sopralluogo fatto, nessun costo extra"): finche' nessuno ha rilevato
+ * niente lo dichiariamo invece di mostrare un totale che sembrerebbe una
+ * conferma.
+ */
+function CostiExtraSopralluogo({ cliente }: { cliente: ClienteRecord }) {
+  const iniziale = cliente["Costi extra sopralluogo"]
+  const [salvato, setSalvato] = useState(iniziale)
+  const [draft, setDraft] = useState(iniziale === undefined ? "" : String(iniziale))
+  const [saving, setSaving] = useState(false)
+
+  const euro = (n: number) =>
+    n.toLocaleString("it-IT", { style: "currency", currency: "EUR" })
+
+  const contrattuale = cliente["Importo Contrattuale"]
+  const grezzo = draft.trim()
+  // Mentre si digita il totale segue il campo, cosi' l'effetto della cifra si
+  // vede prima di salvare; se il testo non e' un numero si resta sull'ultimo
+  // valore salvato invece di mostrare NaN.
+  const digitato = grezzo === "" ? undefined : Number(grezzo.replace(",", "."))
+  const valido = digitato === undefined || Number.isFinite(digitato)
+  const extra = valido ? digitato : salvato
+
+  async function handleSave() {
+    if (!valido) {
+      setDraft(salvato === undefined ? "" : String(salvato))
+      toast.error("Valore non valido")
+      return
+    }
+    if (digitato === salvato) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/clienti/${cliente.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ "Costi extra sopralluogo": digitato ?? null }),
+      })
+      if (!res.ok) throw new Error("Aggiornamento non riuscito")
+      setSalvato(digitato)
+      setDraft(digitato === undefined ? "" : String(digitato))
+      toast.success("Costi extra aggiornati")
+    } catch {
+      setDraft(salvato === undefined ? "" : String(salvato))
+      toast.error("Errore nel salvataggio")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-border pt-4">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-navy">
+        Costi extra sopralluogo
+      </span>
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            value={draft}
+            disabled={saving}
+            placeholder="0,00"
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={handleSave}
+            className="h-8 w-36 bg-card text-[13px]"
+          />
+          <span className="text-[12px] text-muted-foreground">€</span>
+        </div>
+        {typeof contrattuale === "number" ? (
+          <div className="flex flex-wrap items-center gap-1.5 text-[13px] text-muted-foreground">
+            <span>{euro(contrattuale)}</span>
+            <span>+</span>
+            <span>{euro(extra ?? 0)}</span>
+            <span>=</span>
+            <span className="font-semibold text-foreground">
+              {euro(contrattuale + (extra ?? 0))}
+            </span>
+            <span className="text-[11px]">totale aggiornato</span>
+          </div>
+        ) : (
+          <span className="text-[12px] text-muted-foreground">
+            Importo contrattuale non presente: totale non calcolabile
+          </span>
+        )}
+      </div>
+      {extra === undefined ? (
+        <span className="text-[11px] text-muted-foreground">Non ancora rilevato</span>
+      ) : null}
+    </div>
+  )
+}
+
 function Iter({ cliente }: { cliente: ClienteRecord }) {
   const [notifica, setNotifica] = useState(Boolean(cliente["Notifica pred. reg. esercizio"]))
   const [disp, setDisp] = useState(Boolean(cliente["Disponibilità Fine lavori"]))
@@ -763,6 +864,7 @@ function Iter({ cliente }: { cliente: ClienteRecord }) {
           />
         </DataField>
       </div>
+      <CostiExtraSopralluogo cliente={cliente} />
     </div>
   )
 }

@@ -276,11 +276,11 @@ function SettingsCard({
     <button
       type="button"
       onClick={onClick}
-      className="group relative flex min-h-[114px] w-full items-center gap-[17px] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.045] p-[17px] text-left shadow-[0_18px_60px_rgba(0,0,0,0.16)] transition-all hover:-translate-y-0.5 hover:border-[#55C2A4]/70 hover:bg-white/[0.075] hover:shadow-[0_22px_70px_rgba(0,0,0,0.25)] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#55C2A4]"
+      className="group relative flex min-h-[110px] w-full items-center gap-[17px] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.045] p-[17px] text-left shadow-[0_18px_60px_rgba(0,0,0,0.16)] transition-all hover:-translate-y-0.5 hover:border-[#55C2A4]/70 hover:bg-white/[0.075] hover:shadow-[0_22px_70px_rgba(0,0,0,0.25)] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#55C2A4]"
     >
       <span className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#55C2A4]/50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-      <span className="flex size-13 shrink-0 items-center justify-center rounded-2xl border border-[#55C2A4]/20 bg-[#2E8B72]/16 text-[#67D9BA] shadow-[0_0_32px_rgba(46,139,114,0.14)]">
-        <Icon className="size-[22px]" />
+      <span className="flex size-[51px] shrink-0 items-center justify-center rounded-2xl border border-[#55C2A4]/20 bg-[#2E8B72]/16 text-[#67D9BA] shadow-[0_0_32px_rgba(46,139,114,0.14)]">
+        <Icon className="size-[21px]" />
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -300,7 +300,7 @@ function SettingsCard({
           </p>
         ) : null}
       </div>
-      <ChevronRight className="size-[22px] shrink-0 text-gray-500 transition-transform group-hover:translate-x-1 group-hover:text-white" />
+      <ChevronRight className="size-[21px] shrink-0 text-gray-500 transition-transform group-hover:translate-x-1 group-hover:text-white" />
     </button>
   )
 }
@@ -464,19 +464,20 @@ export function CrmSettingsSidebar() {
             <div className="relative flex-1 overflow-hidden">
               <AnimatePresence mode="wait" initial={false}>
                 {/*
-                  auto-fit: il numero di colonne emerge dallo spazio reale invece che
-                  da soglie px. 440px e' la colonna minima perche' l'etichetta piu'
-                  lunga ("Mail server, WhatsApp, centralino e canali", 285px a 15px)
-                  stia su una riga dentro i 142px di cornice della card, con margine
-                  per i font piu' larghi di altri sistemi; sotto quella soglia la
-                  griglia resta a una colonna. min(...,100%) evita che la traccia
-                  sfori il contenitore sui drawer piu' stretti di 440px.
+                  Due colonne sul layer root da md in su. Nel drawer da 640px una
+                  colonna lascia 152px al testo, quindi le descrizioni vanno a capo
+                  su due righe: e' il comportamento storico di questa griglia, non
+                  una regressione: starebbero su una riga sola solo con un drawer da
+                  ~850px o con descrizioni sotto i 24 caratteri.
                   pt-1: lo scroller clippa al padding box, quindi senza spazio in
                   alto la prima card perde il lift in hover sotto il taglio.
                 */}
                 <motion.div
                   key={layer}
-                  className="grid h-full grid-cols-[repeat(auto-fit,minmax(min(440px,100%),1fr))] content-start gap-4 overflow-y-auto px-7 pb-5 pt-1"
+                  className={cn(
+                    "grid h-full content-start gap-4 overflow-y-auto px-7 pb-5 pt-1",
+                    isRoot ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1",
+                  )}
                   initial={{ x: isRoot ? "-100%" : "100%" }}
                   animate={{ x: 0 }}
                   exit={{ x: isRoot ? "100%" : "-100%" }}

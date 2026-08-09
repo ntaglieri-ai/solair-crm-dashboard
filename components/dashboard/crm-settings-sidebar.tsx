@@ -276,31 +276,31 @@ function SettingsCard({
     <button
       type="button"
       onClick={onClick}
-      className="group relative flex min-h-[104px] w-full items-center gap-4 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-left shadow-[0_18px_60px_rgba(0,0,0,0.16)] transition-all hover:-translate-y-0.5 hover:border-[#55C2A4]/70 hover:bg-white/[0.075] hover:shadow-[0_22px_70px_rgba(0,0,0,0.25)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#55C2A4]"
+      className="group relative flex min-h-[120px] w-full items-center gap-[18px] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.045] p-[18px] text-left shadow-[0_18px_60px_rgba(0,0,0,0.16)] transition-all hover:-translate-y-0.5 hover:border-[#55C2A4]/70 hover:bg-white/[0.075] hover:shadow-[0_22px_70px_rgba(0,0,0,0.25)] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#55C2A4]"
     >
       <span className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#55C2A4]/50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-      <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl border border-[#55C2A4]/20 bg-[#2E8B72]/16 text-[#67D9BA] shadow-[0_0_32px_rgba(46,139,114,0.14)]">
-        <Icon className="size-5" />
+      <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl border border-[#55C2A4]/20 bg-[#2E8B72]/16 text-[#67D9BA] shadow-[0_0_32px_rgba(46,139,114,0.14)]">
+        <Icon className="size-6" />
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <h3 className="text-[15px] font-black leading-tight text-white">
+          <h3 className="text-[17px] font-black leading-tight text-white">
             {title}
           </h3>
           {status === "restricted" ? (
-            <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">
+            <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-300">
               Riservato
             </span>
           ) : null}
         </div>
-        <p className="mt-1 text-sm leading-relaxed text-gray-400">{description}</p>
+        <p className="mt-1 text-base leading-relaxed text-gray-400">{description}</p>
         {meta ? (
-          <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#55C2A4]/80">
+          <p className="mt-2 text-[13px] font-bold uppercase tracking-[0.14em] text-[#55C2A4]/80">
             {meta}
           </p>
         ) : null}
       </div>
-      <ChevronRight className="size-5 shrink-0 text-gray-500 transition-transform group-hover:translate-x-1 group-hover:text-white" />
+      <ChevronRight className="size-6 shrink-0 text-gray-500 transition-transform group-hover:translate-x-1 group-hover:text-white" />
     </button>
   )
 }
@@ -466,7 +466,9 @@ export function CrmSettingsSidebar() {
                 <motion.div
                   key={layer}
                   className={cn(
-                    "grid h-full content-start gap-4 overflow-y-auto px-7 pb-5",
+                    // pt-1: lo scroller clippa al padding box, quindi senza spazio
+                    // in alto la prima card perde il lift in hover sotto il taglio.
+                    "grid h-full content-start gap-4 overflow-y-auto px-7 pb-5 pt-1",
                     isRoot ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1",
                   )}
                   initial={{ x: isRoot ? "-100%" : "100%" }}

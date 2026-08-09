@@ -1652,6 +1652,11 @@ export type StatoCliente =
   | "Nuovo contratto digitale"
   | "Fin da firmare"
   | "Attesa cliente"
+  // Fase 3.1 — la pratica resta ferma finche' non si fa il sopralluogo, quindi
+  // sta dopo il blocco contrattuale della Fase 2 e prima dell'iter: e' l'ordine
+  // reale del passaggio Fase 2 → 3. L'ordine di questo type e' quello con cui
+  // gli stati compaiono in filtri, select e menu (vedi STATO_CLIENTE_VALUES).
+  | "Necessario sopralluogo intervento"
   | "Iter in corso"
   | "In esecuzione"
   | "Installazione completata"
@@ -2075,6 +2080,7 @@ export const STATO_CLIENTE_VALUES: StatoCliente[] = [
   "Nuovo contratto digitale",
   "Fin da firmare",
   "Attesa cliente",
+  "Necessario sopralluogo intervento",
   "Iter in corso",
   "In esecuzione",
   "Installazione completata",
@@ -2089,6 +2095,10 @@ export const STATO_CLIENTE_TONE: Record<
   "Nuovo contratto digitale": "info",
   "Fin da firmare": "warning",
   "Attesa cliente": "muted",
+  // "warning" come gli altri stati che aspettano un'azione nostra (Fin da
+  // firmare, Iter in corso). Non "destructive": il sopralluogo da fare e' un
+  // passo previsto della pratica, non un problema.
+  "Necessario sopralluogo intervento": "warning",
   "Iter in corso": "warning",
   "In esecuzione": "teal",
   "Installazione completata": "success",

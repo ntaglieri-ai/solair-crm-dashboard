@@ -43,7 +43,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { formatDMY } from "@/components/compiti/new-compito-dialog"
-import { type ClienteRecord, type StatoCliente } from "@/lib/mock-data"
+import {
+  STATO_CLIENTE_VALUES,
+  type ClienteRecord,
+  type StatoCliente,
+} from "@/lib/mock-data"
 import { ClienteTagPicker } from "./cliente-tag-controls"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { usePermissions } from "@/lib/permissions/provider"
@@ -54,16 +58,10 @@ import { EditRecordDialog } from "@/components/shared/edit-record-dialog"
 // generico per qualunque tipo, "Cliente" incluso, nessuna modifica serviva
 // li').
 
-const STATI: StatoCliente[] = [
-  "Nuovo contratto digitale",
-  "Fin da firmare",
-  "Attesa cliente",
-  "Iter in corso",
-  "In esecuzione",
-  "Installazione completata",
-  "Emessa fattura",
-  "Chiuso",
-]
+// Elenco stati preso da STATO_CLIENTE_VALUES invece di riscriverlo: era una
+// copia identica, e una copia di un enum e' un posto in cui dimenticarsi di
+// aggiungere il valore nuovo (successo aggiungendo "Necessario sopralluogo
+// intervento", Fase 3.1). Filtri e dialog nuovo cliente leggono gia' da li'.
 
 export function ClienteRowContextMenu({
   cliente,
@@ -275,7 +273,7 @@ export function ClienteRowContextMenu({
                 Cambia stato
               </ContextMenuSubTrigger>
               <ContextMenuSubContent>
-                {STATI.map((s) => (
+                {STATO_CLIENTE_VALUES.map((s) => (
                   <ContextMenuItem
                     key={s}
                     onClick={() => {

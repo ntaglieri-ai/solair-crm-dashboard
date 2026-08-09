@@ -24,6 +24,7 @@ import {
 export type CrmSettingsLayer =
   | "root"
   | "account-security"
+  | "ai-features"
   | "company"
   | "communication"
   | "crm-config"

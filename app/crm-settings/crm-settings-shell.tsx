@@ -25,7 +25,7 @@ import {
 } from "@/lib/crm-settings/catalog"
 
 const SECTIONS: Record<string, { label: string; layer: CrmSettingsLayer }> = {
-  account: { label: "Account e accessi", layer: "account-security" },
+  account: { label: "Admin & Sicurezza", layer: "account-security" },
   maintenance: { label: "Manutenzione", layer: "maintenance" },
   "file-manager": { label: "Integrazioni", layer: "integrations" },
   system: { label: "Azienda", layer: "company" },
@@ -39,7 +39,10 @@ function settingsGroupForItem(item: ReturnType<typeof crmSettingsItemForPath> | 
   if (item.id === "communication") {
     return { label: "Comunicazioni", layer: "communication" as CrmSettingsLayer }
   }
-  if (["attributes", "default-values", "assignment-rules", "workflows", "roberta", "import-export"].includes(item.id)) {
+  if (item.id === "roberta") {
+    return { label: "AI Features", layer: "ai-features" as CrmSettingsLayer }
+  }
+  if (["attributes", "default-values", "assignment-rules", "workflows", "import-export"].includes(item.id)) {
     return { label: "Configurazione CRM", layer: "crm-config" as CrmSettingsLayer }
   }
   if (["make", "meta", "nextcloud"].includes(item.id)) {

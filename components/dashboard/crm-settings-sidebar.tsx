@@ -8,6 +8,7 @@ import {
   Mail,
   PlugZap,
   SlidersHorizontal,
+  Sparkles,
   Wrench,
   X,
   ChevronRight,
@@ -26,6 +27,7 @@ import {
 type Layer =
   | "root"
   | "account-security"
+  | "ai-features"
   | "company"
   | "communication"
   | "crm-config"
@@ -51,9 +53,15 @@ interface SubBlock {
 const ROOT_BLOCKS: RootBlock[] = [
   {
     icon: Shield,
-    title: "Account e accessi",
+    title: "Admin & Sicurezza",
     description: "Utenti, ruoli, sessioni e audit",
     layer: "account-security",
+  },
+  {
+    icon: Sparkles,
+    title: "AI Features",
+    description: "Conoscenza chatbot e funzionalita' AI",
+    layer: "ai-features",
   },
   {
     icon: Building2,
@@ -98,6 +106,16 @@ const ACCOUNT_SECURITY_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
     status: item.status,
   }))
 
+const AI_FEATURES_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
+  .filter((item) => item.id === "roberta")
+  .map((item) => ({
+    icon: item.icon,
+    title: item.title,
+    description: item.description,
+    href: item.href,
+    status: item.status,
+  }))
+
 const COMPANY_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
   .filter((item) => ["company", "sites", "appearance"].includes(item.id))
   .map((item) => ({
@@ -120,7 +138,7 @@ const COMMUNICATION_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
 
 const CRM_CONFIG_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
   .filter((item) =>
-    ["attributes", "default-values", "assignment-rules", "workflows", "roberta", "import-export"].includes(item.id),
+    ["attributes", "default-values", "assignment-rules", "workflows", "import-export"].includes(item.id),
   )
   .map((item) => ({
     icon: item.icon,
@@ -163,9 +181,15 @@ const LAYER_HEADER: Record<
   },
   "account-security": {
     eyebrow: "Persone",
-    title: "Account e accessi",
+    title: "Admin & Sicurezza",
     subtitle: "Utenti, ruoli, sessioni e audit",
-    breadcrumb: "CRM Settings & Admin / Account e accessi",
+    breadcrumb: "CRM Settings & Admin / Admin & Sicurezza",
+  },
+  "ai-features": {
+    eyebrow: "Intelligenza artificiale",
+    title: "AI Features",
+    subtitle: "Conoscenza chatbot e funzionalita' AI",
+    breadcrumb: "CRM Settings & Admin / AI Features",
   },
   company: {
     eyebrow: "Organizzazione",
@@ -221,6 +245,7 @@ function useIsMobile() {
 function rootBlockMeta(layer: Exclude<Layer, "root">) {
   const meta: Record<Exclude<Layer, "root">, string> = {
     "account-security": "Governance",
+    "ai-features": "Assistente AI",
     company: "Profilo azienda",
     communication: "Canali operativi",
     "crm-config": "Moduli e processi",
@@ -339,6 +364,7 @@ export function CrmSettingsSidebar() {
     return page ? permissions.canPage(page) : true
   }
   const visibleAccountBlocks = ACCOUNT_SECURITY_BLOCKS.filter(canSeeBlock)
+  const visibleAiFeaturesBlocks = AI_FEATURES_BLOCKS.filter(canSeeBlock)
   const visibleCompanyBlocks = COMPANY_BLOCKS.filter(canSeeBlock)
   const visibleCommunicationBlocks = COMMUNICATION_BLOCKS.filter(canSeeBlock)
   const visibleCrmConfigBlocks = CRM_CONFIG_BLOCKS.filter(canSeeBlock)
@@ -348,6 +374,7 @@ export function CrmSettingsSidebar() {
     : []
   const visibleRootBlocks = ROOT_BLOCKS.filter((block) => {
     if (block.layer === "account-security") return visibleAccountBlocks.length > 0
+    if (block.layer === "ai-features") return visibleAiFeaturesBlocks.length > 0
     if (block.layer === "company") return visibleCompanyBlocks.length > 0
     if (block.layer === "communication") return visibleCommunicationBlocks.length > 0
     if (block.layer === "crm-config") return visibleCrmConfigBlocks.length > 0
@@ -463,6 +490,19 @@ export function CrmSettingsSidebar() {
 
                   {layer === "account-security"
                     ? visibleAccountBlocks.map((block) => (
+                        <SettingsCard
+                          key={block.title}
+                          icon={block.icon}
+                          title={block.title}
+                          description={block.description}
+                          status={block.status}
+                          onClick={() => handleNavigate(block.href)}
+                        />
+                      ))
+                    : null}
+
+                  {layer === "ai-features"
+                    ? visibleAiFeaturesBlocks.map((block) => (
                         <SettingsCard
                           key={block.title}
                           icon={block.icon}

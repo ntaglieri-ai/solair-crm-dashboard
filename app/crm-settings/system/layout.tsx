@@ -53,16 +53,17 @@ export default function SystemSettingsLayout({
   const drawerGroup =
     pathname === "/crm-settings/system/comunicazioni"
       ? { label: "Comunicazioni", layer: "communication" as const }
-      : [
-          "/crm-settings/system/attributi",
-          "/crm-settings/system/valori",
-          "/crm-settings/system/regole",
-          "/crm-settings/system/flussi",
-          "/crm-settings/system/roberta",
-          "/crm-settings/system/import-export",
-        ].includes(pathname)
-        ? { label: "Configurazione CRM", layer: "crm-config" as const }
-        : { label: "Azienda", layer: "company" as const }
+      : pathname === "/crm-settings/system/roberta"
+        ? { label: "AI Features", layer: "ai-features" as const }
+        : [
+            "/crm-settings/system/attributi",
+            "/crm-settings/system/valori",
+            "/crm-settings/system/regole",
+            "/crm-settings/system/flussi",
+            "/crm-settings/system/import-export",
+          ].includes(pathname)
+          ? { label: "Configurazione CRM", layer: "crm-config" as const }
+          : { label: "Azienda", layer: "company" as const }
 
   return (
     <div className="flex flex-col gap-5">

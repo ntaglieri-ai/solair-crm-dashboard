@@ -120,6 +120,7 @@ export async function POST() {
     )
     const offers = offerFiles.filter((file) => file.name.toLowerCase().endsWith(".pdf")).map((file, index) => ({
       titolo: withoutExtension(file.name),
+      tipo: "locandina",
       pdf_path: file.path,
       cover_path: covers.get(withoutExtension(file.name).toLowerCase()) ?? null,
       ordinamento: index,

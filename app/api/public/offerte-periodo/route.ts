@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const today = new Date().toISOString().slice(0, 10)
   const { data, error } = await supabase
     .from("offerta_commerciale_offerte")
-    .select("id, titolo, descrizione, tipo, url_pubblico, valido_dal, valido_al, ordinamento, configurazioni, aggiornato_at")
+    .select("id, titolo, descrizione, tipo, url_pubblico, pdf_path, valido_dal, valido_al, ordinamento, configurazioni, aggiornato_at")
     .eq("pubblicata", true)
     .or(`valido_dal.is.null,valido_dal.lte.${today}`)
     .or(`valido_al.is.null,valido_al.gte.${today}`)
@@ -35,17 +35,24 @@ export async function GET(request: Request) {
 
   return NextResponse.json(
     {
-      offerte: (data ?? []).map((offerta) => ({
-        id: offerta.id,
-        titolo: offerta.titolo,
-        descrizione: offerta.descrizione,
-        tipo: offerta.tipo,
-        url: offerta.url_pubblico,
-        validoDal: offerta.valido_dal,
-        validoAl: offerta.valido_al,
-        configurazioni: offerta.configurazioni,
-        aggiornatoAt: offerta.aggiornato_at,
-      })),
+      offerte: (data ?? []).map((offerta) => {
+        const pdfUrl = offerta.pdf_path
+          ? new URL(`/api/public/offerte-periodo/${offerta.id}/pdf`, request.url).toString()
+          : null
+        return {
+          id: offerta.id,
+          titolo: offerta.titolo,
+          descrizione: offerta.descrizione,
+          tipo: offerta.tipo,
+          url: offerta.url_pubblico,
+          pdfUrl,
+          link: offerta.url_pubblico ?? pdfUrl,
+          validoDal: offerta.valido_dal,
+          validoAl: offerta.valido_al,
+          configurazioni: offerta.configurazioni,
+          aggiornatoAt: offerta.aggiornato_at,
+        }
+      }),
     },
     {
       headers: {

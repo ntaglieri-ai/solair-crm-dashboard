@@ -30,6 +30,9 @@ function mapRow(row: Record<string, unknown>): Lead {
     kWh: (row.kwh as number) ?? 0,
     "Modello pannello": (row.modello_pannello as string) ?? "",
     "Wallbox richiesto": (row.wallbox_richiesto as boolean) ?? false,
+    "Consenso telefono": (row.consenso_contatto_telefono as boolean) ?? false,
+    "Consenso WhatsApp": (row.consenso_contatto_whatsapp as boolean) ?? false,
+    "Consenso e-mail": (row.consenso_contatto_email as boolean) ?? false,
     "Data sopralluogo": (row.data_sopralluogo as string) ?? null,
     "Installatore - Incaricato sopralluogo": null,
     "Tempo di conversione Lead": (row.tempo_conversione_lead as string) ?? "",
@@ -63,6 +66,7 @@ const LIST_COLUMNS = [
   "stato_lead", "stato_email", "valutazione", "lead_proprietario_id",
   "origine_lead", "sede", "campaign_name", "citta", "provincia",
   "codice_postale", "residente_in_sicilia", "wallbox_richiesto",
+  "consenso_contatto_telefono", "consenso_contatto_whatsapp", "consenso_contatto_email",
   "data_click", "data_ora", "ora_ultima_attivita", "created_at",
 ].join(",")
 
@@ -486,6 +490,12 @@ export async function patchLead(id: string, patch: Partial<Lead>): Promise<Lead 
   if (patch["campaign name"] !== undefined) row.campaign_name = patch["campaign name"]
   if (patch["Residente in Sicilia"] !== undefined) row.residente_in_sicilia = patch["Residente in Sicilia"]
   if (patch["Wallbox richiesto"] !== undefined) row.wallbox_richiesto = patch["Wallbox richiesto"]
+  if (patch["Consenso telefono"] !== undefined)
+    row.consenso_contatto_telefono = patch["Consenso telefono"]
+  if (patch["Consenso WhatsApp"] !== undefined)
+    row.consenso_contatto_whatsapp = patch["Consenso WhatsApp"]
+  if (patch["Consenso e-mail"] !== undefined)
+    row.consenso_contatto_email = patch["Consenso e-mail"]
   if (patch.kWp !== undefined) row.kwp = patch.kWp
   if (patch.kWh !== undefined) row.kwh = patch.kWh
   if (patch["Account convertito"] !== undefined)

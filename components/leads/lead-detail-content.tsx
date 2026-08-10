@@ -295,6 +295,19 @@ function InfoPrincipali({ lead }: { lead: Lead }) {
           <DataField label="Mobile / Fisso">
             {val(lead["Mobile/Fisso"])}
           </DataField>
+          <DataField label="Consensi contatto">
+            <div className="flex flex-wrap gap-1.5">
+              <Badge className={lead["Consenso telefono"] ? "rounded-md bg-teal/10 px-2 py-0.5 text-[11px] font-medium text-teal" : "rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"}>
+                Telefono {lead["Consenso telefono"] ? "si" : "no"}
+              </Badge>
+              <Badge className={lead["Consenso WhatsApp"] ? "rounded-md bg-teal/10 px-2 py-0.5 text-[11px] font-medium text-teal" : "rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"}>
+                WhatsApp {lead["Consenso WhatsApp"] ? "si" : "no"}
+              </Badge>
+              <Badge className={lead["Consenso e-mail"] ? "rounded-md bg-teal/10 px-2 py-0.5 text-[11px] font-medium text-teal" : "rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"}>
+                E-mail {lead["Consenso e-mail"] ? "si" : "no"}
+              </Badge>
+            </div>
+          </DataField>
           <DataField label="Stato Lead">
             <Select
               items={statoItems}

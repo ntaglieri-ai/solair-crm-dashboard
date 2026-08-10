@@ -32,12 +32,22 @@ type MetaLeadField = {
   values?: unknown[]
 }
 
+type MetaCustomDisclaimerResponse = {
+  checkbox_key?: string
+  key?: string
+  name?: string
+  text?: string
+  response?: unknown
+  values?: unknown[]
+}
+
 type MetaLeadResponse = {
   id?: string
   created_time?: string
   ad_id?: string
   form_id?: string
   field_data?: MetaLeadField[]
+  custom_disclaimer_responses?: MetaCustomDisclaimerResponse[]
 }
 
 type FieldMap = Record<string, string>
@@ -195,7 +205,10 @@ async function fetchMetaLead(leadgenId: string, accessToken: string): Promise<Me
   const graphVersion =
     process.env.META_GRAPH_API_VERSION?.trim() || DEFAULT_GRAPH_API_VERSION
   const url = new URL(`https://graph.facebook.com/${graphVersion}/${leadgenId}`)
-  url.searchParams.set("fields", "created_time,id,ad_id,form_id,field_data")
+  url.searchParams.set(
+    "fields",
+    "created_time,id,ad_id,form_id,field_data,custom_disclaimer_responses",
+  )
   url.searchParams.set("access_token", accessToken)
 
   const response = await fetch(url, { cache: "no-store" })
@@ -252,6 +265,8 @@ function mapMetaLeadToIntakePayload(
 ): LeadIntakePayload {
   const fields = flattenFieldData(metaLead.field_data)
   const rawFields = flattenFieldData(metaLead.field_data, false)
+  const disclaimerFields = flattenDisclaimerResponses(metaLead.custom_disclaimer_responses)
+  const consensi = resolveContactConsents(fields, disclaimerFields)
 
   const nome =
     pick(fields, ["full_name", "nome", "nome_e_cognome", "name"]) ||
@@ -283,12 +298,9 @@ function mapMetaLeadToIntakePayload(
     citta,
     provincia,
     tipoProprieta,
-    consensoWhatsapp: parseConsent(
-      pick(fields, ["consenso_whatsapp", "whatsapp", "contatto_whatsapp"]),
-    ),
-    consensoMarketingEmail: parseConsent(
-      pick(fields, ["consenso_marketing_email", "marketing_email", "newsletter"]),
-    ),
+    consensoTelefono: consensi.telefono,
+    consensoWhatsapp: consensi.whatsapp,
+    consensoEmail: consensi.email,
     note: buildNote(metaLead, event, rawFields),
   }
 }
@@ -306,6 +318,88 @@ function flattenFieldData(fieldData: MetaLeadField[] | undefined, normalize = tr
   }
 
   return fields
+}
+
+function flattenDisclaimerResponses(
+  responses: MetaCustomDisclaimerResponse[] | undefined,
+): FieldMap {
+  const fields: FieldMap = {}
+
+  for (const response of responses ?? []) {
+    const rawName =
+      response.checkbox_key ??
+      response.key ??
+      response.name ??
+      response.text
+    if (!rawName) continue
+
+    const key = normalizeFieldName(rawName)
+    const values = Array.isArray(response.values)
+      ? response.values
+      : response.response !== undefined
+        ? [response.response]
+        : ["accepted"]
+    const value = values
+      .map((item) => (item == null ? "" : String(item).trim()))
+      .filter(Boolean)
+      .join(", ")
+
+    if (key && value) fields[key] = value
+  }
+
+  return fields
+}
+
+function resolveContactConsents(fields: FieldMap, disclaimerFields: FieldMap) {
+  return {
+    telefono: parseConsent(
+      pick(fields, [
+        "consenso_telefono",
+        "consenso_contatto_telefono",
+        "contatto_telefono",
+        "telefono",
+        "chiamata",
+        "chiamami",
+      ]) ??
+        pick(disclaimerFields, [
+          "consenso_telefono",
+          "consenso_contatto_telefono",
+          "contatto_telefono",
+          "telefono",
+          "chiamata",
+          "chiamami",
+        ]),
+    ),
+    whatsapp: parseConsent(
+      pick(fields, ["consenso_whatsapp", "consenso_contatto_whatsapp", "whatsapp", "contatto_whatsapp"]) ??
+        pick(disclaimerFields, [
+          "consenso_whatsapp",
+          "consenso_contatto_whatsapp",
+          "whatsapp",
+          "contatto_whatsapp",
+        ]),
+    ),
+    email: parseConsent(
+      pick(fields, [
+        "consenso_email",
+        "consenso_e_mail",
+        "consenso_contatto_email",
+        "consenso_marketing_email",
+        "marketing_email",
+        "newsletter",
+        "email",
+      ]) ??
+        pick(disclaimerFields, [
+          "consenso_email",
+          "consenso_e_mail",
+          "consenso_contatto_email",
+          "consenso_marketing_email",
+          "marketing_email",
+          "newsletter",
+          "email",
+        ]),
+    ),
+  }
 }
 
 function buildNote(

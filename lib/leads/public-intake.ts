@@ -28,8 +28,18 @@ export interface LeadIntakePayload {
   offertaUrl?: string
   consumoAnnuoKwh?: number | string
   note?: string
+  consensoTelefono?: boolean
   consensoWhatsapp?: boolean
+  consensoEmail?: boolean
   consensoMarketingEmail?: boolean
+  consenso_contatto_telefono?: boolean
+  consenso_contatto_whatsapp?: boolean
+  consenso_contatto_email?: boolean
+  consensi_contatto?: {
+    telefono?: boolean
+    whatsapp?: boolean
+    email?: boolean
+  }
 }
 
 const ORIGINE_LABELS: Record<LeadIntakeOrigine, string> = {
@@ -56,6 +66,10 @@ function normalizeNumber(value: unknown): number | null {
   if (typeof value !== "string" || !value.trim()) return null
   const parsed = Number(value.trim().replace(/\./g, "").replace(",", "."))
   return Number.isFinite(parsed) ? parsed : null
+}
+
+function normalizeBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null
 }
 
 function buildDescription(payload: LeadIntakePayload) {
@@ -114,6 +128,22 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
   const kwp = normalizeNumber(payload.kwp ?? payload.potenzaKw)
   const kwh = normalizeNumber(payload.kwh ?? payload.accumuloKwh)
   const description = buildDescription(payload)
+  const consensoTelefono = normalizeBoolean(
+    payload.consensoTelefono ??
+      payload.consenso_contatto_telefono ??
+      payload.consensi_contatto?.telefono,
+  )
+  const consensoWhatsapp = normalizeBoolean(
+    payload.consensoWhatsapp ??
+      payload.consenso_contatto_whatsapp ??
+      payload.consensi_contatto?.whatsapp,
+  )
+  const consensoEmail = normalizeBoolean(
+    payload.consensoEmail ??
+      payload.consensoMarketingEmail ??
+      payload.consenso_contatto_email ??
+      payload.consensi_contatto?.email,
+  )
 
   const existing = await findExistingLead(telefonoNorm, emailNorm)
 
@@ -126,9 +156,17 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       ? `${existing.descrizione}\n${notaIngresso}`
       : notaIngresso
 
+    const updateRow: Record<string, unknown> = {
+      descrizione: descrizioneAggiornata,
+      updated_at: new Date().toISOString(),
+    }
+    if (consensoTelefono !== null) updateRow.consenso_contatto_telefono = consensoTelefono
+    if (consensoWhatsapp !== null) updateRow.consenso_contatto_whatsapp = consensoWhatsapp
+    if (consensoEmail !== null) updateRow.consenso_contatto_email = consensoEmail
+
     const { error: updateError } = await supabase
       .from("leads")
-      .update({ descrizione: descrizioneAggiornata, updated_at: new Date().toISOString() })
+      .update(updateRow)
       .eq("id", existing.id)
 
     if (updateError) throw new Error(`ingestLead update: ${updateError.message}`)
@@ -153,6 +191,9 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       kwh,
       modello_pannello: payload.modelloPannello || null,
       wallbox_richiesto: payload.wallboxRichiesto ?? false,
+      consenso_contatto_telefono: consensoTelefono ?? false,
+      consenso_contatto_whatsapp: consensoWhatsapp ?? false,
+      consenso_contatto_email: consensoEmail ?? false,
       descrizione: description,
       paese: "Italia",
     })

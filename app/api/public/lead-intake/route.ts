@@ -11,9 +11,14 @@ const KEY_BY_ORIGINE: Record<LeadIntakeOrigine, string | undefined> = {
 }
 
 const VALID_ORIGINI: LeadIntakeOrigine[] = ["chatbot", "meta_ads", "configuratore", "manuale"]
+const VALID_TIPI_DOCUMENTO = ["preventivo", "contratto"] as const
 
 function isValidOrigine(value: unknown): value is LeadIntakeOrigine {
   return typeof value === "string" && (VALID_ORIGINI as string[]).includes(value)
+}
+
+function isValidTipoDocumento(value: unknown) {
+  return typeof value === "string" && (VALID_TIPI_DOCUMENTO as readonly string[]).includes(value)
 }
 
 export async function POST(request: Request) {
@@ -45,6 +50,13 @@ export async function POST(request: Request) {
 
   if (!body.nome || !body.telefono) {
     return NextResponse.json({ error: "Campi obbligatori mancanti: nome, telefono" }, { status: 400 })
+  }
+
+  if (body.tipo_documento !== undefined && !isValidTipoDocumento(body.tipo_documento)) {
+    return NextResponse.json(
+      { error: 'Campo "tipo_documento" non valido. Valori ammessi: preventivo, contratto' },
+      { status: 400 },
+    )
   }
 
   try {

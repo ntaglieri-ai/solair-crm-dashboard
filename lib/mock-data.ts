@@ -596,6 +596,9 @@ export interface Lead {
   Sede: SedeLabel
   // campi UI extra Solair
   "Wallbox richiesto": boolean
+  "Consenso telefono"?: boolean
+  "Consenso WhatsApp"?: boolean
+  "Consenso e-mail"?: boolean
   emailAperture: number
   leadCaldo: boolean
   possibileDuplicato: boolean

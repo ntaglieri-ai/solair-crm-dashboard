@@ -5,9 +5,11 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export type LeadIntakeOrigine = "chatbot" | "meta_ads" | "configuratore" | "manuale"
+export type LeadIntakeTipoDocumento = "preventivo" | "contratto"
 
 export interface LeadIntakePayload {
   origine: LeadIntakeOrigine
+  tipo_documento?: LeadIntakeTipoDocumento
   nome: string
   telefono: string
   email?: string
@@ -72,6 +74,10 @@ function normalizeBoolean(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null
 }
 
+function normalizeTipoDocumento(value: unknown): LeadIntakeTipoDocumento | null {
+  return value === "preventivo" || value === "contratto" ? value : null
+}
+
 function buildDescription(payload: LeadIntakePayload) {
   const parts: string[] = []
   if (payload.note?.trim()) parts.push(payload.note.trim())
@@ -127,6 +133,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
   const emailNorm = payload.email ? normalizeEmail(payload.email) : null
   const kwp = normalizeNumber(payload.kwp ?? payload.potenzaKw)
   const kwh = normalizeNumber(payload.kwh ?? payload.accumuloKwh)
+  const tipoDocumento = normalizeTipoDocumento(payload.tipo_documento)
   const description = buildDescription(payload)
   const consensoTelefono = normalizeBoolean(
     payload.consensoTelefono ??
@@ -163,6 +170,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
     if (consensoTelefono !== null) updateRow.consenso_contatto_telefono = consensoTelefono
     if (consensoWhatsapp !== null) updateRow.consenso_contatto_whatsapp = consensoWhatsapp
     if (consensoEmail !== null) updateRow.consenso_contatto_email = consensoEmail
+    if (tipoDocumento !== null) updateRow.tipo_documento = tipoDocumento
 
     const { error: updateError } = await supabase
       .from("leads")
@@ -191,6 +199,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       kwh,
       modello_pannello: payload.modelloPannello || null,
       wallbox_richiesto: payload.wallboxRichiesto ?? false,
+      tipo_documento: tipoDocumento,
       consenso_contatto_telefono: consensoTelefono ?? false,
       consenso_contatto_whatsapp: consensoWhatsapp ?? false,
       consenso_contatto_email: consensoEmail ?? false,

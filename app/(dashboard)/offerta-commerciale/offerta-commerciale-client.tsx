@@ -1,5 +1,5 @@
 "use client"
-/* eslint-disable react-hooks/set-state-in-effect, @next/next/no-img-element */
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Archive, BadgeEuro, BatteryCharging, BookOpenCheck, Calculator, Cloud, FileText, Loader2, PackageOpen, Plus, RefreshCw, Save, Settings2, ShieldCheck, SlidersHorizontal, SolarPanel, TicketPercent, Trash2, Upload } from "lucide-react"
@@ -46,6 +46,7 @@ export function OffertaCommercialeClient() {
   const [syncing, setSyncing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [deletingCatalog, setDeletingCatalog] = useState<string | null>(null)
+  const [deletingDocument, setDeletingDocument] = useState<string | null>(null)
   const [quoteKwp, setQuoteKwp] = useState(6)
   const [quoteBrand, setQuoteBrand] = useState("Sineng")
   const [quoteKwh, setQuoteKwh] = useState(10.6)
@@ -112,12 +113,12 @@ export function OffertaCommercialeClient() {
     finally { setUploading(false) }
   }
 
-  const saveOffer = async (offer: OffertaPeriodo) => {
+  const saveOffer = async (offer: OffertaPeriodo, successMessage = `Offerta ${offer.titolo} salvata`) => {
     try {
       const response = await fetch("/api/offerta-commerciale/offerte", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(offer) })
       const body = await response.json()
       if (!response.ok) throw new Error(body.error ?? "Salvataggio offerta non riuscito")
-      toast.success(`Offerta ${offer.titolo} salvata`)
+      toast.success(successMessage)
       await load()
     } catch (error) { toast.error(error instanceof Error ? error.message : "Errore salvataggio") }
   }
@@ -133,6 +134,19 @@ export function OffertaCommercialeClient() {
       await load()
     } catch (error) { toast.error(error instanceof Error ? error.message : "Errore eliminazione") }
     finally { setDeletingCatalog(null) }
+  }
+
+  const deleteDocument = async (path: string, name: string) => {
+    if (!window.confirm(`Eliminare definitivamente “${name}” da Nextcloud?`)) return
+    setDeletingDocument(path)
+    try {
+      const response = await fetch(`/api/offerta-commerciale/documenti?path=${encodeURIComponent(path)}`, { method: "DELETE" })
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error ?? "Eliminazione non riuscita")
+      toast.success("Documento eliminato da Nextcloud")
+      await load()
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Errore eliminazione") }
+    finally { setDeletingDocument(null) }
   }
 
   const activeOffers = useMemo(() => data?.offerte.filter((offer) => offer.pubblicata).length ?? 0, [data])
@@ -268,7 +282,7 @@ export function OffertaCommercialeClient() {
 
       <TabsContent value="calcolo" className="pt-5"><div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]"><section className="rounded-xl border border-border bg-white p-5 shadow-sm"><PanelTitle icon={Calculator} title="Configurazione offerta" description="Stima rapida basata sul listino attivo. Non crea ancora un preventivo." /><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><label className="text-xs font-medium text-muted-foreground">Potenza fotovoltaico<select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground" value={quoteKwp} onChange={(e) => setQuoteKwp(Number(e.target.value))}>{catalogo.fotovoltaico.map((row) => <option key={row.kwp} value={row.kwp}>{row.kwp} kWp</option>)}</select></label><label className="text-xs font-medium text-muted-foreground">Marca accumulo<select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground" value={quoteBattery?.marca ?? ""} onChange={(e) => { const battery=catalogo.accumuli.find((item)=>item.marca===e.target.value); setQuoteBrand(e.target.value); if (battery) setQuoteKwh(battery.taglie[0]) }}>{catalogo.accumuli.map((item) => <option key={item.marca} value={item.marca}>{item.marca}</option>)}</select></label><label className="text-xs font-medium text-muted-foreground">Capacità<select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground" value={quoteKwh} onChange={(e) => setQuoteKwh(Number(e.target.value))}>{quoteBattery?.taglie.map((kwh) => <option key={kwh} value={kwh}>{kwh} kWh</option>)}</select></label><label className="text-xs font-medium text-muted-foreground">Zona commerciale<select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground" value={quoteZone} onChange={(e) => setQuoteZone(e.target.value)}>{[...new Set(catalogo.sconti.map((rule)=>rule.zona))].map((zone)=><option key={zone} value={zone}>Zona {zone}</option>)}</select></label><label className="flex items-center justify-between gap-3 rounded-lg border border-border bg-slate-50 px-3 py-2 text-sm">Includi EPS<Switch checked={quoteEps} onCheckedChange={setQuoteEps} /></label><label className="flex items-center justify-between gap-3 rounded-lg border border-border bg-slate-50 px-3 py-2 text-sm">EPS omaggio<Switch checked={quoteEpsGift} disabled={!quoteEps || !quoteRule?.eps_omaggiabile} onCheckedChange={setQuoteEpsGift} /></label></div>{quoteTotal == null ? <p className="mt-5 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Combinazione non presente nel listino: richiedere una verifica commerciale.</p> : null}</section><aside className="rounded-xl bg-blue-700 p-5 text-white shadow-sm"><p className="text-sm opacity-80">Totale indicativo IVA inclusa</p><p className="mt-2 text-4xl font-semibold">{quoteTotal == null ? "—" : euro.format(quoteTotal)}</p><div className="mt-6 space-y-2 border-t border-white/20 pt-4 text-sm"><div className="flex justify-between"><span>Fotovoltaico</span><span>{quoteBase == null ? "—" : euro.format(quoteBase)}</span></div><div className="flex justify-between"><span>Accumulo</span><span>{quoteStorage == null ? "—" : euro.format(quoteStorage)}</span></div><div className="flex justify-between"><span>Sconto {quoteRule?.percentuale ?? 0}%</span><span>- {euro.format(quoteDiscount)}</span></div>{quoteEps ? <div className="flex justify-between"><span>EPS</span><span>{quoteEpsPrice === 0 ? "Omaggio" : euro.format(quoteEpsPrice)}</span></div> : null}</div><div className="mt-5 rounded-lg bg-white/10 p-3 text-xs leading-relaxed text-white/80">Valore soggetto a sopralluogo, fattibilità tecnica e conferma delle condizioni commerciali.</div></aside></div></TabsContent>
 
-      <TabsContent value="offerte" className="pt-5">{visibleOffers.length === 0 ? <Empty>Nessuna offerta pubblicata disponibile.</Empty> : <div className="grid gap-4 lg:grid-cols-2">{visibleOffers.map((offer) => <article key={offer.id} className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">{offer.cover_path ? <img src={`/api/offerta-commerciale/offerte/${offer.id}/asset?kind=cover`} alt="" className="h-52 w-full object-cover" /> : <div className="flex h-36 items-center justify-center bg-slate-100"><FileText className="size-10 text-muted-foreground" /></div>}<div className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold text-foreground">{offer.titolo}</h2>{offer.descrizione ? <p className="mt-2 text-sm text-muted-foreground">{offer.descrizione}</p> : null}</div>{offer.pubblicata ? <Badge className="bg-teal-600">Pubblicata</Badge> : <Badge variant="outline">Bozza</Badge>}</div><div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-xs text-muted-foreground"><span>{offer.valido_dal ? new Date(offer.valido_dal).toLocaleDateString("it-IT") : "Data inizio libera"} - {offer.valido_al ? new Date(offer.valido_al).toLocaleDateString("it-IT") : "senza scadenza"}</span>{offer.pdf_path ? <Button variant="outline" size="sm" render={<a href={`/api/offerta-commerciale/offerte/${offer.id}/asset`} target="_blank" rel="noreferrer" />}>Apri PDF</Button> : null}</div></div></article>)}</div>}</TabsContent>
+      <TabsContent value="offerte" className="pt-5">{visibleOffers.length === 0 ? <Empty>Nessuna offerta pubblicata disponibile.</Empty> : <div className="grid gap-4 lg:grid-cols-2">{visibleOffers.map((offer) => <article key={offer.id} className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">{offer.cover_path ? <img src={`/api/offerta-commerciale/offerte/${offer.id}/asset?kind=cover`} alt="" className="h-52 w-full object-cover" /> : <div className="flex h-36 items-center justify-center bg-slate-100"><FileText className="size-10 text-muted-foreground" /></div>}<div className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold text-foreground">{offer.titolo}</h2>{offer.descrizione ? <p className="mt-2 text-sm text-muted-foreground">{offer.descrizione}</p> : null}</div>{offer.pubblicata ? <Badge className="bg-teal-600">Pubblicata</Badge> : <Badge variant="outline">Bozza</Badge>}</div>{canManage ? <Badge variant={offer.testo_estratto ? "secondary" : "outline"}>{offer.testo_estratto ? `${offer.testo_estratto.length.toLocaleString("it-IT")} caratteri letti` : "solo PDF"}</Badge> : null}<div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-xs text-muted-foreground"><span>{offer.valido_dal ? new Date(offer.valido_dal).toLocaleDateString("it-IT") : "Data inizio libera"} - {offer.valido_al ? new Date(offer.valido_al).toLocaleDateString("it-IT") : "senza scadenza"}</span><div className="flex flex-wrap items-center gap-2">{offer.pdf_path ? <Button variant="outline" size="sm" render={<a href={`/api/offerta-commerciale/offerte/${offer.id}/asset`} target="_blank" rel="noreferrer" />}>Apri PDF</Button> : null}{offer.pdf_path && offer.pubblicata ? <Button variant="outline" size="sm" render={<a href={`/api/public/offerte-periodo/${offer.id}/pdf`} target="_blank" rel="noreferrer" />}>Link pubblico</Button> : null}</div></div>{canManage ? <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"><Switch checked={offer.pubblicata} onCheckedChange={(checked) => { const updated = { ...offer, pubblicata: checked }; setOffer(offer.id, { pubblicata: checked }); void saveOffer(updated, checked ? "Roberta puo usare questo PDF" : "PDF nascosto a Roberta") }} />Roberta</label> : null}</div></article>)}</div>}</TabsContent>
     </Tabs>
   </div>
 }

@@ -114,6 +114,16 @@ export async function ensureFolder(fullPath: string): Promise<WebDavResult> {
   return { ok: true, status: 201 }
 }
 
+export async function downloadAdminFile(fullPath: string): Promise<Response> {
+  const { res, error } = await davRequest("GET", fullPath)
+  if (error) throw new Error(error)
+  if (!res) throw new Error("Credenziali admin Nextcloud non configurate")
+  if (res.status === 404) throw new Error("File Nextcloud non trovato")
+  if (res.status === 401 || res.status === 403) throw new Error("File Nextcloud non accessibile")
+  if (!res.ok) throw new Error(`Download Nextcloud fallito (HTTP ${res.status})`)
+  return res
+}
+
 const PROPFIND_BODY = `<?xml version="1.0"?>
 <d:propfind xmlns:d="DAV:">
   <d:prop>

@@ -57,6 +57,11 @@ export type OffertaPeriodo = {
   id: string
   titolo: string
   descrizione: string | null
+  testo_estratto: string | null
+  testo_fingerprint: string | null
+  testo_estratto_at: string | null
+  tipo: "offerta" | "locandina" | "brochure" | "finanziaria" | "pagina"
+  url_pubblico: string | null
   pdf_path: string | null
   cover_path: string | null
   valido_dal: string | null

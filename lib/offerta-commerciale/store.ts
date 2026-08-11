@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type {
   AccessorioCommerciale,
   CatalogoCommerciale,
+  CodiceSconto,
   MatriceAccumulo,
   OffertaPeriodo,
   PrezzoFotovoltaico,
@@ -94,6 +95,29 @@ export function normalizeSconti(value: unknown): RegolaSconto[] {
     const eps_prezzo = finite(source.eps_prezzo)
     if (!zona || kwp_min == null || kwp_max == null || percentuale == null || eps_prezzo == null) return []
     return [{ zona, kwp_min, kwp_max, percentuale, eps_prezzo, eps_omaggiabile: source.eps_omaggiabile === true }]
+  })
+}
+
+const TIPI_CODICE_SCONTO = new Set(["percentuale", "importo", "omaggio", "nota"])
+
+export function normalizeCodiciSconto(value: unknown): CodiceSconto[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((row) => {
+    if (!row || typeof row !== "object") return []
+    const source = row as Record<string, unknown>
+    const codice = text(source.codice, 40).toUpperCase().replace(/\s+/g, "-")
+    const nome = text(source.nome, 120)
+    const tipo = text(source.tipo, 30)
+    const valore = finite(source.valore)
+    if (!codice || !nome || !TIPI_CODICE_SCONTO.has(tipo)) return []
+    return [{
+      codice,
+      nome,
+      descrizione: text(source.descrizione, 500) || null,
+      tipo: tipo as CodiceSconto["tipo"],
+      valore: valore != null && valore >= 0 ? valore : null,
+      attivo: source.attivo !== false,
+    }]
   })
 }
 

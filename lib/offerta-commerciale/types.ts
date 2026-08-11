@@ -26,6 +26,15 @@ export type RegolaSconto = {
   eps_omaggiabile: boolean
 }
 
+export type CodiceSconto = {
+  codice: string
+  nome: string
+  descrizione: string | null
+  tipo: "percentuale" | "importo" | "omaggio" | "nota"
+  valore: number | null
+  attivo: boolean
+}
+
 export type CatalogoCommerciale = {
   id: string
   nome: string
@@ -38,6 +47,7 @@ export type CatalogoCommerciale = {
   accumuli: MatriceAccumulo[]
   accessori: AccessorioCommerciale[]
   sconti: RegolaSconto[]
+  codici_sconto: CodiceSconto[]
   note: string | null
   pubblicato_at: string | null
   aggiornato_at: string

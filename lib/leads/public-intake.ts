@@ -3,6 +3,7 @@
 // sessione utente CRM — l'autenticazione avviene via API key per sorgente
 // (vedi app/api/public/lead-intake/route.ts), non via cookie di sessione.
 import { createAdminClient } from "@/lib/supabase/admin"
+import { assignLeadTag, ensureLeadTag } from "@/lib/leads/discount-tag"
 
 export type LeadIntakeOrigine = "chatbot" | "meta_ads" | "configuratore" | "manuale"
 export type LeadIntakeTipoDocumento = "preventivo" | "contratto"
@@ -34,6 +35,16 @@ export interface LeadIntakePayload {
   consensoWhatsapp?: boolean
   consensoEmail?: boolean
   consensoMarketingEmail?: boolean
+  codiceSconto?: string
+  codice_sconto?: string
+  scontoPercentuale?: number | string
+  sconto_percentuale?: number | string
+  prezzoTotale?: number | string
+  prezzo_totale?: number | string
+  prezzoFinale?: number | string
+  prezzo_finale?: number | string
+  noteCodiceSconto?: string
+  note_codice_sconto?: string
   consenso_contatto_telefono?: boolean
   consenso_contatto_whatsapp?: boolean
   consenso_contatto_email?: boolean
@@ -78,9 +89,31 @@ function normalizeTipoDocumento(value: unknown): LeadIntakeTipoDocumento | null 
   return value === "preventivo" || value === "contratto" ? value : null
 }
 
+function discountCode(payload: LeadIntakePayload) {
+  return normalizeText(payload.codiceSconto ?? payload.codice_sconto)
+}
+
+function buildDiscountNote(payload: LeadIntakePayload) {
+  const codice = discountCode(payload)
+  if (!codice) return null
+
+  const sconto = normalizeNumber(payload.scontoPercentuale ?? payload.sconto_percentuale)
+  const prezzoTotale = normalizeNumber(payload.prezzoTotale ?? payload.prezzo_totale)
+  const prezzoFinale = normalizeNumber(payload.prezzoFinale ?? payload.prezzo_finale)
+  const note = normalizeText(payload.noteCodiceSconto ?? payload.note_codice_sconto)
+  const parts = [`Codice sconto: ${codice}`]
+  if (sconto != null) parts.push(`Sconto: ${sconto}%`)
+  if (prezzoTotale != null) parts.push(`Prezzo prima dello sconto: ${prezzoTotale.toLocaleString("it-IT")} EUR`)
+  if (prezzoFinale != null) parts.push(`Prezzo finale indicato: ${prezzoFinale.toLocaleString("it-IT")} EUR`)
+  if (note) parts.push(`Nota codice sconto: ${note}`)
+  return parts.join("\n")
+}
+
 function buildDescription(payload: LeadIntakePayload) {
   const parts: string[] = []
   if (payload.note?.trim()) parts.push(payload.note.trim())
+  const scontoNote = buildDiscountNote(payload)
+  if (scontoNote) parts.push(scontoNote)
 
   const interesse = normalizeText(payload.interesse)
   const offertaNome = normalizeText(payload.offertaNome)
@@ -135,6 +168,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
   const kwh = normalizeNumber(payload.kwh ?? payload.accumuloKwh)
   const tipoDocumento = normalizeTipoDocumento(payload.tipo_documento)
   const description = buildDescription(payload)
+  const hasDiscountCode = Boolean(discountCode(payload))
   const consensoTelefono = normalizeBoolean(
     payload.consensoTelefono ??
       payload.consenso_contatto_telefono ??
@@ -178,6 +212,10 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       .eq("id", existing.id)
 
     if (updateError) throw new Error(`ingestLead update: ${updateError.message}`)
+    if (hasDiscountCode) {
+      const tagId = await ensureLeadTag(supabase)
+      await assignLeadTag(supabase, existing.id, tagId)
+    }
 
     return { id: existing.id, duplicate: true, nomeLead: existing.nome_lead ?? payload.nome }
   }
@@ -210,6 +248,10 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
     .single()
 
   if (error) throw new Error(`ingestLead insert: ${error.message}`)
+  if (hasDiscountCode) {
+    const tagId = await ensureLeadTag(supabase)
+    await assignLeadTag(supabase, data.id as string, tagId)
+  }
 
   return { id: data.id as string, duplicate: false, nomeLead: (data.nome_lead as string) ?? payload.nome }
 }

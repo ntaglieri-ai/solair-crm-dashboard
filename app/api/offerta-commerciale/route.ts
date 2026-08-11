@@ -7,6 +7,7 @@ import {
   loadOffertaCommerciale,
   normalizeAccessori,
   normalizeAccumuli,
+  normalizeCodiciSconto,
   normalizeFotovoltaico,
   normalizeSconti,
   OFFERTA_COMMERCIALE_ROOT,
@@ -69,6 +70,7 @@ export async function PATCH(request: Request) {
     accumuli: normalizeAccumuli(catalogo.accumuli),
     accessori: normalizeAccessori(catalogo.accessori),
     sconti: normalizeSconti(catalogo.sconti),
+    codici_sconto: normalizeCodiciSconto(catalogo.codici_sconto),
     note: typeof catalogo.note === "string" ? catalogo.note.trim().slice(0, 4000) || null : null,
     aggiornato_at: now,
   }).eq("id", catalogo.id)

@@ -117,6 +117,9 @@ export function normalizeCodiciSconto(value: unknown): CodiceSconto[] {
       tipo: tipo as CodiceSconto["tipo"],
       valore: valore != null && valore >= 0 ? valore : null,
       attivo: source.attivo !== false,
+      // Assente = false: i codici salvati prima della migration
+      // 20260812 non sono cumulabili con lo sconto di zona.
+      cumulabile_con_sconto_zona: source.cumulabile_con_sconto_zona === true,
     }]
   })
 }

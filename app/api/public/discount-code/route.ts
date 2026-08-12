@@ -1,33 +1,10 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { normalizeCodiciSconto } from "@/lib/offerta-commerciale/store"
+import { corsHeaders } from "@/lib/public/cors"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-
-const DEFAULT_ALLOWED_ORIGINS = [
-  "https://solairgroup.it",
-  "https://www.solairgroup.it",
-]
-
-function allowedOrigins() {
-  const configured = process.env.PUBLIC_DISCOUNT_ALLOWED_ORIGINS?.split(",")
-    .map((origin) => origin.trim().replace(/\/$/, ""))
-    .filter(Boolean)
-  return configured?.length ? configured : DEFAULT_ALLOWED_ORIGINS
-}
-
-function corsHeaders(request: Request) {
-  const headers: Record<string, string> = { Vary: "Origin" }
-  const origin = request.headers.get("origin")?.replace(/\/$/, "")
-  if (origin && allowedOrigins().includes(origin)) {
-    headers["Access-Control-Allow-Origin"] = origin
-    headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
-    headers["Access-Control-Allow-Headers"] = "Content-Type"
-    headers["Access-Control-Max-Age"] = "86400"
-  }
-  return headers
-}
 
 function normalizeCode(value: string) {
   return value.trim().slice(0, 40).toUpperCase().replace(/\s+/g, "-")

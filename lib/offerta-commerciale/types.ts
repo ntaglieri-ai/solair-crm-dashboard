@@ -33,6 +33,9 @@ export type CodiceSconto = {
   tipo: "percentuale" | "importo" | "omaggio" | "nota"
   valore: number | null
   attivo: boolean
+  // true: la percentuale del codice si somma allo sconto di zona.
+  // false (default): lo sostituisce. Vedi calcola-preventivo.ts.
+  cumulabile_con_sconto_zona: boolean
 }
 
 export type CatalogoCommerciale = {

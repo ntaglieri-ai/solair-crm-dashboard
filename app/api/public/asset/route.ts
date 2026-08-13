@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { downloadFile } from "@/lib/nextcloud/admin-webdav"
+import { downloadFile } from "@/lib/nextcloud/webdav"
 import { corsHeaders } from "@/lib/public/cors"
 
 export const runtime = "nodejs"
@@ -9,6 +9,13 @@ const PREFISSI_CONSENTITI = ["Solair/Offerta-Commerciale/Pannelli/"]
 
 function isPathConsentito(path: string): boolean {
   return PREFISSI_CONSENTITI.some((prefix) => path.startsWith(prefix))
+}
+
+function assetCredentials(): { username: string; appPassword: string } | null {
+  const username = process.env.NEXTCLOUD_ASSET_USER
+  const appPassword = process.env.NEXTCLOUD_ASSET_PASSWORD
+  if (!username || !appPassword) return null
+  return { username, appPassword }
 }
 
 export async function OPTIONS(request: Request) {
@@ -28,18 +35,27 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Path non valido o non consentito" }, { status: 400, headers })
   }
 
-  const result = await downloadFile(pathPulito)
-  if (!result.ok || !result.body) {
-    console.error(`[asset] download fallito per "${pathPulito}": ${result.error ?? `HTTP ${result.status}`}`)
-    return NextResponse.json({ error: "File non trovato" }, { status: 404, headers })
+  const creds = assetCredentials()
+  if (!creds) {
+    console.error("[asset] NEXTCLOUD_ASSET_USER / NEXTCLOUD_ASSET_PASSWORD non configurate")
+    return NextResponse.json({ error: "Servizio non disponibile" }, { status: 503, headers })
   }
 
-  return new NextResponse(result.body, {
-    status: 200,
-    headers: {
-      ...headers,
-      "Content-Type": result.contentType ?? "application/octet-stream",
-      ...(result.contentLength ? { "Content-Length": result.contentLength } : {}),
-    },
-  })
+  try {
+    const res = await downloadFile(creds.username, creds.appPassword, pathPulito)
+    return new NextResponse(res.body, {
+      status: 200,
+      headers: {
+        ...headers,
+        "Content-Type": res.headers.get("content-type") ?? "application/octet-stream",
+        ...(res.headers.get("content-length")
+          ? { "Content-Length": res.headers.get("content-length")! }
+          : {}),
+      },
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Errore download Nextcloud"
+    console.error(`[asset] download fallito per "${pathPulito}": ${message}`)
+    return NextResponse.json({ error: "File non trovato" }, { status: 404, headers })
+  }
 }

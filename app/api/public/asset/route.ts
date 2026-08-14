@@ -5,7 +5,10 @@ import { corsHeaders } from "@/lib/public/cors"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const PREFISSI_CONSENTITI = ["Solair/Offerta-Commerciale/Pannelli/"]
+const PREFISSI_CONSENTITI = [
+  "Solair/Offerta-Commerciale/Pannelli/",
+  "Solair/Offerta-Commerciale/Batterie/",
+]
 
 function isPathConsentito(path: string): boolean {
   return PREFISSI_CONSENTITI.some((prefix) => path.startsWith(prefix))

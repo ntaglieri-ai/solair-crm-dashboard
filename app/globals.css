@@ -824,6 +824,499 @@
   }
 }
 
+/* ===== Offerta Commerciale — superfici premium =============================
+   Volutamente FUORI da @layer components: queste classi vestono Button e Input,
+   che portano gia' utility Tailwind (bg-*, hover:bg-*). Dentro un layer le
+   utility vincerebbero sempre; non in layer, vincono queste.
+   Grammatica visiva identica alle .dashboard-* qui sopra: raggio 8px, gradienti
+   stratificati, ombre ampie e morbide, numeri tabellari, tono per card. */
+
+/* Testata della pagina: stessa profondita' delle card sotto, altrimenti resta
+   l'unico blocco piatto e trascina giu' tutto il resto. */
+.offerta-hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgb(203 213 225 / 0.9);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 97% 0%, rgb(46 139 114 / 0.11), transparent 20rem),
+    radial-gradient(circle at 4% 100%, rgb(49 95 197 / 0.09), transparent 22rem),
+    linear-gradient(152deg, #ffffff, #f7fbff 58%, #f1f7ff);
+  padding: clamp(1.4rem, 2.4vw, 1.9rem);
+  box-shadow:
+    0 24px 58px rgb(15 23 42 / 0.09),
+    inset 0 1px 0 rgb(255 255 255 / 0.95);
+}
+
+/* Filo brand a quattro colori, come .dashboard-premium-card::after. */
+.offerta-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: linear-gradient(90deg, #1e3a5f, #315fc5 38%, #2e8b72 74%, #f2b84b);
+  opacity: 0.9;
+}
+
+.offerta-hero-title {
+  color: #0f172a;
+  font-size: clamp(1.85rem, 3vw, 2.3rem);
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+
+.offerta-hero-subtitle {
+  margin-top: 0.6rem;
+  max-width: 46rem;
+  color: #475569;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.offerta-kpi {
+  --kpi-tone: #315fc5;
+  position: relative;
+  display: flex;
+  min-height: 9.75rem;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1.15rem;
+  overflow: hidden;
+  border: 1px solid rgb(203 213 225 / 0.85);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--kpi-tone), transparent 86%), transparent 11rem),
+    linear-gradient(158deg, #ffffff 44%, color-mix(in srgb, var(--kpi-tone), white 93%));
+  padding: 1.1rem 1.25rem 1.2rem;
+  box-shadow:
+    0 14px 32px rgb(15 23 42 / 0.07),
+    inset 0 1px 0 rgb(255 255 255 / 0.95);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+/* Filo di colore in testa: distingue le card a colpo d'occhio senza tingere
+   l'intera superficie. */
+.offerta-kpi::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--kpi-tone),
+    color-mix(in srgb, var(--kpi-tone), white 55%)
+  );
+}
+
+/* Anello decorativo in basso a destra, come .dashboard-metric::after. */
+.offerta-kpi::after {
+  content: "";
+  position: absolute;
+  right: -2.5rem;
+  bottom: -3rem;
+  width: 7.5rem;
+  height: 7.5rem;
+  border: 1.15rem solid color-mix(in srgb, var(--kpi-tone), transparent 90%);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.offerta-kpi:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--kpi-tone), transparent 60%);
+  box-shadow:
+    0 24px 46px color-mix(in srgb, var(--kpi-tone), transparent 84%),
+    0 8px 18px rgb(15 23 42 / 0.06),
+    inset 0 1px 0 rgb(255 255 255 / 0.95);
+}
+
+.offerta-kpi-head {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.offerta-kpi-icon {
+  display: inline-flex;
+  width: 2.4rem;
+  height: 2.4rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--kpi-tone), white 12%),
+    var(--kpi-tone)
+  );
+  color: white;
+  box-shadow:
+    0 10px 22px color-mix(in srgb, var(--kpi-tone), transparent 66%),
+    inset 0 1px 0 rgb(255 255 255 / 0.28);
+}
+
+.offerta-kpi-label {
+  color: #64748b;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  line-height: 1;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.offerta-kpi-body {
+  position: relative;
+  z-index: 1;
+}
+
+.offerta-kpi-value {
+  display: block;
+  color: color-mix(in srgb, var(--kpi-tone), #0f172a 30%);
+  font-size: 2.75rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 0.9;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Il nome del listino e' testo, non una cifra: stessa card, scala diversa. */
+.offerta-kpi-value[data-kind="text"] {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 1.2rem;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.offerta-kpi-hint {
+  margin-top: 0.5rem;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* --- Scheda cliente ------------------------------------------------------ */
+
+.offerta-panel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgb(203 213 225 / 0.9);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 100% 0%, rgb(49 95 197 / 0.07), transparent 17rem),
+    #ffffff;
+  box-shadow:
+    0 22px 55px rgb(15 23 42 / 0.075),
+    inset 0 1px 0 rgb(255 255 255 / 0.9);
+}
+
+.offerta-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  border-bottom: 1px solid rgb(226 232 240 / 0.9);
+  background: linear-gradient(180deg, #f6faff, rgb(255 255 255 / 0));
+  padding: 1.15rem 1.35rem;
+}
+
+.offerta-panel-icon {
+  display: inline-flex;
+  width: 2.6rem;
+  height: 2.6rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: linear-gradient(140deg, #315fc5, #1e3a5f);
+  color: white;
+  box-shadow:
+    0 12px 26px rgb(30 58 95 / 0.28),
+    inset 0 1px 0 rgb(255 255 255 / 0.25);
+}
+
+.offerta-panel-title {
+  color: #0f172a;
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.offerta-panel-subtitle {
+  margin-top: 0.2rem;
+  color: #64748b;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.offerta-field-label {
+  display: block;
+  color: #475569;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+/* Campo di ricerca: e' il punto d'ingresso del flusso, deve pesare piu' di un
+   input di form qualsiasi. */
+.offerta-search-input {
+  height: 3rem;
+  border-color: rgb(203 213 225 / 0.95);
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  box-shadow: inset 0 1px 2px rgb(15 23 42 / 0.05);
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.offerta-search-input:focus-visible {
+  background: #ffffff;
+  box-shadow:
+    0 0 0 3px rgb(49 95 197 / 0.16),
+    0 10px 24px rgb(49 95 197 / 0.1);
+}
+
+.offerta-result {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  border: 1px solid rgb(226 232 240 / 0.95);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 0.75rem 0.9rem;
+  text-align: left;
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease,
+    background 150ms ease;
+}
+
+.offerta-result:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, #315fc5, transparent 58%);
+  background: linear-gradient(180deg, #ffffff, #f4f8ff);
+  box-shadow: 0 12px 26px rgb(49 95 197 / 0.12);
+}
+
+/* Esito della ricerca: card accento con barra laterale e comparsa animata,
+   cosi' e' evidente che qualcosa e' cambiato dopo la selezione. */
+.offerta-lead-card {
+  --lead-tone: #315fc5;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--lead-tone), transparent 72%);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 98% 0%, color-mix(in srgb, var(--lead-tone), transparent 88%), transparent 13rem),
+    linear-gradient(150deg, color-mix(in srgb, var(--lead-tone), white 95%), #ffffff 65%);
+  padding: 1.05rem 1.15rem 1.05rem 1.4rem;
+  box-shadow:
+    0 16px 38px color-mix(in srgb, var(--lead-tone), transparent 86%),
+    inset 0 1px 0 rgb(255 255 255 / 0.9);
+  animation: offerta-reveal 340ms cubic-bezier(0.22, 0.7, 0.3, 1) both;
+}
+
+.offerta-lead-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(
+    180deg,
+    var(--lead-tone),
+    color-mix(in srgb, var(--lead-tone), white 45%)
+  );
+}
+
+.offerta-lead-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  background: var(--lead-tone);
+  padding: 0.2rem 0.65rem;
+  color: white;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--lead-tone), transparent 65%);
+}
+
+.offerta-lead-name {
+  margin-top: 0.55rem;
+  color: #0f172a;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+}
+
+.offerta-reveal {
+  animation: offerta-reveal 300ms cubic-bezier(0.22, 0.7, 0.3, 1) both;
+}
+
+/* Divisore "oppure": separa la ricerca dalla creazione, che sono due strade
+   alternative e non due passi in sequenza. */
+.offerta-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  color: #94a3b8;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.offerta-divider::before,
+.offerta-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1 1 auto;
+  background: linear-gradient(90deg, transparent, rgb(203 213 225 / 0.95), transparent);
+}
+
+.offerta-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid rgb(226 232 240 / 0.9);
+  background: linear-gradient(180deg, rgb(255 255 255 / 0), #f7fafd);
+  padding: 1.1rem 1.35rem;
+}
+
+/* --- Azione primaria ----------------------------------------------------- */
+
+.offerta-cta {
+  position: relative;
+  height: 3rem;
+  overflow: hidden;
+  padding: 0 1.35rem;
+  background: linear-gradient(135deg, #1e3a5f, #315fc5 62%, #3f79e0);
+  color: #ffffff;
+  font-size: 0.9375rem;
+  font-weight: 800;
+  letter-spacing: -0.005em;
+  box-shadow:
+    0 14px 30px rgb(30 58 95 / 0.28),
+    inset 0 1px 0 rgb(255 255 255 / 0.2);
+  transition: transform 170ms cubic-bezier(0.22, 0.7, 0.3, 1), box-shadow 170ms ease,
+    filter 170ms ease;
+}
+
+.offerta-cta:hover:not(:disabled) {
+  transform: translateY(-2px);
+  filter: saturate(1.06);
+  box-shadow:
+    0 20px 40px rgb(30 58 95 / 0.34),
+    inset 0 1px 0 rgb(255 255 255 / 0.24);
+}
+
+/* Feedback al click: schiaccia il pulsante prima che parta la fetch, cosi' il
+   gesto e' confermato anche nei ~300ms in cui non e' ancora successo nulla. */
+.offerta-cta:active:not(:disabled) {
+  transform: translateY(0) scale(0.965);
+  box-shadow:
+    0 6px 14px rgb(30 58 95 / 0.3),
+    inset 0 2px 6px rgb(15 23 42 / 0.25);
+  transition-duration: 80ms;
+}
+
+.offerta-cta::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-120%);
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgb(255 255 255 / 0.22) 50%,
+    transparent 80%
+  );
+  pointer-events: none;
+}
+
+.offerta-cta:hover:not(:disabled)::after {
+  animation: offerta-sheen 720ms ease-out;
+}
+
+/* Attesa dopo il click: la lucentezza continua a scorrere finche' la scheda del
+   configuratore non e' aperta. */
+.offerta-cta[data-busy="true"]::after {
+  animation: offerta-sheen 1100ms ease-in-out infinite;
+}
+
+.offerta-cta:disabled {
+  background: linear-gradient(135deg, #b6c2d1, #cbd5e1);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+@keyframes offerta-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes offerta-sheen {
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .offerta-kpi,
+  .offerta-result,
+  .offerta-cta {
+    transition: none;
+  }
+
+  .offerta-kpi:hover,
+  .offerta-result:hover,
+  .offerta-cta:hover:not(:disabled),
+  .offerta-cta:active:not(:disabled) {
+    transform: none;
+  }
+
+  .offerta-lead-card,
+  .offerta-reveal {
+    animation: none;
+  }
+
+  .offerta-cta::after,
+  .offerta-cta[data-busy="true"]::after {
+    animation: none;
+  }
+}
+
+@media (max-width: 1279px) {
+  .offerta-kpi {
+    min-height: 8.75rem;
+  }
+
+  .offerta-kpi-value {
+    font-size: 2.35rem;
+  }
+}
+
 @keyframes crm-progress {
   0% {
     transform: translateX(-110%);

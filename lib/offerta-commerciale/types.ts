@@ -38,6 +38,35 @@ export type CodiceSconto = {
   cumulabile_con_sconto_zona: boolean
 }
 
+export type PannelloSpec = {
+  brand: string
+  modello: string
+  nome_display: string
+  codice: string | null
+  potenza_wp: number | null
+  larghezza_mm: number | null
+  altezza_mm: number | null
+  peso_kg: number | null
+  efficienza_pct: number | null
+  // Numero (%/anno) o testo libero: i pannelli inseriti a mano usano entrambe
+  // le forme e il configuratore pubblico legge il valore cosi com'e.
+  degrado: string | number | null
+  garanzia_prodotto_anni: number | null
+  garanzia_lineare_anni: number | null
+  tags: string[]
+  tier: string | null
+  attivo: boolean
+  immagine_nc_path: string | null
+  scheda_pdf_nc_path: string | null
+  // Chiavi extra dei record creati via SQL manuale: preservate dal normalizer.
+  [key: string]: unknown
+}
+
+export type SpecificheProdotto = {
+  pannelli?: PannelloSpec[]
+  [key: string]: unknown
+}
+
 export type CatalogoCommerciale = {
   id: string
   nome: string
@@ -51,6 +80,7 @@ export type CatalogoCommerciale = {
   accessori: AccessorioCommerciale[]
   sconti: RegolaSconto[]
   codici_sconto: CodiceSconto[]
+  specifiche_prodotto: SpecificheProdotto | null
   note: string | null
   pubblicato_at: string | null
   aggiornato_at: string

@@ -5,8 +5,10 @@ import type {
   CodiceSconto,
   MatriceAccumulo,
   OffertaPeriodo,
+  PannelloSpec,
   PrezzoFotovoltaico,
   RegolaSconto,
+  SpecificheProdotto,
 } from "./types"
 
 export const OFFERTA_COMMERCIALE_ROOT =
@@ -20,6 +22,16 @@ function finite(value: unknown) {
 
 function text(value: unknown, max = 180) {
   return typeof value === "string" ? value.trim().slice(0, max) : ""
+}
+
+function textOrNull(value: unknown, max = 180) {
+  return text(value, max) || null
+}
+
+/** Come finite(), ma "" / null / undefined restano null invece di diventare 0. */
+function optionalNumber(value: unknown) {
+  if (value == null || value === "") return null
+  return finite(value)
 }
 
 export function normalizeFotovoltaico(value: unknown): PrezzoFotovoltaico[] {
@@ -122,6 +134,58 @@ export function normalizeCodiciSconto(value: unknown): CodiceSconto[] {
       cumulabile_con_sconto_zona: source.cumulabile_con_sconto_zona === true,
     }]
   })
+}
+
+/**
+ * Finora i pannelli sono stati inseriti con SQL manuale e /api/public/catalogo
+ * li restituisce cosi come sono: preserviamo le chiavi sconosciute e
+ * normalizziamo solo i campi gestiti dal modal.
+ */
+export function normalizePannelli(value: unknown): PannelloSpec[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((row) => {
+    if (!row || typeof row !== "object") return []
+    const source = row as Record<string, unknown>
+    const modello = text(source.modello, 180)
+    const nomeDisplay = text(source.nome_display, 180) || modello
+    if (!nomeDisplay) return []
+    return [{
+      ...source,
+      brand: text(source.brand, 120),
+      modello,
+      nome_display: nomeDisplay,
+      codice: textOrNull(source.codice, 80),
+      potenza_wp: optionalNumber(source.potenza_wp),
+      larghezza_mm: optionalNumber(source.larghezza_mm),
+      altezza_mm: optionalNumber(source.altezza_mm),
+      peso_kg: optionalNumber(source.peso_kg),
+      efficienza_pct: optionalNumber(source.efficienza_pct),
+      degrado: typeof source.degrado === "number" && Number.isFinite(source.degrado)
+        ? source.degrado
+        : textOrNull(source.degrado, 120),
+      garanzia_prodotto_anni: optionalNumber(source.garanzia_prodotto_anni),
+      garanzia_lineare_anni: optionalNumber(source.garanzia_lineare_anni),
+      tags: Array.isArray(source.tags)
+        ? source.tags.flatMap((tag) => { const value = text(tag, 60); return value ? [value] : [] })
+        : [],
+      tier: textOrNull(source.tier, 60),
+      attivo: source.attivo !== false,
+      immagine_nc_path: textOrNull(source.immagine_nc_path, 500),
+      scheda_pdf_nc_path: textOrNull(source.scheda_pdf_nc_path, 500),
+    }]
+  })
+}
+
+/**
+ * Fonde le specifiche in arrivo dal client su quelle gia' salvate: le chiavi
+ * diverse da "pannelli" restano intatte anche se il client non le conosce.
+ */
+export function normalizeSpecificheProdotto(value: unknown, current: unknown): SpecificheProdotto {
+  const isPlainObject = (input: unknown): input is Record<string, unknown> =>
+    !!input && typeof input === "object" && !Array.isArray(input)
+  const base = isPlainObject(current) ? { ...current } : {}
+  if (!isPlainObject(value)) return base as SpecificheProdotto
+  return { ...base, ...value, pannelli: normalizePannelli(value.pannelli) }
 }
 
 export async function loadOffertaCommerciale(supabase: SupabaseClient) {

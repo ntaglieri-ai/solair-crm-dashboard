@@ -11,6 +11,9 @@ const CATEGORIES = {
   listini: { folder: "Listini", extensions: ["pdf"] },
   offerte: { folder: "Offerte-del-periodo", extensions: ["pdf", "png", "jpg", "jpeg", "webp"] },
   schede: { folder: "Schede-tecniche", extensions: ["pdf"] },
+  // Immagini e schede tecniche dei pannelli: la cartella e' quella servita in
+  // lettura da /api/public/asset (PREFISSI_CONSENTITI).
+  pannelli: { folder: "Pannelli", extensions: ["pdf", "png", "jpg", "jpeg", "webp"] },
 } as const
 
 const MAX_FILE_BYTES = 25 * 1024 * 1024

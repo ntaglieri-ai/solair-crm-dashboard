@@ -10,6 +10,7 @@ import {
   normalizeCodiciSconto,
   normalizeFotovoltaico,
   normalizeSconti,
+  normalizeSpecificheProdotto,
   OFFERTA_COMMERCIALE_ROOT,
 } from "@/lib/offerta-commerciale/store"
 
@@ -61,6 +62,14 @@ export async function PATCH(request: Request) {
   }
   const supabase = createAdminClient()
   if (!supabase) return NextResponse.json({ error: "Supabase admin non configurato" }, { status: 503 })
+  // Le specifiche prodotto si fondono su quelle salvate: il client rimanda solo
+  // cio' che conosce e le altre chiavi del JSON non devono andare perse.
+  const { data: corrente, error: correnteError } = await supabase
+    .from("offerta_commerciale_cataloghi")
+    .select("specifiche_prodotto")
+    .eq("id", catalogo.id)
+    .maybeSingle()
+  if (correnteError) return NextResponse.json({ error: correnteError.message }, { status: 500 })
   const now = new Date().toISOString()
   const { error } = await supabase.from("offerta_commerciale_cataloghi").update({
     nome: typeof catalogo.nome === "string" ? catalogo.nome.trim().slice(0, 180) : "Listino commerciale",
@@ -71,6 +80,7 @@ export async function PATCH(request: Request) {
     accessori: normalizeAccessori(catalogo.accessori),
     sconti: normalizeSconti(catalogo.sconti),
     codici_sconto: normalizeCodiciSconto(catalogo.codici_sconto),
+    specifiche_prodotto: normalizeSpecificheProdotto(catalogo.specifiche_prodotto, corrente?.specifiche_prodotto),
     note: typeof catalogo.note === "string" ? catalogo.note.trim().slice(0, 4000) || null : null,
     aggiornato_at: now,
   }).eq("id", catalogo.id)

@@ -20,6 +20,10 @@ import {
   storeNextcloudCredential,
   type NextcloudCredStatus,
 } from "./credentials"
+// Ciclo di import con path-permissions.ts (che importa nextcloudGroupForRole):
+// benigno, entrambi i lati si usano solo dentro funzioni, mai in valutazione
+// di modulo.
+import { computeRequiredGroupShares, normalizeNcPath, type NcGroupShare } from "./path-permissions"
 
 type OcsMeta = { status: string; statuscode: number; message: string }
 
@@ -82,6 +86,164 @@ async function ocsRequest(
       headers,
     }),
   )
+}
+
+/**
+ * Come ocsRequest ma sulla Share API, che vive su un path base diverso
+ * (/apps/files_sharing/... invece di /cloud/...).
+ */
+async function ocsShareRequest(
+  cfg: NextcloudAdminConfig,
+  query: string,
+  init: RequestInit = {},
+): Promise<{ meta: OcsMeta; data: unknown }> {
+  const headers = new Headers(init.headers)
+  headers.set("Authorization", basicAuth(cfg.adminUser, cfg.adminPassword))
+  headers.set("OCS-APIRequest", "true")
+  headers.set("Accept", "application/json")
+  const base = `${cfg.baseUrl}/ocs/v2.php/apps/files_sharing/api/v1/shares`
+  return parseOcs(await fetch(`${base}${query}${query.includes("?") ? "&" : "?"}format=json`, { ...init, headers }))
+}
+
+type OcsShare = { id?: string | number; share_with?: string; share_type?: number | string; permissions?: number | string }
+
+const SHARE_TYPE_GROUP = 1
+
+// L'istanza limita la creazione di condivisioni a ~20 ogni 10 minuti per
+// utente: oltre quella soglia la POST risponde 429 con corpo vuoto e senza
+// Retry-After. La finestra e' troppo lunga per aspettarla dentro la richiesta,
+// quindi si fa un solo ritentativo breve (copre un burst transitorio) e poi il
+// chiamante interrompe il giro: la funzione e' idempotente, il salvataggio
+// successivo riprende da dove si era fermato.
+const RATE_LIMIT_RETRY_MS = 1000
+
+function isRateLimited(meta: OcsMeta): boolean {
+  return meta.statuscode === 429
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Rende reale su Nextcloud l'accesso dichiarato in permessi_cartelle_nextcloud:
+ * condivide `path` con il gruppo `group`. Idempotente — se la condivisione
+ * esiste gia' con gli stessi permessi non fa nulla, se esiste con permessi
+ * diversi li allinea (altrimenti un readonly promosso a editable in tabella non
+ * si rifletterebbe mai sul filesystem). Non lancia mai: il chiamante logga e
+ * prosegue.
+ */
+export async function shareGroupFolderIfNeeded(
+  cfg: NextcloudAdminConfig,
+  group: string,
+  path: string,
+  permissions = 31,
+): Promise<{ ok: boolean; error: string | null; rateLimited?: boolean }> {
+  try {
+    const existing = await ocsShareRequest(cfg, `?path=${encodeURIComponent(path)}`)
+    // 404 = la cartella non esiste su Nextcloud: inutile tentare la POST, che
+    // fallirebbe comunque consumando una richiesta del rate limit.
+    if (existing.meta.statuscode === 404) {
+      return { ok: false, error: `Percorso inesistente su Nextcloud: "${path}"` }
+    }
+    if (isOcsOk(existing.meta)) {
+      const shares = (Array.isArray(existing.data) ? existing.data : []) as OcsShare[]
+      const found = shares.find(
+        (s) => s?.share_with === group && Number(s?.share_type) === SHARE_TYPE_GROUP,
+      )
+      if (found) {
+        if (Number(found.permissions) === permissions || found.id == null) return { ok: true, error: null }
+        const updated = await ocsShareRequest(cfg, `/${encodeURIComponent(String(found.id))}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ permissions: String(permissions) }),
+        })
+        return isOcsOk(updated.meta)
+          ? { ok: true, error: null }
+          : { ok: false, error: `Aggiornamento permessi fallito (OCS ${updated.meta.statuscode}: ${updated.meta.message})` }
+      }
+    }
+
+    let created = await ocsShareRequest(cfg, "", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        path,
+        shareType: String(SHARE_TYPE_GROUP),
+        shareWith: group,
+        permissions: String(permissions),
+      }),
+    })
+    if (isRateLimited(created.meta)) {
+      await sleep(RATE_LIMIT_RETRY_MS)
+      created = await ocsShareRequest(cfg, "", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          path,
+          shareType: String(SHARE_TYPE_GROUP),
+          shareWith: group,
+          permissions: String(permissions),
+        }),
+      })
+    }
+    if (isOcsOk(created.meta)) return { ok: true, error: null }
+    if (isRateLimited(created.meta)) {
+      return {
+        ok: false,
+        rateLimited: true,
+        error: "Rate limit Nextcloud (429): riprovare il salvataggio fra ~10 minuti",
+      }
+    }
+    // Alcune versioni rispondono 403/404 con questo messaggio quando la
+    // condivisione esiste gia': e' comunque lo stato desiderato.
+    if (/already shared|gia.{0,3} condivis/i.test(created.meta.message)) return { ok: true, error: null }
+    return { ok: false, error: `OCS ${created.meta.statuscode}: ${created.meta.message}` }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Errore rete Nextcloud" }
+  }
+}
+
+/**
+ * Elimina le condivisioni di gruppo non piu' previste dalla tabella: senza
+ * questo passaggio portare un accesso a "hidden" non toglierebbe l'accesso
+ * fisico, perche' la condivisione creata in precedenza sopravvive.
+ *
+ * Tocca SOLO i gruppi gestiti dal CRM (solair-*): condivisioni verso utenti
+ * singoli, link pubblici o altri gruppi non vengono mai rimosse. Di contro, una
+ * condivisione creata a mano verso un gruppo solair-* e non rappresentata in
+ * tabella viene revocata: e' il prezzo del "la tabella e' l'unica fonte".
+ */
+export async function revokeStaleGroupShares(
+  cfg: NextcloudAdminConfig,
+  attese: NcGroupShare[],
+): Promise<{ rimosse: number; errori: string[] }> {
+  const errori: string[] = []
+  let rimosse = 0
+  try {
+    const elenco = await ocsShareRequest(cfg, "")
+    if (!isOcsOk(elenco.meta)) {
+      return {
+        rimosse: 0,
+        errori: [`Lettura condivisioni fallita (OCS ${elenco.meta.statuscode}: ${elenco.meta.message})`],
+      }
+    }
+    const previste = new Set(attese.map((s) => `${s.folder} ${s.group}`))
+    const shares = (Array.isArray(elenco.data) ? elenco.data : []) as (OcsShare & { path?: string })[]
+
+    for (const share of shares) {
+      const group = share.share_with
+      if (Number(share.share_type) !== SHARE_TYPE_GROUP) continue
+      if (!group || !CRM_NEXTCLOUD_GROUPS.has(group)) continue
+      const folder = normalizeNcPath(share.path ?? "").replace(/\/+$/, "")
+      if (!folder || previste.has(`${folder} ${group}`)) continue
+
+      const rimossa = await ocsShareRequest(cfg, `/${encodeURIComponent(String(share.id))}`, { method: "DELETE" })
+      if (isOcsOk(rimossa.meta)) rimosse++
+      else errori.push(`"${folder}" -> ${group}: OCS ${rimossa.meta.statuscode} ${rimossa.meta.message}`)
+    }
+  } catch (e) {
+    errori.push(e instanceof Error ? e.message : "Errore rete Nextcloud")
+  }
+  return { rimosse, errori }
 }
 
 /**
@@ -161,6 +323,25 @@ export async function syncNextcloudUserGroup(
           error: `Rimozione dal vecchio gruppo ${group} fallita (OCS ${removed.meta.statuscode}: ${removed.meta.message})`,
         }
       }
+    }
+
+    // L'appartenenza al gruppo da sola non da' accesso fisico ai file: le
+    // cartelle vanno condivise col gruppo. Best-effort, non fa fallire la
+    // sincronizzazione del ruolo (stessa convenzione delle altre chiamate
+    // Nextcloud non critiche di questo file).
+    try {
+      const shares = await computeRequiredGroupShares()
+      for (const share of shares) {
+        if (share.group !== desired) continue
+        const result = await shareGroupFolderIfNeeded(cfg, share.group, share.folder, share.permissions)
+        if (!result.ok) {
+          console.warn(`[nextcloud] condivisione "${share.folder}" -> ${share.group} fallita: ${result.error}`)
+        }
+        // Raggiunto il limite: le condivisioni restanti fallirebbero tutte.
+        if (result.rateLimited) break
+      }
+    } catch (e) {
+      console.warn("[nextcloud] calcolo condivisioni di gruppo fallito:", e instanceof Error ? e.message : e)
     }
 
     return { ok: true, group: desired, error: null }

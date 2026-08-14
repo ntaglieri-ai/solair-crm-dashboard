@@ -92,6 +92,14 @@ export async function POST() {
       if (!testo) throw new Error(`Listino non pubblicato: ${file.name} non contiene testo estraibile`)
       const parsed = parseListinoCommerciale(testo)
       const importNote = `Importazione automatica completata: ${parsed.parsedBase} prezzi FV e ${parsed.parsedBattery} prezzi espliciti elaborati.`
+      const { data: currentPublished, error: currentError } = await supabase
+        .from("offerta_commerciale_cataloghi")
+        .select("codici_sconto, specifiche_prodotto")
+        .eq("stato", "pubblicato")
+        .order("aggiornato_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (currentError) throw new Error(currentError.message)
       const catalogValues = {
         nome: withoutExtension(file.name),
         stato: "bozza",
@@ -101,6 +109,8 @@ export async function POST() {
         accumuli: parsed.accumuli,
         accessori: parsed.accessori,
         sconti: parsed.sconti,
+        codici_sconto: currentPublished?.codici_sconto ?? [],
+        specifiche_prodotto: currentPublished?.specifiche_prodotto ?? {},
         note: `${parsed.note}\n${importNote}`.trim(),
         aggiornato_at: now,
       }

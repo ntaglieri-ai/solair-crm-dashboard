@@ -35,10 +35,24 @@ const NOTE_COLORS = [
 
 function formatMoment(value: string) {
   if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat("it-IT", {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(value))
+  }).format(date)
+}
+
+function FriendlyDateTime({ value }: { value: unknown }) {
+  if (typeof value !== "string" || !value.trim()) {
+    return <span className="text-muted-foreground">—</span>
+  }
+  const formatted = formatMoment(value)
+  return (
+    <span className="whitespace-nowrap tabular-nums text-foreground" title={value}>
+      {formatted}
+    </span>
+  )
 }
 
 function NoteIcons({ lead }: { lead: Lead }) {
@@ -255,6 +269,11 @@ export function LeadCell({
 
     case "kWh":
       return <span className="tabular-nums text-foreground">{lead.kWh}</span>
+
+    case "Ora creazione":
+    case "Ora ultima attività":
+    case "Data/Ora":
+      return <FriendlyDateTime value={value} />
 
     default: {
       if (value === null || value === undefined || value === "") {

@@ -128,6 +128,10 @@ export function LeadTable({
         widths[column.id] = 210
         continue
       }
+      if (column.id === "Ora creazione" || column.id === "Ora ultima attività" || column.id === "Data/Ora") {
+        widths[column.id] = 178
+        continue
+      }
       const contentLength = leads.reduce((maximum, lead) => {
         const value = lead[column.id]
         const length = Array.isArray(value)

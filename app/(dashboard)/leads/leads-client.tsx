@@ -153,7 +153,7 @@ export function LeadsClient({
     Partial<Record<LeadColumnId, number>>
   >({})
   const [preferencesLoaded, setPreferencesLoaded] = useState(false)
-  const [sortBy, setSortBy] = useState<LeadColumnId | null>("Valutazione")
+  const [sortBy, setSortBy] = useState<LeadColumnId | null>("Ora creazione")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [density, setDensity] = useState<Density>("normale")
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)

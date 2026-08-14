@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { usePermissions } from "@/lib/permissions/provider"
-import type { AccessorioCommerciale, CatalogoCommerciale, CodiceSconto, OffertaCommercialePayload, OffertaPeriodo, PannelloSpec } from "@/lib/offerta-commerciale/types"
+import type { AccessorioCommerciale, CatalogoCommerciale, CodiceSconto, DocumentoCommerciale, OffertaCommercialePayload, OffertaPeriodo, PannelloSpec, VersioneCatalogoCommerciale } from "@/lib/offerta-commerciale/types"
 
 function numberValue(value: string) {
   const parsed = Number(value.replace(",", "."))
@@ -529,6 +529,252 @@ function periodoOfferta(offer: OffertaPeriodo) {
   return `${dal ?? "Data inizio libera"} – ${al ?? "senza scadenza"}`
 }
 
+type CategoriaUpload = "listini" | "offerte" | "schede" | "pannelli"
+
+const UPLOAD_CATEGORIES: Array<{
+  key: CategoriaUpload
+  title: string
+  hint: string
+  accept: string
+  multiple?: boolean
+  className: string
+}> = [
+  {
+    key: "listini",
+    title: "Listini",
+    hint: "PDF che alimentano storico e listino corrente",
+    accept: "application/pdf,.pdf",
+    className: "border-blue-200 bg-blue-50/50 hover:bg-blue-50",
+  },
+  {
+    key: "offerte",
+    title: "Offerte del periodo",
+    hint: "PDF, JPG, PNG o WebP",
+    accept: "application/pdf,image/png,image/jpeg,image/webp,.pdf,.png,.jpg,.jpeg,.webp",
+    multiple: true,
+    className: "border-teal-200 bg-teal-50/50 hover:bg-teal-50",
+  },
+  {
+    key: "schede",
+    title: "Schede tecniche",
+    hint: "Solo PDF",
+    accept: "application/pdf,.pdf",
+    multiple: true,
+    className: "border-slate-200 bg-slate-50 hover:bg-slate-100",
+  },
+  {
+    key: "pannelli",
+    title: "Pannelli",
+    hint: "Immagini e schede PDF dei pannelli",
+    accept: "application/pdf,image/png,image/jpeg,image/webp,.pdf,.png,.jpg,.jpeg,.webp",
+    multiple: true,
+    className: "border-indigo-200 bg-indigo-50/50 hover:bg-indigo-50",
+  },
+]
+
+function dataBreve(value: string | null | undefined) {
+  return value ? new Date(value).toLocaleDateString("it-IT") : "—"
+}
+
+function nomeDaPath(value: string | null | undefined) {
+  return value?.split("/").pop() || "PDF non collegato"
+}
+
+function dimensioneDocumento(kb: number | null | undefined) {
+  if (kb == null) return "—"
+  return kb >= 1024 ? `${FORMATO_NUMERO.format(Math.round(kb / 102.4) / 10)} MB` : `${FORMATO_NUMERO.format(kb)} KB`
+}
+
+function UploadTile({ config, uploading, onUpload }: { config: (typeof UPLOAD_CATEGORIES)[number]; uploading: boolean; onUpload: (category: CategoriaUpload, files: FileList | null) => void }) {
+  return <label className={`flex min-h-28 cursor-pointer flex-col justify-between rounded-lg border border-dashed p-4 text-sm transition-colors ${config.className} ${uploading ? "pointer-events-none opacity-60" : ""}`}>
+    <span>
+      <span className="flex items-center gap-2 font-bold text-foreground"><Upload className="size-4" />{config.title}</span>
+      <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{config.hint}</span>
+    </span>
+    <span className="mt-3 text-xs font-semibold text-blue-700">{uploading ? "Caricamento..." : "Scegli file"}</span>
+    <input className="sr-only" type="file" multiple={config.multiple} accept={config.accept} disabled={uploading} onChange={(e) => { onUpload(config.key, e.target.files); e.target.value = "" }} />
+  </label>
+}
+
+function StatoListinoBadge({ stato }: { stato: CatalogoCommerciale["stato"] }) {
+  if (stato === "pubblicato") return <Badge className="bg-teal-600">Pubblicato</Badge>
+  if (stato === "archiviato") return <Badge variant="outline" className="bg-white text-slate-600">Archiviato</Badge>
+  return <Badge variant="secondary">Bozza</Badge>
+}
+
+function StoricoListini({ versioni, catalogoId, deletingCatalog, onDelete }: { versioni: VersioneCatalogoCommerciale[]; catalogoId: string; deletingCatalog: string | null; onDelete: (id: string, name: string) => void }) {
+  if (versioni.length === 0) return <Empty>Nessun listino nello storico.</Empty>
+  return <section className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+    <div className="flex flex-col gap-1 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-2">
+        <Archive className="size-4 text-blue-700" />
+        <h2 className="font-semibold">Storico listini</h2>
+      </div>
+      <p className="text-xs font-medium text-muted-foreground">{versioni.length} versioni CRM</p>
+    </div>
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[820px] text-sm">
+        <thead className="bg-slate-50 text-left">
+          <tr>
+            <th className="px-4 py-3">Listino</th>
+            <th className="px-4 py-3">Stato</th>
+            <th className="px-4 py-3">Validità</th>
+            <th className="px-4 py-3">Aggiornato</th>
+            <th className="px-4 py-3 text-right">Azioni</th>
+          </tr>
+        </thead>
+        <tbody>{versioni.map((version) => {
+          const inUso = version.id === catalogoId
+          return <tr key={version.id} className="border-t border-border align-top">
+            <td className="px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-foreground">{version.nome}</span>
+                {inUso ? <Badge className="bg-blue-700">In uso</Badge> : null}
+              </div>
+              <div className="mt-1 max-w-[360px] truncate text-xs text-muted-foreground" title={version.fonte_path ?? undefined}>{nomeDaPath(version.fonte_path)}</div>
+            </td>
+            <td className="px-4 py-3"><StatoListinoBadge stato={version.stato} /></td>
+            <td className="px-4 py-3 text-muted-foreground">{dataBreve(version.valido_dal)} - {dataBreve(version.valido_al)}</td>
+            <td className="px-4 py-3 text-muted-foreground">
+              <div>{dataBreve(version.aggiornato_at)}</div>
+              {version.pubblicato_at ? <div className="mt-1 text-xs">pubblicato {dataBreve(version.pubblicato_at)}</div> : null}
+            </td>
+            <td className="px-4 py-3">
+              <div className="flex justify-end gap-1">
+                {version.fonte_path ? <Button variant="ghost" size="icon-sm" aria-label={`Apri PDF ${version.nome}`} nativeButton={false} render={<a href={`/api/offerta-commerciale/documenti?path=${encodeURIComponent(version.fonte_path)}`} target="_blank" rel="noreferrer" />}><FileText className="size-4" /></Button> : null}
+                {version.stato === "archiviato" ? <Button variant="ghost" size="icon-sm" aria-label={`Elimina ${version.nome}`} disabled={deletingCatalog === version.id} onClick={() => onDelete(version.id, version.nome)}>{deletingCatalog === version.id ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4 text-destructive" />}</Button> : null}
+              </div>
+            </td>
+          </tr>
+        })}</tbody>
+      </table>
+    </div>
+  </section>
+}
+
+function DocumentiNextcloud({ documenti, fonteAttiva, deletingDocument, onDelete }: { documenti: DocumentoCommerciale[]; fonteAttiva: string | null; deletingDocument: string | null; onDelete: (path: string, name: string) => void }) {
+  if (documenti.length === 0) return <Empty>Nessun documento sincronizzato da Nextcloud.</Empty>
+  return <section className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+    <div className="flex flex-col gap-1 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-2">
+        <Cloud className="size-4 text-blue-700" />
+        <h2 className="font-semibold">Documenti Nextcloud</h2>
+      </div>
+      <p className="text-xs font-medium text-muted-foreground">Il cestino elimina il file e riallinea il CRM</p>
+    </div>
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[860px] text-sm">
+        <thead className="bg-slate-50 text-left">
+          <tr>
+            <th className="px-4 py-3">Documento</th>
+            <th className="px-4 py-3">Tipo</th>
+            <th className="px-4 py-3">Dimensione</th>
+            <th className="px-4 py-3">Modificato</th>
+            <th className="px-4 py-3 text-right">Azioni</th>
+          </tr>
+        </thead>
+        <tbody>{documenti.map((doc) => {
+          const attivo = doc.path === fonteAttiva
+          const deleting = deletingDocument === doc.path
+          return <tr key={doc.id} className="border-t border-border align-top">
+            <td className="px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-foreground">{doc.nome}</span>
+                {attivo ? <Badge className="bg-blue-700">Listino in uso</Badge> : null}
+              </div>
+              <div className="mt-1 max-w-[420px] truncate text-xs text-muted-foreground" title={doc.path}>{doc.path}</div>
+            </td>
+            <td className="px-4 py-3"><Badge variant="outline">{doc.tipo}</Badge></td>
+            <td className="px-4 py-3 text-muted-foreground">{dimensioneDocumento(doc.dimensione_kb)}</td>
+            <td className="px-4 py-3 text-muted-foreground">{dataBreve(doc.modificato_at)}</td>
+            <td className="px-4 py-3">
+              <div className="flex justify-end gap-1">
+                <Button variant="ghost" size="icon-sm" aria-label={`Apri ${doc.nome}`} nativeButton={false} render={<a href={`/api/offerta-commerciale/documenti?path=${encodeURIComponent(doc.path)}`} target="_blank" rel="noreferrer" />}><ExternalLink className="size-4" /></Button>
+                <Button type="button" variant="ghost" size="icon-sm" aria-label={`Elimina ${doc.nome}`} title={attivo ? "Non puoi eliminare il PDF del listino in uso" : undefined} disabled={deleting || attivo} onClick={() => onDelete(doc.path, doc.nome)}>{deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className={`size-4 ${attivo ? "text-muted-foreground" : "text-destructive"}`} />}</Button>
+              </div>
+            </td>
+          </tr>
+        })}</tbody>
+      </table>
+    </div>
+  </section>
+}
+
+function TesterPrezzoAccumulo({ catalogo }: { catalogo: CatalogoCommerciale }) {
+  const [kwpValue, setKwpValue] = useState(() => String(catalogo.fotovoltaico[0]?.kwp ?? ""))
+  const [marca, setMarca] = useState(() => catalogo.accumuli[0]?.marca ?? "")
+  const accumulo = catalogo.accumuli.find((item) => item.marca === marca) ?? catalogo.accumuli[0] ?? null
+  const [kwhValue, setKwhValue] = useState(() => String(accumulo?.taglie[0] ?? ""))
+
+  useEffect(() => {
+    if (catalogo.fotovoltaico.length > 0 && !catalogo.fotovoltaico.some((row) => String(row.kwp) === kwpValue)) {
+      setKwpValue(String(catalogo.fotovoltaico[0].kwp))
+    }
+    if (catalogo.accumuli.length > 0 && !catalogo.accumuli.some((item) => item.marca === marca)) {
+      setMarca(catalogo.accumuli[0].marca)
+    }
+  }, [catalogo.accumuli, catalogo.fotovoltaico, kwpValue, marca])
+
+  useEffect(() => {
+    if (accumulo && !accumulo.taglie.some((taglia) => String(taglia) === kwhValue)) {
+      setKwhValue(String(accumulo.taglie[0] ?? ""))
+    }
+  }, [accumulo, kwhValue])
+
+  if (catalogo.fotovoltaico.length === 0 || catalogo.accumuli.length === 0 || !accumulo) return null
+
+  const kwp = Number(kwpValue)
+  const kwh = Number(kwhValue)
+  const base = catalogo.fotovoltaico.find((row) => row.kwp === kwp)?.prezzo ?? null
+  const indiceKwh = accumulo.taglie.findIndex((taglia) => Math.abs(taglia - kwh) < 0.001)
+  const sovrapprezzo = indiceKwh >= 0 ? accumulo.prezzi[String(kwp)]?.[indiceKwh] ?? null : null
+  const totale = base != null && sovrapprezzo != null ? base + sovrapprezzo : null
+  const tagliaDerivata = kwp < 6 || kwp === 10
+
+  return <section className="rounded-xl border border-amber-100 bg-white p-4 shadow-sm">
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <div>
+        <h2 className="text-lg font-bold text-amber-950">Prova prezzo accumulo</h2>
+        <p className="mt-1 text-sm font-medium text-amber-800/80">Verifica immediata delle righe derivate dal listino.</p>
+      </div>
+      {tagliaDerivata ? <Badge variant="outline" className="w-fit border-amber-200 bg-amber-50 text-amber-900">Taglia da regole</Badge> : <Badge variant="outline" className="w-fit border-teal-200 bg-teal-50 text-teal-800">Taglia in tabella</Badge>}
+    </div>
+
+    <div className="mt-4 grid gap-3 lg:grid-cols-[140px_minmax(160px,1fr)_150px]">
+      <label className="text-xs font-medium text-muted-foreground">Impianto
+        <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm font-semibold text-foreground" value={kwpValue} onChange={(event) => setKwpValue(event.target.value)}>
+          {catalogo.fotovoltaico.map((row) => <option key={row.kwp} value={row.kwp}>{FORMATO_NUMERO.format(row.kwp)} kWp</option>)}
+        </select>
+      </label>
+      <label className="text-xs font-medium text-muted-foreground">Marca accumulo
+        <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm font-semibold text-foreground" value={marca} onChange={(event) => setMarca(event.target.value)}>
+          {catalogo.accumuli.map((item) => <option key={item.marca} value={item.marca}>{item.marca}</option>)}
+        </select>
+      </label>
+      <label className="text-xs font-medium text-muted-foreground">Capacità
+        <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm font-semibold text-foreground" value={kwhValue} onChange={(event) => setKwhValue(event.target.value)}>
+          {accumulo.taglie.map((taglia) => <option key={taglia} value={taglia}>{FORMATO_NUMERO.format(taglia)} kWh</option>)}
+        </select>
+      </label>
+    </div>
+
+    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <div className="rounded-lg border border-border bg-slate-50 p-3">
+        <p className="text-xs font-bold uppercase text-muted-foreground">FV</p>
+        <p className="mt-1 text-lg font-extrabold text-slate-950">{euro(base)}</p>
+      </div>
+      <div className="rounded-lg border border-border bg-slate-50 p-3">
+        <p className="text-xs font-bold uppercase text-muted-foreground">Accumulo</p>
+        <p className="mt-1 text-lg font-extrabold text-slate-950">{euro(sovrapprezzo)}</p>
+      </div>
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+        <p className="text-xs font-bold uppercase text-amber-800">Totale</p>
+        <p className="mt-1 text-lg font-extrabold text-amber-950">{euro(totale)}</p>
+      </div>
+    </div>
+  </section>
+}
+
 type VistaCatalogo = "fv" | "accumuli" | "accessori" | "offerte"
 
 const VISTE_CATALOGO: Record<VistaCatalogo, { icona: typeof BadgeEuro; titolo: string; descrizione: string }> = {
@@ -698,10 +944,11 @@ export function OffertaCommercialeClient() {
     finally { setSyncing(false) }
   }
 
-  const uploadFiles = async (category: "listini" | "offerte" | "schede", files: FileList | null) => {
+  const uploadFiles = async (category: CategoriaUpload, files: FileList | null) => {
     if (!files?.length) return
     setUploading(true)
     try {
+      const caricati: string[] = []
       for (const file of Array.from(files)) {
         const form = new FormData()
         form.set("category", category)
@@ -709,9 +956,10 @@ export function OffertaCommercialeClient() {
         const response = await fetch("/api/offerta-commerciale/upload", { method: "POST", body: form })
         const body = await response.json()
         if (!response.ok) throw new Error(`${file.name}: ${body.error ?? "Upload non riuscito"}`)
+        caricati.push(body.nome ?? file.name)
       }
-      toast.success(`${files.length} file caricati su Nextcloud`)
-      await syncNextcloud()
+      toast.success(`${caricati.length} file caricati: ${caricati.join(", ")}. Ora premi Sincronizza.`)
+      await load()
     } catch (error) { toast.error(error instanceof Error ? error.message : "Errore upload") }
     finally { setUploading(false) }
   }
@@ -746,7 +994,7 @@ export function OffertaCommercialeClient() {
       const response = await fetch(`/api/offerta-commerciale/documenti?path=${encodeURIComponent(path)}`, { method: "DELETE" })
       const body = await response.json()
       if (!response.ok) throw new Error(body.error ?? "Eliminazione non riuscita")
-      toast.success("Documento eliminato da Nextcloud")
+      toast.success(body.cataloghi_eliminati > 0 ? "Documento e listini archiviati collegati eliminati" : "Documento eliminato da Nextcloud")
       await load()
     } catch (error) { toast.error(error instanceof Error ? error.message : "Errore eliminazione") }
     finally { setDeletingDocument(null) }
@@ -845,7 +1093,11 @@ export function OffertaCommercialeClient() {
                     <p className="mt-3 text-xs text-muted-foreground">Fonte: {data.nextcloudRoot} · Stato: {catalogo.stato} · Pubblicazione automatica dei nuovi listini validi</p>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2">
-                    <Button variant="outline" onClick={syncNextcloud} disabled={syncing}>{syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}Sincronizza</Button>
+                    <Button variant="outline" nativeButton={false} render={<label className="cursor-pointer" />} disabled={uploading}>
+                      {uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}Carica listino
+                      <input className="sr-only" type="file" accept="application/pdf,.pdf" disabled={uploading} onChange={(e) => { void uploadFiles("listini", e.target.files); e.target.value="" }} />
+                    </Button>
+                    <Button variant="outline" onClick={syncNextcloud} disabled={syncing || uploading}>{syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}Sincronizza</Button>
                     <Button onClick={saveCatalog} disabled={saving} className="bg-teal-600 hover:bg-teal-700">{saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}Salva</Button>
                   </div>
                 </div>
@@ -868,6 +1120,7 @@ export function OffertaCommercialeClient() {
 
                 <TabsContent value="accumulo" className="space-y-5 pt-5">
                   <div className="rounded-xl border border-amber-100 bg-amber-50/70 px-5 py-4"><div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-lg bg-white text-amber-700 ring-1 ring-amber-200"><BatteryCharging className="size-5" /></span><div><h2 className="text-xl font-bold text-amber-950">Prezzi accumulo per taglia di impianto</h2><p className="mt-1 text-sm font-medium text-amber-800/80">Ogni tabella mostra il sovrapprezzo accumulo in base ai kWp dell&apos;impianto fotovoltaico.</p></div></div><ToggleSezione aperta={batterieAperte} onToggle={() => setBatterieAperte((v) => !v)} tone="amber">Batterie Disponibili</ToggleSezione></div></div>
+                  <TesterPrezzoAccumulo catalogo={catalogo} />
                   {batterieAperte ? <BatterieSection onClose={() => setBatterieAperte(false)} /> : null}
                   {catalogo.accumuli.map((battery, batteryIndex) => <section key={battery.marca} className="overflow-hidden rounded-xl border border-amber-100 bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-100 bg-amber-50/60 p-4"><div><h2 className="text-lg font-bold text-amber-950">{battery.marca}</h2><p className="text-sm font-medium text-amber-800/80">{battery.tensione ? `${battery.tensione} tensione` : ""} {battery.ip ? `· ${battery.ip}` : ""} {battery.garanzia_anni ? `· ${battery.garanzia_anni} anni` : ""}</p></div><Badge variant="outline" className="border-amber-200 bg-white text-amber-800">Sovrapprezzo accumulo</Badge></div><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead className="bg-slate-50"><tr><th className="px-3 py-3 text-left text-base font-bold">Taglia impianto</th>{battery.taglie.map((kwh) => <th key={kwh} className="px-3 py-3 text-right text-base font-bold">{kwh} kWh</th>)}</tr></thead><tbody>{Object.keys(battery.prezzi).sort((a,b) => Number(a)-Number(b)).map((kwp) => <tr key={kwp} className="border-t border-border"><td className="px-3 py-2 font-bold">{kwp} kWp</td>{battery.taglie.map((_, priceIndex) => <td key={priceIndex} className="px-3 py-2 text-right"><Input className="ml-auto w-28 text-right font-semibold" type="number" value={battery.prezzi[kwp]?.[priceIndex] ?? 0} onChange={(e) => { const accumuli = structuredClone(catalogo.accumuli); accumuli[batteryIndex].prezzi[kwp][priceIndex] = numberValue(e.target.value); setCatalogo({ ...catalogo, accumuli }) }} /></td>)}</tr>)}</tbody></table></div></section>)}
                 </TabsContent>
@@ -918,7 +1171,21 @@ export function OffertaCommercialeClient() {
 
                 <TabsContent value="offerte-admin" className="pt-5">{data.offerte.length === 0 ? <Empty>Carica PDF e copertine nelle offerte del periodo, poi avvia la sincronizzazione.</Empty> : <div className="grid gap-4 lg:grid-cols-2">{data.offerte.map((offer) => <article key={offer.id} className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">{offer.cover_path ? <img src={`/api/offerta-commerciale/offerte/${offer.id}/asset?kind=cover`} alt="" className="h-52 w-full object-cover" /> : <div className="flex h-36 items-center justify-center bg-slate-100"><FileText className="size-10 text-muted-foreground" /></div>}<div className="space-y-3 p-4"><Input value={offer.titolo} onChange={(e) => setOffer(offer.id,{titolo:e.target.value})} /><Textarea value={offer.descrizione ?? ""} onChange={(e) => setOffer(offer.id,{descrizione:e.target.value})} placeholder="Descrizione breve" /><div className="grid grid-cols-2 gap-2"><Input type="date" value={offer.valido_dal ?? ""} onChange={(e) => setOffer(offer.id,{valido_dal:e.target.value || null})} /><Input type="date" value={offer.valido_al ?? ""} onChange={(e) => setOffer(offer.id,{valido_al:e.target.value || null})} /></div><div className="flex items-center justify-between gap-2"><label className="flex items-center gap-2 text-sm"><Switch checked={offer.pubblicata} onCheckedChange={(checked) => setOffer(offer.id,{pubblicata:checked})} />Pubblicata</label><div className="flex gap-2">{offer.pdf_path ? <Button variant="outline" size="sm" nativeButton={false} render={<a href={`/api/offerta-commerciale/offerte/${offer.id}/asset`} target="_blank" rel="noreferrer" />}>Apri PDF</Button> : null}<Button size="sm" onClick={() => saveOffer(offer)} className="bg-teal-600 hover:bg-teal-700">Salva</Button></div></div></div></article>)}</div>}</TabsContent>
 
-                <TabsContent value="documenti-admin" className="space-y-5 pt-5"><section className="rounded-xl border border-border bg-white p-4 shadow-sm"><PanelTitle icon={Upload} title="Carica documenti" description="Massimo 25 MB per file. Per le offerte usa lo stesso nome per PDF e copertina." />{uploading ? <Loader2 className="mb-3 size-5 animate-spin text-blue-700" /> : null}<div className="grid gap-3 md:grid-cols-3"><label className="cursor-pointer rounded-lg border border-dashed border-blue-200 bg-blue-50/50 p-4 text-sm transition-colors hover:bg-blue-50"><span className="font-medium">Listini</span><span className="mt-1 block text-xs text-muted-foreground">Solo PDF</span><input className="sr-only" type="file" accept="application/pdf,.pdf" disabled={uploading} onChange={(e) => { void uploadFiles("listini", e.target.files); e.target.value="" }} /></label><label className="cursor-pointer rounded-lg border border-dashed border-teal-200 bg-teal-50/50 p-4 text-sm transition-colors hover:bg-teal-50"><span className="font-medium">Offerte del periodo</span><span className="mt-1 block text-xs text-muted-foreground">PDF, JPG, PNG o WebP</span><input className="sr-only" type="file" multiple accept="application/pdf,image/png,image/jpeg,image/webp,.pdf,.png,.jpg,.jpeg,.webp" disabled={uploading} onChange={(e) => { void uploadFiles("offerte", e.target.files); e.target.value="" }} /></label><label className="cursor-pointer rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-sm transition-colors hover:bg-slate-100"><span className="font-medium">Schede tecniche</span><span className="mt-1 block text-xs text-muted-foreground">Solo PDF</span><input className="sr-only" type="file" multiple accept="application/pdf,.pdf" disabled={uploading} onChange={(e) => { void uploadFiles("schede", e.target.files); e.target.value="" }} /></label></div></section><section className="overflow-hidden rounded-xl border border-border bg-white shadow-sm"><div className="flex items-center gap-2 border-b border-border p-4"><Archive className="size-4 text-blue-700" /><h2 className="font-semibold">Storico listini</h2></div><table className="w-full text-sm"><tbody>{data.versioni.map((version) => <tr key={version.id} className="border-t border-border first:border-t-0"><td className="px-4 py-3 font-medium">{version.nome}</td><td className="px-4 py-3"><Badge variant={version.stato === "pubblicato" ? "default" : "outline"}>{version.stato}</Badge></td><td className="px-4 py-3 text-right text-muted-foreground">{new Date(version.aggiornato_at).toLocaleDateString("it-IT")}</td><td className="w-14 px-3 py-2 text-right">{version.stato === "archiviato" ? <Button variant="ghost" size="icon-sm" aria-label={`Elimina ${version.nome}`} disabled={deletingCatalog === version.id} onClick={() => void deleteCatalog(version.id, version.nome)}>{deletingCatalog === version.id ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4 text-destructive" />}</Button> : null}</td></tr>)}</tbody></table></section>{data.documenti.length === 0 ? <Empty>Nessun documento sincronizzato da Nextcloud.</Empty> : <section className="overflow-hidden rounded-xl border border-border bg-white shadow-sm"><div className="flex items-center gap-2 border-b border-border p-4"><Cloud className="size-4 text-blue-700" /><h2 className="font-semibold">Documenti Nextcloud</h2></div><table className="w-full text-sm"><thead className="bg-slate-50 text-left"><tr><th className="px-4 py-3">Documento</th><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">Modificato</th></tr></thead><tbody>{data.documenti.map((doc) => <tr key={doc.id} className="border-t border-border"><td className="px-4 py-3"><div className="font-medium">{doc.nome}</div><div className="text-xs text-muted-foreground">{doc.path}</div></td><td className="px-4 py-3"><Badge variant="outline">{doc.tipo}</Badge></td><td className="px-4 py-3 text-muted-foreground">{doc.modificato_at ? new Date(doc.modificato_at).toLocaleDateString("it-IT") : "—"}</td></tr>)}</tbody></table></section>}</TabsContent>
+                <TabsContent value="documenti-admin" className="space-y-5 pt-5">
+                  <section className="rounded-xl border border-border bg-white p-4 shadow-sm">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <PanelTitle icon={Upload} title="Carica documenti" description="Carica i file su Nextcloud, poi usa Sincronizza per importarli nel CRM. Massimo 25 MB per file." />
+                      <Button variant="outline" onClick={syncNextcloud} disabled={syncing || uploading}>{syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}Sincronizza ora</Button>
+                    </div>
+                    {uploading ? <div className="mb-3 flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800"><Loader2 className="size-4 animate-spin" />Upload in corso su Nextcloud</div> : null}
+                    <div className="grid gap-3 md:grid-cols-4">
+                      {UPLOAD_CATEGORIES.map((config) => <UploadTile key={config.key} config={config} uploading={uploading} onUpload={(category, files) => void uploadFiles(category, files)} />)}
+                    </div>
+                  </section>
+
+                  <StoricoListini versioni={data.versioni} catalogoId={catalogo.id} deletingCatalog={deletingCatalog} onDelete={(id, name) => void deleteCatalog(id, name)} />
+                  <DocumentiNextcloud documenti={data.documenti} fonteAttiva={catalogo.fonte_path} deletingDocument={deletingDocument} onDelete={(path, name) => void deleteDocument(path, name)} />
+                </TabsContent>
               </Tabs>
             </div>
           </SheetContent>

@@ -121,34 +121,114 @@ function extractDiscounts(lines: string[]) {
   ) === index)
 }
 
+function canonicalAccessoryName(value: string) {
+  const clean = value
+    .replace(/\s*\(\s*/g, " (")
+    .replace(/\s*\)\s*/g, ")")
+    .replace(/\s+/g, " ")
+    .trim()
+  const label = normalized(clean)
+  if (label.includes("ZAVORRE A VELA")) return "Zavorre a vela"
+  if (label === "ZAVORRE") return "Zavorre"
+  if (label.includes("WALL BOX")) return "Wall Box SolaxPower / Sungrow"
+  if (label.includes("OTTIMIZZATORI") && label.includes("TIGO")) return "Ottimizzatori Tigo"
+  if (label.includes("TIGO CLOUD CONNECT")) return "Tigo Cloud Connect"
+  if (label.includes("SECONDO INVERTER")) return "Secondo inverter in parallelo"
+  return clean
+}
+
+function accessoryUnit(line: string) {
+  return /\/\s*KWP/i.test(normalized(line)) ? "€/kWp" : "€"
+}
+
+function accessoryDiscountable(name: string) {
+  const label = normalized(name)
+  if (/WALL BOX|CLOUD CONNECT|SECONDO INVERTER/i.test(label)) return false
+  return /ZAVORRE|OTTIMIZZATORI/i.test(label)
+}
+
+function isAccessoryStop(line: string) {
+  const label = normalized(line)
+  return (
+    label.includes("ECCETTO") ||
+    label.includes("BATTERIE DA") ||
+    label.includes("POTENZE INFERIORI") ||
+    label.startsWith("ZONA ") ||
+    label.startsWith("EPS") ||
+    label.includes("% DI SCONTO")
+  )
+}
+
+function isAccessorySectionStart(line: string) {
+  const label = normalized(line)
+  return label === "ACCESSORI" || label === "LISTINO ACCESSORI" || label.startsWith("LISTINO ACCESSORI ")
+}
+
+function accessoryFromCells(cells: string[]): AccessorioCommerciale | null {
+  const cleanCells = cells.map((cell) => cell.trim()).filter(Boolean)
+  if (cleanCells.length < 2) return null
+  if (normalized(cleanCells.join(" ")).includes("ACCESSORIO PREZZO")) return null
+
+  // Nei PDF Canva capita che una riga FV e una riga accessorio condividano la
+  // stessa coordinata Y: "7 | 7.890,00 € | Wall Box ... | 1.500 €".
+  const values = cleanCells.map(numberIt)
+  const offset = values[0] != null &&
+    REQUIRED_KWP.includes(values[0] as (typeof REQUIRED_KWP)[number]) &&
+    values[1] != null &&
+    values[1] > 1000
+    ? 2
+    : 0
+  const remaining = cleanCells.slice(offset)
+  if (remaining.length < 2) return null
+
+  const name = canonicalAccessoryName(remaining[0])
+  if (!name || numbersInText(name).length > 0 || /^PREZZO/i.test(normalized(name))) return null
+  const priceText = remaining.slice(1).join(" ")
+  const prices = numbersInText(priceText).filter((value) => value > 0)
+  if (prices.length === 0) return null
+
+  return {
+    nome: name,
+    prezzo: prices[0],
+    prezzo_combo: prices[1] ?? null,
+    unita: accessoryUnit(priceText),
+    scontabile: accessoryDiscountable(name),
+  }
+}
+
 function extractAccessories(lines: string[]) {
   const result: AccessorioCommerciale[] = []
-  const definitions = [
-    { pattern: /ZAVORRE A VELA/i, name: "Zavorre a vela", unit: "€/kWp" },
-    { pattern: /^ZAVORRE(?:\s*\||$)/i, name: "Zavorre", unit: "€/kWp" },
-    { pattern: /WALL BOX/i, name: "Wall Box SolaxPower / Sungrow", unit: "€" },
-    { pattern: /OTTIMIZZATORI.*TIGO/i, name: "Ottimizzatori Tigo", unit: "€/kWp" },
-    { pattern: /TIGO CLOUD CONNECT/i, name: "Tigo Cloud Connect", unit: "€" },
-    { pattern: /SECONDO INVERTER/i, name: "Secondo inverter in parallelo", unit: "€" },
-  ]
-  for (const definition of definitions) {
-    const line = lines.find((candidate) => definition.pattern.test(normalized(candidate)))
-    if (!line) continue
-    const normalizedLine = normalized(line)
-    const match = normalizedLine.match(definition.pattern)
-    const values = match?.index == null
-      ? []
-      : numbersInText(normalizedLine.slice(match.index + match[0].length)).filter((value) => value > 0)
-    if (values.length === 0) continue
-    result.push({
-      nome: definition.name,
-      prezzo: values[0],
-      prezzo_combo: values[1] ?? null,
-      unita: definition.unit,
-      scontabile: !/WALL BOX|CLOUD CONNECT|SECONDO INVERTER/i.test(definition.name),
-    })
+  let inAccessories = false
+  for (const line of lines) {
+    if (isAccessorySectionStart(line)) {
+      inAccessories = true
+      continue
+    }
+    if (!inAccessories) continue
+    if (isAccessoryStop(line)) break
+    const accessory = accessoryFromCells(line.split("|"))
+    if (accessory) result.push(accessory)
   }
-  return result
+
+  const secondoInverter = lines.find((line) => /SECONDO INVERTER/i.test(normalized(line)))
+  if (secondoInverter) {
+    const prices = numbersInText(secondoInverter).filter((value) => value > 0)
+    if (prices.length > 0) {
+      result.push({
+        nome: "Secondo inverter in parallelo",
+        prezzo: prices[0],
+        prezzo_combo: null,
+        unita: "€",
+        scontabile: false,
+      })
+    }
+  }
+  return result.filter((item, index, items) => items.findIndex((candidate) =>
+    normalized(candidate.nome) === normalized(item.nome) &&
+    candidate.prezzo === item.prezzo &&
+    candidate.prezzo_combo === item.prezzo_combo &&
+    candidate.unita === item.unita,
+  ) === index)
 }
 
 /** Converte autonomamente un PDF commerciale nella matrice finale del CRM. */

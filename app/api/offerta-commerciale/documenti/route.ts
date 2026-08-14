@@ -51,8 +51,23 @@ export async function DELETE(request: Request) {
 
   const path = new URL(request.url).searchParams.get("path")?.trim()
   if (!path) return NextResponse.json({ error: "Documento non valido" }, { status: 400 })
-  if (!path.startsWith("Solair/Offerta-Commerciale/")) {
+  if (path.includes("..") || !path.startsWith(`${OFFERTA_COMMERCIALE_ROOT}/`)) {
     return NextResponse.json({ error: "Documento fuori dal catalogo commerciale" }, { status: 400 })
+  }
+
+  const supabase = createAdminClient()
+  if (!supabase) return NextResponse.json({ error: "Supabase admin non configurato" }, { status: 503 })
+
+  const { data: cataloghi, error: cataloghiError } = await supabase
+    .from("offerta_commerciale_cataloghi")
+    .select("id, nome, stato")
+    .eq("fonte_path", path)
+  if (cataloghiError) return NextResponse.json({ error: cataloghiError.message }, { status: 500 })
+  const bloccante = cataloghi?.find((catalogo) => catalogo.stato !== "archiviato")
+  if (bloccante) {
+    return NextResponse.json({
+      error: `Il file è collegato al listino “${bloccante.nome}” (${bloccante.stato}). Sincronizza un nuovo listino o archivialo prima di cancellare il PDF.`,
+    }, { status: 409 })
   }
 
   const deleted = await deleteFile(path)
@@ -60,8 +75,14 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: deleted.error ?? `Eliminazione Nextcloud fallita (${deleted.status})` }, { status: 502 })
   }
 
-  const supabase = createAdminClient()
-  if (!supabase) return NextResponse.json({ error: "Supabase admin non configurato" }, { status: 503 })
+  const archivedCatalogIds = (cataloghi ?? []).map((catalogo) => catalogo.id)
+  if (archivedCatalogIds.length > 0) {
+    const { error: catalogDeleteError } = await supabase
+      .from("offerta_commerciale_cataloghi")
+      .delete()
+      .in("id", archivedCatalogIds)
+    if (catalogDeleteError) return NextResponse.json({ error: catalogDeleteError.message }, { status: 500 })
+  }
 
   const { error: documentError } = await supabase.from("offerta_commerciale_documenti").delete().eq("path", path)
   if (documentError) return NextResponse.json({ error: documentError.message }, { status: 500 })
@@ -78,5 +99,5 @@ export async function DELETE(request: Request) {
     .eq("cover_path", path)
   if (coverUpdateError) return NextResponse.json({ error: coverUpdateError.message }, { status: 500 })
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, cataloghi_eliminati: archivedCatalogIds.length })
 }

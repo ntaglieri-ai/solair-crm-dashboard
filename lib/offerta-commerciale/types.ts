@@ -116,11 +116,16 @@ export type DocumentoCommerciale = {
   sincronizzato_at: string
 }
 
+export type VersioneCatalogoCommerciale = Pick<
+  CatalogoCommerciale,
+  "id" | "nome" | "stato" | "valido_dal" | "valido_al" | "fonte_path" | "fonte_fingerprint" | "pubblicato_at" | "aggiornato_at"
+>
+
 export type OffertaCommercialePayload = {
   catalogo: CatalogoCommerciale | null
   offerte: OffertaPeriodo[]
   documenti: DocumentoCommerciale[]
   canManage: boolean
   nextcloudRoot: string
-  versioni: Pick<CatalogoCommerciale, "id" | "nome" | "stato" | "valido_dal" | "valido_al" | "aggiornato_at">[]
+  versioni: VersioneCatalogoCommerciale[]
 }

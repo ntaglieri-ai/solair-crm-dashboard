@@ -931,6 +931,56 @@
     inset 0 1px 0 rgb(255 255 255 / 0.95);
 }
 
+/* Card che apre la vista di sola lettura: resta una card, non diventa un
+   pulsante — cambia solo l'affordance (cursore, focus, chip di azione). */
+button.offerta-kpi,
+a.offerta-kpi {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+
+button.offerta-kpi:focus-visible,
+a.offerta-kpi:focus-visible {
+  outline: 2px solid var(--kpi-tone);
+  outline-offset: 3px;
+}
+
+.offerta-kpi-foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.offerta-kpi-azione {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.15rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--kpi-tone), white 88%);
+  padding: 0.25rem 0.4rem 0.25rem 0.55rem;
+  color: color-mix(in srgb, var(--kpi-tone), #0f172a 25%);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+  opacity: 0.72;
+  transition: opacity 180ms ease, background-color 180ms ease;
+}
+
+button.offerta-kpi:hover .offerta-kpi-azione,
+a.offerta-kpi:hover .offerta-kpi-azione,
+button.offerta-kpi:focus-visible .offerta-kpi-azione,
+a.offerta-kpi:focus-visible .offerta-kpi-azione {
+  background: color-mix(in srgb, var(--kpi-tone), white 78%);
+  opacity: 1;
+}
+
 .offerta-kpi-head {
   position: relative;
   z-index: 1;

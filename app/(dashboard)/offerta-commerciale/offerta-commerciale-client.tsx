@@ -2,7 +2,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Archive, BadgeEuro, BatteryCharging, BookOpenCheck, Calculator, ChevronDown, Cloud, ExternalLink, FileText, Loader2, Mail, PackageOpen, Pencil, Phone, Plug, Plus, RefreshCw, Save, Search, Settings2, ShieldCheck, SlidersHorizontal, SolarPanel, TicketPercent, Trash2, Upload, User, UserPlus, X } from "lucide-react"
+import { Archive, BadgeEuro, BatteryCharging, BookOpenCheck, Calculator, ChevronDown, ChevronRight, Cloud, ExternalLink, FileText, Loader2, Mail, PackageOpen, Pencil, Phone, Plug, Plus, RefreshCw, Save, Search, Settings2, ShieldCheck, SlidersHorizontal, SolarPanel, TicketPercent, Trash2, Upload, User, UserPlus, X } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { usePermissions } from "@/lib/permissions/provider"
 import type { AccessorioCommerciale, CatalogoCommerciale, CodiceSconto, OffertaCommercialePayload, OffertaPeriodo, PannelloSpec } from "@/lib/offerta-commerciale/types"
 
 function numberValue(value: string) {
@@ -27,17 +28,30 @@ const TONI_METRICA = {
   slate: "#5b7391",
 } as const
 
-function Metric({ icon: Icon, label, value, hint, tone = "blue", kind = "number" }: { icon: typeof BadgeEuro; label: string; value: string; hint: string; tone?: keyof typeof TONI_METRICA; kind?: "number" | "text" }) {
-  return <article className="offerta-kpi" style={{ "--kpi-tone": TONI_METRICA[tone] } as React.CSSProperties}>
+/**
+ * Card KPI. Con `onClick` o `href` diventa un elemento interattivo che apre la
+ * relativa vista in sola lettura: e' l'unico modo che ha un agente senza
+ * permesso di gestione per consultare il catalogo, quindi resta cliccabile a
+ * prescindere dai permessi.
+ */
+function Metric({ icon: Icon, label, value, hint, tone = "blue", kind = "number", azione, onClick, href }: { icon: typeof BadgeEuro; label: string; value: string; hint: string; tone?: keyof typeof TONI_METRICA; kind?: "number" | "text"; azione?: string; onClick?: () => void; href?: string }) {
+  const contenuto = <>
     <div className="offerta-kpi-head">
       <span className="offerta-kpi-icon"><Icon className="size-5" /></span>
       <span className="offerta-kpi-label">{label}</span>
     </div>
     <div className="offerta-kpi-body">
       <p className="offerta-kpi-value" data-kind={kind} title={kind === "text" ? value : undefined}>{value}</p>
-      <p className="offerta-kpi-hint">{hint}</p>
+      <div className="offerta-kpi-foot">
+        <p className="offerta-kpi-hint">{hint}</p>
+        {azione ? <span className="offerta-kpi-azione">{azione}<ChevronRight className="size-3" /></span> : null}
+      </div>
     </div>
-  </article>
+  </>
+  const stile = { "--kpi-tone": TONI_METRICA[tone] } as React.CSSProperties
+  if (href) return <a className="offerta-kpi" style={stile} href={href} target="_blank" rel="noreferrer">{contenuto}</a>
+  if (onClick) return <button type="button" className="offerta-kpi" style={stile} onClick={onClick}>{contenuto}</button>
+  return <article className="offerta-kpi" style={stile}>{contenuto}</article>
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
@@ -494,6 +508,124 @@ function SezioneCliente() {
   </section>
 }
 
+const FORMATO_EURO = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 })
+const FORMATO_NUMERO = new Intl.NumberFormat("it-IT")
+
+function euro(value: number | null | undefined) {
+  return value == null ? "—" : FORMATO_EURO.format(value)
+}
+
+/** Un accessorio puo' essere quotato in €, in €/kWp o a corpo: l'unita' decide il formato. */
+function prezzoAccessorio(value: number | null | undefined, unita: string) {
+  if (value == null) return "—"
+  const misura = unita.trim()
+  return !misura || misura === "€" ? FORMATO_EURO.format(value) : `${FORMATO_NUMERO.format(value)} ${misura}`
+}
+
+function periodoOfferta(offer: OffertaPeriodo) {
+  const dal = offer.valido_dal ? new Date(offer.valido_dal).toLocaleDateString("it-IT") : null
+  const al = offer.valido_al ? new Date(offer.valido_al).toLocaleDateString("it-IT") : null
+  if (!dal && !al) return "Sempre valida"
+  return `${dal ?? "Data inizio libera"} – ${al ?? "senza scadenza"}`
+}
+
+type VistaCatalogo = "fv" | "accumuli" | "accessori" | "offerte"
+
+const VISTE_CATALOGO: Record<VistaCatalogo, { icona: typeof BadgeEuro; titolo: string; descrizione: string }> = {
+  fv: { icona: SolarPanel, titolo: "Taglie FV", descrizione: "Prezzo dell'impianto fotovoltaico senza accumulo, IVA inclusa." },
+  accumuli: { icona: BatteryCharging, titolo: "Accumuli", descrizione: "Sovrapprezzo dell'accumulo per marca e taglia dell'impianto." },
+  accessori: { icona: Plug, titolo: "Accessori", descrizione: "Voci pubblicate al configuratore con il relativo prezzo." },
+  offerte: { icona: PackageOpen, titolo: "Offerte del periodo", descrizione: "Offerte pubblicate, con il PDF da mostrare al cliente." },
+}
+
+/**
+ * Consultazione del catalogo aperta dalle card KPI: nessun campo modificabile e
+ * nessun salvataggio, quindi resta disponibile anche senza
+ * "offerta_commerciale.manage". I dati sono gia' nel payload della pagina.
+ */
+function VistaCatalogoSheet({ vista, onChiudi, catalogo, offerte }: { vista: VistaCatalogo | null; onChiudi: () => void; catalogo: CatalogoCommerciale; offerte: OffertaPeriodo[] }) {
+  const meta = vista ? VISTE_CATALOGO[vista] : null
+  const Icona = meta?.icona ?? BookOpenCheck
+  const accessori = catalogo.accessori.filter((item) => item.nome.trim() && item.prezzo >= 0)
+
+  return <Sheet open={vista != null} onOpenChange={(open) => { if (!open) onChiudi() }}>
+    <SheetContent className="max-w-none overflow-y-auto bg-slate-50 p-0 data-[side=right]:!w-[92vw] sm:!max-w-[640px]" showCloseButton>
+      <SheetHeader className="border-b bg-white px-6 py-5 pr-14">
+        <SheetTitle className="flex items-center gap-2 text-xl"><Icona className="size-5 text-blue-700" />{meta?.titolo ?? "Catalogo"}</SheetTitle>
+        <SheetDescription>{meta?.descrizione}</SheetDescription>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Badge variant="secondary"><ShieldCheck className="size-3.5" />Sola lettura</Badge>
+          <Badge variant="outline" className="bg-white text-blue-700">{catalogo.nome}</Badge>
+        </div>
+      </SheetHeader>
+
+      <div className="space-y-4 p-5">
+        {vista === "fv" ? (catalogo.fotovoltaico.length === 0 ? <Empty>Nessuna taglia a listino.</Empty> : <section className="overflow-hidden rounded-xl border border-blue-100 bg-white shadow-sm">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left"><tr><th className="px-4 py-3 font-bold">Potenza</th><th className="px-4 py-3 text-right font-bold">Prezzo</th></tr></thead>
+            <tbody>{catalogo.fotovoltaico.map((row, index) => <tr key={index} className="border-t border-border">
+              <td className="px-4 py-2.5 font-semibold">{FORMATO_NUMERO.format(row.kwp)} kWp</td>
+              <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{euro(row.prezzo)}</td>
+            </tr>)}</tbody>
+          </table>
+        </section>) : null}
+
+        {vista === "accumuli" ? (catalogo.accumuli.length === 0 ? <Empty>Nessun accumulo in catalogo.</Empty> : catalogo.accumuli.map((battery) => <section key={battery.marca} className="overflow-hidden rounded-xl border border-amber-100 bg-white shadow-sm">
+          <div className="border-b border-amber-100 bg-amber-50/60 p-4">
+            <h3 className="text-base font-bold text-amber-950">{battery.marca}</h3>
+            <p className="mt-0.5 text-sm font-medium text-amber-800/80">{[battery.tensione, battery.ip, battery.garanzia_anni ? `${battery.garanzia_anni} anni di garanzia` : null].filter(Boolean).join(" · ") || "Sovrapprezzo accumulo"}</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[420px] text-sm">
+              <thead className="bg-slate-50"><tr><th className="px-3 py-2.5 text-left font-bold">Impianto</th>{battery.taglie.map((kwh) => <th key={kwh} className="px-3 py-2.5 text-right font-bold">{kwh} kWh</th>)}</tr></thead>
+              <tbody>{Object.keys(battery.prezzi).sort((a, b) => Number(a) - Number(b)).map((kwp) => <tr key={kwp} className="border-t border-border">
+                <td className="px-3 py-2 font-bold">{kwp} kWp</td>
+                {battery.taglie.map((_, priceIndex) => <td key={priceIndex} className="px-3 py-2 text-right tabular-nums">{euro(battery.prezzi[kwp]?.[priceIndex])}</td>)}
+              </tr>)}</tbody>
+            </table>
+          </div>
+        </section>)) : null}
+
+        {vista === "accessori" ? (accessori.length === 0 ? <Empty>Nessun accessorio pubblicato.</Empty> : <section className="overflow-hidden rounded-xl border border-teal-100 bg-white shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-left"><tr><th className="px-4 py-3 font-bold">Accessorio</th><th className="px-4 py-3 text-right font-bold">Prezzo</th><th className="px-4 py-3 text-right font-bold">In combo</th></tr></thead>
+              <tbody>{accessori.map((item, index) => <tr key={index} className="border-t border-border">
+                <td className="px-4 py-2.5">
+                  <span className="font-semibold text-foreground">{item.nome}</span>
+                  {item.scontabile ? <Badge variant="outline" className="ml-2 border-teal-200 bg-teal-50 text-teal-800">Scontabile</Badge> : null}
+                </td>
+                <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{prezzoAccessorio(item.prezzo, item.unita)}</td>
+                <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{item.prezzo_combo == null ? "—" : prezzoAccessorio(item.prezzo_combo, item.unita)}</td>
+              </tr>)}</tbody>
+            </table>
+          </div>
+        </section>) : null}
+
+        {vista === "offerte" ? (offerte.length === 0 ? <Empty>Nessuna offerta pubblicata disponibile.</Empty> : <ul className="space-y-3">{offerte.map((offer) => <li key={offer.id} className="rounded-xl border border-border bg-white p-4 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-semibold text-foreground">{offer.titolo}</p>
+              {offer.descrizione ? <p className="mt-1 text-sm text-muted-foreground">{offer.descrizione}</p> : null}
+            </div>
+            <Badge className="shrink-0 bg-teal-600">Pubblicata</Badge>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground">{periodoOfferta(offer)}</span>
+            {/* Stesso canale del PDF del listino: credenziali admin, quindi
+                funziona anche per chi non ha un account Nextcloud collegato, e
+                senza il vincolo di validita' del link pubblico — le date sono
+                facoltative e nel sistema non fanno scadere nulla. */}
+            {offer.pdf_path
+              ? <Button variant="outline" size="sm" nativeButton={false} render={<a href={`/api/offerta-commerciale/documenti?path=${encodeURIComponent(offer.pdf_path)}`} target="_blank" rel="noreferrer" />}><FileText className="size-4" />Apri PDF</Button>
+              : <span className="text-xs font-medium text-muted-foreground">PDF non disponibile</span>}
+          </div>
+        </li>)}</ul>) : null}
+      </div>
+    </SheetContent>
+  </Sheet>
+}
+
 export function OffertaCommercialeClient() {
   const [data, setData] = useState<OffertaCommercialePayload | null>(null)
   const [catalogo, setCatalogo] = useState<CatalogoCommerciale | null>(null)
@@ -511,6 +643,10 @@ export function OffertaCommercialeClient() {
   // riga che lo blocca, anche se sta guardando un'altra tab.
   const [tabCatalogo, setTabCatalogo] = useState("listino")
   const [mostraErroriAccessori, setMostraErroriAccessori] = useState(false)
+  // Vista di sola lettura aperta da una card KPI: aperta a tutti, indipendente
+  // dal pannello di gestione.
+  const [vistaCatalogo, setVistaCatalogo] = useState<VistaCatalogo | null>(null)
+  const permissions = usePermissions()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -616,8 +752,11 @@ export function OffertaCommercialeClient() {
     finally { setDeletingDocument(null) }
   }
 
-  const activeOffers = useMemo(() => data?.offerte.filter((offer) => offer.pubblicata).length ?? 0, [data])
-  const canManage = data?.canManage === true
+  const publishedOffers = useMemo(() => data?.offerte.filter((offer) => offer.pubblicata) ?? [], [data])
+  const activeOffers = publishedOffers.length
+  // Doppio controllo: il payload e' la fonte autorevole (lo decide il server),
+  // l'engine client evita che il pulsante compaia mentre la fetch e' in corso.
+  const canManage = data?.canManage === true && permissions.canAction("offerta_commerciale.manage")
 
   if (loading && !data) return <div className="flex min-h-80 items-center justify-center"><Loader2 className="size-7 animate-spin text-primary" /></div>
   if (!catalogo || !data) return <Empty>Il modulo richiede la migrazione database “20260803_offerta_commerciale.sql”.</Empty>
@@ -788,12 +927,16 @@ export function OffertaCommercialeClient() {
     </header>
 
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-      <Metric icon={BookOpenCheck} label="Listino" value={catalogo.nome} hint="listino attivo" tone="navy" kind="text" />
-      <Metric icon={SolarPanel} label="Taglie FV" value={String(catalogo.fotovoltaico.length)} hint="taglie a listino" tone="blue" />
-      <Metric icon={BatteryCharging} label="Accumuli" value={String(catalogo.accumuli.length)} hint="marche in catalogo" tone="amber" />
-      <Metric icon={Plug} label="Accessori" value={String(accessoriAttivi)} hint="voci pubblicate" tone="teal" />
-      <Metric icon={PackageOpen} label="Offerte" value={String(activeOffers)} hint="offerte del periodo" tone="slate" />
+      {/* Il PDF del listino e' il file sincronizzato da Nextcloud: senza
+          fonte_path la card resta informativa. */}
+      <Metric icon={BookOpenCheck} label="Listino" value={catalogo.nome} hint="listino attivo" tone="navy" kind="text" azione={catalogo.fonte_path ? "Apri PDF" : undefined} href={catalogo.fonte_path ? `/api/offerta-commerciale/documenti?path=${encodeURIComponent(catalogo.fonte_path)}` : undefined} />
+      <Metric icon={SolarPanel} label="Taglie FV" value={String(catalogo.fotovoltaico.length)} hint="taglie a listino" tone="blue" azione="Vedi" onClick={() => setVistaCatalogo("fv")} />
+      <Metric icon={BatteryCharging} label="Accumuli" value={String(catalogo.accumuli.length)} hint="marche in catalogo" tone="amber" azione="Vedi" onClick={() => setVistaCatalogo("accumuli")} />
+      <Metric icon={Plug} label="Accessori" value={String(accessoriAttivi)} hint="voci pubblicate" tone="teal" azione="Vedi" onClick={() => setVistaCatalogo("accessori")} />
+      <Metric icon={PackageOpen} label="Offerte" value={String(activeOffers)} hint="offerte del periodo" tone="slate" azione="Vedi" onClick={() => setVistaCatalogo("offerte")} />
     </div>
+
+    <VistaCatalogoSheet vista={vistaCatalogo} onChiudi={() => setVistaCatalogo(null)} catalogo={catalogo} offerte={publishedOffers} />
 
     <section className="offerta-panel px-5 py-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">

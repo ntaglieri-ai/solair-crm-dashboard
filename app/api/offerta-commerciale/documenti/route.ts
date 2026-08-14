@@ -1,9 +1,49 @@
 import { NextResponse } from "next/server"
-import { requireApiAction } from "@/lib/permissions/server"
+import { requireApiAction, requireApiPage } from "@/lib/permissions/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { deleteFile } from "@/lib/nextcloud/admin-webdav"
+import { deleteFile, downloadAdminFile } from "@/lib/nextcloud/admin-webdav"
+import { OFFERTA_COMMERCIALE_ROOT } from "@/lib/offerta-commerciale/store"
 
 export const runtime = "nodejs"
+
+/**
+ * Documento del catalogo commerciale in sola lettura: serve alla card KPI
+ * "Listino", che apre il PDF sincronizzato da Nextcloud.
+ *
+ * Passa dalle credenziali admin e non da quelle dell'utente: le cartelle sotto
+ * Solair/ non sono condivise con gli account provisionati, quindi un agente
+ * riceverebbe un 404 pur avendo il permesso di pagina. Il controllo di accesso
+ * resta quindi tutto qui: permesso di pagina + path vincolato alla cartella del
+ * catalogo (a differenza di /api/public/asset, che e' senza autenticazione e
+ * non deve servire i listini).
+ */
+export async function GET(request: Request) {
+  const guard = await requireApiPage("offerta_commerciale")
+  if (guard.response) return guard.response
+
+  const path = new URL(request.url).searchParams.get("path")?.trim()
+  if (!path) return NextResponse.json({ error: "Documento non valido" }, { status: 400 })
+  if (path.includes("..") || !path.startsWith(`${OFFERTA_COMMERCIALE_ROOT}/`)) {
+    return NextResponse.json({ error: "Documento fuori dal catalogo commerciale" }, { status: 400 })
+  }
+
+  let file: Response
+  try {
+    file = await downloadAdminFile(path)
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "File non disponibile" }, { status: 502 })
+  }
+
+  const nome = path.split("/").pop() || "documento.pdf"
+  return new Response(file.body, {
+    headers: {
+      "Content-Type": file.headers.get("content-type") ?? "application/pdf",
+      ...(file.headers.get("content-length") ? { "Content-Length": file.headers.get("content-length")! } : {}),
+      "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(nome)}`,
+      "Cache-Control": "private, max-age=300",
+    },
+  })
+}
 
 export async function DELETE(request: Request) {
   const guard = await requireApiAction("offerta_commerciale.manage")

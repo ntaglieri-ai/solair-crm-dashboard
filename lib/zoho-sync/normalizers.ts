@@ -40,7 +40,17 @@ export function comparableValue(value: unknown): string | number | boolean | nul
   return String(value).trim()
 }
 
-export function valuesEqual(a: unknown, b: unknown): boolean {
-  return comparableValue(a) === comparableValue(b)
+function comparableTimestamp(value: unknown): number | null {
+  if (typeof value !== "string") return null
+  const normalized = value.trim()
+  if (!normalized || !normalized.includes("T")) return null
+  const parsed = new Date(normalized)
+  return Number.isNaN(parsed.valueOf()) ? null : parsed.valueOf()
 }
 
+export function valuesEqual(a: unknown, b: unknown): boolean {
+  const aTimestamp = comparableTimestamp(a)
+  const bTimestamp = comparableTimestamp(b)
+  if (aTimestamp !== null && bTimestamp !== null) return aTimestamp === bTimestamp
+  return comparableValue(a) === comparableValue(b)
+}

@@ -3,7 +3,9 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 export type ZohoSyncMode = "dry_run" | "write"
 export type ZohoSyncStatus = "running" | "completed" | "failed"
 export type ZohoSyncAction = "create" | "update" | "skip" | "conflict" | "error"
+export type ZohoSyncModule = "leads" | "clienti"
 export type ZohoFieldType = "text" | "number" | "boolean" | "timestamp" | "zoho_id" | "owner_lookup"
+export type SyncValue = string | number | boolean | null
 
 export type CsvRow = Record<string, string | undefined>
 
@@ -57,20 +59,20 @@ export type LeadZohoMapping = {
   updateExisting: boolean
 }
 
-export type NormalizedLead = Partial<Record<LeadColumn, string | number | boolean | null>> & {
+export type NormalizedLead = Partial<Record<LeadColumn, SyncValue>> & {
   zoho_id: string
 }
 
-export type LeadCrmRecord = Partial<Record<LeadColumn, string | number | boolean | null>> & {
+export type LeadCrmRecord = Partial<Record<LeadColumn, SyncValue>> & {
   id: string
   zoho_id: string | null
   zoho_synced_at: string | null
 }
 
 export type FieldDiff = {
-  field: LeadColumn
-  crmValue: string | number | boolean | null
-  zohoValue: string | number | boolean | null
+  field: string
+  crmValue: SyncValue
+  zohoValue: SyncValue
 }
 
 export type SyncIssue = {
@@ -88,6 +90,8 @@ export type LeadDiffResult = {
   payloadSummary: Record<string, unknown>
 }
 
+export type SyncDiffResult = LeadDiffResult
+
 export type ZohoSyncStats = {
   csvRows: number
   mappedRows: number
@@ -99,6 +103,7 @@ export type ZohoSyncStats = {
   duplicateZohoIds: number
   missingZohoIds: number
   unresolvedOwnerIds: string[]
+  unresolvedInstallatoreIds?: string[]
   unmappedHeaders: string[]
 }
 
@@ -109,4 +114,3 @@ export type ZohoSyncRunResult = {
 }
 
 export type SupabaseLike = SupabaseClient
-

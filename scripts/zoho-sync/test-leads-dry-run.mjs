@@ -63,6 +63,7 @@ function printSummary(result, logToDatabase) {
   console.log(JSON.stringify({
     mode: "dry_run",
     databaseLogging: logToDatabase,
+    operativeWrites: false,
     runId,
     csvRows: stats.csvRows,
     mappedRows: stats.mappedRows,

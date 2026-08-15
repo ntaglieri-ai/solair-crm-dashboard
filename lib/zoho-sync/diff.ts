@@ -1,15 +1,32 @@
+import { updateableClienteColumns, type ClienteCrmRecord, type NormalizedCliente } from "./clienti-mapping"
 import { updateableMappedColumns } from "./mapping"
 import { valuesEqual } from "./normalizers"
-import type { FieldDiff, LeadCrmRecord, LeadDiffResult, NormalizedLead } from "./types"
+import type { FieldDiff, LeadCrmRecord, LeadDiffResult, NormalizedLead, SyncDiffResult } from "./types"
 
 function summarize(
-  lead: NormalizedLead,
+  record: Record<string, unknown>,
   diffs: FieldDiff[],
 ): Record<string, unknown> {
   return {
-    mappedValues: Object.entries(lead).filter(([, value]) => value !== null && value !== "").length,
+    mappedValues: Object.entries(record).filter(([, value]) => value !== null && value !== "").length,
     changedFields: diffs.map((diff) => diff.field),
   }
+}
+
+function diffExistingRecord(params: {
+  normalized: Record<string, unknown>
+  existing: Record<string, unknown>
+  columns: string[]
+}): FieldDiff[] {
+  const diffs: FieldDiff[] = []
+  for (const field of params.columns) {
+    const zohoValue = (params.normalized[field] ?? null) as FieldDiff["zohoValue"]
+    const crmValue = (params.existing[field] ?? null) as FieldDiff["crmValue"]
+    if (!valuesEqual(crmValue, zohoValue)) {
+      diffs.push({ field, crmValue, zohoValue })
+    }
+  }
+  return diffs
 }
 
 export function diffLeadRecord(
@@ -29,14 +46,11 @@ export function diffLeadRecord(
     }
   }
 
-  const diffs: FieldDiff[] = []
-  for (const field of updateableMappedColumns()) {
-    const zohoValue = lead[field] ?? null
-    const crmValue = existing[field] ?? null
-    if (!valuesEqual(crmValue, zohoValue)) {
-      diffs.push({ field, crmValue, zohoValue })
-    }
-  }
+  const diffs = diffExistingRecord({
+    normalized: lead,
+    existing,
+    columns: updateableMappedColumns(),
+  })
 
   if (diffs.length === 0) {
     return {
@@ -56,6 +70,50 @@ export function diffLeadRecord(
     diffs,
     error: null,
     payloadSummary: summarize(lead, diffs),
+  }
+}
+
+export function diffClienteRecord(
+  cliente: NormalizedCliente,
+  existing: ClienteCrmRecord | null,
+): SyncDiffResult {
+  if (!existing) {
+    return {
+      action: "create",
+      zohoId: cliente.zoho_record_id,
+      crmRecordId: null,
+      diffs: [],
+      error: null,
+      payloadSummary: {
+        mappedValues: Object.entries(cliente).filter(([, value]) => value !== null && value !== "").length,
+      },
+    }
+  }
+
+  const diffs = diffExistingRecord({
+    normalized: cliente,
+    existing,
+    columns: updateableClienteColumns(),
+  })
+
+  if (diffs.length === 0) {
+    return {
+      action: "skip",
+      zohoId: cliente.zoho_record_id,
+      crmRecordId: existing.id,
+      diffs,
+      error: null,
+      payloadSummary: summarize(cliente, diffs),
+    }
+  }
+
+  return {
+    action: "update",
+    zohoId: cliente.zoho_record_id,
+    crmRecordId: existing.id,
+    diffs,
+    error: null,
+    payloadSummary: summarize(cliente, diffs),
   }
 }
 

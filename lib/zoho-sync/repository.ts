@@ -1,9 +1,11 @@
+import { CLIENTI_CRM_SELECT_COLUMNS, type ClienteCrmRecord } from "./clienti-mapping"
 import { LEAD_CRM_SELECT_COLUMNS } from "./mapping"
 import type {
   FieldDiff,
   LeadCrmRecord,
-  LeadDiffResult,
+  SyncDiffResult,
   SupabaseLike,
+  ZohoSyncModule,
   ZohoSyncMode,
   ZohoSyncStats,
   ZohoSyncStatus,
@@ -41,6 +43,26 @@ export async function fetchOwnerIdsByZohoId(
   return owners
 }
 
+export async function fetchInstallatoreIdsByZohoId(
+  supabase: SupabaseLike,
+): Promise<Map<string, string>> {
+  const installatori = new Map<string, string>()
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from("installatori")
+      .select("id,zoho_id")
+      .not("zoho_id", "is", null)
+      .range(from, from + 999)
+    if (error) throw new Error(`installatori: ${error.message}`)
+    for (const row of data ?? []) {
+      const zohoId = String(row.zoho_id ?? "").trim()
+      if (zohoId) installatori.set(zohoId, String(row.id))
+    }
+    if (!data || data.length < 1000) break
+  }
+  return installatori
+}
+
 export async function fetchLeadsByZohoId(
   supabase: SupabaseLike,
   zohoIds: string[],
@@ -60,9 +82,41 @@ export async function fetchLeadsByZohoId(
   return leads
 }
 
+export async function fetchClientiByZohoRecordId(
+  supabase: SupabaseLike,
+  zohoIds: string[],
+): Promise<Map<string, ClienteCrmRecord>> {
+  const clienti = new Map<string, ClienteCrmRecord>()
+  const uniqueIds = [...new Set(zohoIds.filter(Boolean))]
+  await inChunks(uniqueIds, async (chunk) => {
+    let columns: string[] = [...CLIENTI_CRM_SELECT_COLUMNS]
+    let data: unknown[] | null = null
+    for (;;) {
+      const result = await supabase
+        .from("clienti")
+        .select(columns.join(","))
+        .in("zoho_record_id", chunk)
+      if (!result.error) {
+        data = (result.data ?? []) as unknown[]
+        break
+      }
+
+      const missingColumn = result.error.message.match(/column clienti\.([a-zA-Z0-9_]+) does not exist/)?.[1]
+      if (!missingColumn || !columns.includes(missingColumn)) {
+        throw new Error(`clienti: ${result.error.message}`)
+      }
+      columns = columns.filter((column) => column !== missingColumn)
+    }
+    for (const row of ((data ?? []) as unknown as ClienteCrmRecord[])) {
+      if (row.zoho_record_id) clienti.set(String(row.zoho_record_id), row)
+    }
+  })
+  return clienti
+}
+
 export async function createSyncRun(
   supabase: SupabaseLike,
-  params: { mode: ZohoSyncMode; modules: string[]; since?: string | null },
+  params: { mode: ZohoSyncMode; modules: ZohoSyncModule[]; since?: string | null },
 ): Promise<string> {
   const { data, error } = await supabase
     .from("zoho_sync_runs")
@@ -95,10 +149,10 @@ export async function finishSyncRun(
   if (error) throw new Error(`zoho_sync_runs update: ${error.message}`)
 }
 
-function eventPayload(runId: string, event: LeadDiffResult) {
+function eventPayload(runId: string, module: ZohoSyncModule, event: SyncDiffResult) {
   return {
     run_id: runId,
-    module: "leads",
+    module,
     zoho_id: event.zohoId,
     crm_record_id: event.crmRecordId,
     action: event.action,
@@ -110,9 +164,9 @@ function eventPayload(runId: string, event: LeadDiffResult) {
   }
 }
 
-function conflictPayload(event: LeadDiffResult, diff: FieldDiff) {
+function conflictPayload(module: ZohoSyncModule, event: SyncDiffResult, diff: FieldDiff) {
   return {
-    module: "leads",
+    module,
     zoho_id: event.zohoId,
     crm_record_id: event.crmRecordId,
     field: diff.field,
@@ -125,16 +179,17 @@ function conflictPayload(event: LeadDiffResult, diff: FieldDiff) {
 export async function insertSyncEvents(
   supabase: SupabaseLike,
   runId: string,
-  events: LeadDiffResult[],
+  module: ZohoSyncModule,
+  events: SyncDiffResult[],
 ) {
-  await inChunks(events.map((event) => eventPayload(runId, event)), async (chunk) => {
+  await inChunks(events.map((event) => eventPayload(runId, module, event)), async (chunk) => {
     const { error } = await supabase.from("zoho_sync_events").insert(chunk)
     if (error) throw new Error(`zoho_sync_events insert: ${error.message}`)
   })
 
   const conflicts = events
     .filter((event) => event.action === "conflict")
-    .flatMap((event) => event.diffs.map((diff) => conflictPayload(event, diff)))
+    .flatMap((event) => event.diffs.map((diff) => conflictPayload(module, event, diff)))
   if (conflicts.length === 0) return
 
   await inChunks(conflicts, async (chunk) => {

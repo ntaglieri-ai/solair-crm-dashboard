@@ -13,7 +13,7 @@ import {
   normalizeCompitoCsvRow,
   unmappedCompitiHeaders,
 } from "./compiti-mapping"
-import { diffClienteRecord, diffCompitoRecord, diffLeadRecord, errorResult } from "./diff"
+import { diffClienteRecord, diffCompitoRecord, diffLeadRecord, diffScadenzaRecord, errorResult } from "./diff"
 import {
   LEAD_OWNER_ZOHO_ID_HEADER,
   LEAD_ZOHO_ID_HEADER,
@@ -21,6 +21,13 @@ import {
   unmappedHeaders,
 } from "./mapping"
 import { normalizeZohoId } from "./normalizers"
+import {
+  SCADENZA_OWNER_ZOHO_ID_HEADER,
+  SCADENZA_ZOHO_ID_HEADER,
+  normalizeScadenzaCsvRow,
+  unmappedScadenzeHeaders,
+} from "./scadenze-mapping"
+import { fetchScadenzeByZohoId } from "./scadenze-repository"
 import {
   createSyncRun,
   fetchClientiByZohoRecordId,
@@ -48,6 +55,7 @@ export type RunLeadDryRunOptions = {
 
 export type RunClientiDryRunOptions = RunLeadDryRunOptions
 export type RunCompitiDryRunOptions = RunLeadDryRunOptions
+export type RunScadenzeDryRunOptions = RunLeadDryRunOptions
 
 function readCsvRows(csvText: string): CsvRow[] {
   return parse(csvText, {
@@ -78,7 +86,7 @@ function increment(stats: ZohoSyncStats, event: SyncDiffResult) {
   stats[event.action] += 1
 }
 
-function validateCsvIds(rows: CsvRow[], idHeader: string) {
+function validateCsvIds(rows: CsvRow[], idHeader: string, label = "Record") {
   const seen = new Set<string>()
   const duplicateIds = new Set<string>()
   const validRows: Array<{ row: CsvRow; rowNumber: number; zohoId: string }> = []
@@ -88,7 +96,7 @@ function validateCsvIds(rows: CsvRow[], idHeader: string) {
     const rowNumber = index + 2
     const zohoId = normalizeZohoId(row[idHeader])
     if (!zohoId) {
-      errors.push(errorResult("Lead senza ID record", null, rowNumber))
+      errors.push(errorResult(`${label} senza ID record`, null, rowNumber))
       return
     }
     if (seen.has(zohoId)) {
@@ -309,6 +317,73 @@ export async function runCompitiDryRun(
         status: "failed",
         stats,
         error: error instanceof Error ? error.message : "Errore sync Zoho compiti",
+      })
+    }
+    throw error
+  }
+}
+
+export async function runScadenzeDryRun(
+  options: RunScadenzeDryRunOptions,
+): Promise<ZohoSyncRunResult> {
+  const csvText = await readFile(options.csvPath, "utf8")
+  const rows = readCsvRows(csvText)
+  const headers = Object.keys(rows[0] ?? {})
+  const stats = emptyStats(rows.length, unmappedScadenzeHeaders(headers))
+  const events: SyncDiffResult[] = []
+  let runId: string | null = null
+
+  try {
+    if (options.logToDatabase !== false) {
+      runId = await createSyncRun(options.supabase, {
+        mode: "dry_run",
+        modules: ["scadenze"],
+      })
+    }
+
+    const { validRows, errors, duplicateIds } = validateCsvIds(rows, SCADENZA_ZOHO_ID_HEADER, "Scadenza")
+    stats.duplicateZohoIds = duplicateIds.size
+    stats.missingZohoIds = errors.filter((event) => !event.zohoId).length
+    events.push(...errors)
+
+    const ownerIdsByZohoId = await fetchOwnerIdsByZohoId(options.supabase)
+    const unresolvedOwnerIds = new Set<string>()
+    for (const { row } of validRows) {
+      const ownerZohoId = normalizeZohoId(row[SCADENZA_OWNER_ZOHO_ID_HEADER])
+      if (ownerZohoId && !ownerIdsByZohoId.has(ownerZohoId)) unresolvedOwnerIds.add(ownerZohoId)
+    }
+    stats.unresolvedOwnerIds = [...unresolvedOwnerIds].sort()
+
+    const scadenzeByZohoId = await fetchScadenzeByZohoId(
+      options.supabase,
+      validRows.map((item) => item.zohoId),
+    )
+
+    for (const { row, rowNumber, zohoId } of validRows) {
+      const normalized = normalizeScadenzaCsvRow(row, ownerIdsByZohoId)
+      if (!normalized) {
+        events.push(errorResult("Scadenza senza ID record", zohoId, rowNumber))
+        continue
+      }
+      const existing = scadenzeByZohoId.get(normalized.zoho_id) ?? null
+      events.push(diffScadenzaRecord(normalized, existing))
+      stats.mappedRows += 1
+    }
+
+    for (const event of events) increment(stats, event)
+
+    if (runId) {
+      await insertSyncEvents(options.supabase, runId, "scadenze", events)
+      await finishSyncRun(options.supabase, runId, { status: "completed", stats })
+    }
+
+    return { runId, stats, events }
+  } catch (error) {
+    if (runId) {
+      await finishSyncRun(options.supabase, runId, {
+        status: "failed",
+        stats,
+        error: error instanceof Error ? error.message : "Errore sync Zoho scadenze",
       })
     }
     throw error

@@ -2,6 +2,7 @@ import { updateableClienteColumns, type ClienteCrmRecord, type NormalizedCliente
 import { updateableCompitoColumns, type CompitoCrmRecord, type NormalizedCompito } from "./compiti-mapping"
 import { updateableMappedColumns } from "./mapping"
 import { valuesEqual, zohoIdValuesEqual } from "./normalizers"
+import { updateableScadenzaColumns, type NormalizedScadenza, type ScadenzaCrmRecord } from "./scadenze-mapping"
 import type { FieldDiff, LeadCrmRecord, LeadDiffResult, NormalizedLead, SyncDiffResult } from "./types"
 
 function summarize(
@@ -168,6 +169,50 @@ export function diffCompitoRecord(
     diffs,
     error: null,
     payloadSummary: summarize(compito, diffs),
+  }
+}
+
+export function diffScadenzaRecord(
+  scadenza: NormalizedScadenza,
+  existing: ScadenzaCrmRecord | null,
+): SyncDiffResult {
+  if (!existing) {
+    return {
+      action: "create",
+      zohoId: scadenza.zoho_id,
+      crmRecordId: null,
+      diffs: [],
+      error: null,
+      payloadSummary: {
+        mappedValues: Object.entries(scadenza).filter(([, value]) => value !== null && value !== "").length,
+      },
+    }
+  }
+
+  const diffs = diffExistingRecord({
+    normalized: scadenza,
+    existing,
+    columns: updateableScadenzaColumns(),
+  })
+
+  if (diffs.length === 0) {
+    return {
+      action: "skip",
+      zohoId: scadenza.zoho_id,
+      crmRecordId: existing.id,
+      diffs,
+      error: null,
+      payloadSummary: summarize(scadenza, diffs),
+    }
+  }
+
+  return {
+    action: "update",
+    zohoId: scadenza.zoho_id,
+    crmRecordId: existing.id,
+    diffs,
+    error: null,
+    payloadSummary: summarize(scadenza, diffs),
   }
 }
 

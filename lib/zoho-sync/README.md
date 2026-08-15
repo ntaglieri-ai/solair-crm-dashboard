@@ -6,6 +6,7 @@ Current modules:
 - `leads`
 - `clienti`
 - `compiti`
+- `scadenze`
 
 The current engine is dry-run only. It may write diagnostic rows to
 `zoho_sync_runs` and `zoho_sync_events` when database logging is enabled, but it
@@ -39,6 +40,7 @@ Customers created by CRM conversion have `clienti.lead_id` and no
 node scripts/zoho-sync/test-leads-dry-run.mjs --no-db-log
 node scripts/zoho-sync/test-clienti-dry-run.mjs --no-db-log
 node scripts/zoho-sync/test-compiti-dry-run.mjs --no-db-log
+node scripts/zoho-sync/test-scadenze-dry-run.mjs --no-db-log
 pnpm exec tsc --noEmit --pretty false
 pnpm exec eslint lib/zoho-sync scripts/zoho-sync lib/clienti/zoho-fields.ts
 ```

@@ -22,77 +22,19 @@ export function numberValue(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-const ZOHO_CSV_TIME_ZONE = "Europe/Rome"
-
-function parseTimestampParts(value: string) {
-  const match = value.match(
-    /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?/,
-  )
-  if (!match) return null
-  return {
-    year: Number(match[1]),
-    month: Number(match[2]),
-    day: Number(match[3]),
-    hour: Number(match[4] ?? "0"),
-    minute: Number(match[5] ?? "0"),
-    second: Number(match[6] ?? "0"),
-    millisecond: Number((match[7] ?? "0").padEnd(3, "0")),
-  }
-}
-
-function timeZoneOffsetMinutes(instantMs: number, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hour12: false,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).formatToParts(new Date(instantMs))
-
-  const part = (type: string) => Number(parts.find((item) => item.type === type)?.value)
-  const localAsUtcMs = Date.UTC(
-    part("year"),
-    part("month") - 1,
-    part("day"),
-    part("hour"),
-    part("minute"),
-    part("second"),
-  )
-  return (localAsUtcMs - instantMs) / 60000
-}
-
-function localRomeTimestampToUtcIso(value: string): string | null {
-  const parts = parseTimestampParts(value)
-  if (!parts) return null
-
-  const localAsUtcMs = Date.UTC(
-    parts.year,
-    parts.month - 1,
-    parts.day,
-    parts.hour,
-    parts.minute,
-    parts.second,
-    parts.millisecond,
-  )
-  const firstOffset = timeZoneOffsetMinutes(localAsUtcMs, ZOHO_CSV_TIME_ZONE)
-  let utcMs = localAsUtcMs - firstOffset * 60_000
-  const secondOffset = timeZoneOffsetMinutes(utcMs, ZOHO_CSV_TIME_ZONE)
-  if (secondOffset !== firstOffset) {
-    utcMs = localAsUtcMs - secondOffset * 60_000
-  }
-
-  const parsed = new Date(utcMs)
-  return Number.isNaN(parsed.valueOf()) ? null : parsed.toISOString()
-}
-
 export function timestampValue(value: unknown): string | null {
   const normalized = String(value ?? "").trim()
   if (!normalized) return null
-  return localRomeTimestampToUtcIso(normalized)
+
+  // Zoho CSV timestamps and CRM timestamps are treated as Italian local wall-clock values.
+  // Do not apply timezone offsets here: keep the displayed hour stable.
+  const withOffsetColon = normalized.replace(/([+-]\d{2})(\d{2})$/, "$1:$2")
+  const isoLike = withOffsetColon.includes("T")
+    ? withOffsetColon
+    : withOffsetColon.replace(" ", "T")
+  const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/.test(isoLike)
+  const parsed = new Date(hasTimezone ? isoLike : `${isoLike}Z`)
+  return Number.isNaN(parsed.valueOf()) ? null : parsed.toISOString()
 }
 
 export function comparableValue(value: unknown): string | number | boolean | null {

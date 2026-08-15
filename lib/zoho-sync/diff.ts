@@ -1,7 +1,7 @@
 import { updateableClienteColumns, type ClienteCrmRecord, type NormalizedCliente } from "./clienti-mapping"
 import { updateableCompitoColumns, type CompitoCrmRecord, type NormalizedCompito } from "./compiti-mapping"
 import { updateableMappedColumns } from "./mapping"
-import { valuesEqual } from "./normalizers"
+import { valuesEqual, zohoIdValuesEqual } from "./normalizers"
 import type { FieldDiff, LeadCrmRecord, LeadDiffResult, NormalizedLead, SyncDiffResult } from "./types"
 
 function summarize(
@@ -23,11 +23,20 @@ function diffExistingRecord(params: {
   for (const field of params.columns) {
     const zohoValue = (params.normalized[field] ?? null) as FieldDiff["zohoValue"]
     const crmValue = (params.existing[field] ?? null) as FieldDiff["crmValue"]
-    if (!valuesEqual(crmValue, zohoValue)) {
+    if (!fieldValuesEqual(field, crmValue, zohoValue)) {
       diffs.push({ field, crmValue, zohoValue })
     }
   }
   return diffs
+}
+
+function isZohoIdField(field: string): boolean {
+  return field === "zoho_id" || field === "zoho_record_id" || field.endsWith("_zoho_id") || /^zoho_.*_id$/.test(field)
+}
+
+function fieldValuesEqual(field: string, crmValue: unknown, zohoValue: unknown): boolean {
+  if (isZohoIdField(field)) return zohoIdValuesEqual(crmValue, zohoValue)
+  return valuesEqual(crmValue, zohoValue)
 }
 
 export function diffLeadRecord(

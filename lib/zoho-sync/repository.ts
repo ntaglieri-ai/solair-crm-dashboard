@@ -70,7 +70,7 @@ export async function fetchLeadsByZohoId(
   zohoIds: string[],
 ): Promise<Map<string, LeadCrmRecord>> {
   const leads = new Map<string, LeadCrmRecord>()
-  const uniqueIds = [...new Set(zohoIds.filter(Boolean))]
+  const uniqueIds = [...new Set(zohoIds.flatMap((id) => (id ? [id, `zcrm_${id}`] : [])))]
   await inChunks(uniqueIds, async (chunk) => {
     const { data, error } = await supabase
       .from("leads")
@@ -78,7 +78,7 @@ export async function fetchLeadsByZohoId(
       .in("zoho_id", chunk)
     if (error) throw new Error(`leads: ${error.message}`)
     for (const row of ((data ?? []) as unknown as LeadCrmRecord[])) {
-      if (row.zoho_id) leads.set(String(row.zoho_id), row as LeadCrmRecord)
+      if (row.zoho_id) leads.set(normalizeZohoId(row.zoho_id), row as LeadCrmRecord)
     }
   })
   return leads
@@ -89,7 +89,7 @@ export async function fetchClientiByZohoRecordId(
   zohoIds: string[],
 ): Promise<Map<string, ClienteCrmRecord>> {
   const clienti = new Map<string, ClienteCrmRecord>()
-  const uniqueIds = [...new Set(zohoIds.filter(Boolean))]
+  const uniqueIds = [...new Set(zohoIds.flatMap((id) => (id ? [id, `zcrm_${id}`] : [])))]
   await inChunks(uniqueIds, async (chunk) => {
     let columns: string[] = [...CLIENTI_CRM_SELECT_COLUMNS]
     let data: unknown[] | null = null
@@ -110,7 +110,7 @@ export async function fetchClientiByZohoRecordId(
       columns = columns.filter((column) => column !== missingColumn)
     }
     for (const row of ((data ?? []) as unknown as ClienteCrmRecord[])) {
-      if (row.zoho_record_id) clienti.set(String(row.zoho_record_id), row)
+      if (row.zoho_record_id) clienti.set(normalizeZohoId(row.zoho_record_id), row)
     }
   })
   return clienti

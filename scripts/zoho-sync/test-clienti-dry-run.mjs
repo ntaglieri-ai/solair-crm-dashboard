@@ -64,6 +64,7 @@ function printSummary(result, logToDatabase) {
     mode: "dry_run",
     module: "clienti",
     databaseLogging: logToDatabase,
+    operativeWrites: false,
     runId,
     csvRows: stats.csvRows,
     mappedRows: stats.mappedRows,

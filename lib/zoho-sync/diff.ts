@@ -1,4 +1,5 @@
 import { updateableClienteColumns, type ClienteCrmRecord, type NormalizedCliente } from "./clienti-mapping"
+import { updateableCompitoColumns, type CompitoCrmRecord, type NormalizedCompito } from "./compiti-mapping"
 import { updateableMappedColumns } from "./mapping"
 import { valuesEqual } from "./normalizers"
 import type { FieldDiff, LeadCrmRecord, LeadDiffResult, NormalizedLead, SyncDiffResult } from "./types"
@@ -114,6 +115,50 @@ export function diffClienteRecord(
     diffs,
     error: null,
     payloadSummary: summarize(cliente, diffs),
+  }
+}
+
+export function diffCompitoRecord(
+  compito: NormalizedCompito,
+  existing: CompitoCrmRecord | null,
+): SyncDiffResult {
+  if (!existing) {
+    return {
+      action: "create",
+      zohoId: compito.zoho_record_id,
+      crmRecordId: null,
+      diffs: [],
+      error: null,
+      payloadSummary: {
+        mappedValues: Object.entries(compito).filter(([, value]) => value !== null && value !== "").length,
+      },
+    }
+  }
+
+  const diffs = diffExistingRecord({
+    normalized: compito,
+    existing,
+    columns: updateableCompitoColumns(),
+  })
+
+  if (diffs.length === 0) {
+    return {
+      action: "skip",
+      zohoId: compito.zoho_record_id,
+      crmRecordId: existing.id,
+      diffs,
+      error: null,
+      payloadSummary: summarize(compito, diffs),
+    }
+  }
+
+  return {
+    action: "update",
+    zohoId: compito.zoho_record_id,
+    crmRecordId: existing.id,
+    diffs,
+    error: null,
+    payloadSummary: summarize(compito, diffs),
   }
 }
 

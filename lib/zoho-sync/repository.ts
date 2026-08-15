@@ -1,5 +1,7 @@
 import { CLIENTI_CRM_SELECT_COLUMNS, type ClienteCrmRecord } from "./clienti-mapping"
+import { COMPITI_CRM_SELECT_COLUMNS, type CompitoCrmRecord } from "./compiti-mapping"
 import { LEAD_CRM_SELECT_COLUMNS } from "./mapping"
+import { normalizeZohoId } from "./normalizers"
 import type {
   FieldDiff,
   LeadCrmRecord,
@@ -112,6 +114,59 @@ export async function fetchClientiByZohoRecordId(
     }
   })
   return clienti
+}
+
+async function selectExistingByZohoRecordId<T extends { zoho_record_id: string | null }>(
+  supabase: SupabaseLike,
+  table: "clienti" | "compiti",
+  columns: readonly string[],
+  zohoIds: string[],
+): Promise<Map<string, T>> {
+  const records = new Map<string, T>()
+  const uniqueIds = [...new Set(zohoIds.filter(Boolean))]
+  await inChunks(uniqueIds, async (chunk) => {
+    let selectColumns: string[] = [...columns]
+    let data: unknown[] | null = null
+    for (;;) {
+      const result = await supabase
+        .from(table)
+        .select(selectColumns.join(","))
+        .in("zoho_record_id", chunk)
+      if (!result.error) {
+        data = (result.data ?? []) as unknown[]
+        break
+      }
+
+      const missingColumn = result.error.message.match(/column [a-z_]+\.([a-zA-Z0-9_]+) does not exist/)?.[1]
+      if (!missingColumn || !selectColumns.includes(missingColumn)) {
+        throw new Error(`${table}: ${result.error.message}`)
+      }
+      selectColumns = selectColumns.filter((column) => column !== missingColumn)
+    }
+    for (const row of ((data ?? []) as unknown as T[])) {
+      if (row.zoho_record_id) records.set(String(row.zoho_record_id), row)
+    }
+  })
+  return records
+}
+
+export async function fetchCompitiByZohoRecordId(
+  supabase: SupabaseLike,
+  zohoIds: string[],
+): Promise<Map<string, CompitoCrmRecord>> {
+  const lookupIds = [
+    ...new Set(zohoIds.flatMap((id) => (id ? [id, `zcrm_${id}`] : []))),
+  ]
+  const records = await selectExistingByZohoRecordId<CompitoCrmRecord>(
+    supabase,
+    "compiti",
+    COMPITI_CRM_SELECT_COLUMNS,
+    lookupIds,
+  )
+  return new Map([...records.values()].map((record) => [
+    normalizeZohoId(record.zoho_record_id),
+    record,
+  ]))
 }
 
 export async function createSyncRun(

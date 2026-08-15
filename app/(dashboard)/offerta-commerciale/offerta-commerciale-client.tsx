@@ -602,7 +602,21 @@ function StatoListinoBadge({ stato }: { stato: CatalogoCommerciale["stato"] }) {
   return <Badge variant="secondary">Bozza</Badge>
 }
 
-function StoricoListini({ versioni, catalogoId, deletingCatalog, onDelete }: { versioni: VersioneCatalogoCommerciale[]; catalogoId: string; deletingCatalog: string | null; onDelete: (id: string, name: string) => void }) {
+function StoricoListini({
+  versioni,
+  catalogoId,
+  deletingCatalog,
+  publishingCatalog,
+  onDelete,
+  onPublish,
+}: {
+  versioni: VersioneCatalogoCommerciale[]
+  catalogoId: string
+  deletingCatalog: string | null
+  publishingCatalog: string | null
+  onDelete: (id: string, name: string) => void
+  onPublish: (id: string, name: string) => void
+}) {
   if (versioni.length === 0) return <Empty>Nessun listino nello storico.</Empty>
   return <section className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
     <div className="flex flex-col gap-1 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -642,6 +656,7 @@ function StoricoListini({ versioni, catalogoId, deletingCatalog, onDelete }: { v
             <td className="px-4 py-3">
               <div className="flex justify-end gap-1">
                 {version.fonte_path ? <Button variant="ghost" size="icon-sm" aria-label={`Apri PDF ${version.nome}`} nativeButton={false} render={<a href={`/api/offerta-commerciale/documenti?path=${encodeURIComponent(version.fonte_path)}`} target="_blank" rel="noreferrer" />}><FileText className="size-4" /></Button> : null}
+                {version.stato === "archiviato" ? <Button variant="ghost" size="icon-sm" aria-label={`Ripubblica ${version.nome}`} title={`Ripubblica ${version.nome}`} disabled={publishingCatalog === version.id || deletingCatalog === version.id} onClick={() => onPublish(version.id, version.nome)}>{publishingCatalog === version.id ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4 text-blue-700" />}</Button> : null}
                 {version.stato === "archiviato" ? <Button variant="ghost" size="icon-sm" aria-label={`Elimina ${version.nome}`} disabled={deletingCatalog === version.id} onClick={() => onDelete(version.id, version.nome)}>{deletingCatalog === version.id ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4 text-destructive" />}</Button> : null}
               </div>
             </td>
@@ -880,6 +895,7 @@ export function OffertaCommercialeClient() {
   const [syncing, setSyncing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [deletingCatalog, setDeletingCatalog] = useState<string | null>(null)
+  const [publishingCatalog, setPublishingCatalog] = useState<string | null>(null)
   const [deletingDocument, setDeletingDocument] = useState<string | null>(null)
   // Sezioni schede prodotto: chiuse finche' non le si apre dai rispettivi
   // pulsanti sugli header delle tabelle prezzi.
@@ -985,6 +1001,23 @@ export function OffertaCommercialeClient() {
       await load()
     } catch (error) { toast.error(error instanceof Error ? error.message : "Errore eliminazione") }
     finally { setDeletingCatalog(null) }
+  }
+
+  const publishCatalog = async (id: string, name: string) => {
+    if (!window.confirm(`Ripubblicare “${name}” come listino in uso? Il listino attualmente pubblicato verrà archiviato.`)) return
+    setPublishingCatalog(id)
+    try {
+      const response = await fetch("/api/offerta-commerciale", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action: "publish" }),
+      })
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error ?? "Pubblicazione non riuscita")
+      toast.success(`Listino “${name}” ripubblicato`)
+      await load()
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Errore pubblicazione") }
+    finally { setPublishingCatalog(null) }
   }
 
   const deleteDocument = async (path: string, name: string) => {
@@ -1183,7 +1216,7 @@ export function OffertaCommercialeClient() {
                     </div>
                   </section>
 
-                  <StoricoListini versioni={data.versioni} catalogoId={catalogo.id} deletingCatalog={deletingCatalog} onDelete={(id, name) => void deleteCatalog(id, name)} />
+                  <StoricoListini versioni={data.versioni} catalogoId={catalogo.id} deletingCatalog={deletingCatalog} publishingCatalog={publishingCatalog} onDelete={(id, name) => void deleteCatalog(id, name)} onPublish={(id, name) => void publishCatalog(id, name)} />
                   <DocumentiNextcloud documenti={data.documenti} fonteAttiva={catalogo.fonte_path} deletingDocument={deletingDocument} onDelete={(path, name) => void deleteDocument(path, name)} />
                 </TabsContent>
               </Tabs>

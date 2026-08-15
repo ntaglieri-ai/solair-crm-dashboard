@@ -67,8 +67,31 @@ export async function POST(request: Request) {
   if (!body?.id || body.action !== "publish") return NextResponse.json({ error: "Richiesta non valida" }, { status: 400 })
   const supabase = createAdminClient()
   if (!supabase) return NextResponse.json({ error: "Supabase admin non configurato" }, { status: 503 })
-  const { error } = await supabase.rpc("pubblica_catalogo_offerta_commerciale", { p_id: body.id })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const { data: catalogo, error: readError } = await supabase
+    .from("offerta_commerciale_cataloghi")
+    .select("id, stato")
+    .eq("id", body.id)
+    .maybeSingle()
+  if (readError) return NextResponse.json({ error: readError.message }, { status: 500 })
+  if (!catalogo) return NextResponse.json({ error: "Listino non trovato" }, { status: 404 })
+  if (catalogo.stato === "pubblicato") return NextResponse.json({ ok: true })
+  if (catalogo.stato !== "bozza" && catalogo.stato !== "archiviato") {
+    return NextResponse.json({ error: "Stato listino non pubblicabile" }, { status: 409 })
+  }
+
+  const now = new Date().toISOString()
+  const { error: archiveError } = await supabase
+    .from("offerta_commerciale_cataloghi")
+    .update({ stato: "archiviato", aggiornato_at: now })
+    .eq("stato", "pubblicato")
+    .neq("id", body.id)
+  if (archiveError) return NextResponse.json({ error: archiveError.message }, { status: 500 })
+
+  const { error: publishError } = await supabase
+    .from("offerta_commerciale_cataloghi")
+    .update({ stato: "pubblicato", pubblicato_at: now, aggiornato_at: now })
+    .eq("id", body.id)
+  if (publishError) return NextResponse.json({ error: publishError.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
 

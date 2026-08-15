@@ -73,6 +73,7 @@ export type FieldDiff = {
   field: string
   crmValue: SyncValue
   zohoValue: SyncValue
+  writeBlockedReason?: "empty_zoho_preserves_crm"
 }
 
 export type SyncIssue = {

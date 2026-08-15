@@ -9,9 +9,15 @@ function summarize(
   record: Record<string, unknown>,
   diffs: FieldDiff[],
 ): Record<string, unknown> {
+  const writableFields = writableDiffs(diffs).map((diff) => diff.field)
+  const blockedEmptyZohoFields = diffs
+    .filter((diff) => diff.writeBlockedReason === "empty_zoho_preserves_crm")
+    .map((diff) => diff.field)
   return {
     mappedValues: Object.entries(record).filter(([, value]) => value !== null && value !== "").length,
     changedFields: diffs.map((diff) => diff.field),
+    writableFields,
+    blockedEmptyZohoFields,
   }
 }
 
@@ -25,10 +31,42 @@ function diffExistingRecord(params: {
     const zohoValue = (params.normalized[field] ?? null) as FieldDiff["zohoValue"]
     const crmValue = (params.existing[field] ?? null) as FieldDiff["crmValue"]
     if (!fieldValuesEqual(field, crmValue, zohoValue)) {
-      diffs.push({ field, crmValue, zohoValue })
+      diffs.push({
+        field,
+        crmValue,
+        zohoValue,
+        writeBlockedReason: shouldPreserveExistingCrmValue(crmValue, zohoValue)
+          ? "empty_zoho_preserves_crm"
+          : undefined,
+      })
     }
   }
   return diffs
+}
+
+function isEmptySyncValue(value: unknown): boolean {
+  return value === undefined || value === null || value === ""
+}
+
+function shouldPreserveExistingCrmValue(crmValue: unknown, zohoValue: unknown): boolean {
+  return isEmptySyncValue(zohoValue) && !isEmptySyncValue(crmValue)
+}
+
+export function writableDiffs(diffs: FieldDiff[]): FieldDiff[] {
+  return diffs.filter((diff) => !diff.writeBlockedReason)
+}
+
+export function buildUpdatePayload(
+  normalized: Record<string, unknown>,
+  diffs: FieldDiff[],
+): Record<string, unknown> {
+  return Object.fromEntries(
+    writableDiffs(diffs).map((diff) => [diff.field, normalized[diff.field] ?? null]),
+  )
+}
+
+function hasWritableDiffs(diffs: FieldDiff[]): boolean {
+  return writableDiffs(diffs).length > 0
 }
 
 function isZohoIdField(field: string): boolean {
@@ -63,7 +101,7 @@ export function diffLeadRecord(
     columns: updateableMappedColumns(),
   })
 
-  if (diffs.length === 0) {
+  if (!hasWritableDiffs(diffs)) {
     return {
       action: "skip",
       zohoId: lead.zoho_id,
@@ -107,7 +145,7 @@ export function diffClienteRecord(
     columns: updateableClienteColumns(),
   })
 
-  if (diffs.length === 0) {
+  if (!hasWritableDiffs(diffs)) {
     return {
       action: "skip",
       zohoId: cliente.zoho_record_id,
@@ -151,7 +189,7 @@ export function diffCompitoRecord(
     columns: updateableCompitoColumns(),
   })
 
-  if (diffs.length === 0) {
+  if (!hasWritableDiffs(diffs)) {
     return {
       action: "skip",
       zohoId: compito.zoho_record_id,
@@ -195,7 +233,7 @@ export function diffScadenzaRecord(
     columns: updateableScadenzaColumns(),
   })
 
-  if (diffs.length === 0) {
+  if (!hasWritableDiffs(diffs)) {
     return {
       action: "skip",
       zohoId: scadenza.zoho_id,

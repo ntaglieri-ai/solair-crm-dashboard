@@ -32,8 +32,6 @@ export function diffLeadRecord(
   const diffs: FieldDiff[] = []
   for (const field of updateableMappedColumns()) {
     const zohoValue = lead[field] ?? null
-    if (zohoValue === null || zohoValue === "") continue
-
     const crmValue = existing[field] ?? null
     if (!valuesEqual(crmValue, zohoValue)) {
       diffs.push({ field, crmValue, zohoValue })
@@ -51,9 +49,8 @@ export function diffLeadRecord(
     }
   }
 
-  const action = existing.zoho_synced_at ? "conflict" : "update"
   return {
-    action,
+    action: "update",
     zohoId: lead.zoho_id,
     crmRecordId: existing.id,
     diffs,
@@ -76,4 +73,3 @@ export function errorResult(
     payloadSummary: { rowNumber },
   }
 }
-

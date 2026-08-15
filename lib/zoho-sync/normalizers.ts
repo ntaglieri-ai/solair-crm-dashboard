@@ -51,10 +51,68 @@ function comparableTimestamp(value: unknown): number | null {
   return Number.isNaN(parsed.valueOf()) ? null : parsed.valueOf()
 }
 
+function wallClockKey(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const normalized = value.trim()
+  const match = normalized.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/,
+  )
+  if (!match) return null
+  return [
+    match[1],
+    match[2],
+    match[3],
+    match[4] ?? "00",
+    match[5] ?? "00",
+    match[6] ?? "00",
+  ].join("-")
+}
+
+function romeWallClockKey(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const normalized = value.trim()
+  if (!/(?:Z|[+-]\d{2}:?\d{2})$/.test(normalized)) return null
+  const parsed = new Date(normalized.replace(/([+-]\d{2})(\d{2})$/, "$1:$2"))
+  if (Number.isNaN(parsed.valueOf())) return null
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Rome",
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(parsed)
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "00"
+  return [
+    part("year"),
+    part("month"),
+    part("day"),
+    part("hour"),
+    part("minute"),
+    part("second"),
+  ].join("-")
+}
+
+function timestampsEqual(crmValue: unknown, zohoValue: unknown): boolean {
+  const crmTimestamp = comparableTimestamp(crmValue)
+  const zohoTimestamp = comparableTimestamp(zohoValue)
+  if (crmTimestamp !== null && zohoTimestamp !== null && crmTimestamp === zohoTimestamp) {
+    return true
+  }
+
+  const zohoWallClock = wallClockKey(zohoValue)
+  if (!zohoWallClock) return false
+
+  // The CRM domain treats Zoho timestamps as Italian local wall-clock values.
+  // Some historical CRM fields are serialized as timestamptz instants, so compare
+  // both the stored clock and the Italy-displayed clock to the CSV clock.
+  return wallClockKey(crmValue) === zohoWallClock || romeWallClockKey(crmValue) === zohoWallClock
+}
+
 export function valuesEqual(a: unknown, b: unknown): boolean {
-  const aTimestamp = comparableTimestamp(a)
-  const bTimestamp = comparableTimestamp(b)
-  if (aTimestamp !== null && bTimestamp !== null) return aTimestamp === bTimestamp
+  if (timestampsEqual(a, b)) return true
   return comparableValue(a) === comparableValue(b)
 }
 

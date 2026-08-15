@@ -157,19 +157,27 @@ function NcStatusBadge({ status }: { status?: NextcloudStatus }) {
   )
 }
 
-const EMAIL_STATUS_META: Record<WelcomeEmailStatus, { label: string; className: string }> = {
-  sent: { label: "Inviata", className: "bg-teal/15 text-teal" },
-  pending: { label: "In attesa", className: "bg-amber-500/15 text-amber-600" },
-  failed: { label: "Errore", className: "bg-destructive/10 text-destructive" },
-}
-
-function EmailStatusBadge({ status }: { status?: WelcomeEmailStatus }) {
-  const meta = EMAIL_STATUS_META[status ?? "pending"]
+function InitialPasswordBadge({ mustChange }: { mustChange?: boolean }) {
+  const meta = mustChange
+    ? { label: "Da cambiare", className: "bg-amber-500/15 text-amber-600" }
+    : { label: "Cambiata", className: "bg-teal/15 text-teal" }
   return (
     <Badge variant="outline" className={cn("border-transparent", meta.className)}>
       {meta.label}
     </Badge>
   )
+}
+
+function initialPasswordTitle(user: Utente) {
+  if (user.welcome_email_status === "failed") {
+    return user.welcome_email_error ?? "Invio password iniziale non riuscito"
+  }
+  if (user.welcome_email_status === "pending") {
+    return "Invio password iniziale in attesa"
+  }
+  return user.must_change_password
+    ? "Password iniziale inviata, cambio ancora richiesto"
+    : "Password iniziale cambiata dall'utente"
 }
 
 function userToForm(user: Utente): UserForm {
@@ -263,7 +271,7 @@ export function AccountManagementClient({
       }
       setUsers((prev) =>
         prev
-          .map((user) => (user.id === id ? body.utente! : user))
+          .map((user) => (user.id === id ? { ...user, ...body.utente! } : user))
           .sort((a, b) => a.nome.localeCompare(b.nome)),
       )
       // Chiude il drawer dopo il salvataggio riuscito: prima restava aperto
@@ -293,6 +301,7 @@ export function AccountManagementClient({
                 ...u,
                 nextcloud_status: fresh.nextcloud_status,
                 nextcloud_error: fresh.nextcloud_error,
+                must_change_password: fresh.must_change_password,
                 welcome_email_status: fresh.welcome_email_status,
                 welcome_email_error: fresh.welcome_email_error,
               }
@@ -425,7 +434,11 @@ export function AccountManagementClient({
       })
       const body = (await res.json().catch(() => null)) as {
         auth?: { error: string | null }
-        utente?: { welcome_email_status: WelcomeEmailStatus; welcome_email_error: string | null }
+        utente?: {
+          must_change_password?: boolean
+          welcome_email_status: WelcomeEmailStatus
+          welcome_email_error: string | null
+        }
         error?: string
       } | null
       if (!res.ok || !body?.utente) {
@@ -436,6 +449,7 @@ export function AccountManagementClient({
           u.id === user.id
             ? {
                 ...u,
+                must_change_password: body.utente!.must_change_password ?? true,
                 welcome_email_status: body.utente!.welcome_email_status,
                 welcome_email_error: body.utente!.welcome_email_error,
               }
@@ -565,7 +579,7 @@ export function AccountManagementClient({
               <TableHead>Creato il</TableHead>
               <TableHead>Stato</TableHead>
               <TableHead>Nextcloud</TableHead>
-              <TableHead>Password temp.</TableHead>
+              <TableHead>Password iniziale</TableHead>
               <TableHead className="w-12 text-right">Azioni</TableHead>
             </TableRow>
           </TableHeader>
@@ -607,8 +621,8 @@ export function AccountManagementClient({
                 <TableCell title={user.nextcloud_error ?? undefined}>
                   <NcStatusBadge status={user.nextcloud_status} />
                 </TableCell>
-                <TableCell title={user.welcome_email_error ?? undefined}>
-                  <EmailStatusBadge status={user.welcome_email_status} />
+                <TableCell title={initialPasswordTitle(user)}>
+                  <InitialPasswordBadge mustChange={user.must_change_password} />
                 </TableCell>
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <DropdownMenu>
@@ -637,7 +651,7 @@ export function AccountManagementClient({
                       ) : null}
                       {user.welcome_email_status !== "sent" ? (
                         <DropdownMenuItem onClick={() => retryWelcomeEmail(user)}>
-                          Rinvia password temporanea
+                          Reinvia password iniziale
                         </DropdownMenuItem>
                       ) : null}
                       <DropdownMenuSeparator />

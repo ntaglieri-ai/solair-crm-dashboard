@@ -31,6 +31,7 @@ export async function POST(
   return NextResponse.json({
     auth: { error: result.error },
     utente: {
+      must_change_password: true,
       welcome_email_status: result.emailStatus,
       welcome_email_error: result.emailError,
     },

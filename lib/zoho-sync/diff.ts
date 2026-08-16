@@ -1,5 +1,6 @@
 import { updateableClienteColumns, type ClienteCrmRecord, type NormalizedCliente } from "./clienti-mapping"
 import { updateableCompitoColumns, type CompitoCrmRecord, type NormalizedCompito } from "./compiti-mapping"
+import { updateableInstallatoreColumns, type InstallatoreCrmRecord, type NormalizedInstallatore } from "./installatori-mapping"
 import { updateableMappedColumns } from "./mapping"
 import { valuesEqual, zohoIdValuesEqual } from "./normalizers"
 import { updateableScadenzaColumns, type NormalizedScadenza, type ScadenzaCrmRecord } from "./scadenze-mapping"
@@ -251,6 +252,50 @@ export function diffScadenzaRecord(
     diffs,
     error: null,
     payloadSummary: summarize(scadenza, diffs),
+  }
+}
+
+export function diffInstallatoreRecord(
+  installatore: NormalizedInstallatore,
+  existing: InstallatoreCrmRecord | null,
+): SyncDiffResult {
+  if (!existing) {
+    return {
+      action: "create",
+      zohoId: installatore.zoho_id,
+      crmRecordId: null,
+      diffs: [],
+      error: null,
+      payloadSummary: {
+        mappedValues: Object.entries(installatore).filter(([, value]) => value !== null && value !== "").length,
+      },
+    }
+  }
+
+  const diffs = diffExistingRecord({
+    normalized: installatore,
+    existing,
+    columns: updateableInstallatoreColumns(),
+  })
+
+  if (!hasWritableDiffs(diffs)) {
+    return {
+      action: "skip",
+      zohoId: installatore.zoho_id,
+      crmRecordId: existing.id,
+      diffs,
+      error: null,
+      payloadSummary: summarize(installatore, diffs),
+    }
+  }
+
+  return {
+    action: "update",
+    zohoId: installatore.zoho_id,
+    crmRecordId: existing.id,
+    diffs,
+    error: null,
+    payloadSummary: summarize(installatore, diffs),
   }
 }
 

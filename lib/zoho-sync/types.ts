@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 export type ZohoSyncMode = "dry_run" | "write"
 export type ZohoSyncStatus = "running" | "completed" | "failed"
 export type ZohoSyncAction = "create" | "update" | "skip" | "conflict" | "error"
-export type ZohoSyncModule = "leads" | "clienti" | "compiti" | "scadenze"
+export type ZohoSyncModule = "leads" | "clienti" | "compiti" | "scadenze" | "installatori"
 export type ZohoFieldType = "text" | "number" | "boolean" | "timestamp" | "zoho_id" | "owner_lookup"
 export type SyncValue = string | number | boolean | null
 

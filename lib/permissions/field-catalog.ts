@@ -289,12 +289,12 @@ export function buildFieldPermissionsForRole(
   roleCode: RoleCode | string | null | undefined,
 ): Record<string, Record<string, FieldAccess>> {
   return Object.fromEntries(
-    CRM_FIELD_MODULES.map((module) => [
-      module,
+    CRM_FIELD_MODULES.map((moduleKey) => [
+      moduleKey,
       Object.fromEntries(
-        CRM_FIELD_CATALOG[module].map((field) => [
+        CRM_FIELD_CATALOG[moduleKey].map((field) => [
           field.key,
-          defaultFieldAccessForRole(roleCode, module, field.key),
+          defaultFieldAccessForRole(roleCode, moduleKey, field.key),
         ]),
       ),
     ]),
@@ -307,18 +307,18 @@ export function completeFieldPermissions(
 ) {
   const completed = buildFieldPermissionsForRole(roleCode)
 
-  for (const module of CRM_FIELD_MODULES) {
-    const moduleCurrent = current?.[module] ?? {}
+  for (const moduleKey of CRM_FIELD_MODULES) {
+    const moduleCurrent = current?.[moduleKey] ?? {}
     const hasWildcard = Object.prototype.hasOwnProperty.call(moduleCurrent, "*")
     const wildcard = normalizeFieldAccess(moduleCurrent["*"])
 
-    for (const field of CRM_FIELD_CATALOG[module]) {
+    for (const field of CRM_FIELD_CATALOG[moduleKey]) {
       const existing = moduleCurrent[field.key]
-      completed[module][field.key] = existing
+      completed[moduleKey][field.key] = existing
         ? normalizeFieldAccess(existing)
         : hasWildcard
           ? wildcard
-          : completed[module][field.key]
+          : completed[moduleKey][field.key]
     }
   }
 

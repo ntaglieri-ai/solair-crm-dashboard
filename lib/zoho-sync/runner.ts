@@ -13,7 +13,14 @@ import {
   normalizeCompitoCsvRow,
   unmappedCompitiHeaders,
 } from "./compiti-mapping"
-import { diffClienteRecord, diffCompitoRecord, diffLeadRecord, diffScadenzaRecord, errorResult } from "./diff"
+import { diffClienteRecord, diffCompitoRecord, diffInstallatoreRecord, diffLeadRecord, diffScadenzaRecord, errorResult } from "./diff"
+import {
+  INSTALLATORE_OWNER_ZOHO_ID_HEADER,
+  INSTALLATORE_ZOHO_ID_HEADER,
+  normalizeInstallatoreCsvRow,
+  unmappedInstallatoriHeaders,
+} from "./installatori-mapping"
+import { fetchInstallatoriByZohoId } from "./installatori-repository"
 import {
   LEAD_OWNER_ZOHO_ID_HEADER,
   LEAD_ZOHO_ID_HEADER,
@@ -56,6 +63,7 @@ export type RunLeadDryRunOptions = {
 export type RunClientiDryRunOptions = RunLeadDryRunOptions
 export type RunCompitiDryRunOptions = RunLeadDryRunOptions
 export type RunScadenzeDryRunOptions = RunLeadDryRunOptions
+export type RunInstallatoriDryRunOptions = RunLeadDryRunOptions
 
 function readCsvRows(csvText: string): CsvRow[] {
   return parse(csvText, {
@@ -384,6 +392,73 @@ export async function runScadenzeDryRun(
         status: "failed",
         stats,
         error: error instanceof Error ? error.message : "Errore sync Zoho scadenze",
+      })
+    }
+    throw error
+  }
+}
+
+export async function runInstallatoriDryRun(
+  options: RunInstallatoriDryRunOptions,
+): Promise<ZohoSyncRunResult> {
+  const csvText = await readFile(options.csvPath, "utf8")
+  const rows = readCsvRows(csvText)
+  const headers = Object.keys(rows[0] ?? {})
+  const stats = emptyStats(rows.length, unmappedInstallatoriHeaders(headers))
+  const events: SyncDiffResult[] = []
+  let runId: string | null = null
+
+  try {
+    if (options.logToDatabase !== false) {
+      runId = await createSyncRun(options.supabase, {
+        mode: "dry_run",
+        modules: ["installatori"],
+      })
+    }
+
+    const { validRows, errors, duplicateIds } = validateCsvIds(rows, INSTALLATORE_ZOHO_ID_HEADER, "Installatore")
+    stats.duplicateZohoIds = duplicateIds.size
+    stats.missingZohoIds = errors.filter((event) => !event.zohoId).length
+    events.push(...errors)
+
+    const ownerIdsByZohoId = await fetchOwnerIdsByZohoId(options.supabase)
+    const unresolvedOwnerIds = new Set<string>()
+    for (const { row } of validRows) {
+      const ownerZohoId = normalizeZohoId(row[INSTALLATORE_OWNER_ZOHO_ID_HEADER])
+      if (ownerZohoId && !ownerIdsByZohoId.has(ownerZohoId)) unresolvedOwnerIds.add(ownerZohoId)
+    }
+    stats.unresolvedOwnerIds = [...unresolvedOwnerIds].sort()
+
+    const installatoriByZohoId = await fetchInstallatoriByZohoId(
+      options.supabase,
+      validRows.map((item) => item.zohoId),
+    )
+
+    for (const { row, rowNumber, zohoId } of validRows) {
+      const normalized = normalizeInstallatoreCsvRow(row, ownerIdsByZohoId)
+      if (!normalized) {
+        events.push(errorResult("Installatore senza ID record", zohoId, rowNumber))
+        continue
+      }
+      const existing = installatoriByZohoId.get(normalized.zoho_id) ?? null
+      events.push(diffInstallatoreRecord(normalized, existing))
+      stats.mappedRows += 1
+    }
+
+    for (const event of events) increment(stats, event)
+
+    if (runId) {
+      await insertSyncEvents(options.supabase, runId, "installatori", events)
+      await finishSyncRun(options.supabase, runId, { status: "completed", stats })
+    }
+
+    return { runId, stats, events }
+  } catch (error) {
+    if (runId) {
+      await finishSyncRun(options.supabase, runId, {
+        status: "failed",
+        stats,
+        error: error instanceof Error ? error.message : "Errore sync Zoho installatori",
       })
     }
     throw error

@@ -1,5 +1,7 @@
 import { CLIENTI_CRM_SELECT_COLUMNS, type ClienteCrmRecord } from "./clienti-mapping"
+import { COMPITI_CRM_SELECT_COLUMNS, type CompitoCrmRecord } from "./compiti-mapping"
 import { LEAD_CRM_SELECT_COLUMNS } from "./mapping"
+import { normalizeZohoId } from "./normalizers"
 import type {
   FieldDiff,
   LeadCrmRecord,
@@ -68,7 +70,7 @@ export async function fetchLeadsByZohoId(
   zohoIds: string[],
 ): Promise<Map<string, LeadCrmRecord>> {
   const leads = new Map<string, LeadCrmRecord>()
-  const uniqueIds = [...new Set(zohoIds.filter(Boolean))]
+  const uniqueIds = [...new Set(zohoIds.flatMap((id) => (id ? [id, `zcrm_${id}`] : [])))]
   await inChunks(uniqueIds, async (chunk) => {
     const { data, error } = await supabase
       .from("leads")
@@ -76,7 +78,7 @@ export async function fetchLeadsByZohoId(
       .in("zoho_id", chunk)
     if (error) throw new Error(`leads: ${error.message}`)
     for (const row of ((data ?? []) as unknown as LeadCrmRecord[])) {
-      if (row.zoho_id) leads.set(String(row.zoho_id), row as LeadCrmRecord)
+      if (row.zoho_id) leads.set(normalizeZohoId(row.zoho_id), row as LeadCrmRecord)
     }
   })
   return leads
@@ -87,7 +89,7 @@ export async function fetchClientiByZohoRecordId(
   zohoIds: string[],
 ): Promise<Map<string, ClienteCrmRecord>> {
   const clienti = new Map<string, ClienteCrmRecord>()
-  const uniqueIds = [...new Set(zohoIds.filter(Boolean))]
+  const uniqueIds = [...new Set(zohoIds.flatMap((id) => (id ? [id, `zcrm_${id}`] : [])))]
   await inChunks(uniqueIds, async (chunk) => {
     let columns: string[] = [...CLIENTI_CRM_SELECT_COLUMNS]
     let data: unknown[] | null = null
@@ -108,10 +110,63 @@ export async function fetchClientiByZohoRecordId(
       columns = columns.filter((column) => column !== missingColumn)
     }
     for (const row of ((data ?? []) as unknown as ClienteCrmRecord[])) {
-      if (row.zoho_record_id) clienti.set(String(row.zoho_record_id), row)
+      if (row.zoho_record_id) clienti.set(normalizeZohoId(row.zoho_record_id), row)
     }
   })
   return clienti
+}
+
+async function selectExistingByZohoRecordId<T extends { zoho_record_id: string | null }>(
+  supabase: SupabaseLike,
+  table: "clienti" | "compiti",
+  columns: readonly string[],
+  zohoIds: string[],
+): Promise<Map<string, T>> {
+  const records = new Map<string, T>()
+  const uniqueIds = [...new Set(zohoIds.filter(Boolean))]
+  await inChunks(uniqueIds, async (chunk) => {
+    let selectColumns: string[] = [...columns]
+    let data: unknown[] | null = null
+    for (;;) {
+      const result = await supabase
+        .from(table)
+        .select(selectColumns.join(","))
+        .in("zoho_record_id", chunk)
+      if (!result.error) {
+        data = (result.data ?? []) as unknown[]
+        break
+      }
+
+      const missingColumn = result.error.message.match(/column [a-z_]+\.([a-zA-Z0-9_]+) does not exist/)?.[1]
+      if (!missingColumn || !selectColumns.includes(missingColumn)) {
+        throw new Error(`${table}: ${result.error.message}`)
+      }
+      selectColumns = selectColumns.filter((column) => column !== missingColumn)
+    }
+    for (const row of ((data ?? []) as unknown as T[])) {
+      if (row.zoho_record_id) records.set(String(row.zoho_record_id), row)
+    }
+  })
+  return records
+}
+
+export async function fetchCompitiByZohoRecordId(
+  supabase: SupabaseLike,
+  zohoIds: string[],
+): Promise<Map<string, CompitoCrmRecord>> {
+  const lookupIds = [
+    ...new Set(zohoIds.flatMap((id) => (id ? [id, `zcrm_${id}`] : []))),
+  ]
+  const records = await selectExistingByZohoRecordId<CompitoCrmRecord>(
+    supabase,
+    "compiti",
+    COMPITI_CRM_SELECT_COLUMNS,
+    lookupIds,
+  )
+  return new Map([...records.values()].map((record) => [
+    normalizeZohoId(record.zoho_record_id),
+    record,
+  ]))
 }
 
 export async function createSyncRun(

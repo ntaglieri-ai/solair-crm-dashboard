@@ -1,7 +1,8 @@
 "use client"
 
+import Link from "next/link"
 import { useRef, useState } from "react"
-import { Upload, Download, FileText, X } from "lucide-react"
+import { ArrowRight, Upload, Download, FileText, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import {
@@ -37,6 +38,12 @@ export default function ImportExportPage() {
       <SectionHeader
         title="Import / Export"
         description="Importa ed esporta dati dal CRM in formato CSV."
+        action={
+          <Button variant="outline" render={<Link href="/crm-settings/system/import-export/zoho-t0" />}>
+            Import Zoho T0
+            <ArrowRight className="size-4" />
+          </Button>
+        }
       />
 
       <div className="grid gap-4 lg:grid-cols-2">

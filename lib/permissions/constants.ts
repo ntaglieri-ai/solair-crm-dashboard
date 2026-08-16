@@ -34,6 +34,7 @@ export const PAGE_KEYS = [
   "crm_settings.system.flussi",
   "crm_settings.system.roberta",
   "crm_settings.system.import_export",
+  "crm_settings.system.zoho_t0",
   "crm_settings.system.make",
   "crm_settings.system.meta",
   "crm_settings.system.backup",
@@ -68,6 +69,7 @@ export const ROUTE_PAGE_MAP: Record<string, string> = {
   "/crm-settings/system/flussi": "crm_settings.system.flussi",
   "/crm-settings/system/roberta": "crm_settings.system.roberta",
   "/crm-settings/system/import-export": "crm_settings.system.import_export",
+  "/crm-settings/system/import-export/zoho-t0": "crm_settings.system.zoho_t0",
   "/crm-settings/system/make": "crm_settings.system.make",
   "/crm-settings/system/backup": "crm_settings.system.backup",
   "/crm-settings/maintenance": "crm_settings.maintenance",
@@ -301,6 +303,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       "crm_settings.system.make",
       "crm_settings.system.meta",
       "crm_settings.system.import_export",
+      "crm_settings.system.zoho_t0",
     ])
     grantRecords([...MODULE_KEYS], ["view", "create", "edit", "delete", "export", "assign"])
     grantActions([

@@ -9,6 +9,7 @@ import {
   CircleDollarSign,
   DatabaseZap,
   FileCog,
+  FileUp,
   Flame,
   Gauge,
   HeartPulse,
@@ -623,6 +624,7 @@ function Monitoring({ data }: { data: SuperadminDashboardData }) {
 const SUPERADMIN_SHORTCUTS = [
   { title: "Account Management", href: "/crm-settings/account/utenti", icon: UserCog, tone: "#315fc5" },
   { title: "Permission Management", href: "/crm-settings/account/permessi", icon: ShieldCheck, tone: "#20a47a" },
+  { title: "Import Zoho T0", href: "/crm-settings/system/import-export/zoho-t0", icon: FileUp, tone: "#b8273d" },
   { title: "Manutenzione", href: "/crm-settings/maintenance/health", icon: HeartPulse, tone: "#ef6a47" },
   { title: "Automazioni", href: "/crm-settings/system/flussi", icon: Settings, tone: "#8b6bd6" },
   { title: "File Manager", href: "/crm-settings/file-manager/nextcloud", icon: FileCog, tone: "#2b9fb3" },

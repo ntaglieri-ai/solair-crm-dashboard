@@ -45,6 +45,9 @@ revoke execute on function public.pubblica_catalogo_offerta_commerciale(uuid)
 
 -- Ripristina lo stato precedente delle RPC schema: EXECUTE implicito a
 -- PUBLIC, grant esplicito ad authenticated e nessun grant diretto service_role.
+-- Le implementazioni corrette di add/drop restano installate: la versione
+-- precedente era gia' non funzionante e ripristinarla reintrodurrebbe il bug
+-- `attributi_record.key`. Questo rollback riguarda i privilegi, non quel fix.
 grant execute on function public.crm_admin_list_columns(text) to public;
 grant execute on function public.crm_admin_add_column(text, text, text, text, text, boolean, boolean)
   to public;

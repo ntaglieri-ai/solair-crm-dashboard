@@ -35,6 +35,14 @@ Interrompere il rilascio prima della migrazione se la route distribuita non
 riesce a gestire i campi, se la service role non e' configurata o se il controllo
 permessi non rifiuta l'utente non autorizzato.
 
+Eccezione rilevata durante il rilascio del 20 agosto 2026: la RPC live
+`crm_admin_add_column` falliva su `attributi_record.key`, impedendo lo smoke
+test di scrittura. La singola migrazione e' stata quindi estesa per riallineare
+atomicamente `crm_admin_add_column` e `crm_admin_drop_column` alle
+implementazioni canoniche basate su `crm_custom_fields`, prima di restringere i
+grant. In questo caso lo smoke test completo deve essere ripetuto subito dopo la
+migrazione; la lettura pre-migrazione e il controllo autorizzativo sono passati.
+
 Dopo la migrazione, in caso di regressione confermata, eseguire esclusivamente
 `supabase/rollback/20260820_harden_function_execute_privileges.rollback.sql` e
 ripetere gli smoke test. Il rollback riapre intenzionalmente i privilegi

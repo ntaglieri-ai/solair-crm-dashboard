@@ -34,6 +34,162 @@ revoke all on function public.pubblica_catalogo_offerta_commerciale(uuid)
 grant execute on function public.pubblica_catalogo_offerta_commerciale(uuid)
   to service_role;
 
+-- Riallinea le due RPC di scrittura alla sorgente canonica locale. La versione
+-- live precedente tentava di scrivere `attributi_record.key`, colonna non
+-- esistente, dopo l'ALTER TABLE. L'errore rendeva inutilizzabile la gestione
+-- campi; la transazione PostgREST annullava comunque anche l'ALTER TABLE.
+create or replace function public.crm_admin_add_column(
+  p_table_name text,
+  p_column_name text,
+  p_db_type text,
+  p_label text,
+  p_field_type text,
+  p_required boolean default false,
+  p_visible boolean default true
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id uuid;
+  v_type text;
+begin
+  if p_table_name not in ('leads', 'clienti', 'compiti', 'scadenze', 'installatori') then
+    raise exception 'Tabella CRM non abilitata: %', p_table_name;
+  end if;
+
+  if p_column_name !~ '^[a-z][a-z0-9_]*$' then
+    raise exception 'Nome colonna non valido: %', p_column_name;
+  end if;
+
+  v_type := case p_db_type
+    when 'text' then 'text'
+    when 'numeric' then 'numeric'
+    when 'date' then 'date'
+    when 'timestamptz' then 'timestamptz'
+    when 'boolean' then 'boolean'
+    when 'uuid' then 'uuid'
+    when 'text[]' then 'text[]'
+    else null
+  end;
+
+  if v_type is null then
+    raise exception 'Tipo colonna non abilitato: %', p_db_type;
+  end if;
+
+  execute format(
+    'alter table public.%I add column if not exists %I %s',
+    p_table_name,
+    p_column_name,
+    v_type
+  );
+
+  insert into public.crm_custom_fields (
+    modulo,
+    field_key,
+    label,
+    tipo,
+    required,
+    visible,
+    system,
+    options,
+    ordinamento,
+    table_name,
+    column_name,
+    db_type,
+    deleted_at,
+    updated_at
+  )
+  values (
+    p_table_name,
+    p_column_name,
+    p_label,
+    p_field_type,
+    p_required,
+    p_visible,
+    false,
+    '[]'::jsonb,
+    1000,
+    p_table_name,
+    p_column_name,
+    p_db_type,
+    null,
+    now()
+  )
+  on conflict (modulo, field_key) do update set
+    label = excluded.label,
+    tipo = excluded.tipo,
+    required = excluded.required,
+    visible = excluded.visible,
+    system = false,
+    table_name = excluded.table_name,
+    column_name = excluded.column_name,
+    db_type = excluded.db_type,
+    deleted_at = null,
+    updated_at = now()
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+create or replace function public.crm_admin_drop_column(
+  p_table_name text,
+  p_column_name text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_attr public.crm_custom_fields%rowtype;
+begin
+  if p_table_name not in ('leads', 'clienti', 'compiti', 'scadenze', 'installatori') then
+    raise exception 'Tabella CRM non abilitata: %', p_table_name;
+  end if;
+
+  if p_column_name !~ '^[a-z][a-z0-9_]*$' then
+    raise exception 'Nome colonna non valido: %', p_column_name;
+  end if;
+
+  select *
+    into v_attr
+    from public.crm_custom_fields
+   where table_name = p_table_name
+     and column_name = p_column_name
+     and coalesce(system, false) = false
+     and deleted_at is null
+   limit 1;
+
+  if v_attr.id is null then
+    raise exception 'Colonna non eliminabile o non registrata come custom: %.%',
+      p_table_name,
+      p_column_name;
+  end if;
+
+  execute format(
+    'alter table public.%I drop column if exists %I',
+    p_table_name,
+    p_column_name
+  );
+
+  update public.crm_custom_fields
+     set deleted_at = now(),
+         visible = false,
+         updated_at = now()
+   where id = v_attr.id;
+
+  update public.crm_column_values
+     set active = false,
+         updated_at = now()
+   where table_name = p_table_name
+     and column_name = p_column_name;
+end;
+$$;
+
 -- Gestione dinamica dello schema CRM: la route API verifica prima l'azione
 -- `crm_settings.system.schema.manage` e invoca queste RPC con service_role.
 -- Nessun client anonimo o autenticato deve poter alterare direttamente lo

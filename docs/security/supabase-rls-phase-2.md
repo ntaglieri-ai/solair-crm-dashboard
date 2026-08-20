@@ -27,6 +27,48 @@ L'audit live ha rilevato queste **18 tabelle nello schema `public` senza RLS**:
 17. `public.permessi_record`
 18. `public.ruoli`
 
+## Strategia a impatto minimo (fase 2A)
+
+La prima migrazione RLS mantiene intenzionalmente tutte le operazioni per
+`authenticated` e per il backend `service_role`, ma non definisce alcuna policy
+per `anon`. L'effetto atteso e' quindi:
+
+- CRM autenticato: nessun cambiamento funzionale;
+- API server-side con `service_role`: nessun cambiamento funzionale;
+- sito/configuratore: nessun cambiamento per gli endpoint pubblici mediati dalle
+  API; l'accesso anonimo diretto alle 18 tabelle viene invece bloccato;
+- Nextcloud: nessun cambiamento, perche' WebDAV e credenziali restano gestiti dal
+  backend e non dipendono da policy anonime su queste tabelle.
+
+La policy comune si chiama `crm_authenticated_access`. La migrazione controlla
+prima che tutte le 18 tabelle esistano e opera in una singola transazione: se un
+controllo o una policy fallisce, nessuna tabella resta in uno stato intermedio.
+
+File preparati:
+
+- `supabase/migrations/20260820_enable_rls_legacy_crm_tables.sql`
+- `supabase/rollback/20260820_enable_rls_legacy_crm_tables.rollback.sql`
+
+## Inventario dei call-site
+
+Call-site applicativi diretti rilevati:
+
+- `attivita`: note e storico di lead, clienti e compiti;
+- `cliente_tags`: repository clienti e dati di riferimento;
+- `collegamenti`: API e repository allegati/link;
+- `crm_column_values`: gestione valori predefiniti CRM;
+- `crm_settings`: dashboard, profilo, comunicazioni, Spoki, Roberta e impostazioni;
+- `lead_tags`: repository lead, sconti e dati di riferimento;
+- `permessi_azione`, `permessi_pagina`, `permessi_record`, `ruoli`: motore e UI
+  permessi, utenti e path Nextcloud.
+
+Non risultano call-site diretti attivi per `cliente_comunicazioni`,
+`cliente_documenti_stato`, `cliente_impianto`, `cliente_iter_burocratico`,
+`cliente_logistica`, `cliente_pagamenti`, `compito_tags` e `documenti`; sono
+tabelle legacy o raggiunte indirettamente. Anche per queste, `authenticated` e
+`service_role` restano abilitati per evitare regressioni da integrazioni non
+visibili nel repository.
+
 ## Piano della fase 2
 
 Per ciascuna delle 18 tabelle:
@@ -42,5 +84,6 @@ Per ciascuna delle 18 tabelle:
 ## Stato
 
 - Inventario live: completo, 18 tabelle rilevate e nominate.
-- Correzione SQL RLS: non ancora predisposta.
+- Correzione SQL RLS: predisposta localmente, non applicata.
+- Rollback: predisposto localmente.
 - Modifiche remote: nessuna.

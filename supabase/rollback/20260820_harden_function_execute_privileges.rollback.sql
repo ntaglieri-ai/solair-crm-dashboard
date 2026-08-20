@@ -48,6 +48,8 @@ revoke execute on function public.pubblica_catalogo_offerta_commerciale(uuid)
 -- Le implementazioni corrette di add/drop restano installate: la versione
 -- precedente era gia' non funzionante e ripristinarla reintrodurrebbe il bug
 -- `attributi_record.key`. Questo rollback riguarda i privilegi, non quel fix.
+-- Anche `crm_custom_fields` resta installata: dopo l'uso puo' contenere
+-- metadata necessari e il drop causerebbe perdita di dati. RLS resta attiva.
 grant execute on function public.crm_admin_list_columns(text) to public;
 grant execute on function public.crm_admin_add_column(text, text, text, text, text, boolean, boolean)
   to public;

@@ -7,6 +7,38 @@
 
 begin;
 
+-- La tabella metadata attesa dalla route e dalle RPC canoniche non esiste nel
+-- database live. Viene creata gia' protetta: nessuna policy browser, accesso
+-- esclusivo del backend service_role che bypassa RLS.
+create table if not exists public.crm_custom_fields (
+  id uuid primary key default gen_random_uuid(),
+  modulo text not null,
+  field_key text not null,
+  label text not null,
+  tipo text not null,
+  required boolean not null default false,
+  visible boolean not null default true,
+  system boolean not null default false,
+  options jsonb not null default '[]'::jsonb,
+  ordinamento integer not null default 0,
+  created_by uuid references public.utenti(id) on delete set null,
+  updated_by uuid references public.utenti(id) on delete set null,
+  table_name text not null,
+  column_name text not null,
+  db_type text not null,
+  deleted_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (modulo, field_key),
+  unique (table_name, column_name)
+);
+
+create index if not exists crm_custom_fields_table_column_idx
+  on public.crm_custom_fields (table_name, column_name)
+  where deleted_at is null;
+
+alter table public.crm_custom_fields enable row level security;
+
 -- RPC che gestiscono segreti: accessibili esclusivamente dal backend tramite
 -- la service role. Le REVOKE esplicite coprono anche eventuali grant storici.
 revoke all on function public.nextcloud_cred_upsert(uuid, text, text, text, text, text)

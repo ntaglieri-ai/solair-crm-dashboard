@@ -43,6 +43,13 @@ implementazioni canoniche basate su `crm_custom_fields`, prima di restringere i
 grant. In questo caso lo smoke test completo deve essere ripetuto subito dopo la
 migrazione; la lettura pre-migrazione e il controllo autorizzativo sono passati.
 
+Il primo tentativo della migrazione e' stato annullato atomicamente da Postgres
+perche' `public.crm_custom_fields` non esisteva nel database live. Nessun grant
+e nessuna funzione sono stati modificati. La migrazione e' stata estesa per
+creare la tabella metadata gia' con RLS attiva e senza policy browser; soltanto
+la route con service role puo' usarla. Questa tabella nuova non fa parte delle
+18 tabelle legacy demandate alla fase 2.
+
 Dopo la migrazione, in caso di regressione confermata, eseguire esclusivamente
 `supabase/rollback/20260820_harden_function_execute_privileges.rollback.sql` e
 ripetere gli smoke test. Il rollback riapre intenzionalmente i privilegi

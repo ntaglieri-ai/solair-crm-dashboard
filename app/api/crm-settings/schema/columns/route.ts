@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { requireApiAction } from "@/lib/permissions/server"
 import {
   dbTypeForFieldType,
@@ -35,6 +35,20 @@ type CustomFieldRow = {
   table_name: string
   column_name: string
   db_type: string
+}
+
+function schemaAdminClient() {
+  const admin = createAdminClient()
+  if (!admin) {
+    return {
+      client: null,
+      response: NextResponse.json(
+        { error: "Supabase admin non configurato" },
+        { status: 503 },
+      ),
+    }
+  }
+  return { client: admin, response: null }
 }
 
 function titleFromColumn(value: string) {
@@ -98,7 +112,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Modulo CRM non valido" }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const { client: supabase, response } = schemaAdminClient()
+  if (response) return response
   const { data: physicalColumns, error: physicalError } = await supabase.rpc(
     "crm_admin_list_columns",
     { p_table_name: tableName },
@@ -167,7 +182,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Tipo campo non valido" }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const { client: supabase, response } = schemaAdminClient()
+  if (response) return response
   const { data, error } = await supabase.rpc("crm_admin_add_column", {
     p_table_name: tableName,
     p_column_name: name,
@@ -206,7 +222,8 @@ export async function PATCH(request: Request) {
   if (typeof body?.required === "boolean") patch.required = body.required
   if (typeof body?.visible === "boolean") patch.visible = body.visible
 
-  const supabase = await createClient()
+  const { client: supabase, response } = schemaAdminClient()
+  if (response) return response
   const { error } = await supabase
     .from("crm_custom_fields")
     .update(patch)
@@ -234,7 +251,8 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Campo CRM non valido" }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const { client: supabase, response } = schemaAdminClient()
+  if (response) return response
   const { error } = await supabase.rpc("crm_admin_drop_column", {
     p_table_name: tableName,
     p_column_name: columnName,

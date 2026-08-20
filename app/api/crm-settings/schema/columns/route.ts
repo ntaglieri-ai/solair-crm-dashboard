@@ -91,6 +91,13 @@ function schemaErrorMessage(error: { message?: string; code?: string }) {
   return message
 }
 
+function logSchemaError(operation: string, error: { message?: string; code?: string }) {
+  console.error(`[crm-settings/schema/columns] ${operation}`, {
+    code: error.code ?? "unknown",
+    message: error.message ?? "unknown",
+  })
+}
+
 function isMissingSchemaObject(error: { message?: string; code?: string } | null | undefined) {
   const message = error?.message?.toLowerCase() ?? ""
   return (
@@ -120,6 +127,7 @@ export async function GET(request: Request) {
   )
 
   if (physicalError) {
+    logSchemaError("list columns", physicalError)
     return NextResponse.json({ error: schemaErrorMessage(physicalError) }, { status: 500 })
   }
 
@@ -131,6 +139,7 @@ export async function GET(request: Request) {
     .order("ordinamento", { ascending: true })
 
   if (customError && !isMissingSchemaObject(customError)) {
+    logSchemaError("read custom fields", customError)
     return NextResponse.json({ error: schemaErrorMessage(customError) }, { status: 500 })
   }
 
@@ -195,6 +204,7 @@ export async function POST(request: Request) {
   })
 
   if (error) {
+    logSchemaError("add column", error)
     return NextResponse.json({ error: schemaErrorMessage(error) }, { status: 500 })
   }
 
@@ -233,6 +243,7 @@ export async function PATCH(request: Request) {
     .is("deleted_at", null)
 
   if (error) {
+    logSchemaError("update custom field", error)
     return NextResponse.json({ error: schemaErrorMessage(error) }, { status: 500 })
   }
 
@@ -259,6 +270,7 @@ export async function DELETE(request: Request) {
   })
 
   if (error) {
+    logSchemaError("drop column", error)
     return NextResponse.json({ error: schemaErrorMessage(error) }, { status: 500 })
   }
 

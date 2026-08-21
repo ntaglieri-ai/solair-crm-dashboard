@@ -1,11 +1,46 @@
 // middleware.ts (nella root del progetto)
 import { createServerClient, type CookieOptions } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
+import {
+  clearCrmSessionCookies,
+  CRM_LAST_ACTIVITY_COOKIE,
+  CRM_SESSION_COOKIE,
+  MUST_CHANGE_PASSWORD_COOKIE,
+  setCrmSessionCookies,
+} from "@/lib/auth/session-policy"
 
 type CookieToSet = {
   name: string
   value: string
   options: CookieOptions
+}
+
+function clearAuthCookies(response: NextResponse, request: NextRequest) {
+  clearCrmSessionCookies(response)
+  for (const cookie of request.cookies.getAll()) {
+    if (cookie.name.startsWith("sb-") || cookie.name === MUST_CHANGE_PASSWORD_COOKIE) {
+      response.cookies.set(cookie.name, "", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 0,
+        path: "/",
+      })
+    }
+  }
+  return response
+}
+
+function redirectToExpiredLogin(request: NextRequest) {
+  const url = request.nextUrl.clone()
+  const requestedPath = `${request.nextUrl.pathname}${request.nextUrl.search}`
+  url.pathname = "/login"
+  url.search = ""
+  url.searchParams.set("sessione_scaduta", "1")
+  if (requestedPath !== "/") {
+    url.searchParams.set("redirect", requestedPath)
+  }
+  return clearAuthCookies(NextResponse.redirect(url), request)
 }
 
 export async function middleware(request: NextRequest) {
@@ -51,6 +86,7 @@ export async function middleware(request: NextRequest) {
   const publicRoutes = [
     "/login",
     "/oauth/consent",
+    "/api/auth/session/touch",
     "/api/auth/password-reset",
     "/api/keep-warm",
     "/api/cron",
@@ -65,6 +101,19 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute = publicRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route)
   )
+  const isSessionTouchRoute = request.nextUrl.pathname === "/api/auth/session/touch"
+  const hasCrmSession =
+    request.cookies.get(CRM_SESSION_COOKIE)?.value === "1" &&
+    Boolean(request.cookies.get(CRM_LAST_ACTIVITY_COOKIE)?.value)
+
+  if (isAuthenticated && !hasCrmSession && !isSessionTouchRoute) {
+    if (request.nextUrl.pathname === "/login") {
+      return clearAuthCookies(supabaseResponse, request)
+    }
+    if (!isPublicRoute || request.nextUrl.pathname === "/oauth/consent") {
+      return redirectToExpiredLogin(request)
+    }
+  }
 
   // Se non autenticato e non su route pubblica → redirect a /login
   if (!isAuthenticated && !isPublicRoute) {
@@ -129,12 +178,13 @@ export async function middleware(request: NextRequest) {
       if (shouldCacheCookie) {
         response.cookies.set(MCP_COOKIE, mustChangePassword ? "1" : "0", {
           httpOnly: true,
-          secure: true,
+          secure: process.env.NODE_ENV === "production",
           sameSite: "lax",
           maxAge: 60,
           path: "/",
         })
       }
+      setCrmSessionCookies(response)
       return response
     }
 

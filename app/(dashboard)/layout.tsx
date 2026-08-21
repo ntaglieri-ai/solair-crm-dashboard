@@ -6,6 +6,7 @@ import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permission
 import { PermissionProvider } from "@/lib/permissions/provider"
 import { PageTransition } from "@/components/motion/page-transition"
 import { NavigationFeedback } from "@/components/navigation/navigation-feedback"
+import { SessionTimeoutGuard } from "@/components/auth/session-timeout-guard"
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
   const permissions = await loadCurrentPermissionSnapshot()
@@ -14,6 +15,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     <PermissionProvider snapshot={permissions}>
       <CrmSettingsLauncherProvider>
         <div className="min-h-screen bg-background">
+          <SessionTimeoutGuard />
           <Sidebar />
           <NavigationFeedback />
           <div className="flex min-h-screen flex-col lg:pl-[248px]">

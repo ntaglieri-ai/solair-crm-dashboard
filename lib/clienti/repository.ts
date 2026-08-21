@@ -1,7 +1,13 @@
 // Repository server-side del modulo Clienti — pattern identico a Lead.
 // Nessun mock: tutte le query vanno su Supabase con proiezione selettiva.
 import { createClient } from "@/lib/supabase/server"
-import type { ClienteRecord, SedeLabel, StatoCliente, StatoCompito } from "@/lib/mock-data"
+import type {
+  ClienteCompito,
+  ClienteRecord,
+  SedeLabel,
+  StatoCliente,
+  StatoCompito,
+} from "@/lib/mock-data"
 import type {
   ClientiListParams,
   ClientiListResponse,
@@ -209,10 +215,10 @@ async function clientiWithOpenCompiti(
   )
 }
 
-async function attachCompiti(
-  cliente: ClienteRecord,
-  id: string,
-): Promise<ClienteRecord> {
+// Carica i compiti correlati a un cliente. Separata da attachCompiti perché
+// dipende solo dall'id: così getClienteById può lanciarla IN PARALLELO con la
+// query del record invece di aspettarne l'esito (erano due roundtrip in fila).
+async function loadCompitiCorrelati(id: string): Promise<ClienteCompito[]> {
   const supabase = await createClient()
   const taskResult = await supabase
     .from("compiti")
@@ -233,7 +239,7 @@ async function attachCompiti(
     : { data: [] }
   const names = new Map((usersResult.data ?? []).map((user) => [user.id, user.nome]))
 
-  cliente.compiti = (taskResult.data ?? []).map((row) => ({
+  return (taskResult.data ?? []).map((row) => ({
     id: row.id as string,
     oggetto: (row.oggetto as string) ?? "",
     scadenza: (row.scadenza as string) ?? "",
@@ -243,22 +249,24 @@ async function attachCompiti(
       : "Non assegnato",
     stato: (row.stato as StatoCompito) ?? "Non iniziato",
   }))
-  return cliente
 }
 
 export async function getClienteById(
   id: string,
 ): Promise<ClienteRecord | null> {
   const supabase = await createClient()
-  const detailResult = await supabase
-    .from("clienti")
-    .select(DETAIL_COLUMNS)
-    .eq("id", id)
-    .single()
+
+  // Record e compiti correlati sono indipendenti: si lanciano insieme, così la
+  // pagina di dettaglio paga un roundtrip invece di due in sequenza.
+  const [detailResult, compiti] = await Promise.all([
+    supabase.from("clienti").select(DETAIL_COLUMNS).eq("id", id).single(),
+    loadCompitiCorrelati(id),
+  ])
 
   if (!detailResult.error && detailResult.data) {
     const cliente = mapRow(detailResult.data as unknown as Record<string, unknown>)
-    return attachCompiti(cliente, id)
+    cliente.compiti = compiti
+    return cliente
   }
 
   const { data, error } = await supabase
@@ -268,7 +276,8 @@ export async function getClienteById(
     .single()
   if (error || !data) return null
   const cliente = mapRow(data as unknown as Record<string, unknown>)
-  return attachCompiti(cliente, id)
+  cliente.compiti = compiti
+  return cliente
 }
 
 export async function createClienteRecord(

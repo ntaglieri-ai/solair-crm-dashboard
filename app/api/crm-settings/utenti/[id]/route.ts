@@ -1,6 +1,7 @@
 import { NextResponse, after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { requireApiAction } from "@/lib/permissions/server"
+import { invalidatePermissionSnapshotCache } from "@/lib/permissions/load-permissions"
 import {
   accountUserErrorMessage,
   resolveRole,
@@ -122,6 +123,10 @@ export async function PATCH(
     })
   }
 
+  // Ruolo, sede e flag attivo entrano tutti nello snapshot dei permessi:
+  // dopo una modifica quello in cache non è più valido.
+  invalidatePermissionSnapshotCache()
+
   return NextResponse.json({ utente: data })
 }
 
@@ -205,6 +210,8 @@ export async function DELETE(
       }
     }
   })
+
+  invalidatePermissionSnapshotCache()
 
   return NextResponse.json({ ok: true })
 }

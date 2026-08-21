@@ -10,6 +10,7 @@ import {
 } from "react"
 import { useRouter } from "next/navigation"
 import { useVirtualizer } from "@tanstack/react-virtual"
+import { startNavigationFeedback } from "@/components/navigation/navigation-feedback"
 import Link from "next/link"
 import {
   MoreHorizontal,
@@ -364,7 +365,10 @@ export function LeadTable({
       >
         <TableRow
           data-index={vIndex}
-          onClick={() => router.push(`/leads/${lead.id}`)}
+          onClick={() => {
+            startNavigationFeedback()
+            router.push(`/leads/${lead.id}`)
+          }}
           className={cn(
             "cursor-pointer",
             isActive &&

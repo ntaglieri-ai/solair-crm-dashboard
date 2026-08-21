@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
+import { startNavigationFeedback } from "@/components/navigation/navigation-feedback"
 import { MoreHorizontal, ExternalLink, Trash2, GripVertical } from "lucide-react"
 import { IconArrowUp } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
@@ -259,7 +260,10 @@ export function ClienteTable({
             >
             <TableRow
               key={cliente.id}
-              onClick={() => router.push(`/clienti/${cliente.id}`)}
+              onClick={() => {
+                startNavigationFeedback()
+                router.push(`/clienti/${cliente.id}`)
+              }}
               className="cursor-pointer"
               data-state={selected.has(cliente.id) ? "selected" : undefined}
             >

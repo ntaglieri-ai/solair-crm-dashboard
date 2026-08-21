@@ -22,8 +22,16 @@ type CurrentUser = {
  * messaggio, cosi' la pagina mostra una CTA invece di dati finti.
  */
 export async function loadDocumentiData(user: CurrentUser): Promise<DocumentiData> {
-  const tStart = Date.now()
-  const appPassword = await getNextcloudAppPassword(user.utenteId)
+  // Credenziale, username e regole di path sono indipendenti fra loro: prima
+  // erano tre await in fila, cioè tre roundtrip prima ancora di parlare con
+  // Nextcloud. Se l'account non è provisionato paghiamo due letture inutili,
+  // ma sono in parallelo e il caso è raro.
+  const [appPassword, storedUsername, pathRules] = await Promise.all([
+    getNextcloudAppPassword(user.utenteId),
+    getNextcloudUsername(user.utenteId),
+    loadNcPathRules(),
+  ])
+
   if (!appPassword) {
     return {
       connected: false,
@@ -37,10 +45,8 @@ export async function loadDocumentiData(user: CurrentUser): Promise<DocumentiDat
   // Lo userid Nextcloud puo' NON coincidere con l'email (es. account admin
   // riconciliato a mano): usa quello memorizzato nella credenziale, con
   // fallback all'email per gli account provisionati in automatico.
-  const username =
-    (await getNextcloudUsername(user.utenteId)) ?? nextcloudUsernameFromEmail(user.email)
+  const username = storedUsername ?? nextcloudUsernameFromEmail(user.email)
   const supabase = await createClient()
-  const pathRules = await loadNcPathRules()
 
   // "recentFiles" non dipende dai preferiti: la avviamo subito, in
   // PARALLELO con la sincronizzazione preferiti qui sotto (che ha una sua
@@ -49,10 +55,6 @@ export async function loadDocumentiData(user: CurrentUser): Promise<DocumentiDat
   // Trovato 25/07 mentre si cercava la causa della lentezza generale.
   const tRecentStart = Date.now()
   const recentFilesPromise = recentFiles(username, appPassword, 20)
-    .then((files) => {
-      console.log(`[perf] nextcloud recentFiles: ${Date.now() - tRecentStart}ms`)
-      return files
-    })
     .catch((e) => {
       console.error(
         `[nextcloud] recentFiles fallito dopo ${Date.now() - tRecentStart}ms:`,
@@ -82,7 +84,6 @@ export async function loadDocumentiData(user: CurrentUser): Promise<DocumentiDat
     const ncFavFolders = (await listFavorites(username, appPassword)).filter(
       (e) => e.isDir && canAccessNcPath(e.path, user.roleCode, pathRules),
     )
-    console.log(`[perf] nextcloud listFavorites: ${Date.now() - tFavStart}ms`)
     const toImport = ncFavFolders.filter((e) => !existingPaths.has(normalizeNcPath(e.path)))
 
     if (toImport.length > 0) {
@@ -119,6 +120,5 @@ export async function loadDocumentiData(user: CurrentUser): Promise<DocumentiDat
       }))
   }
 
-  console.log(`[perf] loadDocumentiData TOTALE: ${Date.now() - tStart}ms`)
   return { connected: true, message, favorites, recent }
 }

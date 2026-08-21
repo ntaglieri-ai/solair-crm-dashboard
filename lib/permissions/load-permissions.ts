@@ -76,6 +76,12 @@ type CachedRolePermissions = {
 const rolePermissionCache = new Map<string, CachedRolePermissions>()
 
 export function invalidateRolePermissionCache(roleId?: string) {
+  // Uno snapshot utente incorpora i permessi del suo ruolo: se cambiano, gli
+  // snapshot in cache diventano stantii. Non sapendo quali utenti abbiano quel
+  // ruolo senza interrogare il DB, li azzeriamo tutti — sono ricostruibili e
+  // costano una RPC a testa.
+  invalidatePermissionSnapshotCache()
+
   if (roleId) {
     rolePermissionCache.delete(roleId)
     return
@@ -246,8 +252,46 @@ async function loadCurrentUser() {
   return { supabase, authUser: user, utente: (byEmail as UtenteRow | null) ?? null }
 }
 
+// --- Cache dello snapshot fra richieste -------------------------------------
+// `cache()` di React deduplica solo DENTRO una singola richiesta: ogni
+// navigazione ripagava per intero la RPC get_permission_snapshot (~66ms
+// misurati), che è il pavimento sotto cui nessuna pagina poteva scendere.
+// Qui teniamo lo snapshot in memoria di processo, per utente, con TTL breve.
+//
+// Tre precauzioni, perché sono dati di autorizzazione:
+//  - TTL corto: una modifica ai permessi si propaga al massimo in TTL secondi
+//    anche se l'invalidazione esplicita non viene chiamata o arriva da un
+//    altro processo (su Vercel ogni lambda ha la sua memoria).
+//  - clone in lettura: lo snapshot restituito non è mai l'oggetto in cache, così
+//    una mutazione accidentale a valle non può trapelare a un'altra richiesta.
+//  - mai in cache l'utente non autenticato.
+//
+// La durata è la stessa della cache dei permessi di ruolo qui sopra
+// (PERMISSION_CACHE_MS: 30s in sviluppo, 60s in produzione), così esiste una
+// sola manopola per entrambe.
+type SnapshotCacheEntry = { snapshot: PermissionSnapshot; expiresAt: number }
+const permissionSnapshotCache = new Map<string, SnapshotCacheEntry>()
+
+/**
+ * Svuota la cache degli snapshot. Va chiamata da ogni endpoint che modifica
+ * permessi, ruoli o l'assegnazione di ruolo a un utente. Senza argomenti
+ * azzera tutto: una modifica a un RUOLO tocca tutti gli utenti che lo hanno,
+ * quindi invalidare il solo autore non basterebbe.
+ */
+export function invalidatePermissionSnapshotCache(authUserId?: string) {
+  if (authUserId) permissionSnapshotCache.delete(authUserId)
+  else permissionSnapshotCache.clear()
+}
+
+function rememberSnapshot(authUserId: string, snapshot: PermissionSnapshot) {
+  permissionSnapshotCache.set(authUserId, {
+    snapshot,
+    expiresAt: Date.now() + rolePermissionCacheMs,
+  })
+  return snapshot
+}
+
 async function loadCurrentPermissionSnapshotUncached(): Promise<PermissionSnapshot> {
-  const t0 = Date.now()
   const fastSupabase = await createClient()
   const { data: claimsData } = await fastSupabase.auth.getClaims()
   const claims = claimsData?.claims
@@ -266,12 +310,14 @@ async function loadCurrentPermissionSnapshotUncached(): Promise<PermissionSnapsh
     })
   }
 
-  const tAuth = Date.now()
+  const cached = permissionSnapshotCache.get(fastAuthUser.id)
+  if (cached && cached.expiresAt > Date.now()) {
+    return structuredClone(cached.snapshot)
+  }
+  permissionSnapshotCache.delete(fastAuthUser.id)
+
   const { data: fastData, error: fastError } =
     await fastSupabase.rpc("get_permission_snapshot")
-  console.log(
-    `[perf] get_permission_snapshot: ${Date.now() - tAuth}ms, error=${fastError?.message ?? "none"}, hasData=${Boolean(fastData)}`,
-  )
   if (!fastError && fastData && typeof fastData === "object") {
     const payload = fastData as {
       utente?: UtenteRow
@@ -331,11 +377,14 @@ async function loadCurrentPermissionSnapshotUncached(): Promise<PermissionSnapsh
         snapshot.scopes[row.risorsa] = row.scope ?? "none"
     }
 
-    console.log(`[perf] loadCurrentPermissionSnapshot TOTALE (percorso veloce): ${Date.now() - t0}ms`)
-    return snapshot
+    return rememberSnapshot(fastAuthUser.id, snapshot)
   }
 
-  console.warn("[perf] RPC fallita/assente, uso il FALLBACK LENTO (query multiple separate)")
+  // Non è strumentazione: segnala che la migration della RPC non è applicata e
+  // che l'app sta girando sul percorso lento a query multiple.
+  console.warn(
+    `[permissions] RPC get_permission_snapshot non disponibile (${fastError?.message ?? "nessun dato"}): uso il fallback a query multiple.`,
+  )
   // Fallback compatibile finché la migration RPC non è stata applicata.
   const { supabase, authUser, utente } = await loadCurrentUser()
 
@@ -405,8 +454,7 @@ async function loadCurrentPermissionSnapshotUncached(): Promise<PermissionSnapsh
     snapshot.scopes[row.risorsa] = row.scope ?? "none"
   }
 
-  console.log(`[perf] loadCurrentPermissionSnapshot TOTALE (percorso lento/fallback): ${Date.now() - t0}ms`)
-  return snapshot
+  return rememberSnapshot(fastAuthUser.id, snapshot)
 }
 
 export const loadCurrentPermissionSnapshot = cache(loadCurrentPermissionSnapshotUncached)

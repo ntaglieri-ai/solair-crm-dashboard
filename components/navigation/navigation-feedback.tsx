@@ -3,6 +3,18 @@
 import { useEffect, useRef, useState } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
 
+// Le navigazioni fatte con router.push() (le righe delle tabelle) non passano
+// da un <a>, quindi l'intercettazione dei click qui sotto non le vede: restavano
+// ~240ms senza alcun feedback a schermo. Chi naviga programmaticamente segnala
+// l'inizio con questo evento.
+const NAVIGATION_START_EVENT = "crm:navigation-start"
+
+export function startNavigationFeedback() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(NAVIGATION_START_EVENT))
+  }
+}
+
 export function NavigationFeedback() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -49,9 +61,11 @@ export function NavigationFeedback() {
 
     document.addEventListener("click", onClick, true)
     window.addEventListener("popstate", start)
+    window.addEventListener(NAVIGATION_START_EVENT, start)
     return () => {
       document.removeEventListener("click", onClick, true)
       window.removeEventListener("popstate", start)
+      window.removeEventListener(NAVIGATION_START_EVENT, start)
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
     }
   }, [])

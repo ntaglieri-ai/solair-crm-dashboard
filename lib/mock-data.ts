@@ -501,6 +501,8 @@ export type OrigineLead =
   | "Facebook"
   | "Pubblicità"
   | "Sito web"
+  | "Chat"
+  | "Configuratore WebSite"
   | "Manuale"
   | "Utenza di servizio"
 

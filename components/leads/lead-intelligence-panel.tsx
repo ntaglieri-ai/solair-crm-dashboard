@@ -27,9 +27,15 @@ interface ScoreFactor {
   tone: "positive" | "negative" | "neutral"
 }
 
-// Deriva i contributi di score dai dati del lead (mock intelligence)
+// Deriva i contributi principali dai dati reali del lead.
 function scoreFactors(lead: Lead): ScoreFactor[] {
   const factors: ScoreFactor[] = []
+  if (lead["Origine Lead"] === "Configuratore WebSite")
+    factors.push({
+      label: "Arrivato da configuratore",
+      pts: 35,
+      tone: "positive",
+    })
   if (lead.emailAperture > 0)
     factors.push({
       label: `Email aperta ×${lead.emailAperture}`,
@@ -38,15 +44,21 @@ function scoreFactors(lead: Lead): ScoreFactor[] {
     })
   if (lead.kWp > 0)
     factors.push({ label: "Preventivo configurato", pts: 25, tone: "positive" })
+  if (lead.Telefono || lead["E-mail"])
+    factors.push({ label: "Contatti disponibili", pts: 10, tone: "positive" })
   if (
     ["Contattato", "Inviato Preventivo", "Convertito"].includes(
       lead["Stato Lead"],
     )
   )
     factors.push({ label: "Contattato", pts: 20, tone: "positive" })
-  if (!lead.leadCaldo)
+  const createdAt = new Date(lead["Ora creazione"])
+  const ageDays = Number.isNaN(createdAt.getTime())
+    ? 0
+    : Math.floor((Date.now() - createdAt.getTime()) / (24 * 60 * 60 * 1000))
+  if (["Non contattato", "Tentato di contattare"].includes(lead["Stato Lead"]) && ageDays >= 5)
     factors.push({
-      label: "Da 5 giorni senza risposta",
+      label: `Da ${ageDays} giorni senza risposta`,
       pts: -10,
       tone: "negative",
     })
@@ -209,24 +221,31 @@ function EmailTrackingCard({ lead }: { lead: Lead }) {
 interface UpcomingTask {
   oggetto: string
   scadenza: string
-  priorita: "Alta" | "Media"
+  priorita: string
 }
 
 function upcomingTasks(lead: Lead): UpcomingTask[] {
-  const tasks: UpcomingTask[] = [
-    {
-      oggetto: "Richiamare per conferma preventivo",
-      scadenza: "18 Giu",
-      priorita: lead.Valutazione > 80 ? "Alta" : "Media",
-    },
-  ]
-  if (lead.leadCaldo)
-    tasks.push({
-      oggetto: "Inviare scheda tecnica",
-      scadenza: "20 Giu",
-      priorita: "Media",
-    })
-  return tasks
+  return (lead.compiti ?? [])
+    .filter((task) => !task.completato)
+    .map((task) => ({
+      oggetto: task.oggetto,
+      scadenza: formatTaskDueDate(task.scadenza),
+      priorita: task.priorita || "Medio",
+    }))
+}
+
+function formatTaskDueDate(value: string) {
+  if (!value) return "Senza scadenza"
+  const [day, month, year] = value.split("/")
+  const date =
+    day && month && year
+      ? new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)))
+      : new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat("it-IT", {
+    day: "numeric",
+    month: "short",
+  }).format(date)
 }
 
 function scrollToSection(id: string) {
@@ -243,36 +262,43 @@ function UpcomingTasksCard({ lead }: { lead: Lead }) {
         <CardTitle className="text-[13px]">Prossime attività</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2.5">
-        <ul className="flex flex-col gap-2">
-          {tasks.map((t) => (
-            <li
-              key={t.oggetto}
-              className="flex items-start gap-2 rounded-lg border border-border bg-secondary/40 p-2.5"
-            >
-              <span
-                className={cn(
-                  "mt-1.5 size-2 shrink-0 rounded-full",
-                  t.priorita === "Alta" ? "bg-destructive" : "bg-warning",
-                )}
-              />
-              <div className="flex min-w-0 flex-1 flex-col">
-                <span className="text-xs font-medium leading-snug text-foreground">
-                  {t.oggetto}
-                </span>
-                <span
-                  className={cn(
-                    "text-[11px]",
-                    t.priorita === "Alta"
-                      ? "text-destructive"
-                      : "text-warning",
-                  )}
+        {tasks.length > 0 ? (
+          <ul className="flex flex-col gap-2">
+            {tasks.map((t) => {
+              const highPriority = ["Alta", "Alto"].includes(t.priorita)
+              return (
+                <li
+                  key={`${t.oggetto}-${t.scadenza}`}
+                  className="flex items-start gap-2 rounded-lg border border-border bg-secondary/40 p-2.5"
                 >
-                  {t.scadenza} · {t.priorita}
-                </span>
-              </div>
-            </li>
-          ))}
-        </ul>
+                  <span
+                    className={cn(
+                      "mt-1.5 size-2 shrink-0 rounded-full",
+                      highPriority ? "bg-destructive" : "bg-warning",
+                    )}
+                  />
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="text-xs font-medium leading-snug text-foreground">
+                      {t.oggetto}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[11px]",
+                        highPriority ? "text-destructive" : "text-warning",
+                      )}
+                    >
+                      {t.scadenza} · {t.priorita}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <div className="rounded-lg border border-dashed border-border bg-secondary/30 p-3 text-xs text-muted-foreground">
+            Nessuna attività aperta sul lead.
+          </div>
+        )}
         <Button
           variant="outline"
           size="sm"

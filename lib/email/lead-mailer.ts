@@ -9,6 +9,11 @@
 
 import nodemailer from "nodemailer"
 import type { Transporter } from "nodemailer"
+import {
+  DEFAULT_COMMUNICATION_EMAIL_POLICY,
+  getCommunicationEmailPolicy,
+  type CommunicationEmailPolicy,
+} from "./communication-policy"
 import { textToSafeHtml } from "./html"
 
 const ARUBA_HOST = "smtps.aruba.it"
@@ -17,6 +22,7 @@ const MAX_RECIPIENTS_PER_REQUEST = 200
 
 /** Pausa tra un destinatario e l'altro: mantiene prudente anche il fallback Aruba. */
 export const PACING_MS = 400
+const SES_PACING_MS = 120
 
 export type LeadEmailResult = {
   to: string
@@ -46,27 +52,42 @@ type SystemSmtpConfig = {
   port: number
   user: string
   password: string
-  from: string
+  fromEmail: string
+  fromName: string
 }
 
 type OutboundTransport = {
   transport: Transporter
   from: string
   replyTo?: string
+  pacingMs: number
   provider: "ses" | "smtp" | "personal-aruba"
 }
 
-function systemSmtpConfig(): SystemSmtpConfig | null {
+function formatAddress(email: string, name: string) {
+  const trimmedName = name.trim()
+  if (!trimmedName) return email
+  const safeName = trimmedName.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"")
+  return `"${safeName}" <${email}>`
+}
+
+function systemSmtpConfig(
+  policy: CommunicationEmailPolicy = DEFAULT_COMMUNICATION_EMAIL_POLICY,
+): SystemSmtpConfig | null {
   const provider = process.env.EMAIL_PROVIDER?.trim().toLowerCase()
   const host = process.env.SMTP_HOST
   const port = process.env.SMTP_PORT
   const user = process.env.SMTP_USER
   const password = process.env.SMTP_PASSWORD
-  const from = process.env.SMTP_FROM
-  if (provider !== "ses" && !(host && port && user && password && from)) return null
-  if (!host || !port || !user || !password || !from) return null
+  const fromEmail = policy.fromEmail || process.env.SMTP_FROM
+  if (provider !== "ses" && !(host && port && user && password && fromEmail)) return null
+  if (!host || !port || !user || !password || !fromEmail) return null
 
-  return { host, port: Number(port), user, password, from }
+  return { host, port: Number(port), user, password, fromEmail, fromName: policy.fromName }
+}
+
+export function hasSystemOutboundSmtp(policy?: CommunicationEmailPolicy): boolean {
+  return Boolean(systemSmtpConfig(policy))
 }
 
 /**
@@ -74,11 +95,18 @@ function systemSmtpConfig(): SystemSmtpConfig | null {
  * conserva la conversazione verso l'agente tramite Reply-To.
  */
 export function createAgentOutboundTransport(params: {
-  smtpUser: string
-  smtpPassword: string
+  smtpUser?: string
+  smtpPassword?: string
+  policy?: CommunicationEmailPolicy
+  replyToMode?: "agent" | "company"
 }): OutboundTransport {
-  const system = systemSmtpConfig()
+  const policy = params.policy ?? DEFAULT_COMMUNICATION_EMAIL_POLICY
+  const system = systemSmtpConfig(policy)
   if (system) {
+    const companyReplyTo = policy.replyTo || system.fromEmail
+    const replyTo =
+      params.replyToMode === "company" ? companyReplyTo : params.smtpUser || companyReplyTo
+
     return {
       transport: nodemailer.createTransport({
         host: system.host,
@@ -86,15 +114,21 @@ export function createAgentOutboundTransport(params: {
         secure: system.port === 465,
         auth: { user: system.user, pass: system.password },
       }),
-      from: system.from,
-      replyTo: params.smtpUser,
+      from: formatAddress(system.fromEmail, system.fromName),
+      replyTo,
+      pacingMs: policy.bulkPacing === "prudente" ? PACING_MS : SES_PACING_MS,
       provider: process.env.EMAIL_PROVIDER?.trim().toLowerCase() === "ses" ? "ses" : "smtp",
     }
+  }
+
+  if (!params.smtpUser || !params.smtpPassword) {
+    throw new Error("SMTP personale non configurato e SMTP di sistema non disponibile")
   }
 
   return {
     transport: createPersonalTransport(params.smtpUser, params.smtpPassword),
     from: params.smtpUser,
+    pacingMs: PACING_MS,
     provider: "personal-aruba",
   }
 }
@@ -108,10 +142,13 @@ export async function sendLeadEmails(params: {
 }): Promise<{ results: LeadEmailResult[]; truncated: boolean }> {
   const truncated = params.recipients.length > MAX_RECIPIENTS_PER_REQUEST
   const recipients = params.recipients.slice(0, MAX_RECIPIENTS_PER_REQUEST)
+  const policy = await getCommunicationEmailPolicy()
 
   const outbound = createAgentOutboundTransport({
     smtpUser: params.smtpUser,
     smtpPassword: params.smtpPassword,
+    policy,
+    replyToMode: "agent",
   })
 
   const results: LeadEmailResult[] = []
@@ -129,7 +166,7 @@ export async function sendLeadEmails(params: {
     } catch (e) {
       results.push({ to, ok: false, error: e instanceof Error ? e.message : "Errore invio" })
     }
-    await sleep(PACING_MS)
+    await sleep(outbound.pacingMs)
   }
 
   outbound.transport.close()

@@ -4,9 +4,9 @@ import { createClient } from "@/lib/supabase/server"
 import { getPersonalEmailPassword, getPersonalEmailStatus } from "@/lib/email/personal-credentials"
 import { sendLeadEmails } from "@/lib/email/lead-mailer"
 
-// Mirror di app/api/leads/send-email/route.ts, ma per Clienti: stessa
-// infrastruttura (casella Aruba personale dell'agente), tabella e azione di
-// permesso diverse.
+// Mirror di app/api/leads/send-email/route.ts, ma per Clienti: stesso mailer
+// operativo (SES di sistema con Reply-To agente, fallback Aruba personale),
+// tabella e azione di permesso diverse.
 
 type SendEmailPayload = {
   clienteIds?: unknown

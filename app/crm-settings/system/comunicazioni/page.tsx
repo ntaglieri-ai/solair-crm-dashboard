@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Cloud,
   Fingerprint,
+  Gauge,
   KeyRound,
   LockKeyhole,
   Loader2,
@@ -38,6 +39,7 @@ type EmailPolicy = {
   fromName: string
   replyTo: string
   bulkReplyTo: "agente" | "azienda"
+  bulkPacing: "prudente" | "ses"
 }
 
 type SpokiSettings = {
@@ -80,6 +82,7 @@ const EMPTY_SETTINGS: CommunicationSettings = {
     fromName: "Solair CRM",
     replyTo: "commerciale@solairgroup.it",
     bulkReplyTo: "agente",
+    bulkPacing: "ses",
   },
   spoki: {
     enabled: false,
@@ -132,8 +135,8 @@ export default function CommunicationsPage() {
     [emailState, spokiState, handoffState],
   )
 
-  function save() {
-    setStored({ ...mergeSettings(form), email: EMPTY_SETTINGS.email })
+function save() {
+    setStored(mergeSettings(form))
     toast.success("Configurazione comunicazioni salvata")
   }
 
@@ -185,15 +188,15 @@ export default function CommunicationsPage() {
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-lg font-black text-foreground">Email transazionali</h3>
+                  <h3 className="text-lg font-black text-foreground">Email CRM via Amazon SES</h3>
                   <span className="inline-flex h-7 items-center gap-1 rounded-full bg-emerald-100 px-2.5 text-xs font-black text-emerald-800">
                     <CheckCircle2 className="size-3.5" />
                     Attivo via AWS SES
                   </span>
                 </div>
                 <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-                  Stato reale della produzione: il CRM invia account, password temporanee e reset
-                  tramite variabili SMTP su Vercel. Nessuna credenziale AWS viene salvata nel CRM.
+                  Stato reale della produzione: il CRM invia account, reset, lead, clienti e massa
+                  tramite SES quando gli SMTP di sistema sono configurati.
                 </p>
               </div>
             </div>
@@ -206,7 +209,7 @@ export default function CommunicationsPage() {
 
         <div className="grid gap-0 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="border-b border-[#d8dde6] p-5 lg:border-b-0 lg:border-r">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               <RuntimeMetric
                 label="Provider"
                 value={EMAIL_RUNTIME.provider}
@@ -221,9 +224,15 @@ export default function CommunicationsPage() {
               />
               <RuntimeMetric
                 label="Mittente"
-                value={EMAIL_RUNTIME.fromEmail}
+                value={form.email.fromEmail}
                 tone="green"
                 icon={<Send className="size-4" />}
+              />
+              <RuntimeMetric
+                label="Reply-to massa"
+                value={form.email.bulkReplyTo === "agente" ? "Agente" : "Azienda"}
+                tone="violet"
+                icon={<Mail className="size-4" />}
               />
               <RuntimeMetric
                 label="Segreti"
@@ -236,7 +245,59 @@ export default function CommunicationsPage() {
             <div className="mt-5 grid gap-3 md:grid-cols-3">
               <EmailFlowCard title="Nuovo account" description="Welcome email e password temporanea" />
               <EmailFlowCard title="Reset password" description="Credenziali temporanee da recupero accesso" />
-              <EmailFlowCard title="Cambio password" description="Sessione CRM rinnovata dopo attivazione" />
+              <EmailFlowCard title="Lead e massa" description="From Solair, reply-to secondo policy" />
+            </div>
+
+            <div className="mt-5 rounded-xl border border-[#d8dde6] bg-white p-4 shadow-xs">
+              <div className="flex items-center gap-2">
+                <Gauge className="size-4 text-[#0176d3]" />
+                <h4 className="text-sm font-black uppercase tracking-wide text-foreground">Policy operative</h4>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <TextField
+                  label="Mittente CRM"
+                  value={form.email.fromEmail}
+                  disabled={!canEdit}
+                  onChange={(fromEmail) => update("email", { fromEmail })}
+                  placeholder="commerciale@solairgroup.it"
+                />
+                <TextField
+                  label="Nome mittente"
+                  value={form.email.fromName}
+                  disabled={!canEdit}
+                  onChange={(fromName) => update("email", { fromName })}
+                  placeholder="Solair CRM"
+                />
+                <TextField
+                  label="Reply-to aziendale"
+                  value={form.email.replyTo}
+                  disabled={!canEdit}
+                  onChange={(replyTo) => update("email", { replyTo })}
+                  placeholder="commerciale@solairgroup.it"
+                />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <SegmentedField
+                    label="Reply-to invii massa"
+                    value={form.email.bulkReplyTo}
+                    disabled={!canEdit}
+                    options={[
+                      { value: "agente", label: "Agente" },
+                      { value: "azienda", label: "Azienda" },
+                    ]}
+                    onChange={(bulkReplyTo) => update("email", { bulkReplyTo })}
+                  />
+                  <SegmentedField
+                    label="Ritmo invii massa"
+                    value={form.email.bulkPacing}
+                    disabled={!canEdit}
+                    options={[
+                      { value: "ses", label: "SES" },
+                      { value: "prudente", label: "Prudente" },
+                    ]}
+                    onChange={(bulkPacing) => update("email", { bulkPacing })}
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -246,9 +307,10 @@ export default function CommunicationsPage() {
               <h4 className="text-sm font-black uppercase tracking-wide text-foreground">Confini operativi</h4>
             </div>
             <div className="mt-3 grid gap-2">
-              <BoundaryRow label="Letto dal codice" value="SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM" />
+              <BoundaryRow label="Segreti letti dal codice" value="SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD" />
+              <BoundaryRow label="Policy letta dal codice" value="Mittente, reply-to massa, ritmo invio" />
               <BoundaryRow label="Non salvato qui" value="Access key, SMTP password, secret AWS" />
-              <BoundaryRow label="Fuori da questo pannello" value="Email agente e invii massa personali" />
+              <BoundaryRow label="Fallback" value="Aruba personale solo se SES non disponibile" />
             </div>
           </div>
         </div>
@@ -256,7 +318,7 @@ export default function CommunicationsPage() {
         <div className="grid gap-2 border-t border-[#d8dde6] bg-white p-5 sm:grid-cols-2 xl:grid-cols-4">
           <EnvPill label="SMTP_HOST" value={EMAIL_RUNTIME.endpoint} />
           <EnvPill label="SMTP_PORT" value={EMAIL_RUNTIME.port} />
-          <EnvPill label="SMTP_FROM" value={EMAIL_RUNTIME.fromEmail} />
+          <EnvPill label="SMTP_FROM" value={form.email.fromEmail} />
           <EnvPill label="AWS credentials" value="solo Vercel env" />
         </div>
       </section>
@@ -375,7 +437,15 @@ function mergeSettings(value: LegacyCommunicationSettings): CommunicationSetting
   return {
     ...EMPTY_SETTINGS,
     ...value,
-    email: EMPTY_SETTINGS.email,
+    email: {
+      ...EMPTY_SETTINGS.email,
+      ...value.email,
+      fromEmail: value.email?.fromEmail ?? value.smtp?.fromEmail ?? EMPTY_SETTINGS.email.fromEmail,
+      fromName: value.email?.fromName ?? value.smtp?.fromName ?? EMPTY_SETTINGS.email.fromName,
+      replyTo: value.email?.replyTo ?? value.smtp?.replyTo ?? EMPTY_SETTINGS.email.replyTo,
+      bulkReplyTo: value.email?.bulkReplyTo === "azienda" ? "azienda" : "agente",
+      bulkPacing: value.email?.bulkPacing === "prudente" ? "prudente" : "ses",
+    },
     spoki: { ...EMPTY_SETTINGS.spoki, ...value.spoki },
     automazioni: { ...EMPTY_SETTINGS.automazioni, ...value.automazioni },
     notes: value.notes ?? "",
@@ -557,6 +627,51 @@ function TextField({
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
       />
+    </div>
+  )
+}
+
+function SegmentedField<TValue extends string>({
+  label,
+  value,
+  disabled,
+  options,
+  onChange,
+}: {
+  label: string
+  value: TValue
+  disabled: boolean
+  options: Array<{ value: TValue; label: string }>
+  onChange: (value: TValue) => void
+}) {
+  const id = useId()
+  return (
+    <div className="flex flex-col gap-2">
+      <Label id={id}>{label}</Label>
+      <div
+        role="radiogroup"
+        aria-labelledby={id}
+        className="grid grid-cols-2 rounded-lg border border-border bg-muted/40 p-1"
+      >
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={value === option.value}
+            disabled={disabled}
+            onClick={() => onChange(option.value)}
+            className={cn(
+              "h-10 rounded-md px-3 text-sm font-bold text-muted-foreground transition",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              value === option.value && "bg-white text-navy shadow-sm",
+              disabled && "cursor-not-allowed opacity-60",
+            )}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

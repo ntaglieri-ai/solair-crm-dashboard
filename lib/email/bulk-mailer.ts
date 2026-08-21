@@ -4,10 +4,11 @@
 // configurato, Reply-To personale dell'agente, fallback Aruba personale solo
 // se SES non e' disponibile.
 //
-// Questo modulo NON va invocato dentro una richiesta HTTP sincrona: 100
-// destinatari x 400ms = 40s+ di lavoro. Va sempre dentro after().
+// Questo modulo NON va invocato dentro una richiesta HTTP sincrona: gli invii
+// massa restano lavoro da after(), con ritmo deciso dalla policy Comunicazioni.
 
-import { PACING_MS, createAgentOutboundTransport, sleep } from "./lead-mailer"
+import { createAgentOutboundTransport, sleep } from "./lead-mailer"
+import { getCommunicationEmailPolicy } from "./communication-policy"
 import { type BulkPlaceholder, renderTemplate } from "./bulk-template"
 import { textToSafeHtml } from "./html"
 
@@ -31,8 +32,8 @@ export type BulkSendOutcome = {
 }
 
 export async function sendBulkEmails(params: {
-  smtpUser: string
-  smtpPassword: string
+  smtpUser?: string
+  smtpPassword?: string
   subject: string
   template: string
   recipients: BulkRecipient[]
@@ -42,9 +43,12 @@ export async function sendBulkEmails(params: {
    */
   onProgress?: (progress: BulkProgress) => void | Promise<void>
 }): Promise<BulkSendOutcome> {
+  const policy = await getCommunicationEmailPolicy()
   const outbound = createAgentOutboundTransport({
     smtpUser: params.smtpUser,
     smtpPassword: params.smtpPassword,
+    policy,
+    replyToMode: policy.bulkReplyTo === "azienda" ? "company" : "agent",
   })
 
   let inviate = 0
@@ -73,7 +77,7 @@ export async function sendBulkEmails(params: {
     }
 
     await params.onProgress?.({ inviate, fallite })
-    await sleep(PACING_MS)
+    await sleep(outbound.pacingMs)
   }
 
   outbound.transport.close()

@@ -93,6 +93,8 @@ const ORIGINE_STYLES: Record<OrigineLead, string> = {
   Facebook: "bg-info/10 text-info",
   "Pubblicità": "bg-warning/10 text-warning",
   "Sito web": "bg-teal/10 text-teal",
+  Chat: "bg-info/10 text-info",
+  "Configuratore WebSite": "bg-teal/10 text-teal",
   Manuale: "bg-muted text-muted-foreground",
   "Utenza di servizio": "bg-navy/10 text-navy",
 }

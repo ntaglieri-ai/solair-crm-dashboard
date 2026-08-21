@@ -3,14 +3,20 @@
 import type { ReactNode } from "react"
 import { useEffect, useId, useMemo, useState } from "react"
 import {
-  AlertTriangle,
+  CheckCircle2,
+  Cloud,
+  Fingerprint,
   KeyRound,
+  LockKeyhole,
   Loader2,
   Mail,
   MessageCircle,
+  RadioTower,
   Save,
+  Send,
   Server,
   ShieldCheck,
+  Sparkles,
   Workflow,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -68,11 +74,11 @@ type LegacyCommunicationSettings = Partial<CommunicationSettings> & {
 const EMPTY_SETTINGS: CommunicationSettings = {
   email: {
     provider: "aws-ses",
-    region: "eu-south-1",
+    region: "eu-west-1",
     domain: "solairgroup.it",
-    fromEmail: "",
+    fromEmail: "commerciale@solairgroup.it",
     fromName: "Solair CRM",
-    replyTo: "",
+    replyTo: "commerciale@solairgroup.it",
     bulkReplyTo: "agente",
   },
   spoki: {
@@ -93,6 +99,15 @@ const EMPTY_SETTINGS: CommunicationSettings = {
 type SectionState = "active" | "ready" | "missing"
 type CommunicationSectionKey = Exclude<keyof CommunicationSettings, "notes">
 
+const EMAIL_RUNTIME = {
+  provider: "Amazon SES",
+  region: "eu-west-1",
+  endpoint: "email-smtp.eu-west-1.amazonaws.com",
+  port: "465",
+  fromEmail: "commerciale@solairgroup.it",
+  replyTo: "commerciale@solairgroup.it",
+}
+
 export default function CommunicationsPage() {
   const permissions = usePermissions()
   const canEdit = permissions.canAction("company.communication.manage")
@@ -106,7 +121,7 @@ export default function CommunicationsPage() {
     queueMicrotask(() => setForm(mergeSettings(stored as LegacyCommunicationSettings)))
   }, [stored])
 
-  const emailState = emailPolicyState(form.email)
+  const emailState: SectionState = "active"
   const spokiState = channelState(form.spoki.enabled, [form.spoki.webhookUrl, form.spoki.apiToken])
   const handoffState = requiredState([
     form.automazioni.responsabile_fatturazione,
@@ -118,7 +133,7 @@ export default function CommunicationsPage() {
   )
 
   function save() {
-    setStored(mergeSettings(form))
+    setStored({ ...mergeSettings(form), email: EMPTY_SETTINGS.email })
     toast.success("Configurazione comunicazioni salvata")
   }
 
@@ -152,95 +167,97 @@ export default function CommunicationsPage() {
       ) : null}
 
       <div className="grid gap-3 md:grid-cols-3">
-        <SummaryCard label="Provider email CRM" value="AWS SES" icon={<Mail className="size-5" />} />
+        <SummaryCard label="Email transazionali" value="Attive" icon={<Mail className="size-5" />} />
         <SummaryCard label="Aree configurate" value={`${configuredAreas}/3`} icon={<ShieldCheck className="size-5" />} />
         <SummaryCard
-          label="Segreti produzione"
+          label="Sorgente segreti"
           value="Vercel env"
           icon={<KeyRound className="size-5" />}
         />
       </div>
 
-      <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
-        <div className="mb-5 flex items-start gap-3">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-navy/5 text-navy">
-            <Server className="size-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-base font-black text-foreground">Email CRM via Amazon SES</h3>
-              <StateBadge state={emailState} />
+      <section className="overflow-hidden rounded-xl border border-[#d8dde6] bg-card shadow-sm">
+        <div className="border-b border-[#d8dde6] bg-[#f3f7fb] px-5 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex min-w-0 gap-3">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-[#0176d3] text-white shadow-sm">
+                <Cloud className="size-6" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-lg font-black text-foreground">Email transazionali</h3>
+                  <span className="inline-flex h-7 items-center gap-1 rounded-full bg-emerald-100 px-2.5 text-xs font-black text-emerald-800">
+                    <CheckCircle2 className="size-3.5" />
+                    Attivo via AWS SES
+                  </span>
+                </div>
+                <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+                  Stato reale della produzione: il CRM invia account, password temporanee e reset
+                  tramite variabili SMTP su Vercel. Nessuna credenziale AWS viene salvata nel CRM.
+                </p>
+              </div>
             </div>
-            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-              Dati non sensibili della policy email. Access key, secret e credenziali SMTP non
-              vengono salvati nel CRM.
-            </p>
-          </div>
-        </div>
-
-        <div className="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-sm leading-relaxed text-amber-800">
-          <div className="flex gap-2">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            <span>
-              Il mailer legacy usa ancora le variabili SMTP attuali; questa sezione prepara il
-              passaggio a SES senza introdurre nuovi segreti in `crm_settings`.
+            <span className="inline-flex h-8 items-center gap-2 rounded-full border border-[#0176d3]/20 bg-white px-3 text-xs font-black uppercase tracking-wide text-[#0176d3]">
+              <Sparkles className="size-3.5" />
+              Production source of truth
             </span>
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <TextField
-            label="Regione SES"
-            value={form.email.region}
-            disabled={!canEdit}
-            onChange={(region) => update("email", { region })}
-            placeholder="eu-south-1"
-          />
-          <TextField
-            label="Dominio verificato"
-            value={form.email.domain}
-            disabled={!canEdit}
-            onChange={(domain) => update("email", { domain })}
-            placeholder="solairgroup.it"
-          />
-          <TextField
-            label="Mittente CRM"
-            value={form.email.fromEmail}
-            disabled={!canEdit}
-            onChange={(fromEmail) => update("email", { fromEmail })}
-            placeholder="crm@solairgroup.it"
-          />
-          <TextField
-            label="Nome mittente"
-            value={form.email.fromName}
-            disabled={!canEdit}
-            onChange={(fromName) => update("email", { fromName })}
-            placeholder="Solair CRM"
-          />
-          <TextField
-            label="Reply-to aziendale"
-            value={form.email.replyTo}
-            disabled={!canEdit}
-            onChange={(replyTo) => update("email", { replyTo })}
-            placeholder="commerciale@solairgroup.it"
-          />
-          <SegmentedField
-            label="Reply-to invii massa"
-            value={form.email.bulkReplyTo}
-            disabled={!canEdit}
-            options={[
-              { value: "agente", label: "Agente" },
-              { value: "azienda", label: "Azienda" },
-            ]}
-            onChange={(bulkReplyTo) => update("email", { bulkReplyTo })}
-          />
+        <div className="grid gap-0 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="border-b border-[#d8dde6] p-5 lg:border-b-0 lg:border-r">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <RuntimeMetric
+                label="Provider"
+                value={EMAIL_RUNTIME.provider}
+                tone="blue"
+                icon={<Server className="size-4" />}
+              />
+              <RuntimeMetric
+                label="Regione"
+                value={EMAIL_RUNTIME.region}
+                tone="cyan"
+                icon={<RadioTower className="size-4" />}
+              />
+              <RuntimeMetric
+                label="Mittente"
+                value={EMAIL_RUNTIME.fromEmail}
+                tone="green"
+                icon={<Send className="size-4" />}
+              />
+              <RuntimeMetric
+                label="Segreti"
+                value="Vercel env"
+                tone="violet"
+                icon={<LockKeyhole className="size-4" />}
+              />
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              <EmailFlowCard title="Nuovo account" description="Welcome email e password temporanea" />
+              <EmailFlowCard title="Reset password" description="Credenziali temporanee da recupero accesso" />
+              <EmailFlowCard title="Cambio password" description="Sessione CRM rinnovata dopo attivazione" />
+            </div>
+          </div>
+
+          <div className="bg-[#fbfcfe] p-5">
+            <div className="flex items-center gap-2">
+              <Fingerprint className="size-4 text-[#0176d3]" />
+              <h4 className="text-sm font-black uppercase tracking-wide text-foreground">Confini operativi</h4>
+            </div>
+            <div className="mt-3 grid gap-2">
+              <BoundaryRow label="Letto dal codice" value="SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM" />
+              <BoundaryRow label="Non salvato qui" value="Access key, SMTP password, secret AWS" />
+              <BoundaryRow label="Fuori da questo pannello" value="Email agente e invii massa personali" />
+            </div>
+          </div>
         </div>
 
-        <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <EnvPill label="EMAIL_PROVIDER" value="ses" />
-          <EnvPill label="SES_REGION" value={form.email.region || "da impostare"} />
-          <EnvPill label="SES_FROM_EMAIL" value={form.email.fromEmail || "da impostare"} />
-          <EnvPill label="AWS credentials" value="solo env" />
+        <div className="grid gap-2 border-t border-[#d8dde6] bg-white p-5 sm:grid-cols-2 xl:grid-cols-4">
+          <EnvPill label="SMTP_HOST" value={EMAIL_RUNTIME.endpoint} />
+          <EnvPill label="SMTP_PORT" value={EMAIL_RUNTIME.port} />
+          <EnvPill label="SMTP_FROM" value={EMAIL_RUNTIME.fromEmail} />
+          <EnvPill label="AWS credentials" value="solo Vercel env" />
         </div>
       </section>
 
@@ -355,25 +372,14 @@ export default function CommunicationsPage() {
 }
 
 function mergeSettings(value: LegacyCommunicationSettings): CommunicationSettings {
-  const email = value.email ?? {
-    ...EMPTY_SETTINGS.email,
-    fromEmail: value.smtp?.fromEmail ?? EMPTY_SETTINGS.email.fromEmail,
-    fromName: value.smtp?.fromName ?? EMPTY_SETTINGS.email.fromName,
-    replyTo: value.smtp?.replyTo ?? EMPTY_SETTINGS.email.replyTo,
-  }
-
   return {
     ...EMPTY_SETTINGS,
     ...value,
-    email: { ...EMPTY_SETTINGS.email, ...email, provider: "aws-ses" },
+    email: EMPTY_SETTINGS.email,
     spoki: { ...EMPTY_SETTINGS.spoki, ...value.spoki },
     automazioni: { ...EMPTY_SETTINGS.automazioni, ...value.automazioni },
     notes: value.notes ?? "",
   }
-}
-
-function emailPolicyState(email: EmailPolicy): SectionState {
-  return requiredState([email.region, email.domain, email.fromEmail])
 }
 
 function requiredState(required: string[]): SectionState {
@@ -403,6 +409,60 @@ function SummaryCard({
         <div className="flex size-9 items-center justify-center rounded-lg bg-navy/5 text-navy">{icon}</div>
       </div>
       <div className="mt-3 text-2xl font-black text-foreground">{value}</div>
+    </div>
+  )
+}
+
+function RuntimeMetric({
+  label,
+  value,
+  tone,
+  icon,
+}: {
+  label: string
+  value: string
+  tone: "blue" | "cyan" | "green" | "violet"
+  icon: ReactNode
+}) {
+  const toneClass = {
+    blue: "border-[#0176d3]/20 bg-[#eaf5fe] text-[#0176d3]",
+    cyan: "border-cyan-500/20 bg-cyan-50 text-cyan-700",
+    green: "border-emerald-500/20 bg-emerald-50 text-emerald-700",
+    violet: "border-violet-500/20 bg-violet-50 text-violet-700",
+  }[tone]
+
+  return (
+    <div className="rounded-lg border border-[#d8dde6] bg-white p-3 shadow-xs">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-black uppercase tracking-wide text-muted-foreground">{label}</span>
+        <span className={cn("flex size-7 items-center justify-center rounded-lg border", toneClass)}>
+          {icon}
+        </span>
+      </div>
+      <div className="mt-3 truncate text-sm font-black text-foreground">{value}</div>
+    </div>
+  )
+}
+
+function EmailFlowCard({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="rounded-lg border border-[#d8dde6] bg-white p-3 shadow-xs">
+      <div className="flex items-center gap-2">
+        <span className="flex size-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+          <CheckCircle2 className="size-3.5" />
+        </span>
+        <span className="text-sm font-black text-foreground">{title}</span>
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{description}</p>
+    </div>
+  )
+}
+
+function BoundaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-[#d8dde6] bg-white px-3 py-2">
+      <div className="text-[11px] font-black uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-1 text-sm font-semibold leading-relaxed text-foreground">{value}</div>
     </div>
   )
 }
@@ -525,45 +585,6 @@ function SecretField({
         placeholder="••••••••"
         onChange={(event) => onChange(event.target.value)}
       />
-    </div>
-  )
-}
-
-function SegmentedField<T extends string>({
-  label,
-  value,
-  disabled,
-  options,
-  onChange,
-}: {
-  label: string
-  value: T
-  disabled: boolean
-  options: Array<{ value: T; label: string }>
-  onChange: (value: T) => void
-}) {
-  const id = useId()
-  return (
-    <div className="flex flex-col gap-2">
-      <Label id={id}>{label}</Label>
-      <div className="grid min-h-10 grid-cols-2 rounded-lg border border-border bg-muted/30 p-1" aria-labelledby={id}>
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            disabled={disabled}
-            onClick={() => onChange(option.value)}
-            className={cn(
-              "rounded-md px-3 py-1.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50",
-              value === option.value
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
     </div>
   )
 }

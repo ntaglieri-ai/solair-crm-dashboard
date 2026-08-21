@@ -2,7 +2,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Archive, BadgeEuro, BatteryCharging, BookOpenCheck, Bot, Calculator, ChevronDown, ChevronRight, Cloud, ExternalLink, FileText, FolderOpen, Loader2, Mail, PackageOpen, Pencil, Phone, Plug, Plus, RefreshCw, Save, Search, Settings2, ShieldCheck, SlidersHorizontal, SolarPanel, TicketPercent, Trash2, Upload, User, UserPlus, X } from "lucide-react"
+import { Archive, BadgeEuro, BatteryCharging, BookOpenCheck, Bot, Calculator, ChevronDown, ChevronRight, Cloud, Copy, ExternalLink, FileText, FolderOpen, Loader2, Mail, PackageOpen, Pencil, Phone, Plug, Plus, RefreshCw, Save, Search, Settings2, ShieldCheck, SlidersHorizontal, SolarPanel, TicketPercent, Trash2, Upload, User, UserPlus, X } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -19,7 +19,7 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { usePermissions } from "@/lib/permissions/provider"
-import { deriveRobertaHealth, type RobertaHealthInput } from "@/lib/roberta/health"
+import { deriveRobertaHealth, type RobertaHealthInput, type RobertaHealthLevel } from "@/lib/roberta/health"
 import type { AccessorioCommerciale, CatalogoCommerciale, CodiceSconto, DocumentoCommerciale, OffertaCommercialePayload, OffertaPeriodo, PannelloSpec, VersioneCatalogoCommerciale } from "@/lib/offerta-commerciale/types"
 
 function numberValue(value: string) {
@@ -439,11 +439,12 @@ function RobertaSourcesPanel() {
   const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const health = deriveRobertaHealth(status)
-  const healthTone = {
+  const healthToneByLevel: Record<RobertaHealthLevel, string> = {
     green: "border-teal-200 bg-teal-50 text-teal-800",
     yellow: "border-amber-200 bg-amber-50 text-amber-900",
     red: "border-red-200 bg-red-50 text-red-800",
-  }[health.level]
+  }
+  const healthTone = healthToneByLevel[health.level]
 
   const loadSources = useCallback(async () => {
     setLoading(true)
@@ -831,6 +832,76 @@ function periodoOfferta(offer: OffertaPeriodo) {
   return `${dal ?? "Data inizio libera"} – ${al ?? "senza scadenza"}`
 }
 
+async function copiaNegliAppunti(value: string, successMessage: string) {
+  const testo = value.trim()
+  if (!testo) return
+  try {
+    await navigator.clipboard.writeText(testo)
+    toast.success(successMessage)
+  } catch {
+    toast.error("Copia non riuscita")
+  }
+}
+
+function OffertaAdminCard({
+  offer,
+  generatingPublicLink,
+  onPatch,
+  onSave,
+  onGeneratePublicLink,
+}: {
+  offer: OffertaPeriodo
+  generatingPublicLink: boolean
+  onPatch: (patch: Partial<OffertaPeriodo>) => void
+  onSave: () => void
+  onGeneratePublicLink: () => void
+}) {
+  const publicUrl = offer.url_pubblico?.trim() ?? ""
+
+  return <article className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+    {offer.cover_path ? <img src={`/api/offerta-commerciale/offerte/${offer.id}/asset?kind=cover`} alt="" className="h-52 w-full object-cover" /> : <div className="flex h-36 items-center justify-center bg-slate-100"><FileText className="size-10 text-muted-foreground" /></div>}
+    <div className="space-y-3 p-4">
+      <Input value={offer.titolo} onChange={(e) => onPatch({ titolo: e.target.value })} />
+      <Textarea value={offer.descrizione ?? ""} onChange={(e) => onPatch({ descrizione: e.target.value })} placeholder="Descrizione breve" />
+      <div className="grid grid-cols-2 gap-2">
+        <Input type="date" value={offer.valido_dal ?? ""} onChange={(e) => onPatch({ valido_dal: e.target.value || null })} />
+        <Input type="date" value={offer.valido_al ?? ""} onChange={(e) => onPatch({ valido_al: e.target.value || null })} />
+      </div>
+
+      <div className="rounded-lg border border-teal-100 bg-teal-50/40 p-3">
+        <label className="text-xs font-medium text-teal-900">
+          URL pubblico PDF
+          <Input
+            className="mt-1 bg-white font-semibold"
+            value={offer.url_pubblico ?? ""}
+            placeholder={offer.pdf_path ? "Genera il link pubblico Nextcloud" : "Carica un PDF per generare il link"}
+            onChange={(e) => onPatch({ url_pubblico: e.target.value || null })}
+          />
+        </label>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={onGeneratePublicLink} disabled={!offer.pdf_path || generatingPublicLink}>
+            {generatingPublicLink ? <Loader2 className="size-4 animate-spin" /> : <Cloud className="size-4" />}
+            Genera link
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => void copiaNegliAppunti(publicUrl, "URL pubblico copiato")} disabled={!publicUrl}>
+            <Copy className="size-4" />
+            Copia
+          </Button>
+          {publicUrl ? <Button variant="ghost" size="sm" nativeButton={false} render={<a href={publicUrl} target="_blank" rel="noreferrer" />}><ExternalLink className="size-4" />Apri pubblico</Button> : null}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-2">
+        <label className="flex items-center gap-2 text-sm"><Switch checked={offer.pubblicata} onCheckedChange={(checked) => onPatch({ pubblicata: checked })} />Pubblicata</label>
+        <div className="flex gap-2">
+          {offer.pdf_path ? <Button variant="outline" size="sm" nativeButton={false} render={<a href={`/api/offerta-commerciale/offerte/${offer.id}/asset`} target="_blank" rel="noreferrer" />}>Apri PDF</Button> : null}
+          <Button size="sm" onClick={onSave} className="bg-teal-600 hover:bg-teal-700">Salva</Button>
+        </div>
+      </div>
+    </div>
+  </article>
+}
+
 type CategoriaUpload = "listini" | "offerte" | "schede" | "pannelli"
 
 const UPLOAD_CATEGORIES: Array<{
@@ -1207,6 +1278,7 @@ export function OffertaCommercialeClient() {
   // riga che lo blocca, anche se sta guardando un'altra tab.
   const [tabCatalogo, setTabCatalogo] = useState("listino")
   const [mostraErroriAccessori, setMostraErroriAccessori] = useState(false)
+  const [generatingPublicLink, setGeneratingPublicLink] = useState<string | null>(null)
   // Vista di sola lettura aperta da una card KPI: aperta a tutti, indipendente
   // dal pannello di gestione.
   const [vistaCatalogo, setVistaCatalogo] = useState<VistaCatalogo | null>(null)
@@ -1290,6 +1362,29 @@ export function OffertaCommercialeClient() {
       toast.success(successMessage)
       await load()
     } catch (error) { toast.error(error instanceof Error ? error.message : "Errore salvataggio") }
+  }
+
+  const generatePublicOfferLink = async (offer: OffertaPeriodo) => {
+    if (!offer.pdf_path) {
+      toast.error("Carica o sincronizza un PDF prima di generare il link pubblico")
+      return
+    }
+    setGeneratingPublicLink(offer.id)
+    try {
+      const response = await fetch(`/api/offerta-commerciale/offerte/${offer.id}/public-link`, { method: "POST" })
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error ?? "Generazione link pubblico non riuscita")
+      const url = typeof body.url_pubblico === "string" ? body.url_pubblico : ""
+      setData((current) => current ? {
+        ...current,
+        offerte: current.offerte.map((item) => item.id === offer.id ? { ...item, url_pubblico: url } : item),
+      } : current)
+      toast.success("Link pubblico Nextcloud generato")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Generazione link pubblico non riuscita")
+    } finally {
+      setGeneratingPublicLink(null)
+    }
   }
 
   const deleteCatalog = async (id: string, name: string) => {
@@ -1505,7 +1600,7 @@ export function OffertaCommercialeClient() {
 
                 <TabsContent value="regole" className="space-y-5 pt-5"><div className="grid gap-4 lg:grid-cols-3">{catalogo.sconti.map((rule,index) => <article key={index} className="rounded-xl border border-border bg-white p-4 shadow-sm"><div className="mb-4 flex items-center justify-between"><h3 className="font-semibold">Zona {rule.zona}</h3><Badge className="bg-blue-700">{rule.percentuale}%</Badge></div><div className="grid grid-cols-2 gap-3"><label className="text-xs text-muted-foreground">Da kWp<Input type="number" value={rule.kwp_min} onChange={(e) => { const next=[...catalogo.sconti]; next[index]={...rule,kwp_min:numberValue(e.target.value)}; setCatalogo({...catalogo,sconti:next}) }} /></label><label className="text-xs text-muted-foreground">A kWp<Input type="number" value={rule.kwp_max} onChange={(e) => { const next=[...catalogo.sconti]; next[index]={...rule,kwp_max:numberValue(e.target.value)}; setCatalogo({...catalogo,sconti:next}) }} /></label><label className="text-xs text-muted-foreground">Sconto %<Input type="number" value={rule.percentuale} onChange={(e) => { const next=[...catalogo.sconti]; next[index]={...rule,percentuale:numberValue(e.target.value)}; setCatalogo({...catalogo,sconti:next}) }} /></label><label className="text-xs text-muted-foreground">EPS<Input type="number" value={rule.eps_prezzo} onChange={(e) => { const next=[...catalogo.sconti]; next[index]={...rule,eps_prezzo:numberValue(e.target.value)}; setCatalogo({...catalogo,sconti:next}) }} /></label></div><label className="mt-4 flex items-center justify-between text-sm">EPS omaggiabile<Switch checked={rule.eps_omaggiabile} onCheckedChange={(checked) => { const next=[...catalogo.sconti]; next[index]={...rule,eps_omaggiabile:checked}; setCatalogo({...catalogo,sconti:next}) }} /></label></article>)}</div><section className="overflow-hidden rounded-xl border border-amber-100 bg-white shadow-sm"><div className="flex flex-col gap-3 border-b border-amber-100 bg-amber-50/60 p-4 lg:flex-row lg:items-center lg:justify-between"><div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-lg bg-white text-amber-700 ring-1 ring-amber-200"><TicketPercent className="size-5" /></span><div><h2 className="text-lg font-bold text-amber-950">Codici sconto</h2><p className="text-sm font-medium text-amber-800/80">Archivio dei codici e di cosa comportano. L&apos;impatto sul calcolo sarà definito in uno step successivo.</p></div></div><Button type="button" onClick={addDiscountCode} className="bg-amber-600 text-white hover:bg-amber-700"><Plus className="size-4" />Aggiungi codice</Button></div>{(catalogo.codici_sconto ?? []).length === 0 ? <Empty>Nessun codice sconto configurato.</Empty> : <div className="space-y-3 p-4">{(catalogo.codici_sconto ?? []).map((code, index) => <article key={index} className="rounded-xl border border-amber-100 bg-amber-50/30 p-4"><div className="grid gap-3 lg:grid-cols-[160px_minmax(0,1fr)_150px_130px_90px_170px_40px]"><label className="text-xs font-medium text-muted-foreground">Codice<Input className="mt-1 font-bold uppercase" value={code.codice} onChange={(e) => setDiscountCode(index, { codice: e.target.value })} /></label><label className="text-xs font-medium text-muted-foreground">Nome<Input className="mt-1 font-semibold" value={code.nome} onChange={(e) => setDiscountCode(index, { nome: e.target.value })} /></label><label className="text-xs font-medium text-muted-foreground">Tipo<select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm font-semibold text-foreground" value={code.tipo} onChange={(e) => setDiscountCode(index, { tipo: e.target.value as CodiceSconto["tipo"] })}><option value="percentuale">Percentuale</option><option value="importo">Importo</option><option value="omaggio">Omaggio</option><option value="nota">Nota</option></select></label><label className="text-xs font-medium text-muted-foreground">Valore<Input className="mt-1 font-semibold" type="number" value={code.valore ?? 0} onChange={(e) => setDiscountCode(index, { valore: numberValue(e.target.value) })} /></label><label className="flex items-center justify-between gap-3 rounded-lg border border-amber-100 bg-white px-3 py-2 text-sm font-medium">Attivo<Switch checked={code.attivo} onCheckedChange={(checked) => setDiscountCode(index, { attivo: checked })} /></label><label className="flex items-center justify-between gap-3 rounded-lg border border-amber-100 bg-white px-3 py-2 text-xs font-medium leading-tight" title="Attivo: la percentuale del codice si somma allo sconto di zona. Spento: lo sostituisce.">Cumulabile con sconto zona<Switch checked={code.cumulabile_con_sconto_zona === true} onCheckedChange={(checked) => setDiscountCode(index, { cumulabile_con_sconto_zona: checked })} /></label><Button type="button" variant="ghost" size="icon-sm" aria-label={`Rimuovi ${code.codice}`} onClick={() => removeDiscountCode(index)}><Trash2 className="size-4 text-destructive" /></Button></div><Textarea className="mt-3 bg-white" value={code.descrizione ?? ""} onChange={(e) => setDiscountCode(index, { descrizione: e.target.value })} placeholder="Descrivi cosa comporta il codice: es. sconto extra, accessorio incluso, promo limitata, vincoli di applicazione..." /></article>)}</div>}</section><Textarea className="bg-white" value={catalogo.note ?? ""} onChange={(e) => setCatalogo({...catalogo,note:e.target.value})} placeholder="Note e condizioni commerciali" /></TabsContent>
 
-                <TabsContent value="offerte-admin" className="pt-5">{data.offerte.length === 0 ? <Empty>Carica PDF e copertine nelle offerte del periodo, poi avvia la sincronizzazione.</Empty> : <div className="grid gap-4 lg:grid-cols-2">{data.offerte.map((offer) => <article key={offer.id} className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">{offer.cover_path ? <img src={`/api/offerta-commerciale/offerte/${offer.id}/asset?kind=cover`} alt="" className="h-52 w-full object-cover" /> : <div className="flex h-36 items-center justify-center bg-slate-100"><FileText className="size-10 text-muted-foreground" /></div>}<div className="space-y-3 p-4"><Input value={offer.titolo} onChange={(e) => setOffer(offer.id,{titolo:e.target.value})} /><Textarea value={offer.descrizione ?? ""} onChange={(e) => setOffer(offer.id,{descrizione:e.target.value})} placeholder="Descrizione breve" /><div className="grid grid-cols-2 gap-2"><Input type="date" value={offer.valido_dal ?? ""} onChange={(e) => setOffer(offer.id,{valido_dal:e.target.value || null})} /><Input type="date" value={offer.valido_al ?? ""} onChange={(e) => setOffer(offer.id,{valido_al:e.target.value || null})} /></div><div className="flex items-center justify-between gap-2"><label className="flex items-center gap-2 text-sm"><Switch checked={offer.pubblicata} onCheckedChange={(checked) => setOffer(offer.id,{pubblicata:checked})} />Pubblicata</label><div className="flex gap-2">{offer.pdf_path ? <Button variant="outline" size="sm" nativeButton={false} render={<a href={`/api/offerta-commerciale/offerte/${offer.id}/asset`} target="_blank" rel="noreferrer" />}>Apri PDF</Button> : null}<Button size="sm" onClick={() => saveOffer(offer)} className="bg-teal-600 hover:bg-teal-700">Salva</Button></div></div></div></article>)}</div>}</TabsContent>
+                <TabsContent value="offerte-admin" className="pt-5">{data.offerte.length === 0 ? <Empty>Carica PDF e copertine nelle offerte del periodo, poi avvia la sincronizzazione.</Empty> : <div className="grid gap-4 lg:grid-cols-2">{data.offerte.map((offer) => <OffertaAdminCard key={offer.id} offer={offer} generatingPublicLink={generatingPublicLink === offer.id} onPatch={(patch) => setOffer(offer.id, patch)} onSave={() => saveOffer(offer)} onGeneratePublicLink={() => void generatePublicOfferLink(offer)} />)}</div>}</TabsContent>
 
                 <TabsContent value="documenti-admin" className="space-y-5 pt-5">
                   <section className="rounded-xl border border-border bg-white p-4 shadow-sm">

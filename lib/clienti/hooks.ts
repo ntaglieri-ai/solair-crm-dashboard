@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import {
   useQuery,
   useMutation,
@@ -27,6 +28,7 @@ export function useClientiQuery(
 ) {
   const sp = buildClientiSearchParams(params).toString()
   const hasInitial = !!initial && initial.sp === sp
+  const [initialDataUpdatedAt] = useState(() => Date.now())
   return useQuery({
     queryKey: clientiKeys.list(sp),
     queryFn: async ({ signal }) => {
@@ -38,7 +40,7 @@ export function useClientiQuery(
     staleTime: 60_000,
     refetchOnWindowFocus: false,
     initialData: hasInitial ? initial!.data : undefined,
-    initialDataUpdatedAt: hasInitial ? Date.now() : undefined,
+    initialDataUpdatedAt: hasInitial ? initialDataUpdatedAt : undefined,
     refetchOnMount: hasInitial ? false : undefined,
   })
 }

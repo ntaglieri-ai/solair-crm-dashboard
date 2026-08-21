@@ -90,7 +90,7 @@ export function CompitoKanban({
   }
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-3 [scrollbar-color:var(--color-muted-foreground)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5">
+    <div className="flex gap-4 overflow-x-auto pb-3 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5">
       {STATO_COMPITO_ORDER.map((stato) => {
         const cards = compiti.filter((c) => c.Stato === stato)
         return (
@@ -115,7 +115,7 @@ export function CompitoKanban({
                 {cards.length}
               </span>
             </header>
-            <div className="flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto p-2.5 [scrollbar-color:var(--color-muted-foreground)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:w-2">
+            <div className="flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto p-2.5 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:w-2">
               {cards.map((c) => (
                 <CompitoCard key={c.id} compito={c} onDragStart={setDragId} />
               ))}

@@ -237,6 +237,117 @@
   }
 }
 
+/* ---------------------------------------------------------------------------
+   Scrollbar brandizzata.
+
+   Il tint segue --primary, quindi cambia da sé quando l'utente sceglie un
+   accento diverso (:root[data-accent='teal'|'blue']) senza regole dedicate.
+   In dark passa a --teal, perché lì --primary è quasi bianco e non si
+   leggerebbe come "colorato".
+
+   All'apertura della pagina il thumb sfuma da trasparente al colore pieno.
+   L'animazione agisce sulla custom property, registrata con @property perché
+   una <percentage> sia interpolabile; il suo initial-value coincide con il
+   valore finale, così se l'animazione non parte (browser vecchio, reduced
+   motion) la scrollbar resta comunque colorata invece di sparire.
+   --------------------------------------------------------------------------- */
+
+@property --crm-scrollbar-alpha {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 34%;
+}
+
+:root {
+  --crm-scrollbar-tint: var(--primary);
+  /* Colore pronto all'uso, così le superfici che stilano la propria scrollbar
+     con le utility Tailwind (tabella lead, data-table, kanban) riusano lo
+     stesso tint invece di ridefinirlo. */
+  --crm-scrollbar-thumb: color-mix(
+    in oklab,
+    var(--crm-scrollbar-tint) var(--crm-scrollbar-alpha),
+    transparent
+  );
+}
+
+.dark {
+  --crm-scrollbar-tint: var(--teal);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --crm-scrollbar-tint: var(--teal);
+  }
+}
+
+@keyframes crm-scrollbar-in {
+  from {
+    --crm-scrollbar-alpha: 0%;
+  }
+  to {
+    --crm-scrollbar-alpha: 34%;
+  }
+}
+
+@layer base {
+  html {
+    /* Riserva la gutter: passando fra una pagina che scrolla e una che non
+       scrolla il contenuto non salta più di lato. */
+    scrollbar-gutter: stable;
+    /* Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(
+        in oklab,
+        var(--crm-scrollbar-tint) var(--crm-scrollbar-alpha),
+        transparent
+      )
+      transparent;
+    animation: crm-scrollbar-in 560ms ease-out;
+  }
+
+  /* WebKit / Chromium: vale anche per i contenitori interni (tabelle, drawer,
+     pannelli) perché il selettore non è ancorato a html. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+    background-color: color-mix(
+      in oklab,
+      var(--crm-scrollbar-tint) var(--crm-scrollbar-alpha),
+      transparent
+    );
+    transition: background-color 160ms ease;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--crm-scrollbar-tint) 62%, transparent);
+  }
+
+  ::-webkit-scrollbar-thumb:active {
+    background-color: color-mix(in oklab, var(--crm-scrollbar-tint) 78%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    animation: none;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    transition: none;
+  }
+}
+
 @keyframes navigation-progress {
   0% {
     transform: translateX(-110%);

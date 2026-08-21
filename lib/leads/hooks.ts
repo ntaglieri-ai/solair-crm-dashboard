@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import {
   useQuery,
   useMutation,
@@ -37,6 +38,7 @@ export function useLeadsQuery(
   // initialData solo quando la chiave coincide con il prefetch server-side,
   // così non "perde" sulle altre pagine/filtri.
   const hasInitial = !!initial && initial.sp === sp
+  const [initialDataUpdatedAt] = useState(() => Date.now())
   return useQuery({
     queryKey: leadsKeys.list(sp),
     queryFn: async ({ signal }) => {
@@ -59,7 +61,7 @@ export function useLeadsQuery(
     initialData: hasInitial ? initial!.data : undefined,
     // Quando usiamo il prefetch server-side, lo marchiamo come appena
     // aggiornato così React Query NON rilancia un fetch subito dopo il mount.
-    initialDataUpdatedAt: hasInitial ? Date.now() : undefined,
+    initialDataUpdatedAt: hasInitial ? initialDataUpdatedAt : undefined,
     refetchOnMount: hasInitial ? false : undefined,
   })
 }

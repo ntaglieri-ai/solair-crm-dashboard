@@ -598,7 +598,7 @@ export function LeadTable({
           const delta = shiftedWheel ? e.deltaY : e.deltaX
           el.scrollLeft += delta * 0.72
         }}
-        className="min-h-0 flex-1 touch-pan-y overscroll-contain overflow-y-auto overflow-x-hidden bg-card outline-none [scroll-behavior:auto] focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--color-muted-foreground)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:w-2.5"
+        className="min-h-0 flex-1 touch-pan-y overscroll-contain overflow-y-auto overflow-x-hidden bg-card outline-none [scroll-behavior:auto] focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:w-2.5"
       >
         {/* table semplice (no wrapper shadcn): un solo contenitore di scroll,
             così l'header sticky e la barra orizzontale dedicata funzionano. */}
@@ -785,7 +785,7 @@ export function LeadTable({
             if (el) el.scrollTop += event.deltaY
           }}
           aria-hidden
-          className="shrink-0 overscroll-contain overflow-x-auto overflow-y-hidden border-t border-border bg-card [scroll-behavior:auto] [scrollbar-color:var(--color-muted-foreground)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5"
+          className="shrink-0 overscroll-contain overflow-x-auto overflow-y-hidden border-t border-border bg-card [scroll-behavior:auto] [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5"
         >
           <div style={{ width: contentWidth }} className="h-px" />
         </div>

@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import {
   useQuery,
   useMutation,
@@ -68,6 +69,7 @@ export function useCompitiQuery(
 ) {
   const sp = buildCompitiSearchParams(params).toString()
   const hasInitial = !!initial && initial.sp === sp
+  const [initialDataUpdatedAt] = useState(() => Date.now())
   return useQuery({
     queryKey: compitiKeys.list(sp),
     enabled: options?.enabled ?? true,
@@ -80,7 +82,7 @@ export function useCompitiQuery(
     staleTime: 60_000,
     refetchOnWindowFocus: false,
     initialData: hasInitial ? initial!.data : undefined,
-    initialDataUpdatedAt: hasInitial ? Date.now() : undefined,
+    initialDataUpdatedAt: hasInitial ? initialDataUpdatedAt : undefined,
     refetchOnMount: hasInitial ? false : undefined,
   })
 }

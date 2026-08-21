@@ -11,6 +11,7 @@
 
 import { PACING_MS, createPersonalTransport, sleep } from "./lead-mailer"
 import { type BulkPlaceholder, renderTemplate } from "./bulk-template"
+import { textToSafeHtml } from "./html"
 
 export type BulkRecipient = {
   /** Id del record sorgente (lead/cliente/installatore) — solo per i log. */
@@ -59,7 +60,7 @@ export async function sendBulkEmails(params: {
         to: recipient.email,
         subject,
         text: body,
-        html: body.replace(/\n/g, "<br/>"),
+        html: textToSafeHtml(body),
       })
       inviate++
     } catch (error) {

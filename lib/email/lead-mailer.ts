@@ -12,6 +12,7 @@
 
 import nodemailer from "nodemailer"
 import type { Transporter } from "nodemailer"
+import { textToSafeHtml } from "./html"
 
 const ARUBA_HOST = "smtps.aruba.it"
 const ARUBA_PORT = 465
@@ -63,7 +64,7 @@ export async function sendLeadEmails(params: {
         to,
         subject: params.subject,
         text: params.body,
-        html: params.body.replace(/\n/g, "<br/>"),
+        html: textToSafeHtml(params.body),
       })
       results.push({ to, ok: true, error: null })
     } catch (e) {

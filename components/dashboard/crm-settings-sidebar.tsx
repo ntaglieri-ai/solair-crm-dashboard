@@ -188,7 +188,7 @@ const LAYER_HEADER: Record<
   "ai-features": {
     eyebrow: "Intelligenza artificiale",
     title: "AI Features",
-    subtitle: "Conoscenza chatbot e funzionalita' AI",
+    subtitle: "RobertaBot e funzionalita' AI",
     breadcrumb: "CRM Settings & Admin / AI Features",
   },
   company: {

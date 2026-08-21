@@ -1,9 +1,20 @@
 import { NextResponse } from "next/server"
-import { requireApiPage } from "@/lib/permissions/server"
+import { getCurrentPermissions } from "@/lib/permissions/server"
 import { listFolder } from "@/lib/nextcloud/admin-webdav"
 
+async function requireRobertaCatalogAccess() {
+  const permissions = await getCurrentPermissions()
+  if (
+    !permissions.canPage("crm_settings.system.roberta") &&
+    !permissions.canAction("offerta_commerciale.manage")
+  ) {
+    return { response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) }
+  }
+  return { response: null }
+}
+
 export async function GET(request: Request) {
-  const guard = await requireApiPage("crm_settings.system.roberta")
+  const guard = await requireRobertaCatalogAccess()
   if (guard.response) return guard.response
 
   const path = new URL(request.url).searchParams.get("path")?.trim() || "Solair"

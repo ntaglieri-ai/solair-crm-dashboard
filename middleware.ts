@@ -45,7 +45,7 @@ export async function middleware(request: NextRequest) {
   // La pagina di consenso OIDC deve poter ricevere la richiesta anche senza
   // sessione: gestisce internamente il rinvio a /login preservando
   // authorization_id, cosi' il flusso riprende dopo l'autenticazione.
-  // /api/keep-warm e' pingato da Vercel Cron (nessuna sessione utente) —
+  // /api/keep-warm e /api/cron sono pingati da Vercel Cron (nessuna sessione utente) —
   // protetto dal proprio controllo sul segreto CRON_SECRET, non da questo
   // gate di autenticazione.
   const publicRoutes = [
@@ -53,6 +53,7 @@ export async function middleware(request: NextRequest) {
     "/oauth/consent",
     "/api/auth/password-reset",
     "/api/keep-warm",
+    "/api/cron",
     // Webhook Meta Lead Ads: la route gestisce internamente verifica
     // hub.challenge e firma X-Hub-Signature-256.
     "/api/meta/webhook",

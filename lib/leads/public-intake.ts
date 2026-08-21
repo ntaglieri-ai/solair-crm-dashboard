@@ -70,6 +70,8 @@ const CONFIGURATOR_TAGS = {
   preventivo: { name: "Preventivo configurato", color: "#14B8A6" },
   richiamare: { name: "Da richiamare", color: "#F59E0B" },
   fuoriOrario: { name: "Fuori orario", color: "#8B5CF6" },
+  nuovo: { name: "Nuovo lead", color: "#22C55E" },
+  aggiornato: { name: "Lead aggiornato", color: "#EC4899" },
 }
 
 function normalizePhone(phone: string): string {
@@ -455,6 +457,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       const tags = [
         CONFIGURATOR_TAGS.configuratore,
         CONFIGURATOR_TAGS.richiamare,
+        CONFIGURATOR_TAGS.aggiornato,
         ...(quoteConfigured ? [CONFIGURATOR_TAGS.preventivo] : []),
         ...(outOfHours ? [CONFIGURATOR_TAGS.fuoriOrario] : []),
       ]
@@ -517,6 +520,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
     const tags = [
       CONFIGURATOR_TAGS.configuratore,
       CONFIGURATOR_TAGS.richiamare,
+      CONFIGURATOR_TAGS.nuovo,
       ...(quoteConfigured ? [CONFIGURATOR_TAGS.preventivo] : []),
       ...(outOfHours ? [CONFIGURATOR_TAGS.fuoriOrario] : []),
     ]

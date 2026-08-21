@@ -795,18 +795,15 @@ function AttivitaChiuse({ lead }: { lead: Lead }) {
 
 function EmailSection({ lead }: { lead: Lead }) {
   const [compose, setCompose] = useState(false)
-  const emails: EmailItem[] = [
-    {
-      id: "e1",
-      oggetto: "Preventivo impianto 9+21,2 kWp",
-      data: "12 Giu",
-      stato: "Aperta",
-      aperture: lead.emailAperture || 2,
-    },
-  ]
+  const emails = trackedEmails(lead)
   return (
     <div className="flex flex-col gap-3">
       <ul className="flex flex-col gap-2">
+        {emails.length === 0 ? (
+          <li className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
+            Nessuna email tracciata sul lead.
+          </li>
+        ) : null}
         {emails.map((e) => (
           <li
             key={e.id}
@@ -820,7 +817,9 @@ function EmailSection({ lead }: { lead: Lead }) {
                 {e.oggetto}
               </span>
               <span className="text-[11px] text-muted-foreground">
-                {e.data} · Aperta {e.aperture} volte
+                {[e.data, e.aperture > 0 ? `aperta ${e.aperture} volte` : null]
+                  .filter(Boolean)
+                  .join(" · ")}
               </span>
             </div>
             <Badge
@@ -874,6 +873,21 @@ function EmailSection({ lead }: { lead: Lead }) {
       ) : null}
     </div>
   )
+}
+
+function trackedEmails(lead: Lead): EmailItem[] {
+  if (lead.Stato === "—" && lead.emailAperture <= 0) return []
+  return [
+    {
+      id: "email-status",
+      oggetto: "Ultima email tracciata",
+      data: formatTimelineDateTime(
+        lead["Ora ultima attività"] || lead["Data Click"] || lead["Ora creazione"],
+      ),
+      stato: lead.Stato === "—" ? "Recapitata" : lead.Stato,
+      aperture: lead.emailAperture,
+    },
+  ]
 }
 
 /* ---------- Sezione Record collegati ---------- */
@@ -938,83 +952,101 @@ const TL_TONE = {
   creato: "bg-teal/10 text-teal",
 } as const
 
+function formatTimelineDateTime(value: string | null | undefined) {
+  if (!value) return "—"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat("it-IT", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date)
+}
+
+function formatTimelineDay(value: string | null | undefined) {
+  if (!value) return "Senza data"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat("it-IT", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date)
+}
+
+function formatTimelineHour(value: string | null | undefined) {
+  if (!value) return "—"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "—"
+  return new Intl.DateTimeFormat("it-IT", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date)
+}
+
+function activityToTimelineEvent(activity: Lead["attivita"][number]): TimelineEvent {
+  const tipo =
+    activity.tipo === "nota"
+      ? "nota"
+      : activity.tipo === "nuovo-lead"
+        ? "creato"
+        : "modifica"
+  return {
+    id: activity.id,
+    tipo,
+    testo: activity.descrizione || "Attività registrata",
+    autore: activity.autore ?? "Sistema",
+    ora: formatTimelineHour(activity.timestamp),
+  }
+}
+
+function groupTimelineEvents(
+  events: Array<{ date: string; event: TimelineEvent }>,
+) {
+  const grouped = new Map<string, TimelineEvent[]>()
+  for (const item of events) {
+    const current = grouped.get(item.date) ?? []
+    current.push(item.event)
+    grouped.set(item.date, current)
+  }
+  return Array.from(grouped.entries()).map(([data, eventi]) => ({ data, eventi }))
+}
+
 function SequenzaTemporale({ lead }: { lead: Lead }) {
   const [tab, setTab] = useState<"cronologia" | "interazioni">("cronologia")
   const { tagEvents } = useTags()
   const liveTagEvents = tagEvents[lead.id] ?? []
-
-  const baseGiorni: { data: string; eventi: TimelineEvent[] }[] = [
-    {
-      data: "16/06/2026",
-      eventi: [
-        {
-          id: "t1",
-          tipo: "nota",
-          testo: "Nota aggiunta — preventivo 9 + 20 eps",
-          autore: "Ivan Lo Faro",
-          ora: "01:02",
-        },
-        {
-          id: "t2",
-          tipo: "tag",
-          testo: "Tag aggiunti — Inviare preventivo, Richiamare",
-          autore: "Ivan Lo Faro",
-          ora: "01:01",
-        },
-        {
-          id: "t3",
-          tipo: "modifica",
-          testo:
-            "Lead Proprietario aggiornata da Utenza di servizio a Commerciale",
-          autore: "Matteo Saverino",
-          ora: "09:13",
-        },
-      ],
-    },
-    {
-      data: "15/06/2026",
-      eventi: [
-        {
-          id: "t4",
-          tipo: "modifica",
-          testo: "5 campi aggiornati",
-          bullets: [
-            "Stato Lead → Contattato",
-            "Telefono aggiunto",
-            "campaign name aggiornato",
-            "kWp → " + lead.kWp,
-            "Origine Lead → " + lead["Origine Lead"],
-          ],
-          autore: "Utenza di servizio",
-          ora: "07:44",
-        },
-        {
-          id: "t5",
-          tipo: "creato",
-          testo: "Lead Creato",
-          autore: "Utenza di servizio",
-          ora: "07:28",
-        },
-      ],
-    },
-  ]
-
-  const giorni: { data: string; eventi: TimelineEvent[] }[] =
-    liveTagEvents.length
+  const activityEvents = lead.attivita.map((activity) => ({
+    date: formatTimelineDay(activity.timestamp),
+    event: activityToTimelineEvent(activity),
+  }))
+  const fallbackEvents =
+    activityEvents.length === 0
       ? [
           {
-            data: "Oggi",
-            eventi: liveTagEvents.map((ev) => ({
-              id: ev.id,
-              tipo: "tag" as const,
-              testo: ev.testo,
-              autore: ev.autore,
-              ora: ev.ora,
-            })),
+            date: formatTimelineDay(lead["Ora creazione"]),
+            event: {
+              id: "lead-created",
+              tipo: "creato" as const,
+              testo: "Lead creato",
+              autore: lead["Creato da"] || "Sistema",
+              ora: formatTimelineHour(lead["Ora creazione"]),
+            },
           },
-          ...baseGiorni,
         ]
-      : baseGiorni
+      : []
+  const liveEvents = liveTagEvents.map((ev) => ({
+    date: "Oggi",
+    event: {
+      id: ev.id,
+      tipo: "tag" as const,
+      testo: ev.testo,
+      autore: ev.autore,
+      ora: ev.ora,
+    },
+  }))
+  const giorni = groupTimelineEvents([...liveEvents, ...activityEvents, ...fallbackEvents])
 
   return (
     <div className="flex flex-col gap-4">
@@ -1176,10 +1208,10 @@ export function LeadDetailContent({
   }
 
   const counts: Record<string, number> = {
-    "section-note": 1,
+    "section-note": lead.attivita.filter((activity) => activity.tipo === "nota").length,
     "section-attivita-aperte": openTasks.length,
-    "section-attivita-chiuse": 1,
-    "section-email": 1,
+    "section-attivita-chiuse": (lead.compiti ?? []).filter((task) => task.completato).length,
+    "section-email": trackedEmails(lead).length,
     "section-record": lead["Account convertito"] ? 1 : 0,
   }
 

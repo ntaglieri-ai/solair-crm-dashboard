@@ -1,15 +1,13 @@
-// Invio di MASSA a nome dell'agente (Lead / Clienti / Installatori).
+// Invio di MASSA a nome operativo dell'agente (Lead / Clienti / Installatori).
 //
-// Riusa integralmente il transport e il pacing di lib/email/lead-mailer.ts —
-// stessa casella Aruba personale, stessa pausa di 400ms tra un destinatario e
-// l'altro: qui cambia solo che il corpo e' un TEMPLATE con placeholder
-// risolti per destinatario, e che l'avanzamento viene notificato al chiamante
-// (che lo persiste su email_massa_jobs per la barra di progresso in UI).
+// Riusa il transport di lib/email/lead-mailer.ts: SES/SMTP di sistema quando
+// configurato, Reply-To personale dell'agente, fallback Aruba personale solo
+// se SES non e' disponibile.
 //
 // Questo modulo NON va invocato dentro una richiesta HTTP sincrona: 100
 // destinatari x 400ms = 40s+ di lavoro. Va sempre dentro after().
 
-import { PACING_MS, createPersonalTransport, sleep } from "./lead-mailer"
+import { PACING_MS, createAgentOutboundTransport, sleep } from "./lead-mailer"
 import { type BulkPlaceholder, renderTemplate } from "./bulk-template"
 import { textToSafeHtml } from "./html"
 
@@ -44,7 +42,10 @@ export async function sendBulkEmails(params: {
    */
   onProgress?: (progress: BulkProgress) => void | Promise<void>
 }): Promise<BulkSendOutcome> {
-  const transport = createPersonalTransport(params.smtpUser, params.smtpPassword)
+  const outbound = createAgentOutboundTransport({
+    smtpUser: params.smtpUser,
+    smtpPassword: params.smtpPassword,
+  })
 
   let inviate = 0
   let fallite = 0
@@ -55,8 +56,9 @@ export async function sendBulkEmails(params: {
     const subject = renderTemplate(params.subject, recipient.placeholders)
 
     try {
-      await transport.sendMail({
-        from: params.smtpUser,
+      await outbound.transport.sendMail({
+        from: outbound.from,
+        replyTo: outbound.replyTo,
         to: recipient.email,
         subject,
         text: body,
@@ -74,6 +76,6 @@ export async function sendBulkEmails(params: {
     await sleep(PACING_MS)
   }
 
-  transport.close()
+  outbound.transport.close()
   return { inviate, fallite, errori }
 }

@@ -1,16 +1,16 @@
-// Invio di MASSA a nome dell'agente (Lead / Clienti / Installatori).
+// Invio di MASSA a nome operativo dell'agente (Lead / Clienti / Installatori).
 //
-// Riusa integralmente il transport e il pacing di lib/email/lead-mailer.ts —
-// stessa casella Aruba personale, stessa pausa di 400ms tra un destinatario e
-// l'altro: qui cambia solo che il corpo e' un TEMPLATE con placeholder
-// risolti per destinatario, e che l'avanzamento viene notificato al chiamante
-// (che lo persiste su email_massa_jobs per la barra di progresso in UI).
+// Riusa il transport di lib/email/lead-mailer.ts: SES/SMTP di sistema quando
+// configurato, Reply-To personale dell'agente, fallback Aruba personale solo
+// se SES non e' disponibile.
 //
-// Questo modulo NON va invocato dentro una richiesta HTTP sincrona: 100
-// destinatari x 400ms = 40s+ di lavoro. Va sempre dentro after().
+// Questo modulo NON va invocato dentro una richiesta HTTP sincrona: gli invii
+// massa restano lavoro da after(), con ritmo deciso dalla policy Comunicazioni.
 
-import { PACING_MS, createPersonalTransport, sleep } from "./lead-mailer"
+import { createAgentOutboundTransport, sleep } from "./lead-mailer"
+import { getCommunicationEmailPolicy } from "./communication-policy"
 import { type BulkPlaceholder, renderTemplate } from "./bulk-template"
+import { textToSafeHtml } from "./html"
 
 export type BulkRecipient = {
   /** Id del record sorgente (lead/cliente/installatore) — solo per i log. */
@@ -32,8 +32,8 @@ export type BulkSendOutcome = {
 }
 
 export async function sendBulkEmails(params: {
-  smtpUser: string
-  smtpPassword: string
+  smtpUser?: string
+  smtpPassword?: string
   subject: string
   template: string
   recipients: BulkRecipient[]
@@ -43,7 +43,13 @@ export async function sendBulkEmails(params: {
    */
   onProgress?: (progress: BulkProgress) => void | Promise<void>
 }): Promise<BulkSendOutcome> {
-  const transport = createPersonalTransport(params.smtpUser, params.smtpPassword)
+  const policy = await getCommunicationEmailPolicy()
+  const outbound = createAgentOutboundTransport({
+    smtpUser: params.smtpUser,
+    smtpPassword: params.smtpPassword,
+    policy,
+    replyToMode: policy.bulkReplyTo === "azienda" ? "company" : "agent",
+  })
 
   let inviate = 0
   let fallite = 0
@@ -54,12 +60,13 @@ export async function sendBulkEmails(params: {
     const subject = renderTemplate(params.subject, recipient.placeholders)
 
     try {
-      await transport.sendMail({
-        from: params.smtpUser,
+      await outbound.transport.sendMail({
+        from: outbound.from,
+        replyTo: outbound.replyTo,
         to: recipient.email,
         subject,
         text: body,
-        html: body.replace(/\n/g, "<br/>"),
+        html: textToSafeHtml(body),
       })
       inviate++
     } catch (error) {
@@ -70,9 +77,9 @@ export async function sendBulkEmails(params: {
     }
 
     await params.onProgress?.({ inviate, fallite })
-    await sleep(PACING_MS)
+    await sleep(outbound.pacingMs)
   }
 
-  transport.close()
+  outbound.transport.close()
   return { inviate, fallite, errori }
 }

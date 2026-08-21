@@ -1,7 +1,9 @@
 import { NextResponse, after } from "next/server"
 import { getCurrentPermissions, requireApiRecord } from "@/lib/permissions/server"
 import { getPersonalEmailPassword, getPersonalEmailStatus } from "@/lib/email/personal-credentials"
+import { getCommunicationEmailPolicy } from "@/lib/email/communication-policy"
 import { sendBulkEmails } from "@/lib/email/bulk-mailer"
+import { hasSystemOutboundSmtp } from "@/lib/email/lead-mailer"
 import { MAX_BULK_RECIPIENTS } from "@/lib/email/bulk-template"
 import {
   bulkTargetConfig,
@@ -17,16 +19,16 @@ import {
 // Endpoint UNICO di invio di massa per Lead / Clienti / Installatori: la
 // differenza tra i tre moduli e' tutta dichiarativa in lib/email/bulk-targets.
 //
-// La risposta NON attende l'invio: con il pacing di 400ms imposto dalla
-// casella Aruba personale, 100 destinatari sono 40s+ di lavoro. Si accoda un
+// La risposta NON attende l'invio: il ritmo viene deciso dalla policy
+// Comunicazioni (SES piu' rapido, fallback Aruba prudente). Si accoda un
 // job, si risponde con il suo id, e l'invio prosegue in background via
 // after() aggiornando email_massa_jobs — stesso pattern gia' usato per il
 // provisioning Nextcloud.
 
 // Il lavoro dentro after() NON e' gratis in termini di durata: la funzione
 // resta viva finche' il task non finisce, ed e' comunque tagliata da
-// maxDuration. 100 destinatari x 400ms di pacing + il tempo di consegna SMTP
-// superano abbondantemente i 60s di default, quindi qui si alza il tetto.
+// maxDuration. Il fallback Aruba resta volutamente lento, quindi qui si alza
+// il tetto.
 // NOTA: 300s e' consentito su piano Pro; su Hobby il massimo e' 60 e questo
 // valore va abbassato, altrimenti il deploy fallisce.
 export const maxDuration = 300
@@ -86,8 +88,12 @@ export async function POST(request: Request) {
     )
   }
 
-  const emailStatus = await getPersonalEmailStatus(subject.userId)
-  if (!emailStatus.configured || !emailStatus.smtpUser) {
+  const emailPolicy = await getCommunicationEmailPolicy()
+  const systemSmtpAvailable = hasSystemOutboundSmtp(emailPolicy)
+  const needsAgentMailbox = !systemSmtpAvailable || emailPolicy.bulkReplyTo === "agente"
+  const emailStatus = needsAgentMailbox ? await getPersonalEmailStatus(subject.userId) : null
+
+  if (needsAgentMailbox && (!emailStatus?.configured || !emailStatus.smtpUser)) {
     return NextResponse.json(
       {
         error:
@@ -98,8 +104,10 @@ export async function POST(request: Request) {
     )
   }
 
-  const smtpPassword = await getPersonalEmailPassword(subject.userId)
-  if (!smtpPassword) {
+  const smtpPassword = needsAgentMailbox
+    ? (await getPersonalEmailPassword(subject.userId)) || undefined
+    : undefined
+  if (needsAgentMailbox && !smtpPassword) {
     return NextResponse.json(
       {
         error: "Impossibile leggere la password della tua casella. Riconfigurala dal Profilo.",
@@ -143,7 +151,7 @@ export async function POST(request: Request) {
   }
 
   const recipients = resolved.recipients
-  const smtpUser = emailStatus.smtpUser
+  const smtpUser = emailStatus?.smtpUser || subject.email || undefined
 
   after(async () => {
     let lastFlush = 0

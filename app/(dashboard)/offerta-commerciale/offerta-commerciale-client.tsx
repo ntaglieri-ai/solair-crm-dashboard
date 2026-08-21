@@ -2,16 +2,24 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Archive, BadgeEuro, BatteryCharging, BookOpenCheck, Calculator, ChevronDown, ChevronRight, Cloud, ExternalLink, FileText, Loader2, Mail, PackageOpen, Pencil, Phone, Plug, Plus, RefreshCw, Save, Search, Settings2, ShieldCheck, SlidersHorizontal, SolarPanel, TicketPercent, Trash2, Upload, User, UserPlus, X } from "lucide-react"
+import { Archive, BadgeEuro, BatteryCharging, BookOpenCheck, Bot, Calculator, ChevronDown, ChevronRight, Cloud, ExternalLink, FileText, FolderOpen, Loader2, Mail, PackageOpen, Pencil, Phone, Plug, Plus, RefreshCw, Save, Search, Settings2, ShieldCheck, SlidersHorizontal, SolarPanel, TicketPercent, Trash2, Upload, User, UserPlus, X } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { usePermissions } from "@/lib/permissions/provider"
+import { deriveRobertaHealth, type RobertaHealthInput } from "@/lib/roberta/health"
 import type { AccessorioCommerciale, CatalogoCommerciale, CodiceSconto, DocumentoCommerciale, OffertaCommercialePayload, OffertaPeriodo, PannelloSpec, VersioneCatalogoCommerciale } from "@/lib/offerta-commerciale/types"
 
 function numberValue(value: string) {
@@ -296,6 +304,300 @@ function PannelliSection({ pannelli, onChange, onClose }: { pannelli: PannelloSp
         <Button type="button" variant="ghost" onClick={closeDraft}>Annulla</Button>
         <Button type="button" onClick={confirmDraft} disabled={uploading != null} className="bg-blue-700 text-white hover:bg-blue-800">{draftIndex == null ? "Aggiungi alla lista" : "Applica modifiche"}</Button>
       </div>
+    </div> : null}
+  </section>
+}
+
+type RobertaSourceCategory =
+  | "listini"
+  | "componenti"
+  | "offerte"
+  | "prezzi"
+  | "finanziarie"
+  | "varie"
+
+type RobertaSource = {
+  id: string
+  label: string
+  categoria: RobertaSourceCategory
+  path: string
+  publicUrl?: string
+  active: boolean
+}
+
+type RobertaCategoryOption = {
+  value: RobertaSourceCategory
+  label: string
+}
+
+type RobertaBrowseFolder = {
+  name: string
+  path: string
+}
+
+function suggerisciUrlPubblico(path: string) {
+  const last = path.split("/").filter(Boolean).pop()?.trim() ?? ""
+  const slug = last
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+  if (!slug) return ""
+  if (slug === "offerta-commerciale" || slug === "offerte") return "https://solairgroup.it/offerte"
+  if (slug === "listini") return "https://solairgroup.it/listini"
+  return `https://solairgroup.it/${slug}`
+}
+
+function RobertaPathInput({ value, onChange, onPick }: { value: string; onChange: (value: string) => void; onPick: (path: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [folders, setFolders] = useState<RobertaBrowseFolder[]>([])
+  const [pdfCount, setPdfCount] = useState<number | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [currentPath, setCurrentPath] = useState(value.trim() || "Solair")
+
+  const browse = useCallback(async (path: string) => {
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/crm-settings/roberta/browse?path=${encodeURIComponent(path || "Solair")}`, { cache: "no-store" })
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error ?? "Lettura cartella non riuscita")
+      setCurrentPath(body.path ?? path)
+      setFolders(body.folders ?? [])
+      setPdfCount(typeof body.pdfCount === "number" ? body.pdfCount : null)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Lettura cartella non riuscita")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const openBrowser = () => {
+    const path = value.trim() || currentPath || "Solair"
+    setOpen(true)
+    void browse(path)
+  }
+
+  const parentPath = currentPath.split("/").filter(Boolean).slice(0, -1).join("/")
+  const canGoUp = parentPath.startsWith("Solair")
+
+  return <div className="relative">
+    <Input
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      aria-label="Path Nextcloud"
+      placeholder="Solair/Offerta-Commerciale"
+      className="h-10 pr-28 font-semibold"
+    />
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="absolute right-1.5 top-1/2 h-7 -translate-y-1/2 gap-1.5 border border-border bg-white px-2.5 text-slate-700 shadow-sm hover:bg-slate-50"
+      onClick={openBrowser}
+      aria-expanded={open}
+    >
+      <FolderOpen className="size-3.5" />Sfoglia
+    </Button>
+    {open ? <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-lg border border-border bg-white shadow-xl">
+      <div className="flex items-center justify-between gap-2 border-b border-border bg-slate-50 px-3 py-2">
+        <p className="min-w-0 truncate text-xs font-semibold text-slate-700" title={currentPath}>{currentPath}</p>
+        <Button type="button" variant="ghost" size="icon-sm" aria-label="Chiudi sfoglia path" onClick={() => setOpen(false)}><X className="size-4" /></Button>
+      </div>
+      <div className="max-h-72 overflow-y-auto p-1.5">
+        {canGoUp ? <button type="button" className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100" onClick={() => void browse(parentPath)}>
+          <ChevronRight className="size-4 rotate-180" />Cartella superiore
+        </button> : null}
+        {folders.map((folder) => <button
+          type="button"
+          key={folder.path}
+          className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm font-semibold text-slate-800 hover:bg-blue-50 hover:text-blue-800"
+          onClick={() => {
+            onPick(folder.path)
+            setOpen(false)
+          }}
+        >
+          <FolderOpen className="size-4 text-blue-600" />
+          <span className="min-w-0 truncate">{folder.name}</span>
+        </button>)}
+        {!loading && folders.length === 0 ? <p className="px-2.5 py-4 text-sm text-muted-foreground">Nessuna sottocartella disponibile.</p> : null}
+        {loading ? <p className="flex items-center gap-2 px-2.5 py-4 text-sm font-medium text-muted-foreground"><Loader2 className="size-4 animate-spin" />Lettura cartelle</p> : null}
+      </div>
+      <div className="flex items-center justify-between border-t border-border bg-slate-50 px-3 py-2 text-xs text-muted-foreground">
+        <span>{pdfCount == null ? "PDF non letti" : `${pdfCount} PDF in questa cartella`}</span>
+        <Button type="button" variant="outline" size="sm" onClick={() => { onPick(currentPath); setOpen(false) }}>Usa questa</Button>
+      </div>
+    </div> : null}
+  </div>
+}
+
+function RobertaSourcesPanel() {
+  const [sources, setSources] = useState<RobertaSource[]>([])
+  const [categories, setCategories] = useState<RobertaCategoryOption[]>([])
+  const [status, setStatus] = useState<RobertaHealthInput | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const health = deriveRobertaHealth(status)
+  const healthTone = {
+    green: "border-teal-200 bg-teal-50 text-teal-800",
+    yellow: "border-amber-200 bg-amber-50 text-amber-900",
+    red: "border-red-200 bg-red-50 text-red-800",
+  }[health.level]
+
+  const loadSources = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [sourcesResponse, statusResponse] = await Promise.all([
+        fetch("/api/crm-settings/roberta/sources", { cache: "no-store" }),
+        fetch("/api/crm-settings/roberta/knowledge/sync", { cache: "no-store" }),
+      ])
+      const sourcesBody = await sourcesResponse.json()
+      const statusBody = await statusResponse.json()
+      if (!sourcesResponse.ok) throw new Error(sourcesBody.error ?? "Errore fonti RobertaBot")
+      if (!statusResponse.ok) throw new Error(statusBody.error ?? "Errore stato RobertaBot")
+      setSources(sourcesBody.sources ?? [])
+      setCategories(sourcesBody.categories ?? [])
+      setStatus(statusBody)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Errore fonti RobertaBot")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadSources()
+  }, [loadSources])
+
+  const patchSource = (id: string, patch: Partial<RobertaSource>) => {
+    setSources((current) => current.map((source) => source.id === id ? { ...source, ...patch } : source))
+  }
+
+  const addSource = () => {
+    setSources((current) => [
+      ...current,
+      {
+        id: crypto.randomUUID(),
+        label: "Nuova fonte",
+        categoria: "listini",
+        path: "",
+        publicUrl: "",
+        active: true,
+      },
+    ])
+  }
+
+  const saveSources = async () => {
+    setSaving(true)
+    try {
+      const response = await fetch("/api/crm-settings/roberta/sources", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sources }),
+      })
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error ?? "Errore salvataggio fonti")
+      setSources(body.sources ?? sources)
+      toast.success("Fonti RobertaBot salvate")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Errore salvataggio fonti")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const syncKnowledge = async () => {
+    setSyncing(true)
+    try {
+      const saveResponse = await fetch("/api/crm-settings/roberta/sources", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sources }),
+      })
+      const saveBody = await saveResponse.json()
+      if (!saveResponse.ok) throw new Error(saveBody.error ?? "Errore salvataggio fonti")
+      setSources(saveBody.sources ?? sources)
+
+      const response = await fetch("/api/crm-settings/roberta/knowledge/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force: false }),
+      })
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error ?? "Errore sincronizzazione RobertaBot")
+      await loadSources()
+      toast.success(`RobertaBot aggiornata: ${body.updated} documenti aggiornati, ${body.reused} invariati`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Errore sincronizzazione RobertaBot")
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  return <section className="overflow-visible rounded-xl border border-violet-100 bg-white shadow-sm">
+    <div className="flex flex-col gap-3 border-b border-violet-100 bg-violet-50/60 p-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex items-center gap-3">
+        <span className="flex size-10 items-center justify-center rounded-lg bg-white text-violet-700 ring-1 ring-violet-200"><Bot className="size-5" /></span>
+        <div>
+          <h2 className="text-lg font-bold text-violet-950">Fonti RobertaBot</h2>
+          <p className="mt-1 text-sm font-medium text-violet-800/80">Cartelle Nextcloud autorizzate per la conoscenza del bot.</p>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className={`flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-bold ${healthTone}`} title={health.summary}>
+          <span className="size-3 rounded-full bg-current shadow-[0_0_0_4px_color-mix(in_srgb,currentColor_16%,transparent)]" />
+          {loading ? "Controllo" : health.label}
+        </div>
+        <Button type="button" variant="outline" onClick={addSource}><Plus className="size-4" />Aggiungi fonte</Button>
+        <Button type="button" variant="outline" onClick={() => void saveSources()} disabled={saving || loading}>{saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}Salva fonti</Button>
+        <Button type="button" onClick={() => void syncKnowledge()} disabled={syncing || saving || loading} className="bg-violet-700 text-white hover:bg-violet-800">{syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}Salva e sincronizza</Button>
+      </div>
+    </div>
+
+    {loading ? <div className="flex items-center gap-2 p-5 text-sm font-medium text-muted-foreground"><Loader2 className="size-4 animate-spin" />Caricamento fonti</div> : null}
+    {!loading && sources.length === 0 ? <div className="p-4"><Empty>Nessuna fonte configurata.</Empty></div> : null}
+    {!loading && sources.length > 0 ? <div className="divide-y divide-border">
+      {sources.map((source) => <article key={source.id} className="grid gap-3 p-4 lg:grid-cols-[minmax(180px,1fr)_170px_minmax(280px,1.4fr)_minmax(260px,1fr)_auto_auto] lg:items-end">
+        <label className="text-xs font-medium text-muted-foreground">Nome
+          <Input className="mt-1 h-10 font-semibold" value={source.label} onChange={(event) => patchSource(source.id, { label: event.target.value })} />
+        </label>
+        <label className="text-xs font-medium text-muted-foreground">Categoria
+          <Select value={source.categoria} onValueChange={(value) => patchSource(source.id, { categoria: value as RobertaSourceCategory })}>
+            <SelectTrigger className="mt-1 h-10 w-full bg-white font-semibold">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {categories.map((category) => <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </label>
+        <label className="text-xs font-medium text-muted-foreground">Path Nextcloud
+          <div className="mt-1">
+            <RobertaPathInput
+              value={source.path}
+              onChange={(path) => patchSource(source.id, { path })}
+              onPick={(path) => patchSource(source.id, { path, publicUrl: source.publicUrl?.trim() ? source.publicUrl : suggerisciUrlPubblico(path) })}
+            />
+          </div>
+        </label>
+        <label className="text-xs font-medium text-muted-foreground">Link pubblico
+          <Input className="mt-1 h-10 font-semibold" value={source.publicUrl ?? ""} placeholder="https://solairgroup.it/..." onChange={(event) => patchSource(source.id, { publicUrl: event.target.value })} />
+        </label>
+        <label className="flex h-10 items-center justify-between gap-3 rounded-lg border border-border bg-white px-3 text-sm font-medium">
+          Attiva
+          <Switch checked={source.active} onCheckedChange={(active) => patchSource(source.id, { active })} aria-label={`Fonte ${source.label} attiva`} />
+        </label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-lg"
+          aria-label={`Rimuovi ${source.label}`}
+          onClick={() => setSources((current) => current.filter((item) => item.id !== source.id))}
+        >
+          <Trash2 className="size-4 text-destructive" />
+        </Button>
+      </article>)}
     </div> : null}
   </section>
 }
@@ -1137,13 +1439,14 @@ export function OffertaCommercialeClient() {
               </section>
 
               <Tabs value={tabCatalogo} onValueChange={(value) => setTabCatalogo(String(value))}>
-                <TabsList variant="line" className="w-full justify-start overflow-x-auto border-b border-border">
+                <TabsList variant="line" className="w-full justify-start overflow-visible border-b border-border">
                   <TabsTrigger value="listino" className="h-11 text-base font-bold data-active:text-blue-700 data-active:after:bg-blue-700"><BookOpenCheck className="size-4 text-blue-600" />Listino solo FV</TabsTrigger>
                   <TabsTrigger value="accumulo" className="h-11 text-base font-bold data-active:text-amber-700 data-active:after:bg-amber-500"><BatteryCharging className="size-4 text-amber-600" />Batterie</TabsTrigger>
                   <TabsTrigger value="accessori" className="h-11 text-base font-bold data-active:text-teal-700 data-active:after:bg-teal-600"><Plug className="size-4 text-teal-600" />Accessori</TabsTrigger>
                   <TabsTrigger value="regole" className="h-11 text-base font-bold data-active:text-amber-700 data-active:after:bg-amber-500"><SlidersHorizontal className="size-4 text-amber-600" />Regole</TabsTrigger>
                   <TabsTrigger value="offerte-admin" className="h-11 text-base font-bold data-active:text-teal-700 data-active:after:bg-teal-600"><PackageOpen className="size-4 text-teal-600" />Offerte</TabsTrigger>
                   <TabsTrigger value="documenti-admin" className="h-11 text-base font-bold data-active:text-indigo-700 data-active:after:bg-indigo-600"><Cloud className="size-4 text-indigo-600" />Documenti</TabsTrigger>
+                  <TabsTrigger value="roberta-admin" className="h-11 text-base font-bold data-active:text-violet-700 data-active:after:bg-violet-600"><Bot className="size-4 text-violet-600" />RobertaBot</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="listino" className="space-y-5 pt-5">
@@ -1219,6 +1522,10 @@ export function OffertaCommercialeClient() {
                   <StoricoListini versioni={data.versioni} catalogoId={catalogo.id} deletingCatalog={deletingCatalog} publishingCatalog={publishingCatalog} onDelete={(id, name) => void deleteCatalog(id, name)} onPublish={(id, name) => void publishCatalog(id, name)} />
                   <DocumentiNextcloud documenti={data.documenti} fonteAttiva={catalogo.fonte_path} deletingDocument={deletingDocument} onDelete={(path, name) => void deleteDocument(path, name)} />
                 </TabsContent>
+
+                <TabsContent value="roberta-admin" className="space-y-5 pt-5">
+                  <RobertaSourcesPanel />
+                </TabsContent>
               </Tabs>
             </div>
           </SheetContent>
@@ -1252,14 +1559,14 @@ export function OffertaCommercialeClient() {
     </section>
 
     <Tabs defaultValue="calcolo">
-      <TabsList variant="line" className="w-full justify-start overflow-x-auto border-b border-border">
+      <TabsList variant="line" className="w-full justify-start overflow-visible border-b border-border">
         <TabsTrigger value="calcolo"><Calculator className="size-4" />Calcolo offerta</TabsTrigger>
         <TabsTrigger value="offerte"><PackageOpen className="size-4" />Offerte del periodo</TabsTrigger>
       </TabsList>
 
       <TabsContent value="calcolo" className="pt-5"><SezioneCliente /></TabsContent>
 
-      <TabsContent value="offerte" className="pt-5">{visibleOffers.length === 0 ? <Empty>Nessuna offerta pubblicata disponibile.</Empty> : <div className="grid gap-4 lg:grid-cols-2">{visibleOffers.map((offer) => <article key={offer.id} className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">{offer.cover_path ? <img src={`/api/offerta-commerciale/offerte/${offer.id}/asset?kind=cover`} alt="" className="h-52 w-full object-cover" /> : <div className="flex h-36 items-center justify-center bg-slate-100"><FileText className="size-10 text-muted-foreground" /></div>}<div className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold text-foreground">{offer.titolo}</h2>{offer.descrizione ? <p className="mt-2 text-sm text-muted-foreground">{offer.descrizione}</p> : null}</div>{offer.pubblicata ? <Badge className="bg-teal-600">Pubblicata</Badge> : <Badge variant="outline">Bozza</Badge>}</div>{canManage ? <Badge variant={offer.testo_estratto ? "secondary" : "outline"}>{offer.testo_estratto ? `${offer.testo_estratto.length.toLocaleString("it-IT")} caratteri letti` : "solo PDF"}</Badge> : null}<div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-xs text-muted-foreground"><span>{offer.valido_dal ? new Date(offer.valido_dal).toLocaleDateString("it-IT") : "Data inizio libera"} - {offer.valido_al ? new Date(offer.valido_al).toLocaleDateString("it-IT") : "senza scadenza"}</span><div className="flex flex-wrap items-center gap-2">{offer.pdf_path ? <Button variant="outline" size="sm" nativeButton={false} render={<a href={`/api/offerta-commerciale/offerte/${offer.id}/asset`} target="_blank" rel="noreferrer" />}>Apri PDF</Button> : null}{offer.pdf_path && offer.pubblicata ? <Button variant="outline" size="sm" nativeButton={false} render={<a href={`/api/public/offerte-periodo/${offer.id}/pdf`} target="_blank" rel="noreferrer" />}>Link pubblico</Button> : null}</div></div>{canManage ? <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"><Switch checked={offer.pubblicata} onCheckedChange={(checked) => { const updated = { ...offer, pubblicata: checked }; setOffer(offer.id, { pubblicata: checked }); void saveOffer(updated, checked ? "Roberta puo usare questo PDF" : "PDF nascosto a Roberta") }} />Roberta</label> : null}</div></article>)}</div>}</TabsContent>
+      <TabsContent value="offerte" className="pt-5">{visibleOffers.length === 0 ? <Empty>Nessuna offerta pubblicata disponibile.</Empty> : <div className="grid gap-4 lg:grid-cols-2">{visibleOffers.map((offer) => <article key={offer.id} className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">{offer.cover_path ? <img src={`/api/offerta-commerciale/offerte/${offer.id}/asset?kind=cover`} alt="" className="h-52 w-full object-cover" /> : <div className="flex h-36 items-center justify-center bg-slate-100"><FileText className="size-10 text-muted-foreground" /></div>}<div className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold text-foreground">{offer.titolo}</h2>{offer.descrizione ? <p className="mt-2 text-sm text-muted-foreground">{offer.descrizione}</p> : null}</div>{offer.pubblicata ? <Badge className="bg-teal-600">Pubblicata</Badge> : <Badge variant="outline">Bozza</Badge>}</div>{canManage ? <Badge variant={offer.testo_estratto ? "secondary" : "outline"}>{offer.testo_estratto ? `${offer.testo_estratto.length.toLocaleString("it-IT")} caratteri letti` : "solo PDF"}</Badge> : null}<div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-xs text-muted-foreground"><span>{offer.valido_dal ? new Date(offer.valido_dal).toLocaleDateString("it-IT") : "Data inizio libera"} - {offer.valido_al ? new Date(offer.valido_al).toLocaleDateString("it-IT") : "senza scadenza"}</span><div className="flex flex-wrap items-center gap-2">{offer.pdf_path ? <Button variant="outline" size="sm" nativeButton={false} render={<a href={`/api/offerta-commerciale/offerte/${offer.id}/asset`} target="_blank" rel="noreferrer" />}>Apri PDF</Button> : null}{offer.pdf_path && offer.pubblicata ? <Button variant="outline" size="sm" nativeButton={false} render={<a href={`/api/public/offerte-periodo/${offer.id}/pdf`} target="_blank" rel="noreferrer" />}>Link pubblico</Button> : null}</div></div>{canManage ? <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"><Switch checked={offer.pubblicata} onCheckedChange={(checked) => { const updated = { ...offer, pubblicata: checked }; setOffer(offer.id, { pubblicata: checked }); void saveOffer(updated, checked ? "RobertaBot puo usare questo PDF" : "PDF nascosto a RobertaBot") }} />RobertaBot</label> : null}</div></article>)}</div>}</TabsContent>
     </Tabs>
   </div>
 }

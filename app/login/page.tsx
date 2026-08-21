@@ -49,6 +49,14 @@ function LoginForm() {
       return
     }
 
+    const sessionResponse = await fetch("/api/auth/session/touch", { method: "POST" })
+    if (!sessionResponse.ok) {
+      await supabase.auth.signOut()
+      setError("Accesso riuscito, ma non è stato possibile inizializzare la sessione CRM.")
+      setLoading(false)
+      return
+    }
+
     router.push(postLoginRedirect)
     router.refresh()
   }
@@ -97,8 +105,7 @@ function LoginForm() {
           {sessioneScaduta && (
             <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 p-3 rounded-lg">
               <AlertCircle className="w-4 h-4 shrink-0" />
-              La tua sessione precedente non è più valida. Accedi di nuovo con la password
-              temporanea ricevuta via email.
+              La tua sessione precedente è scaduta. Accedi di nuovo per continuare.
             </div>
           )}
           <div className="space-y-2">

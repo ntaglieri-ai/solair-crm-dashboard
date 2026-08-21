@@ -1,26 +1,31 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Bot, Database, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react"
+import {
+  AlertTriangle,
+  Bot,
+  CheckCircle2,
+  Database,
+  RefreshCw,
+  RotateCcw,
+  Search,
+} from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { SectionHeader } from "@/components/impostazioni/settings-ui"
+import { usePermissions } from "@/lib/permissions/provider"
+import { deriveRobertaHealth } from "@/lib/roberta/health"
 
 type KnowledgeStatus = {
   sources: number
   chunks: number
   catalogItems: number
+  lastSync: {
+    ok: boolean
+    syncedAt: string
+    error: string | null
+  } | null
   recentSources: {
     nome: string
     cartella: string
@@ -41,65 +46,15 @@ type SyncResult = {
   errors: string[]
 }
 
-type RobertaSourceCategory =
-  | "listini"
-  | "componenti"
-  | "offerte"
-  | "prezzi"
-  | "finanziarie"
-  | "varie"
-
-type RobertaSource = {
-  id: string
-  label: string
-  categoria: RobertaSourceCategory
-  path: string
-  publicUrl?: string
-  active: boolean
-}
-
-type CategoryOption = {
-  value: RobertaSourceCategory
-  label: string
-}
-
-const STATO_LABEL: Record<KnowledgeStatus["recentSources"][number]["stato"], string> = {
-  ready: "Pronto",
-  scan_pending: "Scansione",
-  empty: "Vuoto",
-  error: "Errore",
-}
-
-const STATO_TONE: Record<KnowledgeStatus["recentSources"][number]["stato"], string> = {
-  ready: "bg-teal/10 text-teal",
-  scan_pending: "bg-warning/10 text-warning",
-  empty: "bg-muted text-muted-foreground",
-  error: "bg-destructive/10 text-destructive",
-}
-
 export default function RobertaKnowledgePage() {
+  const permissions = usePermissions()
   const [status, setStatus] = useState<KnowledgeStatus | null>(null)
-  const [sources, setSources] = useState<RobertaSource[]>([])
-  const [categories, setCategories] = useState<CategoryOption[]>([])
   const [loading, setLoading] = useState(true)
-  const [savingSources, setSavingSources] = useState(false)
   const [syncing, setSyncing] = useState(false)
-  const [newSource, setNewSource] = useState({
-    label: "",
-    categoria: "listini" as RobertaSourceCategory,
-    path: "",
-    publicUrl: "",
-  })
-
-  async function loadSources() {
-    const response = await fetch("/api/crm-settings/roberta/sources", {
-      cache: "no-store",
-    })
-    const body = await response.json()
-    if (!response.ok) throw new Error(body.error ?? "Errore fonti Roberta")
-    setSources(body.sources ?? [])
-    setCategories(body.categories ?? [])
-  }
+  const health = deriveRobertaHealth(status)
+  const roleCode = permissions.snapshot.subject.ruoloCode
+  const isSuperadmin = permissions.isSuperadmin
+  const canSeeStatus = isSuperadmin || roleCode === "ADMIN"
 
   async function loadStatus(showLoading = true) {
     if (showLoading) setLoading(true)
@@ -108,69 +63,28 @@ export default function RobertaKnowledgePage() {
         cache: "no-store",
       })
       const body = await response.json()
-      if (!response.ok) throw new Error(body.error ?? "Errore stato Roberta")
+      if (!response.ok) throw new Error(body.error ?? "Errore stato RobertaBot")
       setStatus(body)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Errore stato Roberta")
+      toast.error(error instanceof Error ? error.message : "Errore stato RobertaBot")
     } finally {
       setLoading(false)
     }
   }
 
-  async function saveSources(nextSources = sources) {
-    setSavingSources(true)
-    try {
-      const response = await fetch("/api/crm-settings/roberta/sources", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sources: nextSources }),
-      })
-      const body = await response.json()
-      if (!response.ok) throw new Error(body.error ?? "Errore salvataggio fonti")
-      setSources(body.sources ?? nextSources)
-      toast.success("Fonti Roberta salvate")
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Errore salvataggio fonti")
-    } finally {
-      setSavingSources(false)
-    }
-  }
-
-  function addSource() {
-    if (!newSource.label.trim() || !newSource.path.trim()) {
-      toast.error("Inserisci nome e path Nextcloud")
-      return
-    }
-    const next = [
-      ...sources,
-      {
-        id: crypto.randomUUID(),
-        label: newSource.label.trim(),
-        categoria: newSource.categoria,
-        path: newSource.path.trim().replace(/^\/+|\/+$/g, ""),
-        publicUrl: newSource.publicUrl.trim(),
-        active: true,
-      },
-    ]
-    setSources(next)
-    setNewSource({ label: "", categoria: "listini", path: "", publicUrl: "" })
-    void saveSources(next)
-  }
-
   async function sync(force = false) {
     setSyncing(true)
     try {
-      await saveSources()
       const response = await fetch("/api/crm-settings/roberta/knowledge/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ force }),
       })
       const body = (await response.json()) as SyncResult & { error?: string }
-      if (!response.ok) throw new Error(body.error ?? "Errore aggiornamento Roberta")
+      if (!response.ok) throw new Error(body.error ?? "Errore aggiornamento RobertaBot")
 
       toast.success(
-        `Roberta aggiornata: ${body.updated} documenti aggiornati, ${body.reused} invariati`,
+        `RobertaBot aggiornato: ${body.updated} documenti aggiornati, ${body.reused} invariati`,
       )
       if (body.errors.length > 0) {
         toast.warning(`${body.errors.length} avvisi durante la sincronizzazione`)
@@ -178,7 +92,7 @@ export default function RobertaKnowledgePage() {
       await loadStatus()
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Errore aggiornamento Roberta",
+        error instanceof Error ? error.message : "Errore aggiornamento RobertaBot",
       )
     } finally {
       setSyncing(false)
@@ -190,16 +104,15 @@ export default function RobertaKnowledgePage() {
 
     async function run() {
       try {
-        await loadSources()
         const response = await fetch("/api/crm-settings/roberta/knowledge/sync", {
           cache: "no-store",
         })
         const body = await response.json()
-        if (!response.ok) throw new Error(body.error ?? "Errore stato Roberta")
+        if (!response.ok) throw new Error(body.error ?? "Errore stato RobertaBot")
         if (!cancelled) setStatus(body)
       } catch (error) {
         if (!cancelled) {
-          toast.error(error instanceof Error ? error.message : "Errore stato Roberta")
+          toast.error(error instanceof Error ? error.message : "Errore stato RobertaBot")
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -212,12 +125,26 @@ export default function RobertaKnowledgePage() {
     }
   }, [])
 
+  if (!canSeeStatus) {
+    return (
+      <div className="flex flex-col gap-5">
+        <SectionHeader
+          title="RobertaBot"
+          description="Stato tecnico della conoscenza indicizzata."
+        />
+        <section className="rounded-lg border border-border bg-card px-4 py-8 text-sm text-muted-foreground">
+          Stato RobertaBot non disponibile per questo profilo.
+        </section>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <SectionHeader
-        title="Roberta"
-        description="Conoscenza veloce del chatbot ricostruita da listini, offerte e documenti Nextcloud."
-        action={
+        title="RobertaBot"
+        description="Stato tecnico della conoscenza indicizzata e comandi di sincronizzazione."
+        action={isSuperadmin ? (
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => sync(true)} disabled={syncing}>
               <RotateCcw className="size-4" />
@@ -228,176 +155,16 @@ export default function RobertaKnowledgePage() {
               Aggiorna
             </Button>
           </div>
-        }
+        ) : null}
       />
 
-      <section className="rounded-lg border border-border bg-card">
-        <div className="border-b border-border px-4 py-3">
-          <h2 className="font-semibold text-foreground">Fonti controllate</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Scegli quali cartelle Nextcloud Roberta puo&apos; usare e con quale categoria.
-          </p>
-        </div>
-        <div className="divide-y divide-border">
-          {sources.map((source) => (
-            <article
-              key={source.id}
-              className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(160px,1fr)_160px_minmax(240px,1fr)_minmax(240px,1fr)_auto_auto]"
-            >
-              <Input
-                value={source.label}
-                onChange={(event) =>
-                  setSources((current) =>
-                    current.map((item) =>
-                      item.id === source.id ? { ...item, label: event.target.value } : item,
-                    ),
-                  )
-                }
-                aria-label="Nome fonte"
-              />
-              <Select
-                value={source.categoria}
-                onValueChange={(value) =>
-                  setSources((current) =>
-                    current.map((item) =>
-                      item.id === source.id
-                        ? { ...item, categoria: value as RobertaSourceCategory }
-                        : item,
-                    ),
-                  )
-                }
-              >
-                <SelectTrigger aria-label="Categoria fonte">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category.value} value={category.value}>
-                      {category.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input
-                value={source.path}
-                onChange={(event) =>
-                  setSources((current) =>
-                    current.map((item) =>
-                      item.id === source.id ? { ...item, path: event.target.value } : item,
-                    ),
-                  )
-                }
-                aria-label="Path Nextcloud"
-              />
-              <Input
-                value={source.publicUrl ?? ""}
-                onChange={(event) =>
-                  setSources((current) =>
-                    current.map((item) =>
-                      item.id === source.id ? { ...item, publicUrl: event.target.value } : item,
-                    ),
-                  )
-                }
-                aria-label="Link pubblico"
-                placeholder="https://solairgroup.it/..."
-              />
-              <Switch
-                checked={source.active}
-                onCheckedChange={(active) =>
-                  setSources((current) =>
-                    current.map((item) =>
-                      item.id === source.id ? { ...item, active } : item,
-                    ),
-                  )
-                }
-                aria-label={`Fonte ${source.label} attiva`}
-              />
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => {
-                  const next = sources.filter((item) => item.id !== source.id)
-                  setSources(next)
-                  void saveSources(next)
-                }}
-                aria-label={`Rimuovi ${source.label}`}
-              >
-                <Trash2 className="size-4" />
-              </Button>
-            </article>
-          ))}
-
-          <div className="grid gap-3 px-4 py-4 lg:grid-cols-[minmax(160px,1fr)_160px_minmax(240px,1fr)_minmax(240px,1fr)_auto]">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="roberta-source-label">Nome</Label>
-              <Input
-                id="roberta-source-label"
-                value={newSource.label}
-                onChange={(event) =>
-                  setNewSource((current) => ({ ...current, label: event.target.value }))
-                }
-                placeholder="Offerte estate"
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label>Categoria</Label>
-              <Select
-                value={newSource.categoria}
-                onValueChange={(value) =>
-                  setNewSource((current) => ({
-                    ...current,
-                    categoria: value as RobertaSourceCategory,
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category.value} value={category.value}>
-                      {category.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="roberta-source-path">Path Nextcloud</Label>
-              <Input
-                id="roberta-source-path"
-                value={newSource.path}
-                onChange={(event) =>
-                  setNewSource((current) => ({ ...current, path: event.target.value }))
-                }
-                placeholder="Solair/Vendita-Digitale/OFFERTE"
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="roberta-source-public-url">Link pubblico</Label>
-              <Input
-                id="roberta-source-public-url"
-                value={newSource.publicUrl}
-                onChange={(event) =>
-                  setNewSource((current) => ({ ...current, publicUrl: event.target.value }))
-                }
-                placeholder="https://solairgroup.it/offerte"
-              />
-            </div>
-            <div className="flex items-end">
-              <Button onClick={addSource} disabled={savingSources}>
-                <Plus className="size-4" />
-                Aggiungi
-              </Button>
-            </div>
-          </div>
-        </div>
-        <div className="flex justify-end border-t border-border px-4 py-3">
-          <Button variant="outline" onClick={() => saveSources()} disabled={savingSources}>
-            Salva fonti
-          </Button>
-        </div>
-      </section>
+      <HealthPanel
+        level={health.level}
+        label={loading ? "Controllo" : health.label}
+        summary={loading ? "Lettura stato RobertaBot" : health.summary}
+        alarms={isSuperadmin ? health.alarms : []}
+        showAlarms={isSuperadmin}
+      />
 
       <div className="grid gap-3 md:grid-cols-3">
         <MetricCard
@@ -412,50 +179,100 @@ export default function RobertaKnowledgePage() {
         />
         <MetricCard
           icon={Bot}
-          label="Righe catalogo"
-          value={loading ? "..." : String(status?.catalogItems ?? 0)}
+          label="Ultimo controllo"
+          value={loading ? "..." : formatLastSync(status?.lastSync?.syncedAt)}
         />
       </div>
-
-      <section className="rounded-lg border border-border bg-card">
-        <div className="border-b border-border px-4 py-3">
-          <h2 className="font-semibold text-foreground">Ultimi documenti</h2>
-        </div>
-        <div className="divide-y divide-border">
-          {!loading && (status?.recentSources.length ?? 0) === 0 ? (
-            <div className="px-4 py-8 text-sm text-muted-foreground">
-              Nessuna conoscenza sincronizzata.
-            </div>
-          ) : null}
-          {status?.recentSources.map((source) => (
-            <article
-              key={`${source.cartella}/${source.nome}`}
-              className="flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:justify-between"
-            >
-              <div className="min-w-0">
-                <h3 className="truncate text-sm font-medium text-foreground">
-                  {source.nome}
-                </h3>
-                <p className="truncate text-xs text-muted-foreground">
-                  {source.cartella} · {source.testo_chars.toLocaleString("it-IT")} caratteri
-                </p>
-                {source.errore ? (
-                  <p className="mt-1 text-xs text-destructive">{source.errore}</p>
-                ) : null}
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <Badge className={STATO_TONE[source.stato]}>
-                  {STATO_LABEL[source.stato]}
-                </Badge>
-                <span className="text-xs text-muted-foreground">
-                  {new Date(source.synced_at).toLocaleString("it-IT")}
-                </span>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
     </div>
+  )
+}
+
+function formatLastSync(value: string | null | undefined) {
+  if (!value) return "Mai"
+  return new Date(value).toLocaleString("it-IT", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
+function HealthPanel({
+  level,
+  label,
+  summary,
+  alarms,
+  showAlarms,
+}: {
+  level: "green" | "yellow" | "red"
+  label: string
+  summary: string
+  alarms: string[]
+  showAlarms: boolean
+}) {
+  const tone = {
+    green: {
+      border: "border-teal/25",
+      bg: "bg-teal/10",
+      text: "text-teal",
+      dot: "bg-teal",
+      icon: CheckCircle2,
+    },
+    yellow: {
+      border: "border-warning/30",
+      bg: "bg-warning/10",
+      text: "text-warning",
+      dot: "bg-warning",
+      icon: AlertTriangle,
+    },
+    red: {
+      border: "border-destructive/25",
+      bg: "bg-destructive/10",
+      text: "text-destructive",
+      dot: "bg-destructive",
+      icon: AlertTriangle,
+    },
+  }[level]
+  const Icon = tone.icon
+
+  return (
+    <section className={`rounded-lg border ${tone.border} ${tone.bg} p-4`}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-4">
+          <div className="relative flex size-16 items-center justify-center rounded-full bg-card shadow-sm ring-1 ring-border">
+            <span className={`size-9 rounded-full ${tone.dot} shadow-[0_0_0_8px_color-mix(in_srgb,currentColor_12%,transparent)]`} />
+          </div>
+          <div>
+            <p className={`flex items-center gap-2 text-sm font-bold uppercase tracking-wide ${tone.text}`}>
+              <Icon className="size-4" />
+              {label}
+            </p>
+            <h2 className="mt-1 text-xl font-semibold text-foreground">{summary}</h2>
+          </div>
+        </div>
+        <Badge variant="outline" className={`w-fit bg-card ${tone.text}`}>
+          Stato RobertaBot
+        </Badge>
+      </div>
+
+      {showAlarms && alarms.length > 0 ? (
+        <div className="mt-4 rounded-lg border border-border bg-card p-3">
+          <h3 className="text-sm font-semibold text-foreground">Allarmi rilevati</h3>
+          <ul className="mt-2 space-y-1.5 text-sm text-muted-foreground">
+            {alarms.map((alarm) => (
+              <li key={alarm} className="flex gap-2">
+                <AlertTriangle className={`mt-0.5 size-3.5 shrink-0 ${tone.text}`} />
+                <span>{alarm}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {showAlarms && alarms.length === 0 ? (
+        <p className="mt-3 text-sm font-medium text-teal">Nessun allarme rilevato.</p>
+      ) : null}
+    </section>
   )
 }
 

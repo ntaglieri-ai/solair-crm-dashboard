@@ -74,6 +74,15 @@ export default function CambiaPasswordPage() {
         setLoading(false)
         return
       }
+      const sessionResponse = await fetch("/api/auth/session/touch", { method: "POST" })
+      if (!sessionResponse.ok) {
+        await supabase.auth.signOut()
+        setError(
+          "Password aggiornata, ma non e' stato possibile inizializzare la sessione CRM. Accedi di nuovo.",
+        )
+        setLoading(false)
+        return
+      }
     }
 
     router.push("/")

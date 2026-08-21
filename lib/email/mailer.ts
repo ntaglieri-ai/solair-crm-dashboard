@@ -2,6 +2,7 @@
 // un account Gmail personale, in futuro alla casella Aruba — stesso codice,
 // cambia solo la config SMTP_* in .env.
 import nodemailer, { type Transporter } from "nodemailer"
+import { escapeHtml } from "./html"
 
 type SmtpConfig = {
   host: string
@@ -58,6 +59,10 @@ export async function sendWelcomeEmail(params: {
 
   try {
     const transport = getTransport(cfg)
+    const safeNome = escapeHtml(params.nome)
+    const safeTo = escapeHtml(params.to)
+    const safeTempPassword = escapeHtml(params.tempPassword)
+    const safeLoginUrl = escapeHtml(loginUrl())
     await transport.sendMail({
       from: cfg.from,
       to: params.to,
@@ -75,14 +80,14 @@ export async function sendWelcomeEmail(params: {
         `Accedi qui: ${loginUrl()}`,
       ].join("\n"),
       html: `
-        <p>Ciao ${params.nome},</p>
+        <p>Ciao ${safeNome},</p>
         <p>Il tuo account Solair CRM e' stato creato.</p>
         <p>
-          Email: <strong>${params.to}</strong><br/>
-          Password temporanea: <strong>${params.tempPassword}</strong>
+          Email: <strong>${safeTo}</strong><br/>
+          Password temporanea: <strong>${safeTempPassword}</strong>
         </p>
         <p>Al primo accesso ti verra' chiesto di impostare una nuova password.</p>
-        <p><a href="${loginUrl()}">Accedi al CRM</a></p>
+        <p><a href="${safeLoginUrl}">Accedi al CRM</a></p>
       `,
     })
     return { ok: true, error: null }
@@ -106,6 +111,10 @@ export async function sendPasswordResetEmail(params: {
 
   try {
     const transport = getTransport(cfg)
+    const safeNome = escapeHtml(params.nome)
+    const safeTo = escapeHtml(params.to)
+    const safeTempPassword = escapeHtml(params.tempPassword)
+    const safeLoginUrl = escapeHtml(loginUrl())
     await transport.sendMail({
       from: cfg.from,
       to: params.to,
@@ -125,15 +134,15 @@ export async function sendPasswordResetEmail(params: {
         `Accedi qui: ${loginUrl()}`,
       ].join("\n"),
       html: `
-        <p>Ciao ${params.nome},</p>
+        <p>Ciao ${safeNome},</p>
         <p>Abbiamo ricevuto una richiesta di reimpostazione della password per il tuo account Solair CRM.</p>
         <p>
-          Email: <strong>${params.to}</strong><br/>
-          La tua nuova password temporanea: <strong>${params.tempPassword}</strong>
+          Email: <strong>${safeTo}</strong><br/>
+          La tua nuova password temporanea: <strong>${safeTempPassword}</strong>
         </p>
         <p>Al prossimo accesso ti verra' chiesto di impostare una nuova password.</p>
         <p>Se non hai richiesto tu il reset, contatta subito un amministratore: la password precedente e' stata sostituita.</p>
-        <p><a href="${loginUrl()}">Accedi al CRM</a></p>
+        <p><a href="${safeLoginUrl}">Accedi al CRM</a></p>
       `,
     })
     return { ok: true, error: null }

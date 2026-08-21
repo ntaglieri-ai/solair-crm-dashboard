@@ -191,8 +191,8 @@ export const CRM_SETTINGS_CATALOG: CrmSettingsCatalogItem[] = [
   {
     id: "roberta",
     section: "organization",
-    title: "Roberta",
-    description: "Conoscenza chatbot da listini, offerte e documenti",
+    title: "RobertaBot",
+    description: "Stato tecnico, indicizzazione e sincronizzazione conoscenza",
     href: "/crm-settings/system/roberta",
     pageKey: "crm_settings.system.roberta",
     icon: Bot,

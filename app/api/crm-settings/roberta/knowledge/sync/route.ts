@@ -1,33 +1,27 @@
 import { NextResponse } from "next/server"
-import { requireApiPage } from "@/lib/permissions/server"
+import { getCurrentPermissions } from "@/lib/permissions/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import {
-  DEFAULT_ROBERTA_SOURCES,
-  fetchRobertaConfiguredDocuments,
-  syncRobertaKnowledge,
-  type RobertaKnowledgeSourceConfig,
-} from "@/lib/roberta/knowledge"
+  ROBERTA_LAST_SYNC_SETTING_KEY,
+  runRobertaKnowledgeSync,
+} from "@/lib/roberta/sync-runner"
 
 export const runtime = "nodejs"
 export const maxDuration = 120
 
-const SOURCES_SETTING_KEY = "roberta.knowledge.sources"
-
-async function loadSources(supabase: ReturnType<typeof createAdminClient>) {
-  if (!supabase) return DEFAULT_ROBERTA_SOURCES
-  const { data } = await supabase
-    .from("crm_settings")
-    .select("valore")
-    .eq("chiave", SOURCES_SETTING_KEY)
-    .maybeSingle()
-
-  return Array.isArray(data?.valore) && data.valore.length > 0
-    ? (data.valore as RobertaKnowledgeSourceConfig[])
-    : DEFAULT_ROBERTA_SOURCES
+async function requireRobertaCatalogAccess() {
+  const permissions = await getCurrentPermissions()
+  if (
+    !permissions.canPage("crm_settings.system.roberta") &&
+    !permissions.canAction("offerta_commerciale.manage")
+  ) {
+    return { response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) }
+  }
+  return { response: null }
 }
 
 export async function GET() {
-  const guard = await requireApiPage("crm_settings.system.roberta")
+  const guard = await requireRobertaCatalogAccess()
   if (guard.response) return guard.response
 
   const supabase = createAdminClient()
@@ -43,6 +37,7 @@ export async function GET() {
     { count: chunks },
     { count: catalogItems },
     { data: recentSources },
+    { data: lastSyncSetting },
   ] = await Promise.all([
     supabase
       .from("roberta_knowledge_sources")
@@ -58,18 +53,39 @@ export async function GET() {
       .select("nome, cartella, stato, testo_chars, synced_at, errore")
       .order("synced_at", { ascending: false })
       .limit(8),
+    supabase
+      .from("crm_settings")
+      .select("valore")
+      .eq("chiave", ROBERTA_LAST_SYNC_SETTING_KEY)
+      .maybeSingle(),
   ])
+
+  const lastSyncValue = lastSyncSetting?.valore
+  const lastSync =
+    typeof lastSyncValue === "object" &&
+    lastSyncValue != null &&
+    typeof (lastSyncValue as { syncedAt?: unknown }).syncedAt === "string"
+      ? {
+          ok: (lastSyncValue as { ok?: unknown }).ok === true,
+          syncedAt: (lastSyncValue as { syncedAt: string }).syncedAt,
+          error:
+            typeof (lastSyncValue as { error?: unknown }).error === "string"
+              ? (lastSyncValue as { error: string }).error
+              : null,
+        }
+      : null
 
   return NextResponse.json({
     sources: sources ?? 0,
     chunks: chunks ?? 0,
     catalogItems: catalogItems ?? 0,
+    lastSync,
     recentSources: recentSources ?? [],
   })
 }
 
 export async function POST(request: Request) {
-  const guard = await requireApiPage("crm_settings.system.roberta")
+  const guard = await requireRobertaCatalogAccess()
   if (guard.response) return guard.response
 
   const supabase = createAdminClient()
@@ -83,11 +99,7 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as { force?: boolean }
 
   try {
-    const sources = await loadSources(supabase)
-    const documenti = await fetchRobertaConfiguredDocuments(supabase, sources)
-    const result = await syncRobertaKnowledge(supabase, documenti, {
-      force: body.force === true,
-    })
+    const result = await runRobertaKnowledgeSync({ force: body.force === true })
     return NextResponse.json(result)
   } catch (error) {
     const message =

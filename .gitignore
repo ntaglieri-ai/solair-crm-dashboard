@@ -19,3 +19,4 @@ tsconfig.tsbuildinfo
 
 # Supabase CLI linked-project cache
 supabase/.temp/
+.env*

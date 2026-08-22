@@ -14,8 +14,6 @@ import {
 } from "lucide-react"
 import {
   InitialsAvatar,
-  SectionHeader,
-  StatCard,
 } from "@/components/impostazioni/settings-ui"
 import { AccountProfileCard } from "@/components/crm-settings/account-profile-card"
 import type { CurrentAccountProfile } from "@/lib/crm-settings/current-account"
@@ -118,26 +116,81 @@ function formatData(iso: string) {
   })
 }
 
-function roleTone(code: string) {
-  const normalized = code.toUpperCase()
-  if (normalized === "SUPERADMIN" || normalized === "ADMIN") return "navy"
-  if (normalized === "AGENT" || normalized === "STANDARD") return "teal"
-  return "gray"
+const ROLE_THEME = {
+  SUPERADMIN: {
+    pill: "border-violet-200 bg-violet-50 text-violet-700",
+    avatar: "bg-gradient-to-br from-violet-600 to-indigo-700 text-white",
+    row: "border-l-violet-400",
+  },
+  ADMIN: {
+    pill: "border-[#b7d9f8] bg-[#eef6ff] text-[#095ca8]",
+    avatar: "bg-gradient-to-br from-[#0176d3] to-[#0b5cab] text-white",
+    row: "border-l-[#0176d3]",
+  },
+  DIRECTOR: {
+    pill: "border-amber-200 bg-amber-50 text-amber-700",
+    avatar: "bg-gradient-to-br from-amber-500 to-orange-600 text-white",
+    row: "border-l-amber-400",
+  },
+  STANDARD: {
+    pill: "border-sky-200 bg-sky-50 text-sky-700",
+    avatar: "bg-gradient-to-br from-sky-500 to-cyan-600 text-white",
+    row: "border-l-sky-400",
+  },
+  AGENT: {
+    pill: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    avatar: "bg-gradient-to-br from-emerald-500 to-teal-700 text-white",
+    row: "border-l-emerald-400",
+  },
+} as const
+
+function roleTheme(code: string) {
+  const normalized = code.toUpperCase() as keyof typeof ROLE_THEME
+  return ROLE_THEME[normalized] ?? {
+    pill: "border-slate-200 bg-slate-100 text-slate-700",
+    avatar: "bg-gradient-to-br from-slate-500 to-slate-700 text-white",
+    row: "border-l-slate-300",
+  }
 }
 
 function RolePill({ code, label }: { code: string; label: string }) {
-  const tone = roleTone(code)
+  const theme = roleTheme(code)
   return (
     <span
       className={cn(
-        "inline-flex h-6 items-center rounded-full px-2.5 text-xs font-semibold",
-        tone === "navy" && "bg-navy text-navy-foreground",
-        tone === "teal" && "bg-teal text-teal-foreground",
-        tone === "gray" && "bg-muted text-muted-foreground",
+        "inline-flex h-6 items-center rounded-full border px-2.5 text-xs font-semibold shadow-sm",
+        theme.pill,
       )}
     >
       {label}
     </span>
+  )
+}
+
+function MetricCard({
+  label,
+  value,
+  icon,
+  tone,
+}: {
+  label: string
+  value: React.ReactNode
+  icon: React.ReactNode
+  tone: string
+}) {
+  return (
+    <div className="group relative overflow-hidden rounded-xl border border-white/80 bg-white px-4 py-3.5 shadow-[0_14px_32px_rgb(30_58_95/8%)] ring-1 ring-slate-900/[0.03] transition-transform hover:-translate-y-0.5">
+      <div className={cn("absolute inset-x-0 top-0 h-1 bg-gradient-to-r", tone)} aria-hidden />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{label}</span>
+          <span className="text-2xl font-semibold tabular-nums text-slate-900">{value}</span>
+        </div>
+        <div className={cn("flex size-10 items-center justify-center rounded-lg bg-gradient-to-br text-white shadow-sm", tone)}>
+          {icon}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -490,12 +543,22 @@ export function AccountManagementClient({
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionHeader
-        title="Account Management"
-        description="Gestisci account nominativi, ruolo, sede, stato di accesso e profilo operativo."
-        action={
+      <section className="relative overflow-hidden rounded-xl border border-white/75 bg-[linear-gradient(135deg,#ffffff_0%,#f7fbff_48%,#eef7ff_100%)] px-5 py-5 shadow-[0_18px_48px_rgb(30_58_95/10%)] ring-1 ring-slate-900/[0.03]">
+        <div className="absolute inset-x-0 top-0 h-1.5 bg-[linear-gradient(90deg,#0176d3,#2e8b72,#f5b041,#6f42c1)]" aria-hidden />
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#0176d3]">
+              Admin cockpit
+            </p>
+            <h2 className="mt-1 text-2xl font-semibold text-slate-950">
+              Account Management
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
+              Gestisci account nominativi, ruolo, sede, stato di accesso e profilo operativo.
+            </p>
+          </div>
           <Button
-            className="bg-teal text-teal-foreground hover:bg-teal/90"
+            className="bg-[#0176d3] text-white shadow-[0_14px_30px_rgb(1_118_211/24%)] hover:bg-[#095ca8]"
             onClick={() => {
               setNewForm(EMPTY_FORM)
               setNewOpen(true)
@@ -504,8 +567,8 @@ export function AccountManagementClient({
             <Plus className="size-4" />
             Nuovo account
           </Button>
-        }
-      />
+        </div>
+      </section>
       <AccountProfileCard profile={currentProfile} />
 
       {error ? (
@@ -515,24 +578,24 @@ export function AccountManagementClient({
       ) : null}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Utenti totali" value={stats.totali} icon={<Users className="size-5" />} />
-        <StatCard label="Utenti attivi" value={stats.attivi} icon={<UserCheck className="size-5" />} />
-        <StatCard label="Admin" value={stats.admin} icon={<ShieldCheck className="size-5" />} />
-        <StatCard label="Sedi coperte" value={stats.sedi} icon={<MapPin className="size-5" />} />
+        <MetricCard label="Utenti totali" value={stats.totali} icon={<Users className="size-5" />} tone="from-[#0176d3] to-[#2e8bff]" />
+        <MetricCard label="Utenti attivi" value={stats.attivi} icon={<UserCheck className="size-5" />} tone="from-[#2e8b72] to-[#35b79a]" />
+        <MetricCard label="Admin" value={stats.admin} icon={<ShieldCheck className="size-5" />} tone="from-[#6f42c1] to-[#9f7aea]" />
+        <MetricCard label="Sedi coperte" value={stats.sedi} icon={<MapPin className="size-5" />} tone="from-[#dd7a01] to-[#f5b041]" />
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+      <div className="flex flex-col gap-3 rounded-xl border border-white/75 bg-white/86 p-3 shadow-[0_12px_30px_rgb(30_58_95/7%)] ring-1 ring-slate-900/[0.03] sm:flex-row sm:flex-wrap sm:items-center">
         <div className="relative flex-1 sm:min-w-64">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Cerca per nome o email"
-            className="pl-9"
+            className="border-slate-200 bg-white pl-9 shadow-inner shadow-slate-900/[0.02]"
           />
         </div>
         <Select value={ruolo} onValueChange={(v) => setRuolo(v === "all" ? "" : v ?? "")}>
-          <SelectTrigger className="w-full sm:w-48">
+          <SelectTrigger className="w-full border-slate-200 bg-white shadow-inner shadow-slate-900/[0.02] sm:w-48">
             <SelectValue placeholder="Tutti i ruoli" />
           </SelectTrigger>
           <SelectContent>
@@ -545,7 +608,7 @@ export function AccountManagementClient({
           </SelectContent>
         </Select>
         <Select value={sede} onValueChange={(v) => setSede(v === "all" ? "" : v ?? "")}>
-          <SelectTrigger className="w-full sm:w-48">
+          <SelectTrigger className="w-full border-slate-200 bg-white shadow-inner shadow-slate-900/[0.02] sm:w-48">
             <SelectValue placeholder="Tutte le sedi" />
           </SelectTrigger>
           <SelectContent>
@@ -558,7 +621,7 @@ export function AccountManagementClient({
           </SelectContent>
         </Select>
         <Select value={stato} onValueChange={(v) => setStato(v === "all" ? "" : v ?? "")}>
-          <SelectTrigger className="w-full sm:w-40">
+          <SelectTrigger className="w-full border-slate-200 bg-white shadow-inner shadow-slate-900/[0.02] sm:w-40">
             <SelectValue placeholder="Tutti gli stati" />
           </SelectTrigger>
           <SelectContent>
@@ -569,32 +632,35 @@ export function AccountManagementClient({
         </Select>
       </div>
 
-      <div className="rounded-xl border border-border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Utente</TableHead>
-              <TableHead>Ruolo</TableHead>
-              <TableHead>Sede</TableHead>
-              <TableHead>Creato il</TableHead>
-              <TableHead>Stato</TableHead>
-              <TableHead>Nextcloud</TableHead>
-              <TableHead>Password iniziale</TableHead>
-              <TableHead className="w-12 text-right">Azioni</TableHead>
+      <div className="overflow-hidden rounded-xl border border-white/80 bg-white shadow-[0_18px_48px_rgb(30_58_95/8%)] ring-1 ring-slate-900/[0.04]">
+        <Table className="[&_td]:h-[68px] [&_th]:h-11">
+          <TableHeader className="bg-[linear-gradient(180deg,#f8fbff_0%,#eef4fb_100%)]">
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="px-4 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Utente</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Ruolo</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Sede</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Creato il</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Stato</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Nextcloud</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Password iniziale</TableHead>
+              <TableHead className="w-12 text-right text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Azioni</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.map((user) => (
               <TableRow
                 key={user.id}
-                className="cursor-pointer"
+                className={cn("cursor-pointer border-l-4 bg-white hover:bg-[#f7fbff]", roleTheme(user.ruolo).row)}
                 onClick={() => openEdit(user)}
               >
-                <TableCell>
+                <TableCell className="px-4">
                   <div className="flex items-center gap-3">
-                    <InitialsAvatar iniziali={getIniziali(user.nome)} />
+                    <InitialsAvatar
+                      iniziali={getIniziali(user.nome)}
+                      className={cn("shadow-[0_8px_18px_rgb(30_58_95/16%)]", roleTheme(user.ruolo).avatar)}
+                    />
                     <div className="flex flex-col">
-                      <span className="font-medium text-foreground">{user.nome}</span>
+                      <span className="font-semibold text-slate-900">{user.nome}</span>
                       <span className="text-xs text-muted-foreground">{user.email}</span>
                     </div>
                   </div>

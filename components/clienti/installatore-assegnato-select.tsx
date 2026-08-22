@@ -6,6 +6,7 @@
 // senza coordinate cliente) escono come "da verificare", tutti gli altri
 // restano comunque selezionabili — il suggerimento non blocca mai la scelta.
 import { useEffect, useMemo, useState } from "react"
+import { usePermissions } from "@/lib/permissions/provider"
 import { toast } from "sonner"
 import {
   Select,
@@ -36,12 +37,22 @@ export function InstallatoreAssegnatoSelect({
   provincia?: string
   installatoreAttuale?: string
 }) {
+  // Chi non puo' assegnare (AGENT: niente clienti.edit ne' installatori.view)
+  // non deve nemmeno chiedere l'elenco: la richiesta tornerebbe 403 e finirebbe
+  // in console per nulla. Vede il valore attuale in sola lettura, che e' il
+  // comportamento giusto per lui.
+  const permissions = usePermissions()
+  const puoAssegnare =
+    permissions.canRecord("clienti", "edit") ||
+    permissions.canRecord("installatori", "view")
+
   const [dati, setDati] = useState<SuggeritiResponse | null>(null)
   const [erroreCaricamento, setErroreCaricamento] = useState(false)
   const [value, setValue] = useState<string | null>(installatoreAttuale ?? null)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
+    if (!puoAssegnare) return
     let cancelled = false
     const params = new URLSearchParams()
     if (provincia) params.set("provincia", provincia)
@@ -56,7 +67,7 @@ export function InstallatoreAssegnatoSelect({
     return () => {
       cancelled = true
     }
-  }, [provincia])
+  }, [provincia, puoAssegnare])
 
   // Il valore salvato a DB e' il nome (clienti.installatore, testo da Zoho):
   // il Select usa il nome come value, cosi' anche un assegnato storico che non
@@ -103,7 +114,7 @@ export function InstallatoreAssegnatoSelect({
 
   // Caricamento fallito: si torna alla sola lettura invece di offrire un
   // selettore vuoto.
-  if (erroreCaricamento) {
+  if (erroreCaricamento || !puoAssegnare) {
     return (
       <div className="flex flex-col gap-0.5">
         <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">

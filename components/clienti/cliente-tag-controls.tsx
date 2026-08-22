@@ -45,10 +45,19 @@ export function ClienteTagBadges({
   clienteId,
   empty = "—",
   max,
+  animate = false,
 }: {
   clienteId: string
   empty?: string
   max?: number
+  /**
+   * Anima i badge alla comparsa. Spenta di default: nelle celle di tabella i
+   * badge si montano a decine insieme all'apertura della pagina, e le righe
+   * virtualizzate li rimontano a ogni scroll, quindi l'animazione diventa un
+   * crepitio continuo. Va accesa dove i tag sono pochi e il movimento segnala
+   * un'azione appena compiuta — cioè nelle intestazioni di dettaglio.
+   */
+  animate?: boolean
 }) {
   const { getClienteTags } = useClienteTags()
   const tags = getClienteTags(clienteId)
@@ -59,11 +68,15 @@ export function ClienteTagBadges({
   const extra = max ? tags.length - shown.length : 0
   return (
     <div className="flex flex-wrap items-center gap-1">
-      {shown.map((tag) => (
-        <span key={tag.id} className="animate-in zoom-in-90 duration-150">
-          <ClienteTagBadge tag={tag} />
-        </span>
-      ))}
+      {shown.map((tag) =>
+        animate ? (
+          <span key={tag.id} className="animate-in zoom-in-90 duration-150">
+            <ClienteTagBadge tag={tag} />
+          </span>
+        ) : (
+          <ClienteTagBadge key={tag.id} tag={tag} />
+        ),
+      )}
       {extra > 0 ? (
         <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
           +{extra}

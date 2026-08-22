@@ -151,7 +151,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
               <StatoLeadBadge stato={lead["Stato Lead"]} />
               <ScoreBar score={lead.Valutazione} />
               <div className="flex flex-wrap items-center gap-1.5">
-                <LeadTagBadges leadId={lead.id} />
+                <LeadTagBadges leadId={lead.id} animate />
                 <TagAssignPopover
                   leadId={lead.id}
                   trigger={

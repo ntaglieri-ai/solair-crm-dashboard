@@ -49,7 +49,7 @@ export default async function InstallatoreDetailPage({
           <Badge variant={installatore.attivo ? "secondary" : "outline"}>
             {installatore.attivo ? "Attivo" : "Non attivo"}
           </Badge>
-          <InstallatoreTagBadges installatoreId={installatore.id} empty="" />
+          <InstallatoreTagBadges installatoreId={installatore.id} empty="" animate />
         </div>
         <InstallatoreDetailActions installatore={installatore} />
       </header>

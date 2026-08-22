@@ -77,7 +77,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
             </h1>
             <div className="flex flex-wrap items-center gap-2">
               <StatoClienteBadge stato={cliente.Stato} />
-              <ClienteTagBadges clienteId={cliente.id} empty="" />
+              <ClienteTagBadges clienteId={cliente.id} empty="" animate />
             </div>
           </div>
         </div>

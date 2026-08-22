@@ -62,10 +62,19 @@ export function LeadTagBadges({
   leadId,
   empty = "—",
   max,
+  animate = false,
 }: {
   leadId: string
   empty?: string
   max?: number
+  /**
+   * Anima i badge alla comparsa. Spenta di default: nelle celle di tabella i
+   * badge si montano a decine insieme all'apertura della pagina, e le righe
+   * virtualizzate li rimontano a ogni scroll, quindi l'animazione diventa un
+   * crepitio continuo. Va accesa dove i tag sono pochi e il movimento segnala
+   * un'azione appena compiuta — cioè nelle intestazioni di dettaglio.
+   */
+  animate?: boolean
 }) {
   const { getLeadTags } = useTags()
   const tags = getLeadTags(leadId)
@@ -76,11 +85,15 @@ export function LeadTagBadges({
   const extra = max ? tags.length - shown.length : 0
   return (
     <div className="flex flex-wrap items-center gap-1">
-      {shown.map((tag) => (
-        <span key={tag.id} className="animate-in zoom-in-90 duration-150">
-          <TagBadge tag={tag} />
-        </span>
-      ))}
+      {shown.map((tag) =>
+        animate ? (
+          <span key={tag.id} className="animate-in zoom-in-90 duration-150">
+            <TagBadge tag={tag} />
+          </span>
+        ) : (
+          <TagBadge key={tag.id} tag={tag} />
+        ),
+      )}
       {extra > 0 ? (
         <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
           +{extra}

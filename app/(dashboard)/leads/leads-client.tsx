@@ -72,10 +72,15 @@ import { useTags } from "@/lib/tag-store"
 import { usePermissions } from "@/lib/permissions/provider"
 import { motion } from "framer-motion"
 import { useQueryClient } from "@tanstack/react-query"
+import {
+  LEADS_VIEW_COOKIE,
+  LEADS_VIEW_COOKIE_PATH,
+  serializeLeadViewPreferences,
+  type LeadViewPreferences,
+} from "@/lib/leads/view-preferences"
 import { leadsKeys } from "@/lib/leads/hooks"
 
-type LeadViewPreferences = {
-  version: 3
+type StoredLeadPreferences = {
   visibleCols: LeadColumnId[]
   columnWidths: Partial<Record<LeadColumnId, number>>
   density: Density
@@ -120,12 +125,20 @@ interface LeadsClientProps {
   initialLeads: LeadListResponse
   /** Statistiche header pre-caricate server-side. */
   initialStats: LeadStats
+  /**
+   * Preferenze di vista lette dal cookie lato server. Quando ci sono, il primo
+   * render (server e client) usa già le colonne dell'utente: senza, la tabella
+   * si disegnava con i default e saltava alla configurazione salvata solo a
+   * idratazione finita.
+   */
+  initialPreferences: StoredLeadPreferences | null
 }
 
 export function LeadsClient({
   initialSp,
   initialLeads,
   initialStats,
+  initialPreferences,
 }: LeadsClientProps) {
   const { tags, hydrateLeadTagIds } = useTags()
   const permissions = usePermissions()
@@ -147,15 +160,21 @@ export function LeadsClient({
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
   const [convertTarget, setConvertTarget] = useState<Lead | null>(null)
   const [visibleCols, setVisibleCols] = useState<LeadColumnId[]>(
-    DEFAULT_VISIBLE_COLUMNS,
+    initialPreferences?.visibleCols ?? DEFAULT_VISIBLE_COLUMNS,
   )
   const [columnWidths, setColumnWidths] = useState<
     Partial<Record<LeadColumnId, number>>
-  >({})
-  const [preferencesLoaded, setPreferencesLoaded] = useState(false)
+  >(initialPreferences?.columnWidths ?? {})
+  // Con le preferenze dal cookie non c'è nulla da caricare: lo stato è già
+  // quello definitivo fin dal primo render.
+  const [preferencesLoaded, setPreferencesLoaded] = useState(
+    initialPreferences != null,
+  )
   const [sortBy, setSortBy] = useState<LeadColumnId | null>("Ora creazione")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
-  const [density, setDensity] = useState<Density>("normale")
+  const [density, setDensity] = useState<Density>(
+    initialPreferences?.density ?? "normale",
+  )
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkEmailOpen, setBulkEmailOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -170,7 +189,13 @@ export function LeadsClient({
     [visibleCols],
   )
 
+  // Migrazione una tantum: chi ha ancora le preferenze solo in localStorage le
+  // vede applicate qui (un salto, l'ultimo), poi l'effetto di salvataggio qui
+  // sotto scrive il cookie e dal caricamento successivo il server disegna
+  // subito la vista giusta. Con il cookie già presente questo effetto non fa
+  // nulla: il cookie è la fonte autorevole.
   useEffect(() => {
+    if (initialPreferences) return
     let active = true
     queueMicrotask(() => {
       if (!active) return
@@ -199,21 +224,32 @@ export function LeadsClient({
     return () => {
       active = false
     }
-  }, [preferenceKey])
+  }, [initialPreferences, preferenceKey])
 
   useEffect(() => {
     if (!preferencesLoaded) return
     const preferences: LeadViewPreferences = {
       version: 3,
+      owner: preferenceOwner,
       visibleCols,
       columnWidths,
       density,
     }
     window.localStorage.setItem(preferenceKey, JSON.stringify(preferences))
+
+    // Stessa cosa nel cookie, che è ciò che il server legge al prossimo
+    // caricamento. Path=/leads per non spedirlo con ogni asset; un anno di
+    // durata, come una preferenza di interfaccia; SameSite=Lax perché non
+    // serve a niente in cross-site e Secure fuori da localhost.
+    const secure = window.location.protocol === "https:" ? "; Secure" : ""
+    document.cookie =
+      `${LEADS_VIEW_COOKIE}=${serializeLeadViewPreferences(preferences)}` +
+      `; Path=${LEADS_VIEW_COOKIE_PATH}; Max-Age=31536000; SameSite=Lax${secure}`
   }, [
     columnWidths,
     density,
     preferenceKey,
+    preferenceOwner,
     preferencesLoaded,
     visibleCols,
   ])

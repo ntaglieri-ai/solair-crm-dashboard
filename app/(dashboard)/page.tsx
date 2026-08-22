@@ -1,4 +1,3 @@
-import { Suspense } from "react"
 import Link from "next/link"
 import {
   ArrowRight,
@@ -674,37 +673,20 @@ function SuperadminDashboard({
   )
 }
 
-/**
- * Scheletro dei widget mentre i dati arrivano in streaming.
- *
- * L'intestazione è già a schermo quando questo compare: qui manca solo il
- * contenuto sotto. Le altezze ricalcano quelle reali dei riquadri, così
- * all'arrivo dei dati il layout non salta.
- */
-function DashboardWidgetsSkeleton() {
-  return (
-    <div className="flex flex-col gap-5" role="status" aria-label="Caricamento dati">
-      <div className="grid gap-4 md:grid-cols-3">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="h-[132px] animate-pulse rounded-xl bg-muted/70" />
-        ))}
-      </div>
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(350px,0.8fr)]">
-        <div className="h-[340px] animate-pulse rounded-xl bg-muted/70" />
-        <div className="h-[340px] animate-pulse rounded-xl bg-muted/70" />
-      </div>
-      <span className="sr-only">Caricamento dati in corso</span>
-    </div>
-  )
-}
-
 // --- Sezioni dati -----------------------------------------------------------
-// Ogni ruolo carica i propri dati DENTRO il proprio componente, non nella
-// pagina. Così la pagina può restituire subito intestazione e struttura, e i
-// widget arrivano in streaming dietro <Suspense>: prima il documento HTML
-// veniva emesso solo a query concluse, e il browser non poteva nemmeno
-// cominciare a scaricare il JavaScript (misurato in produzione: primo byte a
-// 725ms, prima richiesta JS a 1354ms).
+// Ogni ruolo carica i propri dati dentro il proprio componente: tiene i tre
+// rami separati e leggibili, senza la duplicazione di intestazione e layout che
+// c'era prima.
+//
+// NON sono dietro <Suspense>, deliberatamente. Con un boundary la pagina
+// emetteva il primo byte a 27ms invece di 725 — ma in navigazione interna React
+// monta il boundary e mostra il fallback, cioè un lampo di dashboard vuota
+// prima del contenuto. Provato: compare 4 volte su 4, e nemmeno il prefetch
+// all'hover lo evita, perché per una rotta dinamica non risolve il contenuto
+// sospeso. Gli header di routing non sono leggibili da headers() (Next li
+// rimuove), quindi non si può nemmeno distinguere il caricamento a freddo dalla
+// navigazione interna per attivare lo streaming solo nel primo.
+// Fra un primo byte più rapido e nessuno stato vuoto, qui vale il secondo.
 
 async function SuperadminSection() {
   const [data, bacheca] = await Promise.all([
@@ -833,6 +815,15 @@ export default async function DashboardPage() {
             ),
           }
 
+  const sezione =
+    role === "SUPERADMIN" ? (
+      <SuperadminSection />
+    ) : role === "AGENT" ? (
+      <AgentSection snapshot={permissions.snapshot} />
+    ) : (
+      <BusinessSection snapshot={permissions.snapshot} role={role} />
+    )
+
   return (
     <div className="mx-auto flex max-w-[1540px] flex-col gap-6">
       <Greeting
@@ -840,15 +831,7 @@ export default async function DashboardPage() {
         subtitle={intestazione.subtitle}
         action={intestazione.action}
       />
-      <Suspense fallback={<DashboardWidgetsSkeleton />}>
-        {role === "SUPERADMIN" ? (
-          <SuperadminSection />
-        ) : role === "AGENT" ? (
-          <AgentSection snapshot={permissions.snapshot} />
-        ) : (
-          <BusinessSection snapshot={permissions.snapshot} role={role} />
-        )}
-      </Suspense>
+      {sezione}
     </div>
   )
 }

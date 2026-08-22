@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import Link from "next/link"
 import {
   ArrowRight,
@@ -32,6 +33,7 @@ import { SystemRetryButton } from "@/components/dashboard/system-retry-actions"
 import { listBachecaMessaggiSafe } from "@/lib/bacheca/repository"
 import type { BachecaMessaggio } from "@/lib/bacheca/types"
 import { requirePage } from "@/lib/permissions/server"
+import type { PermissionSnapshot } from "@/lib/permissions/types"
 import {
   getAgentDashboardData,
   getDashboardData,
@@ -672,90 +674,132 @@ function SuperadminDashboard({
   )
 }
 
+/**
+ * Scheletro dei widget mentre i dati arrivano in streaming.
+ *
+ * L'intestazione è già a schermo quando questo compare: qui manca solo il
+ * contenuto sotto. Le altezze ricalcano quelle reali dei riquadri, così
+ * all'arrivo dei dati il layout non salta.
+ */
+function DashboardWidgetsSkeleton() {
+  return (
+    <div className="flex flex-col gap-5" role="status" aria-label="Caricamento dati">
+      <div className="grid gap-4 md:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="h-[132px] animate-pulse rounded-xl bg-muted/70" />
+        ))}
+      </div>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(350px,0.8fr)]">
+        <div className="h-[340px] animate-pulse rounded-xl bg-muted/70" />
+        <div className="h-[340px] animate-pulse rounded-xl bg-muted/70" />
+      </div>
+      <span className="sr-only">Caricamento dati in corso</span>
+    </div>
+  )
+}
+
+// --- Sezioni dati -----------------------------------------------------------
+// Ogni ruolo carica i propri dati DENTRO il proprio componente, non nella
+// pagina. Così la pagina può restituire subito intestazione e struttura, e i
+// widget arrivano in streaming dietro <Suspense>: prima il documento HTML
+// veniva emesso solo a query concluse, e il browser non poteva nemmeno
+// cominciare a scaricare il JavaScript (misurato in produzione: primo byte a
+// 725ms, prima richiesta JS a 1354ms).
+
+async function SuperadminSection() {
+  const [data, bacheca] = await Promise.all([
+    getSuperadminDashboardData(),
+    listBachecaMessaggiSafe(),
+  ])
+  return <SuperadminDashboard data={data} bacheca={bacheca} />
+}
+
+async function AgentSection({ snapshot }: { snapshot: PermissionSnapshot }) {
+  const [data, bacheca] = await Promise.all([
+    getAgentDashboardData(snapshot),
+    listBachecaMessaggiSafe(),
+  ])
+  return (
+    <>
+      <div className="grid gap-4 md:grid-cols-3">
+        <BigMetric icon={TrendingUp} value={data.counts.activeLeads} label="I tuoi lead attivi" tone="#315fc5" accent="pipeline personale" />
+        <BigMetric icon={UserRoundCheck} value={data.counts.clients} label="I tuoi clienti" tone="#20a47a" accent="portafoglio" />
+        <BigMetric icon={BellRing} value={data.counts.overdueTasks} label="Compiti scaduti" tone="#ef6a47" accent="urgenze" />
+      </div>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(350px,0.8fr)]">
+        <PremiumCard>
+          <ExecutiveSummary
+            total={data.upcomingTasks.length}
+            primary="Prossime azioni operative"
+            secondary={`${formatNumber(data.staleLeads.length)} lead da ricontattare`}
+            tone="#8b6bd6"
+          />
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-xl font-bold">
+              <CheckSquare className="size-5 text-[#8b6bd6]" />
+              I tuoi prossimi compiti
+            </h2>
+            <Link href="/compiti" className="dashboard-soft-link">
+              Apri
+              <ArrowRight className="size-4" />
+            </Link>
+          </div>
+          <TaskList tasks={data.upcomingTasks} />
+        </PremiumCard>
+        <PremiumCard className="flex flex-col">
+          <BachecaWidget initialItems={bacheca} />
+        </PremiumCard>
+      </div>
+      <PremiumCard>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-xl font-bold">
+            <KeyRound className="size-5 text-[#ef6a47]" />
+            Lead da ricontattare
+          </h2>
+          <span className="rounded-md bg-[#fff0ed] px-3 py-1.5 text-xs font-bold text-[#b83e35]">
+            {STALE_LEAD_DAYS}+ giorni
+          </span>
+        </div>
+        <LeadQueue leads={data.staleLeads} empty="Nessun lead fermo da ricontattare." />
+      </PremiumCard>
+    </>
+  )
+}
+
+async function BusinessSection({
+  snapshot,
+  role,
+}: {
+  snapshot: PermissionSnapshot
+  role: string
+}) {
+  const [data, bacheca, economic, semaphore] = await Promise.all([
+    getDashboardData(),
+    listBachecaMessaggiSafe(),
+    role === "DIRECTOR" || role === "ADMIN"
+      ? getEconomicWidgetData(snapshot)
+      : Promise.resolve(undefined),
+    role === "ADMIN" ? getSystemSemaphoreData() : Promise.resolve(undefined),
+  ])
+  return (
+    <BusinessDashboard
+      data={data}
+      role={role}
+      bacheca={bacheca}
+      economic={economic}
+      semaphore={semaphore}
+    />
+  )
+}
+
 export default async function DashboardPage() {
+  // requirePage passa dalla cache dello snapshot permessi: è veloce e non
+  // trattiene l'intestazione.
   const permissions = await requirePage("dashboard")
   const subject = permissions.snapshot.subject
   const role = subject.ruoloCode.toUpperCase()
 
-  if (role === "SUPERADMIN") {
-    const [data, bacheca] = await Promise.all([
-      getSuperadminDashboardData(),
-      listBachecaMessaggiSafe(),
-    ])
-    return (
-      <div className="mx-auto flex max-w-[1540px] flex-col gap-6">
-        <Greeting
-          name={subject.nome}
-          subtitle="Centro tecnico per account, permessi, automazioni e provisioning."
-        />
-        <SuperadminDashboard data={data} bacheca={bacheca} />
-      </div>
-    )
-  }
-
-  if (role === "AGENT") {
-    const [data, bacheca] = await Promise.all([
-      getAgentDashboardData(permissions.snapshot),
-      listBachecaMessaggiSafe(),
-    ])
-    return (
-      <div className="mx-auto flex max-w-[1540px] flex-col gap-6">
-        <Greeting
-          name={subject.nome}
-          subtitle="Priorità personali, compiti e comunicazioni operative."
-          action={
-            <Link href="/leads" className="dashboard-primary-action">
-              Apri i tuoi Lead
-              <ArrowRight className="size-4" />
-            </Link>
-          }
-        />
-        <div className="grid gap-4 md:grid-cols-3">
-          <BigMetric icon={TrendingUp} value={data.counts.activeLeads} label="I tuoi lead attivi" tone="#315fc5" accent="pipeline personale" />
-          <BigMetric icon={UserRoundCheck} value={data.counts.clients} label="I tuoi clienti" tone="#20a47a" accent="portafoglio" />
-          <BigMetric icon={BellRing} value={data.counts.overdueTasks} label="Compiti scaduti" tone="#ef6a47" accent="urgenze" />
-        </div>
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(350px,0.8fr)]">
-          <PremiumCard>
-            <ExecutiveSummary
-              total={data.upcomingTasks.length}
-              primary="Prossime azioni operative"
-              secondary={`${formatNumber(data.staleLeads.length)} lead da ricontattare`}
-              tone="#8b6bd6"
-            />
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="flex items-center gap-2 text-xl font-bold">
-                <CheckSquare className="size-5 text-[#8b6bd6]" />
-                I tuoi prossimi compiti
-              </h2>
-              <Link href="/compiti" className="dashboard-soft-link">
-                Apri
-                <ArrowRight className="size-4" />
-              </Link>
-            </div>
-            <TaskList tasks={data.upcomingTasks} />
-          </PremiumCard>
-          <PremiumCard className="flex flex-col">
-            <BachecaWidget initialItems={bacheca} />
-          </PremiumCard>
-        </div>
-        <PremiumCard>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-xl font-bold">
-              <KeyRound className="size-5 text-[#ef6a47]" />
-              Lead da ricontattare
-            </h2>
-            <span className="rounded-md bg-[#fff0ed] px-3 py-1.5 text-xs font-bold text-[#b83e35]">
-              {STALE_LEAD_DAYS}+ giorni
-            </span>
-          </div>
-          <LeadQueue leads={data.staleLeads} empty="Nessun lead fermo da ricontattare." />
-        </PremiumCard>
-      </div>
-    )
-  }
-
-  if (!BUSINESS_ROLES.has(role)) {
+  if (!BUSINESS_ROLES.has(role) && role !== "SUPERADMIN" && role !== "AGENT") {
     return (
       <div className="mx-auto flex max-w-[1540px] flex-col gap-6">
         <Greeting name={subject.nome} subtitle="Dashboard non configurata per questo ruolo." />
@@ -763,34 +807,48 @@ export default async function DashboardPage() {
     )
   }
 
-  const [data, bacheca, economic, semaphore] = await Promise.all([
-    getDashboardData(),
-    listBachecaMessaggiSafe(),
-    role === "DIRECTOR" || role === "ADMIN"
-      ? getEconomicWidgetData(permissions.snapshot)
-      : Promise.resolve(undefined),
-    role === "ADMIN" ? getSystemSemaphoreData() : Promise.resolve(undefined),
-  ])
+  const intestazione =
+    role === "SUPERADMIN"
+      ? {
+          subtitle: "Centro tecnico per account, permessi, automazioni e provisioning.",
+          action: undefined,
+        }
+      : role === "AGENT"
+        ? {
+            subtitle: "Priorità personali, compiti e comunicazioni operative.",
+            action: (
+              <Link href="/leads" className="dashboard-primary-action">
+                Apri i tuoi Lead
+                <ArrowRight className="size-4" />
+              </Link>
+            ),
+          }
+        : {
+            subtitle: "Dati correnti, priorità e comunicazioni operative.",
+            action: (
+              <Link href="/leads" className="dashboard-primary-action">
+                Apri area Lead
+                <ArrowRight className="size-4" />
+              </Link>
+            ),
+          }
 
   return (
     <div className="mx-auto flex max-w-[1540px] flex-col gap-6">
       <Greeting
         name={subject.nome}
-        subtitle="Dati correnti, priorità e comunicazioni operative."
-        action={
-          <Link href="/leads" className="dashboard-primary-action">
-            Apri area Lead
-            <ArrowRight className="size-4" />
-          </Link>
-        }
+        subtitle={intestazione.subtitle}
+        action={intestazione.action}
       />
-      <BusinessDashboard
-        data={data}
-        role={role}
-        bacheca={bacheca}
-        economic={economic}
-        semaphore={semaphore}
-      />
+      <Suspense fallback={<DashboardWidgetsSkeleton />}>
+        {role === "SUPERADMIN" ? (
+          <SuperadminSection />
+        ) : role === "AGENT" ? (
+          <AgentSection snapshot={permissions.snapshot} />
+        ) : (
+          <BusinessSection snapshot={permissions.snapshot} role={role} />
+        )}
+      </Suspense>
     </div>
   )
 }

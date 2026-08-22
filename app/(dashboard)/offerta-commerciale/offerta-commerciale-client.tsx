@@ -1260,10 +1260,19 @@ function VistaCatalogoSheet({ vista, onChiudi, catalogo, offerte }: { vista: Vis
   </Sheet>
 }
 
-export function OffertaCommercialeClient() {
-  const [data, setData] = useState<OffertaCommercialePayload | null>(null)
-  const [catalogo, setCatalogo] = useState<CatalogoCommerciale | null>(null)
-  const [loading, setLoading] = useState(true)
+export function OffertaCommercialeClient({
+  initialData = null,
+}: {
+  initialData?: OffertaCommercialePayload | null
+}) {
+  // Con il precaricamento server-side il primo render ha già il contenuto:
+  // niente spinner su schermo vuoto. Lo spinner resta solo per il caso in cui
+  // il precaricamento non sia riuscito e i dati vadano chiesti dal client.
+  const [data, setData] = useState<OffertaCommercialePayload | null>(initialData)
+  const [catalogo, setCatalogo] = useState<CatalogoCommerciale | null>(
+    initialData?.catalogo ?? null,
+  )
+  const [loading, setLoading] = useState(initialData == null)
   const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -1297,7 +1306,13 @@ export function OffertaCommercialeClient() {
     } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { void load() }, [load])
+  // Salta la fetch iniziale quando la pagina è arrivata già popolata dal
+  // server; `load` resta per i refresh dopo salvataggi e sincronizzazioni.
+  const hasInitialData = initialData != null
+  useEffect(() => {
+    if (hasInitialData) return
+    void load()
+  }, [hasInitialData, load])
 
   const saveCatalog = async () => {
     if (!catalogo) return

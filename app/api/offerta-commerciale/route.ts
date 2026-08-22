@@ -4,14 +4,13 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { deleteFile } from "@/lib/nextcloud/webdav"
 import { commercialNextcloudUser } from "@/lib/offerta-commerciale/nextcloud-user"
 import {
-  loadOffertaCommerciale,
+  buildOffertaCommercialePayload,
   normalizeAccessori,
   normalizeAccumuli,
   normalizeCodiciSconto,
   normalizeFotovoltaico,
   normalizeSconti,
   normalizeSpecificheProdotto,
-  OFFERTA_COMMERCIALE_ROOT,
 } from "@/lib/offerta-commerciale/store"
 
 export async function GET() {
@@ -20,40 +19,8 @@ export async function GET() {
   const supabase = createAdminClient()
   if (!supabase) return NextResponse.json({ error: "Supabase admin non configurato" }, { status: 503 })
   try {
-    const data = await loadOffertaCommerciale(supabase)
     const canManage = guard.permissions.canAction("offerta_commerciale.manage")
-    const catalogo = data.cataloghi.find((item) => item.stato === "pubblicato")
-      ?? (canManage ? data.cataloghi.find((item) => item.stato === "bozza") : null)
-      ?? data.cataloghi[0]
-      ?? null
-    return NextResponse.json({
-      offerte: data.offerte,
-      documenti: data.documenti,
-      catalogo,
-      versioni: data.cataloghi.map(({
-        id,
-        nome,
-        stato,
-        valido_dal,
-        valido_al,
-        fonte_path,
-        fonte_fingerprint,
-        pubblicato_at,
-        aggiornato_at,
-      }) => ({
-        id,
-        nome,
-        stato,
-        valido_dal,
-        valido_al,
-        fonte_path,
-        fonte_fingerprint,
-        pubblicato_at,
-        aggiornato_at,
-      })),
-      canManage,
-      nextcloudRoot: OFFERTA_COMMERCIALE_ROOT,
-    })
+    return NextResponse.json(await buildOffertaCommercialePayload(supabase, canManage))
   } catch (error) {
     const message = error instanceof Error ? error.message : "Errore lettura offerta commerciale"
     return NextResponse.json({ error: message }, { status: 500 })

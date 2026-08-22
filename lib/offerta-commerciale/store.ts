@@ -4,6 +4,7 @@ import type {
   CatalogoCommerciale,
   CodiceSconto,
   MatriceAccumulo,
+  OffertaCommercialePayload,
   OffertaPeriodo,
   PannelloSpec,
   PrezzoFotovoltaico,
@@ -186,6 +187,53 @@ export function normalizeSpecificheProdotto(value: unknown, current: unknown): S
   const base = isPlainObject(current) ? { ...current } : {}
   if (!isPlainObject(value)) return base as SpecificheProdotto
   return { ...base, ...value, pannelli: normalizePannelli(value.pannelli) }
+}
+
+/**
+ * Costruisce il payload completo della pagina Offerta Commerciale.
+ * Usata sia dalla route GET sia dal Server Component della pagina, che lo
+ * precarica: prima la pagina era interamente client e mostrava uno spinner su
+ * schermo vuoto fino al termine della fetch post-mount.
+ */
+export async function buildOffertaCommercialePayload(
+  supabase: SupabaseClient,
+  canManage: boolean,
+): Promise<OffertaCommercialePayload> {
+  const data = await loadOffertaCommerciale(supabase)
+  const catalogo =
+    data.cataloghi.find((item) => item.stato === "pubblicato")
+    ?? (canManage ? data.cataloghi.find((item) => item.stato === "bozza") : null)
+    ?? data.cataloghi[0]
+    ?? null
+
+  return {
+    offerte: data.offerte,
+    documenti: data.documenti,
+    catalogo,
+    versioni: data.cataloghi.map(({
+      id,
+      nome,
+      stato,
+      valido_dal,
+      valido_al,
+      fonte_path,
+      fonte_fingerprint,
+      pubblicato_at,
+      aggiornato_at,
+    }) => ({
+      id,
+      nome,
+      stato,
+      valido_dal,
+      valido_al,
+      fonte_path,
+      fonte_fingerprint,
+      pubblicato_at,
+      aggiornato_at,
+    })),
+    canManage,
+    nextcloudRoot: OFFERTA_COMMERCIALE_ROOT,
+  }
 }
 
 export async function loadOffertaCommerciale(supabase: SupabaseClient) {

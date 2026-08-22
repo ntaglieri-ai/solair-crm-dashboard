@@ -138,7 +138,14 @@ export async function DELETE(
   if (guard.response) return guard.response
 
   const { id } = await params
-  const supabase = await createClient()
+  const admin = createAdminClient()
+  if (!admin) {
+    console.error(`[utenti] eliminazione utente ${id} fallita: service role non configurata`)
+    return NextResponse.json(
+      { error: "Configurazione server incompleta: eliminazione account non disponibile." },
+      { status: 500 },
+    )
+  }
 
   // Recupera lo userid Nextcloud e l'auth_user_id PRIMA di cancellare la riga
   // utenti: la FK di nextcloud_credentials e' `on delete cascade`, quindi la
@@ -146,20 +153,45 @@ export async function DELETE(
   // NC orfano senza modo di risalire a quale account rimuovere. null = utente
   // mai provisionato (Nextcloud) / mai collegato (Auth).
   const ncUsername = await getNextcloudUsername(id)
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await admin
     .from("utenti")
     .select("auth_user_id")
     .eq("id", id)
     .maybeSingle()
+
+  if (existingError) {
+    console.error(`[utenti] lettura utente ${id} prima della delete fallita:`, existingError)
+    return NextResponse.json(
+      { error: accountUserErrorMessage(existingError) },
+      { status: 500 },
+    )
+  }
+
+  if (!existing) {
+    return NextResponse.json({ error: "Utente non trovato o già eliminato." }, { status: 404 })
+  }
+
   const authUserId = existing?.auth_user_id ?? null
 
-  const { error } = await supabase.from("utenti").delete().eq("id", id)
+  const { data: deletedRows, error } = await admin
+    .from("utenti")
+    .delete()
+    .eq("id", id)
+    .select("id")
 
   if (error) {
     console.error(`[utenti] eliminazione utente ${id} fallita:`, error)
     return NextResponse.json(
       { error: accountUserErrorMessage(error) },
       { status: 500 },
+    )
+  }
+
+  if (!deletedRows?.length) {
+    console.error(`[utenti] eliminazione utente ${id} non ha rimosso nessuna riga`)
+    return NextResponse.json(
+      { error: "Eliminazione account non confermata dal database." },
+      { status: 409 },
     )
   }
 

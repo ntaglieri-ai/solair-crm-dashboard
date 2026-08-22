@@ -57,8 +57,12 @@ function LoginForm() {
       return
     }
 
+    // Niente router.refresh() qui: invalidava la cache del router e faceva
+    // rifare TUTTE le rotte gia' prefetchate dalla sidebar. Misurato in
+    // produzione: un solo login innescava 16 render server (le 8 voci di menu,
+    // ciascuna due volte) invece di 8. La destinazione e' comunque
+    // force-dynamic, quindi il push porta gia' dati freschi.
     router.push(postLoginRedirect)
-    router.refresh()
   }
 
   async function handleForgot(e: React.FormEvent) {

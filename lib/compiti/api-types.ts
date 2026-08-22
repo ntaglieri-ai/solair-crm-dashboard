@@ -55,6 +55,80 @@ export const DEFAULT_COMPITI_PARAMS: CompitiListParams = {
   overdue: false,
 }
 
+// --- Parametri delle due colonne della kanban --------------------------------
+// La vista kanban è quella predefinita, ma le sue due query partivano solo dopo
+// il mount e senza initialData: per ~450ms la bacheca mostrava tutte le colonne
+// a zero con "Trascina qui", cioè affermava "non hai compiti" per poi
+// smentirsi. I costruttori stanno qui perché li usino sia il Server Component
+// (per precaricare) sia il client (per la chiave della query): se divergessero,
+// initialData non verrebbe mai riconosciuto e il precarico sarebbe inutile.
+
+export const KANBAN_OPEN_PAGE_SIZE = 200
+
+/** Sottoinsieme di CompitoFilterState che incide sulle query della kanban. */
+export type KanbanFilterInput = {
+  search: string
+  priorita: string
+  proprietario: string
+  sede: string
+  scadenzaDa: string
+  scadenzaA: string
+  overdue: boolean
+}
+
+/**
+ * Filtri al primo caricamento. Deve restare allineato a
+ * DEFAULT_COMPITO_FILTERS in components/compiti/compito-filters.tsx: quello
+ * vive in un componente client e importarlo qui trascinerebbe il modulo client
+ * dentro al Server Component.
+ */
+export const DEFAULT_KANBAN_FILTERS: KanbanFilterInput = {
+  search: "",
+  priorita: "all",
+  proprietario: "all",
+  sede: "all",
+  scadenzaDa: "",
+  scadenzaA: "",
+  overdue: false,
+}
+
+export function buildKanbanOpenParams(
+  f: KanbanFilterInput,
+  stati: StatoCompito[],
+): CompitiListParams {
+  return {
+    page: 1,
+    pageSize: KANBAN_OPEN_PAGE_SIZE,
+    sortBy: "Data di scadenza",
+    sortDir: "asc",
+    search: f.search,
+    stati,
+    priorita: f.priorita,
+    proprietario: f.proprietario,
+    sede: f.sede,
+    scadenzaDa: f.scadenzaDa,
+    scadenzaA: f.scadenzaA,
+    overdue: f.overdue,
+  }
+}
+
+export function buildKanbanDoneParams(f: KanbanFilterInput): CompitiListParams {
+  return {
+    page: 1,
+    pageSize: 25,
+    sortBy: "Data di scadenza",
+    sortDir: "desc",
+    search: f.search,
+    stati: ["Completato"],
+    priorita: f.priorita,
+    proprietario: f.proprietario,
+    sede: f.sede,
+    scadenzaDa: f.scadenzaDa,
+    scadenzaA: f.scadenzaA,
+    overdue: false,
+  }
+}
+
 export function buildCompitiSearchParams(p: CompitiListParams): URLSearchParams {
   const sp = new URLSearchParams()
   sp.set("page", String(p.page))

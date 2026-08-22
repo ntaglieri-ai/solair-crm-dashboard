@@ -37,6 +37,11 @@ import {
 import { cn } from "@/lib/utils"
 import { type Compito, type StatoCompito, OPEN_TASK_STATI } from "@/lib/mock-data"
 import {
+  buildKanbanDoneParams,
+  buildKanbanOpenParams,
+  KANBAN_OPEN_PAGE_SIZE,
+} from "@/lib/compiti/api-types"
+import {
   CompitoFilters,
   DEFAULT_COMPITO_FILTERS,
   type CompitoFilterState,
@@ -89,12 +94,23 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
   return debounced
 }
 
+type KanbanInitial = { sp: string; data: CompitiListResponse }
+
 interface CompitiClientProps {
   initialSp: string
   initialData: CompitiListResponse
+  /** Colonne aperte della kanban precaricate dal server (vista predefinita). */
+  initialKanbanOpen: KanbanInitial
+  /** Colonna "Completato" precaricata dal server. */
+  initialKanbanDone: KanbanInitial
 }
 
-export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
+export function CompitiClient({
+  initialSp,
+  initialData,
+  initialKanbanOpen,
+  initialKanbanDone,
+}: CompitiClientProps) {
   const qc = useQueryClient()
 
   // --- Filter / sort / pagination state ---
@@ -143,15 +159,9 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
   // La board mostra sempre i compiti aperti più urgenti (fino a 200) e le
   // chiusure più recenti, applicando i filtri della barra (ricerca, priorità,
   // proprietario, sede, date). Gli stati sono fissati per colonna.
-  const KANBAN_OPEN_PAGE_SIZE = 200
-  const kanbanOpenParams = useMemo<CompitiListParams>(
+  const kanbanFilters = useMemo(
     () => ({
-      page: 1,
-      pageSize: KANBAN_OPEN_PAGE_SIZE,
-      sortBy: "Data di scadenza",
-      sortDir: "asc",
       search: debouncedSearch,
-      stati: OPEN_TASK_STATI,
       priorita: filters.priorita,
       proprietario: filters.proprietario,
       sede: filters.sede,
@@ -161,27 +171,21 @@ export function CompitiClient({ initialSp, initialData }: CompitiClientProps) {
     }),
     [debouncedSearch, filters],
   )
-  const kanbanDoneParams = useMemo<CompitiListParams>(
-    () => ({
-      page: 1,
-      pageSize: 25,
-      sortBy: "Data di scadenza",
-      sortDir: "desc",
-      search: debouncedSearch,
-      stati: ["Completato"],
-      priorita: filters.priorita,
-      proprietario: filters.proprietario,
-      sede: filters.sede,
-      scadenzaDa: filters.scadenzaDa,
-      scadenzaA: filters.scadenzaA,
-      overdue: false,
-    }),
-    [debouncedSearch, filters],
+  const kanbanOpenParams = useMemo(
+    () => buildKanbanOpenParams(kanbanFilters, [...OPEN_TASK_STATI]),
+    [kanbanFilters],
   )
-  const { data: kanbanOpenData } = useCompitiQuery(kanbanOpenParams, undefined, {
+  const kanbanDoneParams = useMemo(
+    () => buildKanbanDoneParams(kanbanFilters),
+    [kanbanFilters],
+  )
+  // initialData dal server: la bacheca nasce popolata invece di dichiarare zero
+  // per mezzo secondo. Il gancio lo applica solo se la chiave coincide, quindi
+  // appena l'utente filtra o cerca si torna alla fetch normale.
+  const { data: kanbanOpenData } = useCompitiQuery(kanbanOpenParams, initialKanbanOpen, {
     enabled: view === "kanban",
   })
-  const { data: kanbanDoneData } = useCompitiQuery(kanbanDoneParams, undefined, {
+  const { data: kanbanDoneData } = useCompitiQuery(kanbanDoneParams, initialKanbanDone, {
     enabled: view === "kanban",
   })
   const kanbanRows = useMemo(

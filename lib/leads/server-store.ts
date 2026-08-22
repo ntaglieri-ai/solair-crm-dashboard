@@ -249,8 +249,12 @@ export async function getAllLeads(filters?: {
 
   const { data, error } = await query
   if (error) {
+    // NON restituire una lista vuota: la pagina mostrerebbe "nessun lead",
+    // indistinguibile da "non ne hai". Successo il 22/08/2026 durante il
+    // riavvio del database per l'upgrade del piano: la lista risultava vuota
+    // e sembrava che i dati fossero spariti. Meglio far emergere l'errore.
     console.error("[server-store] getAllLeads error:", error.message)
-    return []
+    throw new Error(`Lettura lead non riuscita: ${error.message}`)
   }
   const rows = (data as unknown as Record<string, unknown>[]).map(mapRow)
   const ids = rows.map((row) => row.id)
@@ -358,8 +362,9 @@ export async function getTotalCount(filters?: {
 
   const { count, error } = await query
   if (error) {
+    // Come sopra: uno 0 finto farebbe leggere "0 lead disponibili".
     console.error("[server-store] getTotalCount error:", error.message)
-    return 0
+    throw new Error(`Conteggio lead non riuscito: ${error.message}`)
   }
   return count ?? 0
 }
@@ -426,7 +431,7 @@ export async function getLeadsByIds(ids: Iterable<string>): Promise<Lead[]> {
     .in("id", idArray)
   if (error) {
     console.error("[server-store] getLeadsByIds error:", error.message)
-    return []
+    throw new Error(`Lettura lead non riuscita: ${error.message}`)
   }
   return (data as unknown as Record<string, unknown>[]).map(mapRow)
 }

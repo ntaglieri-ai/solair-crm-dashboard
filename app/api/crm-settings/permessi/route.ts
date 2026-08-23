@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextResponse, after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import {
   PAGINE,
@@ -9,6 +9,7 @@ import {
 } from "@/lib/ruoli-data"
 import { invalidateRolePermissionCache } from "@/lib/permissions/load-permissions"
 import { requireApiAction } from "@/lib/permissions/server"
+import { attoreDaPermessi, logAudit } from "@/lib/audit/log"
 
 type PatchPayload = {
   ruoloId: string
@@ -224,6 +225,17 @@ export async function POST(request: Request) {
   }
   invalidateRolePermissionCache(ruolo.id as string)
 
+  after(() =>
+    logAudit({
+      tipo_evento: "operazione_admin",
+      attore: attoreDaPermessi(guard.permissions),
+      modulo: "permessi",
+      record_id: ruolo.id as string,
+      descrizione: `Nuovo ruolo creato — ${ruolo.nome}`,
+      request,
+    }),
+  )
+
   return NextResponse.json({
     ruolo: {
       id: ruolo.id,
@@ -257,5 +269,37 @@ export async function PATCH(request: Request) {
   }
   invalidateRolePermissionCache(ruoloId)
 
+  after(async () =>
+    logAudit({
+      tipo_evento: "operazione_admin",
+      attore: attoreDaPermessi(guard.permissions),
+      modulo: "permessi",
+      record_id: ruoloId,
+      descrizione: await descriviRuolo(ruoloId),
+      request,
+    }),
+  )
+
   return NextResponse.json({ ok: true })
+}
+
+/**
+ * Nome del ruolo per la descrizione dell'evento. La matrice dei permessi e'
+ * troppo grande per finire in `descrizione`: chi indaga parte da qui e apre il
+ * ruolo per il dettaglio.
+ */
+async function descriviRuolo(ruoloId: string): Promise<string> {
+  try {
+    const supabase = await createClient()
+    const { data } = await supabase
+      .from("ruoli")
+      .select("nome")
+      .eq("id", ruoloId)
+      .maybeSingle()
+    return data?.nome
+      ? `Permessi del ruolo "${data.nome}" aggiornati`
+      : "Permessi di un ruolo aggiornati"
+  } catch {
+    return "Permessi di un ruolo aggiornati"
+  }
 }

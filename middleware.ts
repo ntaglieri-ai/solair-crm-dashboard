@@ -86,6 +86,9 @@ export async function middleware(request: NextRequest) {
     "/oauth/consent",
     "/api/auth/session/touch",
     "/api/auth/password-reset",
+    // Registra l'esito dei tentativi di login nell'audit log: un login fallito
+    // per definizione non ha sessione, quindi deve poter passare senza gate.
+    "/api/auth/audit-login",
     "/api/keep-warm",
     "/api/cron",
     // Webhook Meta Lead Ads: la route gestisce internamente verifica

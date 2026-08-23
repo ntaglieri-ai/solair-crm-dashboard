@@ -10,6 +10,23 @@ import { Label } from "@/components/ui/label"
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react"
 import { AuthShell } from "@/components/auth/auth-shell"
 
+/**
+ * Notifica al server l'esito del tentativo di accesso, per l'audit log.
+ *
+ * `keepalive` serve al caso "success": subito dopo parte router.push e una
+ * fetch normale verrebbe annullata dalla navigazione, perdendo proprio gli
+ * accessi riusciti. Non viene attesa e non puo' fallire in modo visibile: il
+ * login non deve dipendere dalla registrazione.
+ */
+function recordLoginAttempt(esito: "success" | "failed", email: string) {
+  return fetch("/api/auth/audit-login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ esito, email }),
+    keepalive: true,
+  }).catch(() => undefined)
+}
+
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -44,6 +61,9 @@ function LoginForm() {
     })
 
     if (error) {
+      // Registrazione del tentativo fallito: non blocca il ritorno all'utente
+      // e non ne cambia il messaggio, che resta volutamente generico.
+      void recordLoginAttempt("failed", email)
       setError("Email o password non corretti.")
       setLoading(false)
       return
@@ -56,6 +76,8 @@ function LoginForm() {
       setLoading(false)
       return
     }
+
+    void recordLoginAttempt("success", email)
 
     // Niente router.refresh() qui: invalidava la cache del router e faceva
     // rifare TUTTE le rotte gia' prefetchate dalla sidebar. Misurato in

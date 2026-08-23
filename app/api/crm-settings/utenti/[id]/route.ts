@@ -1,6 +1,7 @@
 import { NextResponse, after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { requireApiAction } from "@/lib/permissions/server"
+import { attoreDaPermessi, logAudit } from "@/lib/audit/log"
 import { invalidatePermissionSnapshotCache } from "@/lib/permissions/load-permissions"
 import {
   accountUserErrorMessage,
@@ -123,6 +124,19 @@ export async function PATCH(
     })
   }
 
+  const campiToccati = Object.keys(patch).filter((c) => c !== "ruolo_id")
+  after(() =>
+    logAudit({
+      tipo_evento: "operazione_admin",
+      attore: attoreDaPermessi(guard.permissions),
+      modulo: "utenti",
+      record_id: data.id,
+      descrizione: `Account ${data.nome} aggiornato — ${campiToccati.join(", ") || "nessun campo"}`,
+      dati_dopo: patch,
+      request,
+    }),
+  )
+
   // Ruolo, sede e flag attivo entrano tutti nello snapshot dei permessi:
   // dopo una modifica quello in cache non è più valido.
   invalidatePermissionSnapshotCache()
@@ -131,7 +145,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const guard = await requireApiAction("crm_settings.account.users.manage")
@@ -155,7 +169,8 @@ export async function DELETE(
   const ncUsername = await getNextcloudUsername(id)
   const { data: existing, error: existingError } = await admin
     .from("utenti")
-    .select("auth_user_id")
+    // nome ed email servono all'audit: dopo la delete non sono piu' leggibili.
+    .select("auth_user_id, nome, email")
     .eq("id", id)
     .maybeSingle()
 
@@ -194,6 +209,18 @@ export async function DELETE(
       { status: 409 },
     )
   }
+
+  after(() =>
+    logAudit({
+      tipo_evento: "operazione_admin",
+      attore: attoreDaPermessi(guard.permissions),
+      modulo: "utenti",
+      record_id: id,
+      descrizione: `Account eliminato — ${existing.nome ?? "senza nome"} (${existing.email ?? "senza email"})`,
+      dati_prima: { nome: existing.nome, email: existing.email },
+      request,
+    }),
+  )
 
   // Elimina l'account Nextcloud e l'account Supabase Auth associati, in
   // BACKGROUND via after(): la riga utenti e' gia' cancellata sopra (la

@@ -1,7 +1,9 @@
-import { NextResponse } from "next/server"
+import { NextResponse, after } from "next/server"
 import type { Lead } from "@/lib/mock-data"
 import { updateLeadRecord, deleteLeadRecords } from "@/lib/leads/repository"
 import { requireApiRecord } from "@/lib/permissions/server"
+import { attoreDaPermessi, logAudit } from "@/lib/audit/log"
+import { campiModificati, descriviModifica, diffCampi, etichettaRecord } from "@/lib/audit/describe"
 
 export async function PATCH(
   request: Request,
@@ -16,11 +18,32 @@ export async function PATCH(
   if (!updated) {
     return NextResponse.json({ error: "Lead non trovato" }, { status: 404 })
   }
+
+  // Non si rilegge il lead prima di scrivere: sarebbe una query in piu' su un
+  // percorso caldo (ogni cambio di stato dalla kanban passa di qui). La patch
+  // e' gia' il delta inviato dal client, quindi basta a dire cosa e' cambiato.
+  const campi = campiModificati(null, patch as Record<string, unknown>)
+  after(() =>
+    logAudit({
+      tipo_evento: "modifica_record",
+      attore: attoreDaPermessi(guard.permissions),
+      modulo: "lead",
+      record_id: id,
+      descrizione: descriviModifica(
+        "Lead",
+        etichettaRecord(updated as unknown as Record<string, unknown>, ["Nome Lead"]),
+        campi,
+      ),
+      dati_dopo: diffCampi(patch as Record<string, unknown>, campi),
+      request,
+    }),
+  )
+
   return NextResponse.json(updated)
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const guard = await requireApiRecord("lead", "delete")
@@ -31,5 +54,17 @@ export async function DELETE(
   if (removed === 0) {
     return NextResponse.json({ error: "Lead non trovato" }, { status: 404 })
   }
+
+  after(() =>
+    logAudit({
+      tipo_evento: "eliminazione",
+      attore: attoreDaPermessi(guard.permissions),
+      modulo: "lead",
+      record_id: id,
+      descrizione: `Lead ${id} eliminato`,
+      request,
+    }),
+  )
+
   return NextResponse.json({ removed })
 }

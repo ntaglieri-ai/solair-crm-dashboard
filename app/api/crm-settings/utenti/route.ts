@@ -1,6 +1,7 @@
 import { NextResponse, after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { requireApiAction } from "@/lib/permissions/server"
+import { attoreDaPermessi, logAudit } from "@/lib/audit/log"
 import {
   accountUserErrorMessage,
   resolveRole,
@@ -100,6 +101,18 @@ export async function POST(request: Request) {
       { status: 500 },
     )
   }
+
+  after(() =>
+    logAudit({
+      tipo_evento: "operazione_admin",
+      attore: attoreDaPermessi(guard.permissions),
+      modulo: "utenti",
+      record_id: data.id,
+      descrizione: `Nuovo account creato — ${data.nome} (${data.email}), ruolo ${ruolo.code}`,
+      dati_dopo: { nome: data.nome, email: data.email, ruolo: ruolo.code, sede: data.sede },
+      request,
+    }),
+  )
 
   // Provisioning Nextcloud + Auth (creazione account speculare con la stessa
   // password temporanea, app-password WebDAV cifrata, invio email di

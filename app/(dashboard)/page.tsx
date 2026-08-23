@@ -626,7 +626,7 @@ const SUPERADMIN_SHORTCUTS = [
   { title: "Permission Management", href: "/crm-settings/account/permessi", icon: ShieldCheck, tone: "#20a47a" },
   { title: "Import Zoho T0", href: "/crm-settings/system/import-export/zoho-t0", icon: FileUp, tone: "#b8273d" },
   { title: "Manutenzione", href: "/crm-settings/maintenance/health", icon: HeartPulse, tone: "#ef6a47" },
-  { title: "File Manager", href: "/crm-settings/file-manager/nextcloud", icon: FileCog, tone: "#2b9fb3" },
+  { title: "File Manager", href: "/crm-settings/maintenance/file-manager", icon: FileCog, tone: "#2b9fb3" },
   { title: "Bacheca", href: "#bacheca", icon: Megaphone, tone: "#f2b84b" },
 ]
 

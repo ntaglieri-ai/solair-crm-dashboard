@@ -74,8 +74,6 @@ export const ROUTE_PAGE_MAP: Record<string, string> = {
   "/crm-settings/maintenance/meta": "crm_settings.system.meta",
   "/crm-settings/maintenance/backup": "crm_settings.system.backup",
   "/crm-settings/maintenance/file-manager": "crm_settings.file_manager",
-  "/crm-settings/maintenance/storage": "crm_settings.file_manager",
-  "/crm-settings/file-manager": "crm_settings.file_manager",
 }
 
 export const MODULE_KEYS = [

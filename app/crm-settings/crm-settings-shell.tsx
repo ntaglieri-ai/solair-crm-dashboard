@@ -27,7 +27,6 @@ import {
 const SECTIONS: Record<string, { label: string; layer: CrmSettingsLayer }> = {
   account: { label: "Admin & Sicurezza", layer: "account-security" },
   maintenance: { label: "Manutenzione", layer: "maintenance" },
-  "file-manager": { label: "Integrazioni", layer: "integrations" },
   system: { label: "Azienda", layer: "company" },
 }
 

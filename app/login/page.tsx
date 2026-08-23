@@ -3,29 +3,11 @@
 
 import { Suspense, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { createBrowserClient } from "@supabase/ssr"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react"
 import { AuthShell } from "@/components/auth/auth-shell"
-
-/**
- * Notifica al server l'esito del tentativo di accesso, per l'audit log.
- *
- * `keepalive` serve al caso "success": subito dopo parte router.push e una
- * fetch normale verrebbe annullata dalla navigazione, perdendo proprio gli
- * accessi riusciti. Non viene attesa e non puo' fallire in modo visibile: il
- * login non deve dipendere dalla registrazione.
- */
-function recordLoginAttempt(esito: "success" | "failed", email: string) {
-  return fetch("/api/auth/audit-login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ esito, email }),
-    keepalive: true,
-  }).catch(() => undefined)
-}
 
 function LoginForm() {
   const router = useRouter()
@@ -45,39 +27,39 @@ function LoginForm() {
   const [mode, setMode] = useState<"login" | "forgot">("login")
   const [resetMessage, setResetMessage] = useState<string | null>(null)
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (error) {
-      // Registrazione del tentativo fallito: non blocca il ritorno all'utente
-      // e non ne cambia il messaggio, che resta volutamente generico.
-      void recordLoginAttempt("failed", email)
-      setError("Email o password non corretti.")
+    // L'autenticazione non avviene piu' nel browser. Passando da
+    // /api/auth/login il server e' finalmente SUL percorso del login, ed e'
+    // questo che rende applicabili "Tentativi di login massimi" e "Blocco IP":
+    // finche' signInWithPassword partiva da qui, nessuna impostazione poteva
+    // fermare un tentativo. La stessa risposta imposta i cookie sb-* e quelli
+    // di sessione CRM, quindi non serve piu' la chiamata separata a
+    // /api/auth/session/touch.
+    let res: Response
+    try {
+      res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
+    } catch {
+      setError("Impossibile contattare il server. Controlla la connessione e riprova.")
       setLoading(false)
       return
     }
 
-    const sessionResponse = await fetch("/api/auth/session/touch", { method: "POST" })
-    if (!sessionResponse.ok) {
-      await supabase.auth.signOut()
-      setError("Accesso riuscito, ma non è stato possibile inizializzare la sessione CRM.")
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null
+      // Il messaggio arriva dal server: distingue "credenziali errate" da "IP
+      // bloccato", che l'utente ha diritto di sapere per non riprovare a vuoto.
+      setError(body?.error ?? "Email o password non corretti.")
       setLoading(false)
       return
     }
-
-    void recordLoginAttempt("success", email)
 
     // Niente router.refresh() qui: invalidava la cache del router e faceva
     // rifare TUTTE le rotte gia' prefetchate dalla sidebar. Misurato in

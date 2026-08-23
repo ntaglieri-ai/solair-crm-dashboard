@@ -10,13 +10,25 @@ type CookieToSet = {
   options: CookieOptions
 }
 
-export async function createClient() {
+/**
+ * `headers` inoltra intestazioni alla API di Supabase Auth.
+ *
+ * Serve a un caso solo, ma importante: da quando il login avviene lato server
+ * (/api/auth/login), la richiesta che GoTrue vede parte dal nostro server, non
+ * dal browser. Senza inoltro, auth.sessions registrerebbe "node" come
+ * user_agent e l'IP di uscita del server come indirizzo — e la tabella
+ * "Sessioni attive" mostrerebbe la stessa postazione fittizia per tutti.
+ * Passando lo User-Agent e l'X-Forwarded-For originali, la riga torna a
+ * descrivere la postazione reale di chi si e' collegato.
+ */
+export async function createClient(options?: { headers?: Record<string, string> }) {
   const cookieStore = await cookies()
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      ...(options?.headers ? { global: { headers: options.headers } } : {}),
       cookies: {
         getAll() {
           return cookieStore.getAll()

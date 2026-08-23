@@ -3,8 +3,10 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 import {
   clearCrmSessionCookies,
+  CRM_IDLE_TIMEOUT_COOKIE,
   CRM_LAST_ACTIVITY_COOKIE,
   CRM_SESSION_COOKIE,
+  idleTimeoutFromCookie,
   MUST_CHANGE_PASSWORD_COOKIE,
   setCrmSessionCookies,
 } from "@/lib/auth/session-policy"
@@ -84,6 +86,9 @@ export async function middleware(request: NextRequest) {
   const publicRoutes = [
     "/login",
     "/oauth/consent",
+    // Autenticazione: chi la chiama non ha ancora una sessione, per definizione.
+    // La rotta si difende da sola (throttle per IP, blocco IP, soglia tentativi).
+    "/api/auth/login",
     "/api/auth/session/touch",
     "/api/auth/password-reset",
     // Registra l'esito dei tentativi di login nell'audit log: un login fallito
@@ -173,6 +178,12 @@ export async function middleware(request: NextRequest) {
       shouldCacheCookie = true
     }
 
+    // Il timeout non si rilegge dal database a ogni richiesta: e' gia' stato
+    // risolto da /api/auth/login o dal keepalive e stampato nel cookie.
+    const idleTimeout = idleTimeoutFromCookie(
+      request.cookies.get(CRM_IDLE_TIMEOUT_COOKIE)?.value,
+    )
+
     const setCacheCookie = (response: NextResponse) => {
       if (shouldCacheCookie) {
         response.cookies.set(MCP_COOKIE, mustChangePassword ? "1" : "0", {
@@ -183,7 +194,7 @@ export async function middleware(request: NextRequest) {
           path: "/",
         })
       }
-      setCrmSessionCookies(response)
+      setCrmSessionCookies(response, idleTimeout)
       return response
     }
 

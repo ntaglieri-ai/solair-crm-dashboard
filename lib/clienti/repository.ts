@@ -9,11 +9,13 @@ import type {
   StatoCompito,
 } from "@/lib/mock-data"
 import type {
+  ClientiListItem,
   ClientiListParams,
   ClientiListResponse,
 } from "@/lib/clienti/api-types"
 import { CLIENTI_RECORD_COLUMNS, CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
 import { applicaTagItalia } from "@/lib/clienti/tag-italia"
+import { DEFAULT_CLIENTI_PARAMS } from "@/lib/clienti/api-types"
 
 // Colonne proiettate in lettura — mai SELECT *.
 const LIST_COLUMNS = [
@@ -115,6 +117,7 @@ function mapRow(row: Record<string, unknown>): ClienteRecord {
 
 export async function queryClienti(
   params: ClientiListParams,
+  options?: { ids?: string[] },
 ): Promise<ClientiListResponse> {
   const supabase = await createClient()
   const sortCol = (params.sortBy && SORT_COLUMN[params.sortBy]) || "updated_at"
@@ -156,6 +159,13 @@ export async function queryClienti(
     // quasi sempre null e un valore non-uuid faceva errare l'intera query.
     listQ = listQ.eq("installatore", params.installatore)
     countQ = countQ.eq("installatore", params.installatore)
+  }
+  // Restringe a una selezione esplicita di id (usato solo dall'export di una
+  // selezione). Passa dagli stessi filtri della lista, cosi' un cliente che
+  // l'utente non potrebbe comunque vedere non esce dall'export.
+  if (options?.ids) {
+    listQ = listQ.in("id", options.ids)
+    countQ = countQ.in("id", options.ids)
   }
 
   const [{ data, error }, { count, error: countError }] = await Promise.all([
@@ -389,4 +399,71 @@ export async function deleteClienteRecords(ids: string[]): Promise<number> {
     .in("id", ids)
   if (error) throw new Error(`deleteClienteRecords: ${error.message}`)
   return count ?? 0
+}
+
+// ----------------------------------------------------------------------------
+// Export CSV — stesso contratto del modulo Lead (vedi lib/leads/repository.ts
+// per il ragionamento sul tetto). Qui si riusa queryClienti a pagine grandi
+// invece di riscrivere la query: la lista porta con se' i tag e il badge
+// attivita', che nel CSV servono, e la tabella e' piccola (16 righe reali al
+// 23/08/2026), quindi il costo di qualche COUNT(*) in piu' e' irrilevante.
+// ----------------------------------------------------------------------------
+
+export const EXPORT_MAX_ROWS = 5000
+const EXPORT_CHUNK = 500
+
+export interface ExportQueryResult<T> {
+  rows: T[]
+  total: number
+  truncated: boolean
+  limit: number
+}
+
+export async function queryClientiForExport(
+  params: ClientiListParams,
+): Promise<ExportQueryResult<ClientiListItem>> {
+  const rows: ClientiListItem[] = []
+  let total = 0
+
+  for (let page = 1; ; page += 1) {
+    const res = await queryClienti({ ...params, page, pageSize: EXPORT_CHUNK })
+    total = res.total
+    rows.push(...res.rows)
+    if (res.rows.length < EXPORT_CHUNK) break
+    if (rows.length >= Math.min(total, EXPORT_MAX_ROWS)) break
+  }
+
+  const capped = rows.slice(0, EXPORT_MAX_ROWS)
+  return { rows: capped, total, truncated: total > capped.length, limit: EXPORT_MAX_ROWS }
+}
+
+/**
+ * Export di una selezione esplicita: gli id vengono risolti sul database, non
+ * filtrando lato client una pagina gia' troncata.
+ */
+export async function queryClientiByIdsForExport(
+  ids: string[],
+): Promise<ExportQueryResult<ClientiListItem>> {
+  const unique = Array.from(new Set(ids)).slice(0, EXPORT_MAX_ROWS)
+  if (unique.length === 0) {
+    return { rows: [], total: 0, truncated: false, limit: EXPORT_MAX_ROWS }
+  }
+
+  const rows: ClientiListItem[] = []
+  // .in() finisce nell'URL della richiesta PostgREST: si spezza la lista per
+  // non superarne la lunghezza massima.
+  for (let i = 0; i < unique.length; i += 200) {
+    const res = await queryClienti(
+      { ...DEFAULT_CLIENTI_PARAMS, page: 1, pageSize: EXPORT_CHUNK },
+      { ids: unique.slice(i, i + 200) },
+    )
+    rows.push(...res.rows)
+  }
+
+  return {
+    rows,
+    total: unique.length,
+    truncated: rows.length < unique.length,
+    limit: EXPORT_MAX_ROWS,
+  }
 }

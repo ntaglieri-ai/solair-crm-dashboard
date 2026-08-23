@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react"
 import { IconSettings } from "@tabler/icons-react"
@@ -51,6 +51,10 @@ import { BulkSelectionBar } from "@/components/shared/bulk-selection-bar"
 import { LeadImportDialog } from "@/components/leads/lead-import-dialog"
 import { NewClienteDialog } from "@/components/clienti/new-cliente-dialog"
 import {
+  ExportTruncatoDialog,
+  type ExportTruncatoInfo,
+} from "@/components/shared/export-truncato-dialog"
+import {
   type ClientiListParams,
   type ClientiListResponse,
   INITIAL_PAGE_SIZE,
@@ -64,6 +68,8 @@ import {
   useDeleteClienti,
   bulkUpdateClienti,
   fetchClientiForExport,
+  fetchClientiByIdsForExport,
+  type ClientiExportResult,
 } from "@/lib/clienti/hooks"
 
 const ROWS_ITEMS: Record<string, string> = {
@@ -121,6 +127,9 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
   const [importOpen, setImportOpen] = useState(false)
   const [onlyDuplicates, setOnlyDuplicates] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  // Export troncato: l'avviso e il download che parte solo dopo conferma.
+  const [exportTruncato, setExportTruncato] = useState<ExportTruncatoInfo | null>(null)
+  const pendingExport = useRef<(() => void) | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ClienteRecord | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkEmailOpen, setBulkEmailOpen] = useState(false)
@@ -351,24 +360,49 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
     })
   }
 
-  const handleBulkExport = () => {
-    downloadClientiCsv(selectedRows, `clienti-selezione-${selectedRows.length}.csv`)
-    toast.success("Esportazione avviata", {
-      description: `${selectedRows.length} clienti esportati in CSV.`,
-    })
-  }
-
-  const handleExportFiltered = async () => {
+  // Anche l'export della selezione passa ora dal server: prima costruiva il CSV
+  // dalle righe gia' in pagina, quindi non lasciava alcuna traccia nell'audit
+  // log di un'estrazione di dati personali. Il tetto e' molto piu' alto di
+  // prima, ma quando c'e' un troncamento va detto prima del download.
+  const runExport = async (
+    fetcher: () => Promise<ClientiExportResult>,
+    filename: (n: number) => string,
+  ) => {
     try {
-      const rows = await fetchClientiForExport(params)
-      downloadClientiCsv(rows, `clienti-filtrati-${rows.length}.csv`)
-      toast.success("Esportazione avviata", {
-        description: `${rows.length} clienti filtrati esportati.`,
-      })
+      const result = await fetcher()
+      const download = () => {
+        downloadClientiCsv(result.rows, filename(result.rows.length))
+        toast.success("Esportazione avviata", {
+          description: `${result.rows.length} clienti esportati in CSV.`,
+        })
+      }
+      if (result.truncated) {
+        setExportTruncato({
+          esportate: result.rows.length,
+          totali: result.total,
+          limite: result.limit,
+          entita: "clienti",
+        })
+        pendingExport.current = download
+        return
+      }
+      download()
     } catch {
       toast.error("Errore nell'esportazione")
     }
   }
+
+  const handleBulkExport = () =>
+    runExport(
+      () => fetchClientiByIdsForExport(selectedIds),
+      (n) => `clienti-selezione-${n}.csv`,
+    )
+
+  const handleExportFiltered = () =>
+    runExport(
+      () => fetchClientiForExport(params),
+      (n) => `clienti-filtrati-${n}.csv`,
+    )
 
   const confirmBulkDelete = () => {
     const ids = Array.from(selected)
@@ -622,6 +656,20 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
           onSelect={() => setBulkEmailOpen(true)}
         />
       </BulkSelectionBar>
+
+      {/* Avviso export incompleto */}
+      <ExportTruncatoDialog
+        info={exportTruncato}
+        onCancel={() => {
+          pendingExport.current = null
+          setExportTruncato(null)
+        }}
+        onConfirm={() => {
+          pendingExport.current?.()
+          pendingExport.current = null
+          setExportTruncato(null)
+        }}
+      />
 
       {/* Dialog invio email di massa */}
       <BulkEmailDialog

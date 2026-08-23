@@ -171,13 +171,35 @@ export async function bulkUpdateClienti(
   )
 }
 
-// Export CSV: fetch la pagina corrente con tutti i filtri attivi.
+// Export CSV.
+//
+// Prima si chiamava /api/clienti con pageSize:200, cioe' il tetto della lista,
+// e si trattava il risultato come l'insieme completo. Ora l'export ha il suo
+// endpoint: legge tutte le righe filtrate, dichiara quante ne corrispondevano
+// e scrive la riga `export_dati` nell'audit log.
+export interface ClientiExportResult {
+  rows: ClientiListItem[]
+  total: number
+  /** true quando `rows` e' meno di `total`: il CSV non e' completo. */
+  truncated: boolean
+  limit: number
+}
+
 export async function fetchClientiForExport(
   params: ClientiListParams,
-): Promise<ClientiListItem[]> {
-  const sp = buildClientiSearchParams({ ...params, page: 1, pageSize: 200 })
-  const res = await fetch(`/api/clienti?${sp.toString()}`)
+): Promise<ClientiExportResult> {
+  const sp = buildClientiSearchParams({ ...params, page: 1 })
+  const res = await fetch(`/api/clienti/export?${sp.toString()}`)
   if (!res.ok) throw new Error("Esportazione non riuscita")
-  const data = (await res.json()) as ClientiListResponse
-  return data.rows
+  return (await res.json()) as ClientiExportResult
+}
+
+/** Export di una selezione: gli id vanno al server (e finiscono nell'audit). */
+export async function fetchClientiByIdsForExport(
+  ids: string[],
+): Promise<ClientiExportResult> {
+  const sp = new URLSearchParams({ ids: ids.join(",") })
+  const res = await fetch(`/api/clienti/export?${sp.toString()}`)
+  if (!res.ok) throw new Error("Esportazione non riuscita")
+  return (await res.json()) as ClientiExportResult
 }

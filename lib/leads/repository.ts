@@ -192,3 +192,84 @@ export async function getFullLeadById(id: string): Promise<Lead | undefined> {
 }
 
 export { type LeadColumnId }
+
+// ----------------------------------------------------------------------------
+// Export CSV — lettura completa, non una pagina.
+//
+// Perche' esiste una funzione dedicata invece di riusare queryLeads: quella
+// ricalcola getTotalCount a ogni chiamata, quindi un export a chunk pagherebbe
+// una COUNT(*) per chunk. Qui il totale si legge una volta sola e il resto sono
+// solo range successivi sulla stessa query.
+//
+// Il tetto non e' una scelta estetica: la risposta viaggia in JSON verso il
+// browser e leads ha ~9.3k righe. A 26 colonne per riga si sta sotto il MB ogni
+// ~2.5k righe, quindi 5000 e' il punto in cui l'export resta un download e non
+// una pagina che si pianta. Oltre quel numero il chiamante NON riceve un
+// silenzio: riceve truncated=true e la differenza esatta, e sta a lui dirlo
+// all'utente prima di scaricare (era esattamente il bug del vecchio
+// pageSize:200 fisso, che troncava senza dire niente).
+// ----------------------------------------------------------------------------
+
+export const EXPORT_MAX_ROWS = 5000
+const EXPORT_CHUNK = 1000
+
+export interface ExportQueryResult<T> {
+  rows: T[]
+  /** Righe che i filtri selezionano davvero, anche quelle non esportate. */
+  total: number
+  truncated: boolean
+  limit: number
+}
+
+export async function queryLeadsForExport(
+  params: LeadListParams,
+): Promise<ExportQueryResult<LeadListItem>> {
+  const filters = {
+    stato: params.stato,
+    sede: params.sede,
+    commerciale: params.commerciale,
+    origine: params.origine,
+    score: params.score,
+    search: params.search,
+    advanced: params.advanced,
+  }
+
+  const total = await getTotalCount(filters)
+  const target = Math.min(total, EXPORT_MAX_ROWS)
+
+  const rows: LeadListItem[] = []
+  for (let offset = 0; offset < target; offset += EXPORT_CHUNK) {
+    const chunk = await getAllLeads({
+      ...filters,
+      sortBy: params.sortBy,
+      sortDir: params.sortDir,
+      limit: Math.min(EXPORT_CHUNK, target - offset),
+      offset,
+    })
+    if (chunk.length === 0) break
+    for (const lead of chunk) rows.push(project(lead, ["*"]))
+  }
+
+  return { rows, total, truncated: total > rows.length, limit: EXPORT_MAX_ROWS }
+}
+
+/**
+ * Export di una selezione esplicita. Sostituisce il vecchio "scarica tutto e
+ * poi filtra lato client", che perdeva ogni riga selezionata oltre la 200esima
+ * senza accorgersene. Qui gli id vanno al database, quindi la selezione esce
+ * intera qualunque pagina la abbia prodotta.
+ */
+export async function queryLeadsByIdsForExport(
+  ids: string[],
+): Promise<ExportQueryResult<LeadListItem>> {
+  const unique = Array.from(new Set(ids)).slice(0, EXPORT_MAX_ROWS)
+  const rows: LeadListItem[] = []
+  // .in() con liste lunghe finisce nell'URL della richiesta PostgREST: si
+  // spezza per non superare la lunghezza massima.
+  for (let i = 0; i < unique.length; i += 200) {
+    const chunk = await getLeadsByIds(unique.slice(i, i + 200))
+    for (const lead of chunk) rows.push(project(lead, ["*"]))
+  }
+  const total = new Set(ids).size
+  return { rows, total, truncated: total > rows.length, limit: EXPORT_MAX_ROWS }
+}

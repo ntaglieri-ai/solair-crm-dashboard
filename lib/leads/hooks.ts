@@ -269,19 +269,41 @@ export function useBulkLeads() {
 }
 
 // ----------------------------------------------------------------------------
-// Export CSV: scarica TUTTE le righe corrispondenti ai filtri (fields="*").
+// Export CSV.
+//
+// La versione precedente chiamava /api/leads con pageSize:200 e trattava la
+// risposta come "tutte le righe filtrate". Non lo era: 200 e' il tetto che il
+// route handler impone alla lista (parseLeadsSearchParams), quindi con piu' di
+// 200 lead a filtro il CSV usciva troncato e l'utente non lo sapeva. Ora si
+// passa da /api/leads/export, che legge l'insieme a chunk, dice sempre quante
+// righe corrispondevano davvero e registra l'estrazione nell'audit log.
 // ----------------------------------------------------------------------------
+
+export interface LeadExportResult {
+  rows: LeadListItem[]
+  /** Righe che il filtro (o la selezione) seleziona davvero. */
+  total: number
+  /** true quando `rows` e' meno di `total`: il CSV non e' completo. */
+  truncated: boolean
+  /** Tetto lato server, per poter dire all'utente perche' e' stato troncato. */
+  limit: number
+}
+
 export async function fetchLeadsForExport(
   params: LeadListParams,
-): Promise<LeadListItem[]> {
-  const sp = buildLeadsSearchParams({
-    ...params,
-    page: 1,
-    pageSize: 200,
-    fields: ["*"],
-  })
-  const res = await fetch(`/api/leads?${sp.toString()}`)
+): Promise<LeadExportResult> {
+  const sp = buildLeadsSearchParams({ ...params, page: 1, fields: ["*"] })
+  const res = await fetch(`/api/leads/export?${sp.toString()}`)
   if (!res.ok) throw new Error("Esportazione non riuscita")
-  const data = (await res.json()) as LeadListResponse
-  return data.rows
+  return (await res.json()) as LeadExportResult
+}
+
+/** Export di una selezione: gli id vanno al server, non si filtra una pagina. */
+export async function fetchLeadsByIdsForExport(
+  ids: string[],
+): Promise<LeadExportResult> {
+  const sp = new URLSearchParams({ ids: ids.join(",") })
+  const res = await fetch(`/api/leads/export?${sp.toString()}`)
+  if (!res.ok) throw new Error("Esportazione non riuscita")
+  return (await res.json()) as LeadExportResult
 }

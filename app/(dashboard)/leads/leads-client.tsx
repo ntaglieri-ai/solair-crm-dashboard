@@ -47,6 +47,10 @@ import {
 import { LeadActionsMenu } from "@/components/leads/lead-actions-menu"
 import { LeadImportDialog } from "@/components/leads/lead-import-dialog"
 import {
+  ExportTruncatoDialog,
+  type ExportTruncatoInfo,
+} from "@/components/shared/export-truncato-dialog"
+import {
   AdvancedFilters,
   EMPTY_ADVANCED,
   type AdvancedFilterState,
@@ -67,6 +71,8 @@ import {
   useConvertLead,
   useBulkLeads,
   fetchLeadsForExport,
+  fetchLeadsByIdsForExport,
+  type LeadExportResult,
 } from "@/lib/leads/hooks"
 import { useTags } from "@/lib/tag-store"
 import { usePermissions } from "@/lib/permissions/provider"
@@ -155,6 +161,9 @@ export function LeadsClient({
   const [advanced, setAdvanced] = useState<AdvancedFilterState>(EMPTY_ADVANCED)
   const [onlyDuplicates, setOnlyDuplicates] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  // Export troncato: l'avviso e il download che parte solo dopo conferma.
+  const [exportTruncato, setExportTruncato] = useState<ExportTruncatoInfo | null>(null)
+  const pendingExport = useRef<(() => void) | null>(null)
   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
   const [page, setPage] = useState(1)
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
@@ -568,31 +577,48 @@ export function LeadsClient({
     )
   }
 
-  const handleBulkExport = async () => {
+  // Un export che tronca in silenzio e' peggio di un export che fallisce: il
+  // file sembra completo. Quindi si scarica solo se l'insieme e' intero, e
+  // altrimenti si passa dal dialog che dice quante righe mancano.
+  const runExport = async (
+    fetcher: () => Promise<LeadExportResult>,
+    filename: (n: number) => string,
+  ) => {
     try {
-      const all = await fetchLeadsForExport(params)
-      const sel = new Set(selectedIds)
-      const rows = all.filter((r) => sel.has(r.id))
-      downloadLeadsCsv(rows, `lead-selezione-${rows.length}.csv`)
-      toast.success("Esportazione avviata", {
-        description: `${rows.length} lead esportati in CSV.`,
-      })
+      const result = await fetcher()
+      const download = () => {
+        downloadLeadsCsv(result.rows, filename(result.rows.length))
+        toast.success("Esportazione avviata", {
+          description: `${result.rows.length} lead esportati in CSV.`,
+        })
+      }
+      if (result.truncated) {
+        setExportTruncato({
+          esportate: result.rows.length,
+          totali: result.total,
+          limite: result.limit,
+          entita: "lead",
+        })
+        pendingExport.current = download
+        return
+      }
+      download()
     } catch {
       toast.error("Esportazione non riuscita")
     }
   }
 
-  const handleExportFiltered = async () => {
-    try {
-      const rows = await fetchLeadsForExport(params)
-      downloadLeadsCsv(rows, `lead-filtrati-${rows.length}.csv`)
-      toast.success("Esportazione avviata", {
-        description: `${rows.length} lead filtrati esportati.`,
-      })
-    } catch {
-      toast.error("Esportazione non riuscita")
-    }
-  }
+  const handleBulkExport = () =>
+    runExport(
+      () => fetchLeadsByIdsForExport(selectedIds),
+      (n) => `lead-selezione-${n}.csv`,
+    )
+
+  const handleExportFiltered = () =>
+    runExport(
+      () => fetchLeadsForExport(params),
+      (n) => `lead-filtrati-${n}.csv`,
+    )
 
   const confirmBulkDelete = () => {
     const n = selected.size
@@ -934,6 +960,20 @@ export function LeadsClient({
         onOpenChange={setBulkEmailOpen}
         recordTipo="lead"
         recordIds={selectedIds}
+      />
+
+      {/* Avviso export incompleto */}
+      <ExportTruncatoDialog
+        info={exportTruncato}
+        onCancel={() => {
+          pendingExport.current = null
+          setExportTruncato(null)
+        }}
+        onConfirm={() => {
+          pendingExport.current?.()
+          pendingExport.current = null
+          setExportTruncato(null)
+        }}
       />
 
       {/* Dialog elimina bulk */}

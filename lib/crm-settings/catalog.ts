@@ -7,7 +7,6 @@ import {
   Building2,
   DatabaseBackup,
   FileCog,
-  GitBranch,
   FileUp,
   KeyRound,
   ListChecks,
@@ -19,7 +18,6 @@ import {
   ScrollText,
   ShieldCheck,
   Users,
-  Workflow,
 } from "lucide-react"
 
 export type CrmSettingsLayer =
@@ -166,26 +164,6 @@ export const CRM_SETTINGS_CATALOG: CrmSettingsCatalogItem[] = [
     href: "/crm-settings/system/valori",
     pageKey: "crm_settings.system.valori",
     icon: ListChecks,
-    status: "active",
-  },
-  {
-    id: "assignment-rules",
-    section: "organization",
-    title: "Regole di assegnazione",
-    description: "Distribuzione lead, proprietari e logiche operative",
-    href: "/crm-settings/system/regole",
-    pageKey: "crm_settings.system.regole",
-    icon: GitBranch,
-    status: "active",
-  },
-  {
-    id: "workflows",
-    section: "organization",
-    title: "Flussi operativi",
-    description: "Automazioni CRM, stati e processi interni",
-    href: "/crm-settings/system/flussi",
-    pageKey: "crm_settings.system.flussi",
-    icon: Workflow,
     status: "active",
   },
   {

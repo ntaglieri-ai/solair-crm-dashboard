@@ -58,8 +58,6 @@ export default function SystemSettingsLayout({
         : [
             "/crm-settings/system/attributi",
             "/crm-settings/system/valori",
-            "/crm-settings/system/regole",
-            "/crm-settings/system/flussi",
             "/crm-settings/system/import-export",
           ].includes(pathname)
           ? { label: "Configurazione CRM", layer: "crm-config" as const }

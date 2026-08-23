@@ -138,7 +138,7 @@ const COMMUNICATION_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
 
 const CRM_CONFIG_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
   .filter((item) =>
-    ["attributes", "default-values", "assignment-rules", "workflows", "import-export"].includes(item.id),
+    ["attributes", "default-values", "import-export"].includes(item.id),
   )
   .map((item) => ({
     icon: item.icon,

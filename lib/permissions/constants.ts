@@ -30,8 +30,6 @@ export const PAGE_KEYS = [
   "crm_settings.system.comunicazioni",
   "crm_settings.system.attributi",
   "crm_settings.system.valori",
-  "crm_settings.system.regole",
-  "crm_settings.system.flussi",
   "crm_settings.system.roberta",
   "crm_settings.system.import_export",
   "crm_settings.system.zoho_t0",
@@ -65,8 +63,6 @@ export const ROUTE_PAGE_MAP: Record<string, string> = {
   "/crm-settings/system/comunicazioni": "crm_settings.system.comunicazioni",
   "/crm-settings/system/attributi": "crm_settings.system.attributi",
   "/crm-settings/system/valori": "crm_settings.system.valori",
-  "/crm-settings/system/regole": "crm_settings.system.regole",
-  "/crm-settings/system/flussi": "crm_settings.system.flussi",
   "/crm-settings/system/roberta": "crm_settings.system.roberta",
   "/crm-settings/system/import-export": "crm_settings.system.import_export",
   "/crm-settings/system/import-export/zoho-t0": "crm_settings.system.zoho_t0",
@@ -124,8 +120,6 @@ export const ACTION_KEYS = [
   "clienti.tags.edit",
   "installatori.tags.edit",
   "lead.default_values.manage",
-  "lead.assignment_rules.manage",
-  "lead.workflows.manage",
   "lead.fields.view",
   "lead.fields.create",
   "lead.fields.edit",
@@ -138,29 +132,21 @@ export const ACTION_KEYS = [
   "clienti.fields.edit",
   "clienti.fields.delete",
   "clienti.default_values.manage",
-  "clienti.assignment_rules.manage",
-  "clienti.workflows.manage",
   "compiti.fields.view",
   "compiti.fields.create",
   "compiti.fields.edit",
   "compiti.fields.delete",
   "compiti.default_values.manage",
-  "compiti.assignment_rules.manage",
-  "compiti.workflows.manage",
   "scadenze.fields.view",
   "scadenze.fields.create",
   "scadenze.fields.edit",
   "scadenze.fields.delete",
   "scadenze.default_values.manage",
-  "scadenze.assignment_rules.manage",
-  "scadenze.workflows.manage",
   "installatori.fields.view",
   "installatori.fields.create",
   "installatori.fields.edit",
   "installatori.fields.delete",
   "installatori.default_values.manage",
-  "installatori.assignment_rules.manage",
-  "installatori.workflows.manage",
   // Gestione della Bacheca aziendale (crea/elimina annuncio) nel widget di
   // dashboard. Tenuta separata dal ruolo apposta: il futuro flag SUPERADMIN
   // "solo tecnico" si implementera' negando questa chiave, senza toccare il
@@ -297,8 +283,6 @@ export function buildDefaultPermissionSnapshot(params?: {
       "crm_settings.system.comunicazioni",
       "crm_settings.system.attributi",
       "crm_settings.system.valori",
-      "crm_settings.system.regole",
-      "crm_settings.system.flussi",
       "crm_settings.system.roberta",
       "crm_settings.system.make",
       "crm_settings.system.meta",
@@ -330,8 +314,6 @@ export function buildDefaultPermissionSnapshot(params?: {
     for (const moduleKey of MODULE_KEYS) {
       records[moduleKey].import = true
       actions[`${moduleKey}.default_values.manage`] = true
-      actions[`${moduleKey}.assignment_rules.manage`] = true
-      actions[`${moduleKey}.workflows.manage`] = true
       fields[moduleKey] = roleFields[moduleKey] ?? { "*": "editable" }
       scopes[moduleKey] = "all"
     }
@@ -360,9 +342,9 @@ export function buildDefaultPermissionSnapshot(params?: {
       "crm_settings.system.sedi",
       "crm_settings.system.comunicazioni",
     ])
-    // Documenti in sola lettura; Automazioni (flussi/make) in lettura; CRM
-    // Settings limitato a sezioni operative; Manutenzione negata.
-    grantPages("r", ["documenti", "crm_settings.system.flussi", "crm_settings.system.make", "crm_settings.system.aspetto"])
+    // Documenti in sola lettura; Make in lettura; CRM Settings limitato a
+    // sezioni operative; Manutenzione negata.
+    grantPages("r", ["documenti", "crm_settings.system.make", "crm_settings.system.aspetto"])
     grantRecords(["lead", "clienti", "compiti", "scadenze"], [
       "view",
       "create",

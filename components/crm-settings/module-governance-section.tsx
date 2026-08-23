@@ -4,10 +4,8 @@ import { useRouter } from "next/navigation"
 import {
   ArrowLeftRight,
   ChevronRight,
-  GitBranch,
   ListFilter,
   Settings2,
-  Workflow,
 } from "lucide-react"
 import { usePermissions } from "@/lib/permissions/provider"
 
@@ -27,22 +25,6 @@ const ITEMS = [
     route: "/crm-settings/system/valori",
     action: "default_values.manage",
     icon: ListFilter,
-  },
-  {
-    id: "assignment",
-    label: "Regole di assegnazione",
-    description: "Criteri automatici specifici del modulo",
-    route: "/crm-settings/system/regole",
-    action: "assignment_rules.manage",
-    icon: GitBranch,
-  },
-  {
-    id: "workflows",
-    label: "Flussi di lavoro",
-    description: "Trigger e azioni eseguiti sugli eventi del modulo",
-    route: "/crm-settings/system/flussi",
-    action: "workflows.manage",
-    icon: Workflow,
   },
   {
     id: "transfer",

@@ -2,8 +2,6 @@ export const SYSTEM_SETTING_KEYS = [
   "system.sedi",
   "system.attributi",
   "system.valori",
-  "system.regole",
-  "system.flussi",
   "system.communication",
   "company.profile",
   "company.integrations.make",

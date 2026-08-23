@@ -207,49 +207,6 @@ export const valoriPerModulo: Record<ModuloValori, CampoValori[]> = {
   ],
 }
 
-// --- Sezione 4: Regole di assegnazione --------------------------------------
-
-export interface RegolaCondizione {
-  campo: string
-  operatore: string
-  valore: string
-}
-
-export interface RegolaAssegnazione {
-  id: string
-  nome: string
-  attiva: boolean
-  modulo: string
-  condizioni: RegolaCondizione[]
-  assegna_a: string
-}
-
-export const regoleIniziali: RegolaAssegnazione[] = []
-
-export const UTENTI_ASSEGNABILI: string[] = []
-
-// --- Sezione 5: Flussi di lavoro --------------------------------------------
-
-export type WorkflowTrigger = "creazione" | "modifica" | "data" | "manuale"
-
-export const WORKFLOW_TRIGGER_LABEL: Record<WorkflowTrigger, string> = {
-  creazione: "Creazione",
-  modifica: "Modifica",
-  data: "Data",
-  manuale: "Manuale",
-}
-
-export interface Workflow {
-  id: string
-  nome: string
-  attivo: boolean
-  modulo: string
-  trigger: WorkflowTrigger
-  azioni: string[]
-}
-
-export const workflowsIniziali: Workflow[] = []
-
 // --- Sezione 7: Integrazione Make -------------------------------------------
 
 export interface ScenarioMake {

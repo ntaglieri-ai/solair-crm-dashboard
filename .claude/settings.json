@@ -88,7 +88,10 @@
       "Bash(mongosh:*)",
       "Bash(code:*)",
       "Bash(open:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(vercel env pull:*)",
+      "Bash(vercel:*)",
+      "Bash(supabase:*)"
     ],
     "deny": [
       "Bash(rm -rf:*)",
@@ -97,6 +100,6 @@
       "Bash(git push -f:*)",
       "Bash(dd:*)",
       "Bash(mkfs:*)"
-    ]
+     ]
   }
 }

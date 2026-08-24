@@ -4,21 +4,19 @@ function SkeletonLine({ className = "" }: { className?: string }) {
 
 export default function CrmSettingsLoading() {
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-center gap-2">
-        <SkeletonLine className="h-4 w-24" />
-        <SkeletonLine className="h-4 w-4 rounded-full" />
-        <SkeletonLine className="h-4 w-36" />
-      </div>
-
+    <div>
       <div className="flex flex-col gap-6 lg:flex-row">
-        <aside className="lg:w-60 lg:shrink-0">
-          <SkeletonLine className="mb-4 h-10 w-full" />
-          <div className="flex flex-col gap-2">
-            <SkeletonLine className="h-10 w-full" />
-            <SkeletonLine className="h-10 w-11/12" />
-            <SkeletonLine className="h-10 w-10/12" />
-            <SkeletonLine className="h-10 w-9/12" />
+        {/* Stessa scatola della sidebar di sezione, per non far saltare il layout. */}
+        <aside className="lg:w-64 lg:shrink-0">
+          <div className="overflow-hidden rounded-xl border border-white/70 bg-white/82 shadow-[0_18px_45px_rgb(30_58_95/8%)] ring-1 ring-slate-900/[0.03]">
+            <div className="border-b border-slate-200/70 bg-[linear-gradient(135deg,#f8fbff_0%,#eef5ff_54%,#f6fffc_100%)] px-3 py-3">
+              <SkeletonLine className="h-6 w-32" />
+            </div>
+            <div className="flex flex-col gap-1 p-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <SkeletonLine key={i} className="h-11 w-full" />
+              ))}
+            </div>
           </div>
         </aside>
 

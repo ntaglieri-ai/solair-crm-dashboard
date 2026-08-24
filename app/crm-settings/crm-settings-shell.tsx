@@ -7,7 +7,6 @@ import { ArrowLeft } from "lucide-react"
 import {
   CrmSettingsLauncherProvider,
   useCrmSettingsLauncher,
-  type CrmSettingsLayer,
 } from "@/lib/crm-settings-launcher"
 import { CrmSettingsSidebar } from "@/components/dashboard/crm-settings-sidebar"
 import {
@@ -19,39 +18,7 @@ import {
   CrmSettingsRouteProgress,
   useCrmSettingsNavigation,
 } from "@/components/dashboard/crm-settings-navigation"
-import {
-  CRM_SETTINGS_PAGE_TITLES,
-  crmSettingsItemForPath,
-} from "@/lib/crm-settings/catalog"
-
-const SECTIONS: Record<string, { label: string; layer: CrmSettingsLayer }> = {
-  account: { label: "Admin & Sicurezza", layer: "account-security" },
-  maintenance: { label: "Manutenzione", layer: "maintenance" },
-  system: { label: "Azienda", layer: "company" },
-}
-
-function settingsGroupForItem(item: ReturnType<typeof crmSettingsItemForPath> | undefined) {
-  if (!item) return null
-  if (["company", "sites", "appearance"].includes(item.id)) {
-    return { label: "Azienda", layer: "company" as CrmSettingsLayer }
-  }
-  if (item.id === "communication") {
-    return { label: "Comunicazioni", layer: "communication" as CrmSettingsLayer }
-  }
-  if (item.id === "roberta") {
-    return { label: "AI Features", layer: "ai-features" as CrmSettingsLayer }
-  }
-  if (["attributes", "default-values", "import-export"].includes(item.id)) {
-    return { label: "Configurazione CRM", layer: "crm-config" as CrmSettingsLayer }
-  }
-  if (["make", "meta", "nextcloud"].includes(item.id)) {
-    return { label: "Integrazioni", layer: "integrations" as CrmSettingsLayer }
-  }
-  if (["health", "backup"].includes(item.id)) {
-    return { label: "Manutenzione", layer: "maintenance" as CrmSettingsLayer }
-  }
-  return null
-}
+import { crmSettingsGroupForPath, crmSettingsItemForPath } from "@/lib/crm-settings/catalog"
 
 const DEFAULT_COMPANY_LOGO = "/solair-brand-logo.png"
 
@@ -66,25 +33,22 @@ function CrmSettingsHeader() {
   const { navigate } = useCrmSettingsNavigation()
   const [companyLogo, setCompanyLogo] = useState(DEFAULT_COMPANY_LOGO)
 
-  const sectionKey = pathname.split("/").filter(Boolean)[1] ?? ""
-  const section = SECTIONS[sectionKey]
-  const pageTitle = CRM_SETTINGS_PAGE_TITLES[pathname]
+  // Unico breadcrumb dell'area: gruppo e titolo vengono dal catalogo, gli
+  // stessi che la sidebar di sezione usa per le voci.
   const catalogItem = crmSettingsItemForPath(pathname)
-  const settingsGroup = settingsGroupForItem(catalogItem)
+  const group = crmSettingsGroupForPath(pathname)
 
   const items: CrmBreadcrumbItem[] = [
     { label: "CRM Settings & Admin", action: openCrmSettings },
   ]
-  if (section) {
-    if (pageTitle) {
-      items.push({
-        label: settingsGroup?.label ?? section.label,
-        action: () => openCrmSettingsLayer(settingsGroup?.layer ?? section.layer),
-      })
-      items.push({ label: pageTitle })
-    } else {
-      items.push({ label: section.label })
-    }
+  if (group) {
+    items.push({
+      label: group.title,
+      action: () => openCrmSettingsLayer(group.id),
+    })
+  }
+  if (catalogItem) {
+    items.push({ label: catalogItem.title })
   }
 
   useEffect(() => {

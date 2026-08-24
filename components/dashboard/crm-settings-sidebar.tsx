@@ -2,258 +2,24 @@
 
 import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import {
-  Building2,
-  Shield,
-  Mail,
-  PlugZap,
-  SlidersHorizontal,
-  Sparkles,
-  Wrench,
-  X,
-  ChevronRight,
-  ChevronLeft,
-  type LucideIcon,
-} from "lucide-react"
+import { X, ChevronRight, ChevronLeft, type LucideIcon } from "lucide-react"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
 import { useCrmSettingsNavigation } from "@/components/dashboard/crm-settings-navigation"
 import { pageKeyFromPath } from "@/lib/permissions/constants"
 import { usePermissions } from "@/lib/permissions/provider"
 import { cn } from "@/lib/utils"
 import {
-  CRM_SETTINGS_CATALOG,
+  CRM_SETTINGS_GROUPS,
+  CRM_SETTINGS_GROUP_ORDER,
+  crmSettingsItemsForGroup,
+  type CrmSettingsCatalogItem,
+  type CrmSettingsGroupId,
 } from "@/lib/crm-settings/catalog"
 
-type Layer =
-  | "root"
-  | "account-security"
-  | "ai-features"
-  | "company"
-  | "communication"
-  | "crm-config"
-  | "integrations"
-  | "maintenance"
-  | "system"
-
-interface RootBlock {
-  icon: LucideIcon
-  title: string
-  description: string
-  layer: Exclude<Layer, "root">
-}
-
-interface SubBlock {
-  icon: LucideIcon
-  title: string
-  description: string
-  href: string
-  status?: "active" | "restricted"
-}
-
-const ROOT_BLOCKS: RootBlock[] = [
-  {
-    icon: Shield,
-    title: "Admin & Sicurezza",
-    description: "Utenti, ruoli, sessioni e audit",
-    layer: "account-security",
-  },
-  {
-    icon: Sparkles,
-    title: "AI Features",
-    description: "Conoscenza chatbot e funzionalita' AI",
-    layer: "ai-features",
-  },
-  {
-    icon: Building2,
-    title: "Azienda",
-    description: "Identita', logo, sedi e preferenze CRM",
-    layer: "company",
-  },
-  {
-    icon: Mail,
-    title: "Comunicazioni",
-    description: "Mail server, WhatsApp, centralino e canali",
-    layer: "communication",
-  },
-  {
-    icon: SlidersHorizontal,
-    title: "Configurazione CRM",
-    description: "Campi, valori, regole e flussi operativi",
-    layer: "crm-config",
-  },
-  {
-    icon: PlugZap,
-    title: "Integrazioni",
-    description: "Make, File Manager e connettori esterni",
-    layer: "integrations",
-  },
-  {
-    icon: Wrench,
-    title: "Manutenzione",
-    description: "Health check, backup e controlli tecnici",
-    layer: "maintenance",
-  },
-]
-
-// Layer 2: i sotto-blocchi puntano alle pagine reali gia' protette dai permessi.
-const ACCOUNT_SECURITY_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
-  .filter((item) => item.section === "account")
-  .map((item) => ({
-    icon: item.icon,
-    title: item.title,
-    description: item.description,
-    href: item.href,
-    status: item.status,
-  }))
-
-const AI_FEATURES_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
-  .filter((item) => item.id === "roberta")
-  .map((item) => ({
-    icon: item.icon,
-    title: item.title,
-    description: item.description,
-    href: item.href,
-    status: item.status,
-  }))
-
-const COMPANY_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
-  .filter((item) => ["company", "sites", "appearance"].includes(item.id))
-  .map((item) => ({
-    icon: item.icon,
-    title: item.title,
-    description: item.description,
-    href: item.href,
-    status: item.status,
-  }))
-
-const COMMUNICATION_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
-  .filter((item) => item.id === "communication")
-  .map((item) => ({
-    icon: item.icon,
-    title: item.title,
-    description: item.description,
-    href: item.href,
-    status: item.status,
-  }))
-
-const CRM_CONFIG_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
-  .filter((item) =>
-    ["attributes", "default-values", "import-export"].includes(item.id),
-  )
-  .map((item) => ({
-    icon: item.icon,
-    title: item.title,
-    description: item.description,
-    href: item.href,
-    status: item.status,
-  }))
-
-const INTEGRATION_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
-  .filter((item) => ["make", "meta", "nextcloud"].includes(item.id))
-  .map((item) => ({
-    icon: item.icon,
-    title: item.title,
-    description: item.description,
-    href: item.href,
-    status: item.status,
-  }))
-
-const MAINTENANCE_BLOCKS: SubBlock[] = CRM_SETTINGS_CATALOG
-  .filter((item) => ["health", "backup"].includes(item.id))
-  .map((item) => ({
-    icon: item.icon,
-    title: item.title,
-    description: item.description,
-    href: item.href,
-    status: item.status,
-  }))
-
-// Testata dinamica per ciascun layer.
-const LAYER_HEADER: Record<
-  Layer,
-  { eyebrow: string; title: string; subtitle: string; breadcrumb: string | null }
-> = {
-  root: {
-    eyebrow: "Solair CRM",
-    title: "CRM Settings & Admin",
-    subtitle: "Configurazione e amministrazione",
-    breadcrumb: null,
-  },
-  "account-security": {
-    eyebrow: "Persone",
-    title: "Admin & Sicurezza",
-    subtitle: "Utenti, ruoli, sessioni e audit",
-    breadcrumb: "CRM Settings & Admin / Admin & Sicurezza",
-  },
-  "ai-features": {
-    eyebrow: "Intelligenza artificiale",
-    title: "AI Features",
-    subtitle: "RobertaBot e funzionalita' AI",
-    breadcrumb: "CRM Settings & Admin / AI Features",
-  },
-  company: {
-    eyebrow: "Organizzazione",
-    title: "Azienda",
-    subtitle: "Identita', logo, sedi e preferenze CRM",
-    breadcrumb: "CRM Settings & Admin / Azienda",
-  },
-  communication: {
-    eyebrow: "Canali",
-    title: "Comunicazioni",
-    subtitle: "Mail server, telefonia e messaggistica",
-    breadcrumb: "CRM Settings & Admin / Comunicazioni",
-  },
-  "crm-config": {
-    eyebrow: "Configurazione",
-    title: "Configurazione CRM",
-    subtitle: "Campi, valori, regole e flussi operativi",
-    breadcrumb: "CRM Settings & Admin / Configurazione CRM",
-  },
-  integrations: {
-    eyebrow: "Connessioni",
-    title: "Integrazioni",
-    subtitle: "Make, File Manager e connettori esterni",
-    breadcrumb: "CRM Settings & Admin / Integrazioni",
-  },
-  maintenance: {
-    eyebrow: "Tecnico",
-    title: "Manutenzione",
-    subtitle: "Health check, backup e controlli tecnici",
-    breadcrumb: "CRM Settings & Admin / Manutenzione",
-  },
-  system: {
-    eyebrow: "Organizzazione",
-    title: "Azienda",
-    subtitle: "Identita', logo, sedi e preferenze CRM",
-    breadcrumb: "CRM Settings & Admin / Azienda",
-  },
-}
-
-/** Rileva il breakpoint mobile per scegliere la direzione dello slide. */
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)")
-    const update = () => setIsMobile(mq.matches)
-    update()
-    mq.addEventListener("change", update)
-    return () => mq.removeEventListener("change", update)
-  }, [])
-  return isMobile
-}
-
-function rootBlockMeta(layer: Exclude<Layer, "root">) {
-  const meta: Record<Exclude<Layer, "root">, string> = {
-    "account-security": "Governance",
-    "ai-features": "Assistente AI",
-    company: "Profilo azienda",
-    communication: "Canali operativi",
-    "crm-config": "Moduli e processi",
-    integrations: "Connettori",
-    maintenance: "Solo tecnico",
-    system: "Profilo azienda",
-  }
-  return meta[layer]
+const ROOT_HEADER = {
+  eyebrow: "Solair CRM",
+  title: "CRM Settings & Admin",
+  subtitle: "Configurazione e amministrazione",
 }
 
 /** Card visiva condivisa tra Layer 1 e Layer 2. */
@@ -263,6 +29,8 @@ function SettingsCard({
   description,
   status,
   meta,
+  tone,
+  glow,
   onClick,
 }: {
   icon: LucideIcon
@@ -270,6 +38,8 @@ function SettingsCard({
   description: string
   status?: "active" | "restricted"
   meta?: string
+  tone: string
+  glow: string
   onClick: () => void
 }) {
   return (
@@ -279,7 +49,13 @@ function SettingsCard({
       className="group relative flex min-h-[110px] w-full items-center gap-[17px] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.045] p-[17px] text-left shadow-[0_18px_60px_rgba(0,0,0,0.16)] transition-all hover:-translate-y-0.5 hover:border-[#55C2A4]/70 hover:bg-white/[0.075] hover:shadow-[0_22px_70px_rgba(0,0,0,0.25)] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#55C2A4]"
     >
       <span className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#55C2A4]/50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-      <span className="flex size-[51px] shrink-0 items-center justify-center rounded-2xl border border-[#55C2A4]/20 bg-[#2E8B72]/16 text-[#67D9BA] shadow-[0_0_32px_rgba(46,139,114,0.14)]">
+      <span
+        className={cn(
+          "flex size-[51px] shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-gradient-to-br text-white",
+          tone,
+          glow,
+        )}
+      >
         <Icon className="size-[21px]" />
       </span>
       <div className="min-w-0 flex-1">
@@ -303,6 +79,19 @@ function SettingsCard({
       <ChevronRight className="size-[21px] shrink-0 text-gray-500 transition-transform group-hover:translate-x-1 group-hover:text-white" />
     </button>
   )
+}
+
+/** Rileva il breakpoint mobile per scegliere la direzione dello slide. */
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)")
+    const update = () => setIsMobile(mq.matches)
+    update()
+    mq.addEventListener("change", update)
+    return () => mq.removeEventListener("change", update)
+  }, [])
+  return isMobile
 }
 
 export function CrmSettingsSidebar() {
@@ -357,32 +146,30 @@ export function CrmSettingsSidebar() {
 
   const panelInitial = isMobile ? { y: "100%" } : { x: "100%" }
   const panelAnimate = isMobile ? { y: 0 } : { x: 0 }
-  const header = LAYER_HEADER[layer]
   const isRoot = layer === "root"
-  const canSeeBlock = (block: SubBlock) => {
-    const page = pageKeyFromPath(block.href)
-    return page ? permissions.canPage(page) : true
+
+  // Le voci visibili per gruppo: gli stessi permessi che filtrano la sidebar
+  // di sezione, piu' il gate tecnico sulla manutenzione.
+  const visibleItems = (group: CrmSettingsGroupId): CrmSettingsCatalogItem[] => {
+    if (group === "maintenance" && !permissions.isSuperadmin) return []
+    return crmSettingsItemsForGroup(group).filter((item) => {
+      const page = pageKeyFromPath(item.href)
+      return page ? permissions.canPage(page) : true
+    })
   }
-  const visibleAccountBlocks = ACCOUNT_SECURITY_BLOCKS.filter(canSeeBlock)
-  const visibleAiFeaturesBlocks = AI_FEATURES_BLOCKS.filter(canSeeBlock)
-  const visibleCompanyBlocks = COMPANY_BLOCKS.filter(canSeeBlock)
-  const visibleCommunicationBlocks = COMMUNICATION_BLOCKS.filter(canSeeBlock)
-  const visibleCrmConfigBlocks = CRM_CONFIG_BLOCKS.filter(canSeeBlock)
-  const visibleIntegrationBlocks = INTEGRATION_BLOCKS.filter(canSeeBlock)
-  const visibleMaintenanceBlocks = permissions.isSuperadmin
-    ? MAINTENANCE_BLOCKS.filter(canSeeBlock)
-    : []
-  const visibleRootBlocks = ROOT_BLOCKS.filter((block) => {
-    if (block.layer === "account-security") return visibleAccountBlocks.length > 0
-    if (block.layer === "ai-features") return visibleAiFeaturesBlocks.length > 0
-    if (block.layer === "company") return visibleCompanyBlocks.length > 0
-    if (block.layer === "communication") return visibleCommunicationBlocks.length > 0
-    if (block.layer === "crm-config") return visibleCrmConfigBlocks.length > 0
-    if (block.layer === "integrations") return visibleIntegrationBlocks.length > 0
-    if (block.layer === "maintenance") return visibleMaintenanceBlocks.length > 0
-    if (block.layer === "system") return visibleCompanyBlocks.length > 0
-    return true
-  })
+
+  const visibleGroups = CRM_SETTINGS_GROUP_ORDER.filter(
+    (group) => visibleItems(group).length > 0,
+  )
+  const currentGroup = isRoot ? null : CRM_SETTINGS_GROUPS[layer]
+  const header = currentGroup
+    ? {
+        eyebrow: currentGroup.eyebrow,
+        title: currentGroup.title,
+        subtitle: currentGroup.subtitle,
+        breadcrumb: `CRM Settings & Admin / ${currentGroup.title}`,
+      }
+    : { ...ROOT_HEADER, breadcrumb: null }
 
   return (
     <AnimatePresence>
@@ -483,110 +270,36 @@ export function CrmSettingsSidebar() {
                   exit={{ x: isRoot ? "100%" : "-100%" }}
                   transition={{ type: "spring", damping: 25, stiffness: 260 }}
                 >
-                  {layer === "root"
-                    ? visibleRootBlocks.map((block) => (
-                        <SettingsCard
-                          key={block.title}
-                          icon={block.icon}
-                          title={block.title}
-                          description={block.description}
-                          status={undefined}
-                          meta={rootBlockMeta(block.layer)}
-                          onClick={() => setLayer(block.layer)}
-                        />
-                      ))
-                    : null}
-
-                  {layer === "account-security"
-                    ? visibleAccountBlocks.map((block) => (
-                        <SettingsCard
-                          key={block.title}
-                          icon={block.icon}
-                          title={block.title}
-                          description={block.description}
-                          status={block.status}
-                          onClick={() => handleNavigate(block.href)}
-                        />
-                      ))
-                    : null}
-
-                  {layer === "ai-features"
-                    ? visibleAiFeaturesBlocks.map((block) => (
-                        <SettingsCard
-                          key={block.title}
-                          icon={block.icon}
-                          title={block.title}
-                          description={block.description}
-                          status={block.status}
-                          onClick={() => handleNavigate(block.href)}
-                        />
-                      ))
-                    : null}
-
-                  {layer === "maintenance"
-                    ? visibleMaintenanceBlocks.map((block) => (
-                        <SettingsCard
-                          key={block.title}
-                          icon={block.icon}
-                          title={block.title}
-                          description={block.description}
-                          status={block.status}
-                          onClick={() => handleNavigate(block.href)}
-                        />
-                      ))
-                    : null}
-
-                  {layer === "company" || layer === "system"
-                    ? visibleCompanyBlocks.map((block) => (
-                        <SettingsCard
-                          key={block.title}
-                          icon={block.icon}
-                          title={block.title}
-                          description={block.description}
-                          status={block.status}
-                          onClick={() => handleNavigate(block.href)}
-                        />
-                      ))
-                    : null}
-
-                  {layer === "communication"
-                    ? visibleCommunicationBlocks.map((block) => (
-                        <SettingsCard
-                          key={block.title}
-                          icon={block.icon}
-                          title={block.title}
-                          description={block.description}
-                          status={block.status}
-                          onClick={() => handleNavigate(block.href)}
-                        />
-                      ))
-                    : null}
-
-                  {layer === "crm-config"
-                    ? visibleCrmConfigBlocks.map((block) => (
-                        <SettingsCard
-                          key={block.title}
-                          icon={block.icon}
-                          title={block.title}
-                          description={block.description}
-                          status={block.status}
-                          onClick={() => handleNavigate(block.href)}
-                        />
-                      ))
-                    : null}
-
-                  {layer === "integrations"
-                    ? visibleIntegrationBlocks.map((block) => (
-                        <SettingsCard
-                          key={block.title}
-                          icon={block.icon}
-                          title={block.title}
-                          description={block.description}
-                          status={block.status}
-                          onClick={() => handleNavigate(block.href)}
-                        />
-                      ))
-                    : null}
+                  {isRoot
+                    ? visibleGroups.map((groupId) => {
+                        const group = CRM_SETTINGS_GROUPS[groupId]
+                        return (
+                          <SettingsCard
+                            key={group.id}
+                            icon={group.icon}
+                            title={group.title}
+                            description={group.description}
+                            meta={group.meta}
+                            tone={group.tone}
+                            glow={group.glow}
+                            onClick={() => setLayer(group.id)}
+                          />
+                        )
+                      })
+                    : currentGroup
+                      ? visibleItems(currentGroup.id).map((item) => (
+                          <SettingsCard
+                            key={item.href}
+                            icon={item.icon}
+                            title={item.title}
+                            description={item.description}
+                            status={item.status}
+                            tone={currentGroup.tone}
+                            glow={currentGroup.glow}
+                            onClick={() => handleNavigate(item.href)}
+                          />
+                        ))
+                      : null}
                 </motion.div>
               </AnimatePresence>
             </div>

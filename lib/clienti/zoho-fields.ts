@@ -199,6 +199,10 @@ export const CLIENTI_CRM_FIELDS = [
   // colonna testuale storica `importi_extra` importata da Zoho, che resta di
   // sola lettura — vedi 20260809_clienti_costi_extra_sopralluogo.sql.
   { column: "costi_extra_sopralluogo", type: "numeric", appField: "Costi extra sopralluogo" },
+  // Consenso al contatto via email. Verificato server-side prima di ogni
+  // invio (lib/email/consent.ts) — vedi
+  // 20260824_clienti_consenso_contatto_email.sql.
+  { column: "consenso_contatto_email", type: "boolean", appField: "Consenso e-mail" },
 ] as const satisfies readonly ClienteCrmField[]
 
 // Insieme completo dei campi del record Cliente (Zoho + nativi CRM): e' questo

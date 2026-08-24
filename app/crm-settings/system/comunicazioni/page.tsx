@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { SectionHeader } from "@/components/impostazioni/settings-ui"
+import { ConsensoEnforcementCard } from "@/components/crm-settings/consenso-enforcement-card"
 import { usePersistentSystemSetting } from "@/lib/crm-settings/use-persistent-system-setting"
 import { usePermissions } from "@/lib/permissions/provider"
 import { cn } from "@/lib/utils"
@@ -178,6 +179,10 @@ function save() {
           icon={<KeyRound className="size-5" />}
         />
       </div>
+
+      {/* Sta in cima e non in fondo: e' l'unica impostazione di questa pagina
+          che, spenta, cambia CHI riceve le email invece di come partono. */}
+      <ConsensoEnforcementCard />
 
       <section className="overflow-hidden rounded-xl border border-[#d8dde6] bg-card shadow-sm">
         <div className="border-b border-[#d8dde6] bg-[#f3f7fb] px-5 py-4">

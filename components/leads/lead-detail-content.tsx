@@ -34,6 +34,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
+import { ConsensoEmailToggle } from "@/components/shared/consenso-email-toggle"
 import {
   Dialog,
   DialogContent,
@@ -296,17 +297,22 @@ function InfoPrincipali({ lead }: { lead: Lead }) {
             {val(lead["Mobile/Fisso"])}
           </DataField>
           <DataField label="Consensi contatto">
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <Badge className={lead["Consenso telefono"] ? "rounded-md bg-teal/10 px-2 py-0.5 text-[11px] font-medium text-teal" : "rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"}>
                 Telefono {lead["Consenso telefono"] ? "si" : "no"}
               </Badge>
               <Badge className={lead["Consenso WhatsApp"] ? "rounded-md bg-teal/10 px-2 py-0.5 text-[11px] font-medium text-teal" : "rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"}>
                 WhatsApp {lead["Consenso WhatsApp"] ? "si" : "no"}
               </Badge>
-              <Badge className={lead["Consenso e-mail"] ? "rounded-md bg-teal/10 px-2 py-0.5 text-[11px] font-medium text-teal" : "rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"}>
-                E-mail {lead["Consenso e-mail"] ? "si" : "no"}
-              </Badge>
             </div>
+            {/* L'e-mail e' l'unico dei tre consensi con un blocco vero dietro,
+                quindi e' l'unico modificabile: telefono e WhatsApp restano
+                badge finche' 3CX e Spoki non passano dal CRM. */}
+            <ConsensoEmailToggle
+              recordId={lead.id}
+              endpoint="/api/leads"
+              iniziale={lead["Consenso e-mail"] === true}
+            />
           </DataField>
           <DataField label="Stato Lead">
             <Select

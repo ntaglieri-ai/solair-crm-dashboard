@@ -11,6 +11,13 @@ import { createClient } from "@/lib/supabase/server"
 import type { PermissionSnapshot } from "@/lib/permissions/types"
 import type { BulkRecipient } from "./bulk-mailer"
 import type { BulkPlaceholder } from "./bulk-template"
+import {
+  EMAIL_CONSENT_COLUMN,
+  hasEmailConsent,
+  type ConsentEntita,
+  type DestinatarioConsenziente,
+} from "./consent"
+import { leggiConsensoEnforcement } from "./consent-enforcement"
 
 export const BULK_RECORD_TIPI = ["lead", "cliente", "installatore"] as const
 
@@ -29,6 +36,13 @@ type TargetConfig = {
   columns: string
   /** Colonna proprietario, per il filtro sugli utenti con ruolo AGENT. */
   ownerColumn: string
+  /**
+   * Entita' su cui verificare consenso_contatto_email, oppure null se il
+   * consenso non si applica. Gli installatori sono null di proposito: sono
+   * controparti B2B, non hanno colonna di consenso e le email che ricevono
+   * sono esecuzione di un rapporto di lavoro. Vedi lib/email/consent.ts.
+   */
+  consentEntita: ConsentEntita | null
   label: { singolare: string; plurale: string }
   toRecipient: (row: Record<string, unknown>) => {
     email: string
@@ -44,8 +58,9 @@ const TARGETS: Record<BulkRecordTipo, TargetConfig> = {
   lead: {
     permissionModule: "lead",
     table: "leads",
-    columns: "id,nome_lead,nome,cognome,email,telefono,mobile_fisso,lead_proprietario_id",
+    columns: `id,nome_lead,nome,cognome,email,telefono,mobile_fisso,lead_proprietario_id,${EMAIL_CONSENT_COLUMN}`,
     ownerColumn: "lead_proprietario_id",
+    consentEntita: "lead",
     label: { singolare: "lead", plurale: "lead" },
     toRecipient: (row) => ({
       email: text(row.email),
@@ -62,8 +77,9 @@ const TARGETS: Record<BulkRecordTipo, TargetConfig> = {
   cliente: {
     permissionModule: "clienti",
     table: "clienti",
-    columns: "id,nome_clienti,nome,cognome,email,cellulare,clienti_proprietario_id",
+    columns: `id,nome_clienti,nome,cognome,email,cellulare,clienti_proprietario_id,${EMAIL_CONSENT_COLUMN}`,
     ownerColumn: "clienti_proprietario_id",
+    consentEntita: "cliente",
     label: { singolare: "cliente", plurale: "clienti" },
     toRecipient: (row) => ({
       email: text(row.email),
@@ -82,6 +98,7 @@ const TARGETS: Record<BulkRecordTipo, TargetConfig> = {
     table: "installatori",
     columns: "id,nome,email,email_secondaria,telefono,proprietario_id",
     ownerColumn: "proprietario_id",
+    consentEntita: null,
     label: { singolare: "installatore", plurale: "installatori" },
     toRecipient: (row) => ({
       // Gli installatori hanno spesso solo la secondaria valorizzata.
@@ -109,13 +126,30 @@ export type ResolvedRecipients = {
   esclusiNonProprietari: number
   /** Esclusi perche' senza indirizzo email utilizzabile, o non piu' leggibili. */
   esclusiSenzaEmail: number
+  /**
+   * Esclusi perche' senza consenso_contatto_email: hanno un indirizzo valido
+   * ma non si puo' scrivere loro. Zero sugli installatori, e zero anche quando
+   * l'interruttore globale e' spento (li' non vengono esclusi, vengono inclusi).
+   */
+  esclusiSenzaConsenso: number
+  /**
+   * Chi non ha il consenso, a prescindere dall'interruttore: esclusi se e'
+   * acceso, destinatari da registrare in audit se e' spento.
+   */
+  senzaConsenso: DestinatarioConsenziente[]
+  /** Stato dell'interruttore globale al momento della risoluzione. */
+  consensoEnforcementAttivo: boolean
 }
 
 /**
- * Applica, nell'ordine: filtro di proprieta' (solo per ruolo AGENT) ed
- * esclusione dei record senza email. Non applica il tetto di
+ * Applica, nell'ordine: filtro di proprieta' (solo per ruolo AGENT),
+ * esclusione dei record senza email ed esclusione di chi non ha dato il
+ * consenso al contatto via email. Non applica il tetto di
  * MAX_BULK_RECIPIENTS: quello e' un errore di validazione, non un
  * troncamento silenzioso, e va gestito dal chiamante.
+ *
+ * Il filtro di consenso sta QUI e non nella route proprio per il motivo per
+ * cui esiste questo file: anteprima e invio devono contare gli stessi esclusi.
  */
 export async function resolveBulkRecipients(params: {
   tipo: BulkRecordTipo
@@ -124,6 +158,7 @@ export async function resolveBulkRecipients(params: {
 }): Promise<{ data: ResolvedRecipients | null; error: string | null }> {
   const config = TARGETS[params.tipo]
   const recordIds = [...new Set(params.recordIds)]
+  const { attivo: enforcementAttivo } = await leggiConsensoEnforcement()
 
   if (recordIds.length === 0) {
     return {
@@ -132,6 +167,9 @@ export async function resolveBulkRecipients(params: {
         totaleRichiesti: 0,
         esclusiNonProprietari: 0,
         esclusiSenzaEmail: 0,
+        esclusiSenzaConsenso: 0,
+        senzaConsenso: [],
+        consensoEnforcementAttivo: true,
       },
       error: null,
     }
@@ -156,9 +194,21 @@ export async function resolveBulkRecipients(params: {
     : rows
 
   const recipients: BulkRecipient[] = []
+  const senzaConsenso: DestinatarioConsenziente[] = []
+  let conEmail = 0
+
   for (const row of owned) {
     const mapped = config.toRecipient(row)
     if (!mapped.email.includes("@")) continue
+    conEmail++
+
+    // Un destinatario raggiungibile ma senza consenso non e' "un record senza
+    // email": va contato a parte, altrimenti l'agente legge "12 esclusi" e
+    // pensa a indirizzi mancanti invece che a un blocco di consenso.
+    const senza = Boolean(config.consentEntita) && !hasEmailConsent(row)
+    if (senza) senzaConsenso.push({ id: String(row.id), email: mapped.email })
+    if (senza && enforcementAttivo) continue
+
     recipients.push({
       id: String(row.id),
       email: mapped.email,
@@ -176,8 +226,10 @@ export async function resolveBulkRecipients(params: {
       // Include anche gli id che non tornano dalla query (record cancellato
       // nel frattempo, o non leggibile per RLS): comunque non inviabili, e
       // attribuirli alla proprieta' sarebbe fuorviante per un Director.
-      esclusiSenzaEmail:
-        recordIds.length - esclusiNonProprietari - recipients.length,
+      esclusiSenzaEmail: recordIds.length - esclusiNonProprietari - conEmail,
+      esclusiSenzaConsenso: enforcementAttivo ? senzaConsenso.length : 0,
+      senzaConsenso,
+      consensoEnforcementAttivo: enforcementAttivo,
     },
     error: null,
   }

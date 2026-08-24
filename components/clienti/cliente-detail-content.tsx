@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
+import { ConsensoEmailToggle } from "@/components/shared/consenso-email-toggle"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { type ClienteRecord, type Compito, OPEN_TASK_STATI } from "@/lib/mock-data"
@@ -255,6 +256,15 @@ function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
             value={cliente["E-mail secondaria"]}
             icon={IconMail}
           />
+          {/* Sta accanto agli indirizzi e non in fondo alla scheda: e' cio' che
+              decide se quegli indirizzi sono utilizzabili. */}
+          <DataField label="Consenso contatto">
+            <ConsensoEmailToggle
+              recordId={cliente.id}
+              endpoint="/api/clienti"
+              iniziale={cliente["Consenso e-mail"] === true}
+            />
+          </DataField>
         </div>
         <div className="flex flex-col gap-4">
           <CopyField label="Cellulare" value={cliente.Cellulare} icon={IconPhone} />

@@ -387,8 +387,13 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
         return
       }
       download()
-    } catch {
-      toast.error("Errore nell'esportazione")
+    } catch (error) {
+      // Il messaggio del server arriva fin qui: un 403 per permesso mancante
+      // dice all'utente cosa chiedere all'amministratore, un generico
+      // "errore" lo lascerebbe a indovinare.
+      toast.error(
+        error instanceof Error ? error.message : "Errore nell'esportazione",
+      )
     }
   }
 

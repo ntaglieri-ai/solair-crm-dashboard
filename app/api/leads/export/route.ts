@@ -18,9 +18,15 @@ import {
   queryLeadsByIdsForExport,
   queryLeadsForExport,
 } from "@/lib/leads/repository"
-import { requireApiRecord } from "@/lib/permissions/server"
+import { getCurrentPermissions } from "@/lib/permissions/server"
 import { attoreDaPermessi, logAudit } from "@/lib/audit/log"
-import { criteriDaSearchParams, datiExport, descriviExport } from "@/lib/audit/export"
+import {
+  criteriDaSearchParams,
+  datiExport,
+  descriviExport,
+  logExportNegato,
+  messaggioExportNegato,
+} from "@/lib/audit/export"
 
 const CHIAVI_FILTRO = [
   "search", "stato", "sede", "commerciale", "origine", "tag", "score",
@@ -28,14 +34,42 @@ const CHIAVI_FILTRO = [
 ]
 
 export async function GET(request: Request) {
-  const guard = await requireApiRecord("lead", "view")
-  if (guard.response) return guard.response
+  const permissions = await getCurrentPermissions()
+  const subject = permissions.snapshot.subject
+  if (!subject.userId) {
+    return NextResponse.json({ error: "Non autenticato" }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const idsRaw = searchParams.get("ids")
+  const ids = idsRaw ? idsRaw.split(",").filter(Boolean) : null
+  const scope = ids ? "selezione" : "filtro"
+
+  // Permesso di EXPORT, non di view: sono due cose diverse e il motore le
+  // distingue gia' (RECORD_ACTIONS include "export" dal primo giorno, ma non
+  // lo verificava nessuno — ne' qui ne' in UI). canRecord copre in un colpo
+  // solo sia "non ha accesso al modulo" sia "ha il modulo ma non l'export",
+  // e per entrambi la risposta giusta e' la stessa.
+  if (!permissions.canRecord("lead", "export")) {
+    after(() =>
+      logExportNegato({
+        entita: "Lead",
+        modulo: "lead",
+        ruoloCode: subject.ruoloCode,
+        scope,
+        criterio: criteriDaSearchParams(searchParams, CHIAVI_FILTRO),
+        idsRichiesti: ids ? ids.length : null,
+        attore: attoreDaPermessi(permissions),
+        request,
+      }),
+    )
+    return NextResponse.json(
+      { error: messaggioExportNegato("Lead"), permessoMancante: "lead.export" },
+      { status: 403 },
+    )
+  }
 
   try {
-    const { searchParams } = new URL(request.url)
-    const idsRaw = searchParams.get("ids")
-    const ids = idsRaw ? idsRaw.split(",").filter(Boolean) : null
-    const scope = ids ? "selezione" : "filtro"
 
     const result = ids
       ? await queryLeadsByIdsForExport(ids)
@@ -46,7 +80,7 @@ export async function GET(request: Request) {
     after(() =>
       logAudit({
         tipo_evento: "export_dati",
-        attore: attoreDaPermessi(guard.permissions),
+        attore: attoreDaPermessi(permissions),
         modulo: "lead",
         descrizione: descriviExport("Lead", scope, result),
         dati_dopo: datiExport(

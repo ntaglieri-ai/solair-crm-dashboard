@@ -20,6 +20,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
+import { usePermissions } from "@/lib/permissions/provider"
+import { chiaveCampoCliente } from "@/lib/permissions/field-map"
 import {
   CLIENTE_COLUMNS,
   CLIENTE_COLUMN_GROUPS,
@@ -43,8 +45,21 @@ function ColumnsSection({
   onChange: (cols: ClienteColumnId[]) => void
 }) {
   const [query, setQuery] = useState("")
+  const permissions = usePermissions()
   const set = new Set(visible)
   const q = query.trim().toLowerCase()
+
+  // Le colonne ristrette non compaiono nemmeno nell'elenco: offrirle e poi
+  // filtrarle a valle mostrerebbe comunque a chi non deve vederli quali campi
+  // esistono, e darebbe una spunta che non fa niente.
+  const colonneConcesse = useMemo(
+    () =>
+      CLIENTE_COLUMNS.filter((c) => {
+        const campo = chiaveCampoCliente(c.id)
+        return campo === null || permissions.canField("clienti", campo, "view")
+      }),
+    [permissions],
+  )
 
   const toggle = (id: ClienteColumnId) => {
     const next = new Set(set)
@@ -53,7 +68,7 @@ function ColumnsSection({
     // Mantiene l'ordine: prima le colonne già visibili, poi le nuove
     // seguendo l'ordine del registro CLIENTE_COLUMNS.
     const kept = visible.filter((v) => next.has(v))
-    const added = CLIENTE_COLUMNS.filter(
+    const added = colonneConcesse.filter(
       (c) => next.has(c.id) && !visible.includes(c.id),
     ).map((c) => c.id)
     onChange([...kept, ...added])
@@ -63,13 +78,13 @@ function ColumnsSection({
     () =>
       CLIENTE_COLUMN_GROUPS.map((group) => ({
         group,
-        cols: CLIENTE_COLUMNS.filter(
+        cols: colonneConcesse.filter(
           (c) =>
             c.group === group &&
             (q === "" || c.label.toLowerCase().includes(q)),
         ),
       })).filter((g) => g.cols.length > 0),
-    [q],
+    [q, colonneConcesse],
   )
 
   return (
@@ -87,7 +102,7 @@ function ColumnsSection({
 
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">
-          {visible.length} di {CLIENTE_COLUMNS.length} colonne visibili
+          {visible.length} di {colonneConcesse.length} colonne visibili
         </span>
         <Button
           variant="ghost"

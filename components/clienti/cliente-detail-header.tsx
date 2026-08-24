@@ -40,6 +40,7 @@ import { useDeleteCliente } from "@/lib/clienti/hooks"
 import { usePermissions } from "@/lib/permissions/provider"
 import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
 import { ClienteTagBadges } from "./cliente-tag-controls"
+import { useCampoVisibile } from "@/components/shared/campo-protetto"
 
 function val(v: string | number | null | undefined): string {
   if (v === null || v === undefined || v === "") return "—"
@@ -47,6 +48,7 @@ function val(v: string | number | null | undefined): string {
 }
 
 export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
+  const vediCodiceFiscale = useCampoVisibile("clienti", "codice_fiscale")
   const router = useRouter()
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -263,18 +265,23 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
           { key: "cognome", label: "Cognome", value: cliente.Cognome ?? "" },
           { key: "cellulare", label: "Cellulare", value: cliente.Cellulare ?? "", type: "tel" },
           { key: "email", label: "E-mail", value: cliente["E-mail"] ?? "", type: "email" },
-          {
-            key: "codiceFiscale",
-            label: "Codice fiscale",
-            value: cliente["Codice fiscale"] ?? "",
-          },
+          // Il codice fiscale sparisce anche dal form di modifica per chi non
+          // deve vederlo: lasciarlo qui lo avrebbe mostrato in chiaro proprio
+          // dove si sta per riscriverlo.
+          ...(vediCodiceFiscale
+            ? [{
+                key: "codiceFiscale",
+                label: "Codice fiscale",
+                value: cliente["Codice fiscale"] ?? "",
+              }]
+            : []),
         ]}
         buildBody={(v) => ({
           Nome: v.nome,
           Cognome: v.cognome,
           Cellulare: v.cellulare,
           "E-mail": v.email,
-          "Codice fiscale": v.codiceFiscale,
+          ...(vediCodiceFiscale ? { "Codice fiscale": v.codiceFiscale } : {}),
         })}
       />
     </div>

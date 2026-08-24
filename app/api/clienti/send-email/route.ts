@@ -1,8 +1,15 @@
-import { NextResponse } from "next/server"
+import { NextResponse, after } from "next/server"
 import { getCurrentPermissions, requireApiRecord } from "@/lib/permissions/server"
-import { createClient } from "@/lib/supabase/server"
+import { attoreDaPermessi } from "@/lib/audit/log"
 import { getPersonalEmailPassword, getPersonalEmailStatus } from "@/lib/email/personal-credentials"
 import { sendLeadEmails } from "@/lib/email/lead-mailer"
+import {
+  filtraDestinatariConsenzienti,
+  logInvioBloccatoSenzaConsenso,
+  logInvioSenzaEnforcement,
+  messaggioNessunConsenziente,
+  quantiBloccati,
+} from "@/lib/email/consent"
 
 // Mirror di app/api/leads/send-email/route.ts, ma per Clienti: stesso mailer
 // operativo (SES di sistema con Reply-To agente, fallback Aruba personale),
@@ -38,6 +45,44 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "L'oggetto e' obbligatorio." }, { status: 400 })
   }
 
+  // Stesso controllo di consenso della route Lead, stesso modulo: vedi
+  // lib/email/consent.ts. Server-side, prima di toccare il transport.
+  const { data: consenso, error: consensoError } = await filtraDestinatariConsenzienti({
+    entita: "cliente",
+    ids: clienteIds,
+  })
+  if (consensoError || !consenso) {
+    return NextResponse.json({ error: consensoError ?? "Errore imprevisto" }, { status: 500 })
+  }
+
+  const bloccatiSenzaConsenso = quantiBloccati(consenso)
+
+  if (consenso.destinatari.length === 0) {
+    if (bloccatiSenzaConsenso > 0) {
+      after(() =>
+        logInvioBloccatoSenzaConsenso({
+          entita: "cliente",
+          bloccati: consenso.senzaConsenso,
+          inviati: 0,
+          oggetto: emailSubject,
+          attore: attoreDaPermessi(permissions),
+          request,
+        }),
+      )
+    }
+    return NextResponse.json(
+      {
+        error: messaggioNessunConsenziente({
+          entita: "cliente",
+          bloccatiSenzaConsenso,
+        }),
+        bloccatiSenzaConsenso,
+        esclusiSenzaEmail: consenso.esclusiSenzaEmail,
+      },
+      { status: 400 },
+    )
+  }
+
   const emailStatus = await getPersonalEmailStatus(subject.userId)
   if (!emailStatus.configured || !emailStatus.smtpUser) {
     return NextResponse.json(
@@ -61,37 +106,44 @@ export async function POST(request: Request) {
     )
   }
 
-  const supabase = await createClient()
-  const { data: clienti, error: clientiError } = await supabase
-    .from("clienti")
-    .select("id, email")
-    .in("id", clienteIds)
-
-  if (clientiError) {
-    return NextResponse.json({ error: clientiError.message }, { status: 500 })
-  }
-
-  const recipients = (clienti ?? [])
-    .map((cliente) => (cliente as { email: string | null }).email)
-    .filter((email): email is string => Boolean(email && email.includes("@")))
-
-  if (recipients.length === 0) {
-    return NextResponse.json(
-      { error: "Nessuno dei clienti selezionati ha un indirizzo email valido." },
-      { status: 400 },
-    )
-  }
-
   const { results, truncated } = await sendLeadEmails({
     smtpUser: emailStatus.smtpUser,
     smtpPassword,
-    recipients,
+    recipients: consenso.destinatari.map((destinatario) => destinatario.email),
     subject: emailSubject,
     body: emailBody,
   })
 
   const sent = results.filter((r) => r.ok).length
   const failed = results.filter((r) => !r.ok)
+
+  if (bloccatiSenzaConsenso > 0) {
+    after(() =>
+      logInvioBloccatoSenzaConsenso({
+        entita: "cliente",
+        bloccati: consenso.senzaConsenso,
+        inviati: sent,
+        oggetto: emailSubject,
+        attore: attoreDaPermessi(permissions),
+        request,
+      }),
+    )
+  }
+
+  // Interruttore spento: si e' scritto a chi non aveva acconsentito. Evento
+  // opposto al precedente, e va registrato con la stessa cura.
+  if (!consenso.enforcementAttivo && consenso.senzaConsenso.length > 0) {
+    after(() =>
+      logInvioSenzaEnforcement({
+        entita: "cliente",
+        senzaConsenso: consenso.senzaConsenso,
+        destinatariTotali: consenso.destinatari.length,
+        oggetto: emailSubject,
+        attore: attoreDaPermessi(permissions),
+        request,
+      }),
+    )
+  }
 
   return NextResponse.json({
     ok: true,
@@ -100,5 +152,9 @@ export async function POST(request: Request) {
     failedDetails: failed,
     truncated,
     totalRequested: clienteIds.length,
+    bloccatiSenzaConsenso,
+    esclusiSenzaEmail: consenso.esclusiSenzaEmail,
+    consensoEnforcementAttivo: consenso.enforcementAttivo,
+    inviatiSenzaConsenso: consenso.enforcementAttivo ? 0 : consenso.senzaConsenso.length,
   })
 }

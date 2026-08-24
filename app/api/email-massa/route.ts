@@ -15,6 +15,11 @@ import {
   finishEmailMassaJob,
   updateEmailMassaProgress,
 } from "@/lib/email/bulk-job-store"
+import { attoreDaPermessi } from "@/lib/audit/log"
+import {
+  logInvioBloccatoSenzaConsenso,
+  logInvioSenzaEnforcement,
+} from "@/lib/email/consent"
 
 // Endpoint UNICO di invio di massa per Lead / Clienti / Installatori: la
 // differenza tra i tre moduli e' tutta dichiarativa in lib/email/bulk-targets.
@@ -88,6 +93,65 @@ export async function POST(request: Request) {
     )
   }
 
+  // Destinatari e consenso PRIMA della casella dell'agente: se non c'e'
+  // nessuno a cui si possa scrivere, chiedere di configurare la casella
+  // manderebbe l'agente a risolvere il problema sbagliato.
+  const { data: resolved, error: resolveError } = await resolveBulkRecipients({
+    tipo: recordTipo,
+    recordIds,
+    snapshot: permissions.snapshot,
+  })
+  if (resolveError || !resolved) {
+    return NextResponse.json({ error: resolveError ?? "Errore imprevisto" }, { status: 500 })
+  }
+
+  // Il blocco per consenso mancante viene registrato anche quando l'invio
+  // parte lo stesso per gli altri: e' un evento GDPR, non un dettaglio di UI.
+  if (config.consentEntita && resolved.senzaConsenso.length > 0) {
+    const entita = config.consentEntita
+    const senzaConsenso = resolved.senzaConsenso
+    const destinatari = resolved.recipients.length
+    if (resolved.consensoEnforcementAttivo) {
+      after(() =>
+        logInvioBloccatoSenzaConsenso({
+          entita,
+          bloccati: senzaConsenso,
+          inviati: destinatari,
+          oggetto,
+          attore: attoreDaPermessi(permissions),
+          request,
+        }),
+      )
+    } else {
+      // Interruttore spento: l'invio include chi non ha acconsentito.
+      after(() =>
+        logInvioSenzaEnforcement({
+          entita,
+          senzaConsenso,
+          destinatariTotali: destinatari,
+          oggetto,
+          attore: attoreDaPermessi(permissions),
+          request,
+        }),
+      )
+    }
+  }
+
+  if (resolved.recipients.length === 0) {
+    const perConsenso = resolved.esclusiSenzaConsenso > 0
+    return NextResponse.json(
+      {
+        error: perConsenso
+          ? `Invio annullato: nessuno dei ${config.label.plurale} selezionati ha dato il consenso al contatto via email. Registra il consenso nella scheda del contatto prima di scrivere.`
+          : `Nessuno dei ${config.label.plurale} selezionati e' inviabile: nessun destinatario con email valida di tua competenza.`,
+        esclusiNonProprietari: resolved.esclusiNonProprietari,
+        esclusiSenzaEmail: resolved.esclusiSenzaEmail,
+        esclusiSenzaConsenso: resolved.esclusiSenzaConsenso,
+      },
+      { status: 400 },
+    )
+  }
+
   const emailPolicy = await getCommunicationEmailPolicy()
   const systemSmtpAvailable = hasSystemOutboundSmtp(emailPolicy)
   const needsAgentMailbox = !systemSmtpAvailable || emailPolicy.bulkReplyTo === "agente"
@@ -112,26 +176,6 @@ export async function POST(request: Request) {
       {
         error: "Impossibile leggere la password della tua casella. Riconfigurala dal Profilo.",
         needsEmailSetup: true,
-      },
-      { status: 400 },
-    )
-  }
-
-  const { data: resolved, error: resolveError } = await resolveBulkRecipients({
-    tipo: recordTipo,
-    recordIds,
-    snapshot: permissions.snapshot,
-  })
-  if (resolveError || !resolved) {
-    return NextResponse.json({ error: resolveError ?? "Errore imprevisto" }, { status: 500 })
-  }
-
-  if (resolved.recipients.length === 0) {
-    return NextResponse.json(
-      {
-        error: `Nessuno dei ${config.label.plurale} selezionati e' inviabile: nessun destinatario con email valida di tua competenza.`,
-        esclusiNonProprietari: resolved.esclusiNonProprietari,
-        esclusiSenzaEmail: resolved.esclusiSenzaEmail,
       },
       { status: 400 },
     )
@@ -162,6 +206,7 @@ export async function POST(request: Request) {
         subject: oggetto,
         template,
         recipients,
+        consentEntita: config.consentEntita,
         onProgress: async (progress) => {
           const now = Date.now()
           if (now - lastFlush < PROGRESS_FLUSH_MS) return
@@ -169,6 +214,11 @@ export async function POST(request: Request) {
           await updateEmailMassaProgress(job.id, progress)
         },
       })
+      if (outcome.revocatiInCorsa > 0) {
+        console.warn(
+          `[email-massa] job ${job.id}: ${outcome.revocatiInCorsa} destinatari saltati per consenso revocato dopo l'accodamento`,
+        )
+      }
       await finishEmailMassaJob(job.id, {
         inviate: outcome.inviate,
         fallite: outcome.fallite,
@@ -189,6 +239,11 @@ export async function POST(request: Request) {
       totaleRichiesti: resolved.totaleRichiesti,
       esclusiNonProprietari: resolved.esclusiNonProprietari,
       esclusiSenzaEmail: resolved.esclusiSenzaEmail,
+      esclusiSenzaConsenso: resolved.esclusiSenzaConsenso,
+      consensoEnforcementAttivo: resolved.consensoEnforcementAttivo,
+      inviatiSenzaConsenso: resolved.consensoEnforcementAttivo
+        ? 0
+        : resolved.senzaConsenso.length,
     },
     { status: 202 },
   )

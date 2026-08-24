@@ -65,3 +65,61 @@ export function criteriDaSearchParams(
   }
   return out
 }
+
+// --- Export negato ----------------------------------------------------------
+// Un export bloccato e' un evento di sicurezza quanto uno riuscito: dice che
+// qualcuno ha provato a estrarre dati che non gli competono. Senza questa riga
+// il tentativo non lascerebbe traccia da nessuna parte, perche' il 403 non
+// passa da nessun altro registro.
+//
+// Stesso tipo_evento di un export riuscito (`export_dati`) con `esito: failed`:
+// chi cerca "gli export di questo utente" li trova entrambi con un filtro solo,
+// e li distingue dall'esito. E' lo stesso schema gia' usato per gli invii email
+// bloccati per consenso mancante (lib/email/consent.ts).
+
+import { logAudit } from "./log"
+import type { AuditModulo } from "./constants"
+
+/**
+ * Messaggio restituito al chiamante. Esplicito e uguale per tutti i moduli: chi
+ * riceve il 403 deve capire che gli manca un permesso, non pensare a un guasto.
+ * Il generico "Forbidden" di requireApiRecord non basta a distinguere le due
+ * cose.
+ */
+export function messaggioExportNegato(entita: string): string {
+  return `Il tuo ruolo non ha il permesso di esportare ${entita}. Chiedi a un amministratore di abilitare l'azione "export" per il tuo ruolo in Impostazioni CRM > Permessi.`
+}
+
+export async function logExportNegato(params: {
+  entita: string
+  modulo: AuditModulo
+  ruoloCode: string
+  /** Ambito richiesto, per capire cosa stava cercando di portare via. */
+  scope: ExportScope
+  criterio: Record<string, string> | null
+  /** Quante righe erano state selezionate, quando l'ambito e' una selezione. */
+  idsRichiesti: number | null
+  attore?: { id: string | null; nome: string | null }
+  request?: Request
+}): Promise<void> {
+  console.warn(
+    `[export] negato a ruolo ${params.ruoloCode || "sconosciuto"} su ${params.entita} (${params.scope})`,
+  )
+
+  await logAudit({
+    tipo_evento: "export_dati",
+    esito: "failed",
+    modulo: params.modulo,
+    attore: params.attore,
+    request: params.request,
+    descrizione: `Export CSV ${params.entita} NEGATO: il ruolo ${params.ruoloCode || "sconosciuto"} non ha il permesso di export`,
+    dati_dopo: {
+      esito: "negato",
+      motivo: "permesso record 'export' assente",
+      ruolo: params.ruoloCode || null,
+      ambito: params.scope,
+      criterio: params.scope === "selezione" ? "selezione esplicita" : (params.criterio ?? {}),
+      record_richiesti: params.idsRichiesti,
+    },
+  })
+}

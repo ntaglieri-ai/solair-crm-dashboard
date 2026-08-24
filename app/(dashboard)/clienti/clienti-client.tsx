@@ -31,6 +31,7 @@ import {
   type ClienteRecord,
   type ClienteColumnId,
 } from "@/lib/mock-data"
+import { chiaveCampoCliente } from "@/lib/permissions/field-map"
 import {
   ClienteFilters,
   DEFAULT_CLIENTE_FILTERS,
@@ -139,7 +140,7 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
     permissions.snapshot.subject.authUserId ??
     "anonymous"
   const {
-    visibleCols,
+    visibleCols: visibleColsGrezze,
     setVisibleCols,
     columnWidths,
     setColumnWidths,
@@ -151,6 +152,20 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
     validIds: new Set(CLIENTE_COLUMNS.map((c) => c.id)),
     defaultVisibleCols: DEFAULT_CLIENTE_COLUMNS,
   })
+
+  // Le preferenze di colonna vivono in localStorage e sopravvivono a un cambio
+  // di ruolo: una colonna sensibile gia' attivata resterebbe visibile per
+  // sempre. Il filtro si applica qui, dopo la lettura delle preferenze e prima
+  // di ogni uso, cosi' vale sia per la tabella sia per il selettore colonne.
+  const visibleCols = useMemo(
+    () =>
+      visibleColsGrezze.filter((id) => {
+        const campo = chiaveCampoCliente(id)
+        return campo === null || permissions.canField("clienti", campo, "view")
+      }),
+    [visibleColsGrezze, permissions],
+  )
+
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] =
     useState<ClienteSettingsSectionId>("generali")
@@ -387,8 +402,13 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
         return
       }
       download()
-    } catch {
-      toast.error("Errore nell'esportazione")
+    } catch (error) {
+      // Il messaggio del server arriva fin qui: un 403 per permesso mancante
+      // dice all'utente cosa chiedere all'amministratore, un generico
+      // "errore" lo lascerebbe a indovinare.
+      toast.error(
+        error instanceof Error ? error.message : "Errore nell'esportazione",
+      )
     }
   }
 

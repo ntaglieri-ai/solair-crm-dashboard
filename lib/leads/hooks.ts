@@ -294,7 +294,7 @@ export async function fetchLeadsForExport(
 ): Promise<LeadExportResult> {
   const sp = buildLeadsSearchParams({ ...params, page: 1, fields: ["*"] })
   const res = await fetch(`/api/leads/export?${sp.toString()}`)
-  if (!res.ok) throw new Error("Esportazione non riuscita")
+  if (!res.ok) throw new Error(await messaggioErroreExport(res))
   return (await res.json()) as LeadExportResult
 }
 
@@ -304,6 +304,16 @@ export async function fetchLeadsByIdsForExport(
 ): Promise<LeadExportResult> {
   const sp = new URLSearchParams({ ids: ids.join(",") })
   const res = await fetch(`/api/leads/export?${sp.toString()}`)
-  if (!res.ok) throw new Error("Esportazione non riuscita")
+  if (!res.ok) throw new Error(await messaggioErroreExport(res))
   return (await res.json()) as LeadExportResult
+}
+
+/**
+ * Errore da mostrare all'utente. Il messaggio del server ha la precedenza: un
+ * 403 per permesso di export mancante spiega cosa fare, "Esportazione non
+ * riuscita" no.
+ */
+async function messaggioErroreExport(res: Response): Promise<string> {
+  const body = (await res.json().catch(() => null)) as { error?: string } | null
+  return body?.error || "Esportazione non riuscita"
 }

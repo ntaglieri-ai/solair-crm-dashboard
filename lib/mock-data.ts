@@ -1694,6 +1694,8 @@ export interface ClienteRecord {
   "E-mail secondaria"?: string
   "Ora ultima attività"?: string
   "Codice fiscale"?: string
+  /** Consenso al contatto via email: senza questo nessun invio parte. */
+  "Consenso e-mail"?: boolean
 
   // --- Indirizzo postale ---
   "Via indirizzo postale"?: string

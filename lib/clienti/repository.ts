@@ -32,6 +32,8 @@ const LIST_COLUMNS = [
   "installatore",
   "installatore_id",
   "clienti_proprietario_id",
+  // Serve anche in lista: e' cio' che decide se l'invio email e' possibile.
+  "consenso_contatto_email",
   "created_at",
   "updated_at",
 ].join(",")

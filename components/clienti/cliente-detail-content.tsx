@@ -32,6 +32,8 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
+import { ConsensoEmailToggle } from "@/components/shared/consenso-email-toggle"
+import { CampoProtetto, useCampoVisibile } from "@/components/shared/campo-protetto"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { type ClienteRecord, type Compito, OPEN_TASK_STATI } from "@/lib/mock-data"
@@ -248,13 +250,24 @@ function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
             <DataField label="Cognome">{val(cliente.Cognome)}</DataField>
           </div>
           <DataField label="Saluti">{val(cliente.Saluti)}</DataField>
-          <DataField label="Codice fiscale">{val(cliente["Codice fiscale"])}</DataField>
+          <CampoProtetto modulo="clienti" campo="codice_fiscale">
+            <DataField label="Codice fiscale">{val(cliente["Codice fiscale"])}</DataField>
+          </CampoProtetto>
           <CopyField label="E-mail" value={cliente["E-mail"]} icon={IconMail} />
           <CopyField
             label="E-mail secondaria"
             value={cliente["E-mail secondaria"]}
             icon={IconMail}
           />
+          {/* Sta accanto agli indirizzi e non in fondo alla scheda: e' cio' che
+              decide se quegli indirizzi sono utilizzabili. */}
+          <DataField label="Consenso contatto">
+            <ConsensoEmailToggle
+              recordId={cliente.id}
+              endpoint="/api/clienti"
+              iniziale={cliente["Consenso e-mail"] === true}
+            />
+          </DataField>
         </div>
         <div className="flex flex-col gap-4">
           <CopyField label="Cellulare" value={cliente.Cellulare} icon={IconPhone} />
@@ -550,11 +563,32 @@ function Pagamenti({ cliente }: { cliente: ClienteRecord }) {
       ? n.toLocaleString("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 })
       : "—"
 
+  // Ogni riga della tabella tranche mescola due campi con restrizioni proprie
+  // (l'importo e il riferimento del bonifico): si costruisce filtrando, perche'
+  // qui non c'e' un nodo JSX da avvolgere.
+  const vediTotContratto = useCampoVisibile("clienti", "tot_contratto")
+  const vediCt3 = useCampoVisibile("clienti", "di_cui_ct3")
+  const vediFtv = useCampoVisibile("clienti", "di_cui_ftv")
+  const vediTranche1 = useCampoVisibile("clienti", "n_1_tranche")
+  const vediTranche2 = useCampoVisibile("clienti", "n_2tranche")
+  const vediBonifico1 = useCampoVisibile("clienti", "bonifico1")
+  const vediBonifico2 = useCampoVisibile("clienti", "bonifico2")
+  const vediBonificoPdc = useCampoVisibile("clienti", "bonificopdc")
+  const vediFatturaPdc = useCampoVisibile("clienti", "fatturapdc")
+  const vediSaldo = useCampoVisibile("clienti", "saldo")
+
+  const nascosto = "—"
   const tranche: [string, string, string][] = [
-    ["1° Tranche", val(cliente["1° Tranche"]), val(cliente.Bonifico1)],
-    ["2° Tranche", val(cliente["2°Tranche"]), val(cliente.Bonifico2)],
-    ["PDC", val(cliente.BonificoPDC), val(cliente.FatturaPDC)],
-  ]
+    ["1° Tranche",
+      vediTranche1 ? val(cliente["1° Tranche"]) : nascosto,
+      vediBonifico1 ? val(cliente.Bonifico1) : nascosto],
+    ["2° Tranche",
+      vediTranche2 ? val(cliente["2°Tranche"]) : nascosto,
+      vediBonifico2 ? val(cliente.Bonifico2) : nascosto],
+    ["PDC",
+      vediBonificoPdc ? val(cliente.BonificoPDC) : nascosto,
+      vediFatturaPdc ? val(cliente.FatturaPDC) : nascosto],
+  ].filter((riga) => riga[1] !== nascosto || riga[2] !== nascosto) as [string, string, string][]
 
   return (
     <div className="flex flex-col gap-5">
@@ -564,17 +598,23 @@ function Pagamenti({ cliente }: { cliente: ClienteRecord }) {
           Totale contratto
         </span>
         <div className="text-3xl font-bold tabular-nums text-foreground">
-          {euro(cliente["Tot Contratto"] ?? cliente["Importo Contrattuale"])}
+          {vediTotContratto
+            ? euro(cliente["Tot Contratto"] ?? cliente["Importo Contrattuale"])
+            : "—"}
         </div>
         <div className="mt-2 flex flex-wrap gap-4 text-[12px]">
-          <span className="text-muted-foreground">
-            di cui CT3:{" "}
-            <span className="font-semibold text-foreground">{euro(cliente["di cui CT3"])}</span>
-          </span>
-          <span className="text-muted-foreground">
-            di cui FTV:{" "}
-            <span className="font-semibold text-foreground">{euro(cliente["di cui FTV"])}</span>
-          </span>
+          {vediCt3 ? (
+            <span className="text-muted-foreground">
+              di cui CT3:{" "}
+              <span className="font-semibold text-foreground">{euro(cliente["di cui CT3"])}</span>
+            </span>
+          ) : null}
+          {vediFtv ? (
+            <span className="text-muted-foreground">
+              di cui FTV:{" "}
+              <span className="font-semibold text-foreground">{euro(cliente["di cui FTV"])}</span>
+            </span>
+          ) : null}
           {cliente["Corrispettivo pagato"] ? (
             <Badge className="rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
               Corrispettivo pagato ✓
@@ -584,11 +624,18 @@ function Pagamenti({ cliente }: { cliente: ClienteRecord }) {
       </div>
 
       <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-        <DataField label="Modalità di Pagamento">
-          {val(cliente["Modalità di Pagamento"])}
-        </DataField>
-        <DataField label="Importo Contrattuale">{euro(cliente["Importo Contrattuale"])}</DataField>
-        <CopyField label="IBAN" value={cliente.IBAN} icon={IconReceipt2} />
+        <CampoProtetto modulo="clienti" campo="modalita_di_pagamento">
+          <DataField label="Modalità di Pagamento">
+            {val(cliente["Modalità di Pagamento"])}
+          </DataField>
+        </CampoProtetto>
+        <CampoProtetto modulo="clienti" campo="importo_contrattuale">
+          <DataField label="Importo Contrattuale">{euro(cliente["Importo Contrattuale"])}</DataField>
+        </CampoProtetto>
+        <CampoProtetto modulo="clienti" campo="iban">
+          <CopyField label="IBAN" value={cliente.IBAN} icon={IconReceipt2} />
+        </CampoProtetto>
+        <CampoProtetto modulo="clienti" campo="finanziamento_approvato">
         <DataField label="Finanziamento approvato">
           <Switch
             checked={fin}
@@ -599,6 +646,7 @@ function Pagamenti({ cliente }: { cliente: ClienteRecord }) {
             }}
           />
         </DataField>
+        </CampoProtetto>
       </div>
 
       {/* Tranche */}
@@ -619,23 +667,37 @@ function Pagamenti({ cliente }: { cliente: ClienteRecord }) {
                 <td className="px-3 py-2 text-muted-foreground">{b}</td>
               </tr>
             ))}
-            <tr>
-              <td className="px-3 py-2 font-medium text-foreground">Saldo</td>
-              <td className="px-3 py-2 text-foreground" colSpan={2}>
-                {euro(cliente.Saldo)}
-              </td>
-            </tr>
+            {vediSaldo ? (
+              <tr>
+                <td className="px-3 py-2 font-medium text-foreground">Saldo</td>
+                <td className="px-3 py-2 text-foreground" colSpan={2}>
+                  {euro(cliente.Saldo)}
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>
 
       <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-        <DataField label="Importo Finanziamento">{euro(cliente["Importo Finanziamento"])}</DataField>
-        <DataField label="N. rate e importo rata">{val(cliente["N. rate e importo rata"])}</DataField>
-        <DataField label="Sconto COMBO">{euro(cliente["Sconto COMBO"])}</DataField>
-        <DataField label="Importo da Listino">{euro(cliente["Importo da Listino"])}</DataField>
-        <DataField label="Importo TICA">{euro(cliente["Importo TICA"])}</DataField>
-        <DataField label="IVA">{cliente.IVA ? `${cliente.IVA}%` : "—"}</DataField>
+        <CampoProtetto modulo="clienti" campo="importo_finanziamento">
+          <DataField label="Importo Finanziamento">{euro(cliente["Importo Finanziamento"])}</DataField>
+        </CampoProtetto>
+        <CampoProtetto modulo="clienti" campo="n_rate_e_importo_rata">
+          <DataField label="N. rate e importo rata">{val(cliente["N. rate e importo rata"])}</DataField>
+        </CampoProtetto>
+        <CampoProtetto modulo="clienti" campo="sconto_combo">
+          <DataField label="Sconto COMBO">{euro(cliente["Sconto COMBO"])}</DataField>
+        </CampoProtetto>
+        <CampoProtetto modulo="clienti" campo="importo_da_listino">
+          <DataField label="Importo da Listino">{euro(cliente["Importo da Listino"])}</DataField>
+        </CampoProtetto>
+        <CampoProtetto modulo="clienti" campo="importo_tica">
+          <DataField label="Importo TICA">{euro(cliente["Importo TICA"])}</DataField>
+        </CampoProtetto>
+        <CampoProtetto modulo="clienti" campo="iva">
+          <DataField label="IVA">{cliente.IVA ? `${cliente.IVA}%` : "—"}</DataField>
+        </CampoProtetto>
         <DataField label="Iva Reverse charge">
           <Switch
             checked={reverse}
@@ -1099,10 +1161,19 @@ function NoteSection({ cliente }: { cliente: ClienteRecord }) {
     toast.success("Nota aggiunta")
   }
 
+  // "Note ufficio" non ha restrizioni configurate; le altre due si', e sono
+  // voci di un array costruito prima del render: si filtrano qui.
+  const vediNotePagamenti = useCampoVisibile("clienti", "note_pagamenti")
+  const vediNoteProvvigioni = useCampoVisibile("clienti", "note_provvigioni")
+
   const extra: { label: string; value: string | undefined }[] = [
     { label: "Note ufficio", value: cliente["Note ufficio"] },
-    { label: "Note pagamenti", value: cliente["Note pagamenti"] },
-    { label: "Note Provvigioni", value: cliente["Note Provvigioni"] },
+    ...(vediNotePagamenti
+      ? [{ label: "Note pagamenti", value: cliente["Note pagamenti"] }]
+      : []),
+    ...(vediNoteProvvigioni
+      ? [{ label: "Note Provvigioni", value: cliente["Note Provvigioni"] }]
+      : []),
   ].filter((e) => hasValue(e.value))
 
   return (

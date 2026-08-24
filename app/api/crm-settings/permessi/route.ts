@@ -70,14 +70,6 @@ function buildPermissionRows(ruoloId: string, permessi: RuoloPermessi) {
     }),
   )
 
-  const scopeRows = Object.entries(permessi.scope_dati ?? {}).map(
-    ([risorsa, scope]) => ({
-      ruolo_id: ruoloId,
-      risorsa,
-      scope,
-    }),
-  )
-
   const fieldRows = Object.entries(permessi.campi ?? {}).flatMap(
     ([modulo, fields]) =>
       Object.entries(fields).map(([campo, accesso]) => ({
@@ -89,12 +81,12 @@ function buildPermissionRows(ruoloId: string, permessi: RuoloPermessi) {
       })),
   )
 
-  return { paginaRows, recordRows, uiRows, actionRows, scopeRows, fieldRows }
+  return { paginaRows, recordRows, uiRows, actionRows, fieldRows }
 }
 
 async function savePermissions(ruoloId: string, permessi: RuoloPermessi) {
   const supabase = await createClient()
-  const { paginaRows, recordRows, uiRows, actionRows, scopeRows, fieldRows } =
+  const { paginaRows, recordRows, uiRows, actionRows, fieldRows } =
     buildPermissionRows(ruoloId, permessi)
 
   const paginaRes = await supabase
@@ -107,54 +99,51 @@ async function savePermissions(ruoloId: string, permessi: RuoloPermessi) {
     .upsert(recordRows, { onConflict: "ruolo_id,modulo,azione" })
   if (recordRes.error) return recordRes.error
 
-  const { data: existingUiRows, error: existingUiError } = await supabase
-    .from("permessi_ui")
-    .select("chiave")
-    .eq("ruolo_id", ruoloId)
-
-  if (existingUiError) {
-    console.warn("[crm-settings/permessi] read ui permissions warning:", existingUiError.message)
-    return null
-  }
-
-  const existingUiKeys = new Set((existingUiRows ?? []).map((row) => row.chiave as string))
-  const uiRowsToUpdate = uiRows.filter((row) => existingUiKeys.has(row.chiave))
-  if (uiRowsToUpdate.length === 0) return null
-
+  // permessi_ui si scrive per upsert diretto, senza prima leggere quali chiavi
+  // esistono gia'.
+  //
+  // Il giro di lettura precedente era la causa del salvataggio che non salvava:
+  // con la RLS deny-all (nessuna policy, vedi 20260824e) la SELECT non
+  // falliva, tornava zero righe senza errore. Da li' il codice concludeva
+  // "nessuna chiave da aggiornare" e usciva con `return null` — cioe' successo
+  // — saltando anche tutte le scritture successive: permessi_campo,
+  // permessi_azione e la pulizia delle righe jolly.
+  //
+  // Non e' solo un problema di RLS: l'uscita anticipata sbagliava comunque per
+  // un ruolo nuovo, che di righe in permessi_ui non ne ha ancora nessuna e
+  // quindi non ne avrebbe mai ricevuta una. L'upsert le crea e le aggiorna
+  // senza doverlo sapere in anticipo.
   const uiRes = await supabase
     .from("permessi_ui")
-    .upsert(uiRowsToUpdate, { onConflict: "ruolo_id,chiave" })
+    .upsert(uiRows, { onConflict: "ruolo_id,chiave" })
 
-  if (uiRes.error) {
-    console.warn("[crm-settings/permessi] save ui permissions warning:", uiRes.error.message)
+  // Errore riportato al chiamante e non solo su console: un permesso di UI che
+  // non si scrive e' un permesso che l'amministratore crede di aver dato.
+  if (uiRes.error) return uiRes.error
+
+  // permessi_azione e permessi_campo NON sono opzionali: sono la parte della
+  // configurazione che decide cosa un ruolo vede a schermo. Un loro fallimento
+  // deve risalire, non finire in un console.warn che nessuno legge.
+  //
+  // permessi_scope non compare piu': la tabella non esiste nello schema remoto
+  // e non e' stata creata di proposito. Lo scope per risorsa ha gia' due vie
+  // che funzionano — il default del ruolo in lib/permissions/constants.ts e le
+  // chiavi `visibilita_sedi` / `scope:<risorsa>:<scope>` di permessi_ui — e il
+  // pannello Permessi lo mostra in sola lettura, senza alcun controllo per
+  // cambiarlo. Una terza tabella sarebbe schema per una funzione che nessuno
+  // puo' configurare.
+  if (actionRows.length > 0) {
+    const res = await supabase
+      .from("permessi_azione")
+      .upsert(actionRows, { onConflict: "ruolo_id,azione" })
+    if (res.error) return res.error
   }
 
-  const optionalWrites = [
-    actionRows.length > 0
-      ? supabase
-          .from("permessi_azione")
-          .upsert(actionRows, { onConflict: "ruolo_id,azione" })
-      : null,
-    scopeRows.length > 0
-      ? supabase
-          .from("permessi_scope")
-          .upsert(scopeRows, { onConflict: "ruolo_id,risorsa" })
-      : null,
-    fieldRows.length > 0
-      ? supabase
-          .from("permessi_campo")
-          .upsert(fieldRows, { onConflict: "ruolo_id,modulo,campo" })
-      : null,
-  ].filter(Boolean)
-
-  const optionalResults = await Promise.all(optionalWrites)
-  for (const result of optionalResults) {
-    if (result?.error) {
-      console.warn(
-        "[crm-settings/permessi] save optional permission warning:",
-        result.error.message,
-      )
-    }
+  if (fieldRows.length > 0) {
+    const res = await supabase
+      .from("permessi_campo")
+      .upsert(fieldRows, { onConflict: "ruolo_id,modulo,campo" })
+    if (res.error) return res.error
   }
 
   if (fieldRows.length > 0) {
@@ -164,12 +153,9 @@ async function savePermissions(ruoloId: string, permessi: RuoloPermessi) {
       .eq("ruolo_id", ruoloId)
       .eq("campo", "*")
 
-    if (deleteWildcard.error) {
-      console.warn(
-        "[crm-settings/permessi] delete wildcard field permission warning:",
-        deleteWildcard.error.message,
-      )
-    }
+    // Se la riga jolly resta, continua a vincere sulle regole per campo appena
+    // salvate: e' un fallimento che cambia il risultato, non un avviso.
+    if (deleteWildcard.error) return deleteWildcard.error
   }
 
   return null

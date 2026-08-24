@@ -3,7 +3,9 @@ import "server-only"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 
 import { registraToolClienti } from "@/lib/mcp/tools/clienti"
+import { registraToolCompiti, registraToolScadenze } from "@/lib/mcp/tools/compiti"
 import { registraToolComuni } from "@/lib/mcp/tools/comuni"
+import { registraToolInstallatori } from "@/lib/mcp/tools/installatori"
 import { registraToolLeads } from "@/lib/mcp/tools/leads"
 
 /**
@@ -33,6 +35,9 @@ export function creaServerMcp(): McpServer {
   registraToolComuni(server)
   registraToolLeads(server)
   registraToolClienti(server)
+  registraToolCompiti(server)
+  registraToolScadenze(server)
+  registraToolInstallatori(server)
 
   return server
 }

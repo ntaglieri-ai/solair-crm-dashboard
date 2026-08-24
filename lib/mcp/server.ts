@@ -7,6 +7,7 @@ import { registraToolCompiti, registraToolScadenze } from "@/lib/mcp/tools/compi
 import { registraToolComuni } from "@/lib/mcp/tools/comuni"
 import { registraToolInstallatori } from "@/lib/mcp/tools/installatori"
 import { registraToolLeads } from "@/lib/mcp/tools/leads"
+import { registraToolNextcloud } from "@/lib/mcp/tools/nextcloud"
 import { registraToolOfferta } from "@/lib/mcp/tools/offerta"
 
 /**
@@ -40,6 +41,7 @@ export function creaServerMcp(): McpServer {
   registraToolScadenze(server)
   registraToolInstallatori(server)
   registraToolOfferta(server)
+  registraToolNextcloud(server)
 
   return server
 }

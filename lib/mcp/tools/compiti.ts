@@ -275,7 +275,10 @@ export function registraToolCompiti(server: McpServer): void {
   registraTool(server, {
     nome: "compiti_delete",
     titolo: "Elimina compiti",
-    descrizione: "Elimina definitivamente uno o piu' compiti, con le note e i tag associati.",
+    descrizione:
+      "Elimina definitivamente uno o piu' compiti, con i loro tag. Le note della timeline restano nel " +
+      "database senza piu' un compito a cui appartenere: la relazione e' per tipo e id, senza vincolo " +
+      "che possa propagare la cancellazione.",
     schema: { ids: z.array(z.string().uuid()).min(1).max(100) },
     annotazioni: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     esegui: async ({ ids }) => {

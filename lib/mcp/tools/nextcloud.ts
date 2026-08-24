@@ -35,14 +35,39 @@ import { registraTool } from "@/lib/mcp/registra-tool"
 const LIMITE_BYTE = 12 * 1024 * 1024
 
 /**
- * Un path valido, senza traversal. La radice DAV nuda non e' un bersaglio
- * ammesso: "cancella tutto" non deve poter nascere da un parametro vuoto.
+ * Perimetro dei tool Nextcloud: la Team Folder "Solair" e nient'altro.
+ *
+ * L'account admin vede alla radice DAV anche Documents, Photos, Templates e la
+ * propria home: non sono dati Solair e non hanno ragione di essere raggiungibili
+ * da un tool che cancella. Il resto dell'albero aziendale e' tutto qui sotto
+ * (Vendita-Digitale, Offerta-Commerciale, Solair-Agenti, Solair-Ufficio).
  */
-function pathValido(path: string, { permettiRadice = false } = {}): string {
+const RADICE = "Solair"
+
+/**
+ * Un path valido: dentro il perimetro, senza traversal e — per le operazioni
+ * distruttive — mai la Team Folder nuda, cosi' "cancella tutto" non puo'
+ * nascere da un argomento sbagliato.
+ */
+function pathValido(
+  path: string,
+  { permettiRadice = false, distruttivo = false } = {},
+): string {
   const pulito = path.trim().replace(/^\/+|\/+$/g, "")
-  if (!pulito && !permettiRadice) throw new Error("Percorso obbligatorio")
+  if (!pulito) {
+    if (!permettiRadice) throw new Error("Percorso obbligatorio")
+    return RADICE
+  }
   if (pulito.split("/").some((segmento) => segmento === "." || segmento === "..")) {
     throw new Error(`Percorso non valido: "${path}"`)
+  }
+  if (pulito !== RADICE && !pulito.startsWith(`${RADICE}/`)) {
+    throw new Error(
+      `Percorso fuori perimetro: i tool Nextcloud lavorano solo dentro "${RADICE}/". Ricevuto "${path}".`,
+    )
+  }
+  if (distruttivo && pulito === RADICE) {
+    throw new Error(`"${RADICE}" e' la Team Folder intera: non e' un bersaglio ammesso per questa operazione.`)
   }
   return pulito
 }
@@ -57,9 +82,10 @@ export function registraToolNextcloud(server: McpServer): void {
     titolo: "Sfoglia una cartella",
     descrizione:
       "Elenca il contenuto di una cartella Nextcloud: sottocartelle e file con dimensione e data di " +
-      "modifica. Senza percorso elenca la radice. Una cartella che non esiste torna vuota, non in errore.",
+      "modifica. Senza percorso elenca la Team Folder Solair, che e' il perimetro di tutti i tool " +
+      "Nextcloud. Una cartella che non esiste torna vuota, non in errore.",
     schema: {
-      path: z.string().optional().describe("Percorso relativo, es. 'Solair/Vendita-Digitale'. Vuoto = radice."),
+      path: z.string().optional().describe("Percorso dentro Solair/, es. 'Solair/Vendita-Digitale'. Vuoto = Solair."),
     },
     annotazioni: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     esegui: async ({ path }) => {
@@ -204,7 +230,7 @@ export function registraToolNextcloud(server: McpServer): void {
     },
     annotazioni: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     esegui: async ({ path, nuovo_nome }) => {
-      const origine = pathValido(path)
+      const origine = pathValido(path, { distruttivo: true })
       const nome = sanitizeName(nuovo_nome)
       if (!nome || /^\.+$/.test(nome) || nome.includes("/")) {
         throw new Error(`Nome non valido: "${nuovo_nome}". Passa solo il nome, non un percorso.`)
@@ -233,7 +259,7 @@ export function registraToolNextcloud(server: McpServer): void {
     },
     annotazioni: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     esegui: async ({ path_origine, path_destinazione }) => {
-      const origine = pathValido(path_origine)
+      const origine = pathValido(path_origine, { distruttivo: true })
       const destinazione = pathValido(path_destinazione)
       if (origine === destinazione) return { dati: { path: origine, invariato: true }, righe: 0 }
       if (destinazione.startsWith(`${origine}/`)) {
@@ -255,7 +281,7 @@ export function registraToolNextcloud(server: McpServer): void {
     schema: { path: z.string().min(1) },
     annotazioni: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     esegui: async ({ path }) => {
-      const bersaglio = pathValido(path)
+      const bersaglio = pathValido(path, { distruttivo: true })
       const esito = await deleteFile(bersaglio)
       if (!esito.ok) throw new Error(esito.error ?? `Eliminazione fallita (HTTP ${esito.status})`)
       return { dati: { path: bersaglio, eliminato: true, gia_assente: esito.status === 404 }, righe: 1 }

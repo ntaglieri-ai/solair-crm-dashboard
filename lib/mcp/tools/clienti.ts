@@ -243,7 +243,8 @@ export function registraToolClienti(server: McpServer): void {
     titolo: "Elimina clienti",
     descrizione:
       "Elimina definitivamente uno o piu' clienti, con tutte le sezioni di dettaglio e i tag " +
-      "associati. Operazione non reversibile.",
+      "associati. Non e' reversibile. Le note della timeline e i link esterni restano nel database " +
+      "senza piu' un record a cui appartenere, come quando si elimina un cliente dal CRM.",
     schema: { ids: z.array(z.string().uuid()).min(1).max(50) },
     annotazioni: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     esegui: async ({ ids }) => {

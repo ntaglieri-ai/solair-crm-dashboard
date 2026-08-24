@@ -161,8 +161,9 @@ export function registraToolInstallatori(server: McpServer): void {
     nome: "installatori_delete",
     titolo: "Elimina installatore",
     descrizione:
-      "Elimina definitivamente un installatore, con le sue zone di competenza. I clienti che lo " +
-      "avevano assegnato restano, con il riferimento vuoto.",
+      "Elimina definitivamente un installatore, con le sue zone di competenza e i suoi tag. I clienti " +
+      "che lo avevano assegnato restano, con il riferimento vuoto; note e link esterni restano anche " +
+      "loro nel database, senza piu' un record a cui appartenere.",
     schema: { id: z.string().uuid() },
     annotazioni: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     esegui: async ({ id }) => {

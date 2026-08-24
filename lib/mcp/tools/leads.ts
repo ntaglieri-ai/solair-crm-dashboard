@@ -260,8 +260,9 @@ export function registraToolLeads(server: McpServer): void {
     nome: "leads_delete",
     titolo: "Elimina lead",
     descrizione:
-      "Elimina definitivamente uno o piu' lead. L'operazione non e' reversibile e porta con se' " +
-      "note, attivita' e collegamenti del lead.",
+      "Elimina definitivamente uno o piu' lead, con i loro tag. Non e' reversibile. Le note della " +
+      "timeline e i link esterni NON vengono cancellati: restano nel database senza piu' un record a " +
+      "cui appartenere, esattamente come quando si elimina un lead dal CRM.",
     schema: { ids: z.array(z.string().uuid()).min(1).max(100).describe("id dei lead da eliminare.") },
     annotazioni: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     esegui: async ({ ids }) => {

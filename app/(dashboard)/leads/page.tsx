@@ -7,7 +7,7 @@ import {
   buildLeadsSearchParams,
 } from "@/lib/leads/api-types"
 import { queryLeads, computeStats } from "@/lib/leads/repository"
-import { LEAD_COLUMNS } from "@/lib/mock-data"
+import { LEAD_COLUMNS, DEFAULT_VISIBLE_COLUMNS } from "@/lib/mock-data"
 import {
   LEADS_VIEW_COOKIE,
   parseLeadViewPreferences,
@@ -21,19 +21,14 @@ export const dynamic = "force-dynamic"
 export default async function LeadsPage() {
   const permissions = await requirePage("lead")
 
-  const initialParams = getInitialLeadsParams()
-  const initialSp = buildLeadsSearchParams(initialParams).toString()
-
-  // Fetch server-side in parallelo: prima pagina (50 righe) + conteggi header.
-  const [initialLeads, initialStats, cookieStore] = await Promise.all([
-    queryLeads(initialParams),
-    computeStats(),
-    cookies(),
-  ])
-
-  // Preferenze di vista dal cookie: servono a disegnare la tabella con le
-  // colonne giuste già dal server, invece di farle saltare a idratazione
-  // finita (vedi lib/leads/view-preferences.ts).
+  // Preferenze di vista dal cookie lette PRIMA di costruire i params: il
+  // client ricostruisce la query con le colonne reali dell'utente (cookie),
+  // non con DEFAULT_VISIBLE_COLUMNS. Se qui usassimo sempre il default, la
+  // chiave di prefetch non coinciderebbe con quella del client per chi ha
+  // colonne personalizzate, React Query scarterebbe l'initialData e
+  // rilancerebbe una fetch da zero: da qui il flash di tabella vuota al
+  // primo accesso.
+  const cookieStore = await cookies()
   const subject = permissions.snapshot.subject
   const preferenceOwner = subject.userId ?? subject.authUserId ?? "anonymous"
   const initialPreferences = parseLeadViewPreferences(
@@ -41,6 +36,19 @@ export default async function LeadsPage() {
     preferenceOwner,
     new Set(LEAD_COLUMNS.map((column) => column.id)),
   )
+
+  const initialParams = {
+    ...getInitialLeadsParams(),
+    fields: (initialPreferences?.visibleCols ??
+      DEFAULT_VISIBLE_COLUMNS) as unknown as string[],
+  }
+  const initialSp = buildLeadsSearchParams(initialParams).toString()
+
+  // Fetch server-side in parallelo: prima pagina (50 righe) + conteggi header.
+  const [initialLeads, initialStats] = await Promise.all([
+    queryLeads(initialParams),
+    computeStats(),
+  ])
 
   return (
     <LeadsClient

@@ -13,6 +13,13 @@ export type WebDavItem = {
   nome: string
   isFolder: boolean
   dimensioneKb: number | null
+  /**
+   * Dimensione in byte, non arrotondata. `dimensioneKb` va bene per mostrarla
+   * a schermo, ma il fingerprint del sync commerciale e' costruito sui byte:
+   * arrotondare al KB farebbe risultare "cambiato" un file identico visto da
+   * un accesso diverso.
+   */
+  byte: number | null
   modificato: string | null // ISO
   path: string // path completo DAV admin (stessa forma di fullPath in input)
   // ETag Nextcloud, virgolette rimosse. Cambia ad ogni modifica del contenuto:
@@ -212,6 +219,7 @@ export async function listFolder(fullPath: string): Promise<WebDavListResult> {
       nome: path.split("/").pop() ?? path,
       isFolder: /<[a-z0-9]*:?collection\s*\/?>/i.test(block),
       dimensioneKb: size != null && Number.isFinite(size) ? Math.round(size / 1024) : null,
+      byte: size != null && Number.isFinite(size) ? size : null,
       modificato: lastMod ? new Date(lastMod).toISOString() : null,
       path,
       etag: etag && etag.length > 0 ? etag : null,

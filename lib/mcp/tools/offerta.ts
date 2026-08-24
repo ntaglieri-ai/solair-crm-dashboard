@@ -19,6 +19,10 @@ import {
   normalizeSpecificheProdotto,
   OFFERTA_COMMERCIALE_ROOT,
 } from "@/lib/offerta-commerciale/store"
+import {
+  accessoNextcloudAdmin,
+  sincronizzaOffertaCommerciale,
+} from "@/lib/offerta-commerciale/sync"
 import type { CatalogoCommerciale, PannelloSpec } from "@/lib/offerta-commerciale/types"
 import { clientMcpObbligatorio } from "@/lib/mcp/context"
 import { registraTool } from "@/lib/mcp/registra-tool"
@@ -408,6 +412,38 @@ export function registraToolOfferta(server: McpServer): void {
       return {
         dati: { id: catalogo_id, nome: catalogo.nome, file_sorgente_rimasto: catalogo.fonte_path ?? null },
         righe: 1,
+      }
+    },
+  })
+
+  registraTool(server, {
+    nome: "listino_sync_da_nextcloud",
+    titolo: "Sincronizza dal catalogo Nextcloud",
+    descrizione:
+      "Rilegge la cartella Nextcloud del catalogo commerciale: aggiorna l'elenco dei documenti, " +
+      "importa le offerte del periodo con il testo estratto dai PDF e trasforma ogni listino nuovo in " +
+      "una BOZZA, leggendone prezzi, accumuli, accessori e sconti. La bozza non va in produzione da " +
+      "sola: per attivarla serve listino_pubblica. Codici sconto e schede prodotto vengono ereditati " +
+      "dal listino attivo, perche' nel PDF non ci sono.",
+    schema: {},
+    annotazioni: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    esegui: async () => {
+      const supabase = clientMcpObbligatorio()
+      // Credenziali admin: l'app-password personale vive solo dentro una
+      // sessione browser. Le due viste su Nextcloud coincidono (verificato).
+      // pubblicaListini: false — una sincronizzazione non deve poter cambiare
+      // da sola i prezzi che il configuratore mostra ai visitatori.
+      const esito = await sincronizzaOffertaCommerciale(supabase, accessoNextcloudAdmin(), {
+        pubblicaListini: false,
+      })
+      return {
+        dati: {
+          ...esito,
+          nota: esito.bozze > 0
+            ? `${esito.bozze} listino/i pronti come bozza: usa listino_pubblica per attivarne uno.`
+            : "Nessun listino nuovo da importare.",
+        },
+        righe: esito.files,
       }
     },
   })

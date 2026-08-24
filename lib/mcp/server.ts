@@ -7,6 +7,7 @@ import { registraToolCompiti, registraToolScadenze } from "@/lib/mcp/tools/compi
 import { registraToolComuni } from "@/lib/mcp/tools/comuni"
 import { registraToolInstallatori } from "@/lib/mcp/tools/installatori"
 import { registraToolLeads } from "@/lib/mcp/tools/leads"
+import { registraToolOfferta } from "@/lib/mcp/tools/offerta"
 
 /**
  * Istanza del server MCP. Si costruisce una per richiesta: il transport e'
@@ -38,6 +39,7 @@ export function creaServerMcp(): McpServer {
   registraToolCompiti(server)
   registraToolScadenze(server)
   registraToolInstallatori(server)
+  registraToolOfferta(server)
 
   return server
 }

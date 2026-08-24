@@ -41,7 +41,23 @@ const LIST_COLUMNS = [
 const DETAIL_COLUMNS = [
   // installatore_id (FK uuid verso installatori) non e' tra le colonne Zoho:
   // va chiesto esplicitamente, serve al selettore "Installatore assegnato".
-  ...new Set(["id", "created_at", "updated_at", "installatore_id", ...CLIENTI_RECORD_COLUMNS]),
+  //
+  // Stesso motivo per `sede` e `clienti_proprietario_id`, aggiunte il
+  // 24/08/2026: sono in LIST_COLUMNS ma non hanno una voce in zoho-fields,
+  // quindi il dettaglio non le chiedeva affatto e mapRow le leggeva
+  // undefined. Effetto: la scheda di un cliente mostrava Sede vuota anche
+  // quando in tabella c'era, e cadeva sul nome testuale del proprietario
+  // importato da Zoho invece che sul suo id. La lista era corretta, il
+  // dettaglio no — per questo la cosa non saltava all'occhio.
+  ...new Set([
+    "id",
+    "created_at",
+    "updated_at",
+    "installatore_id",
+    "sede",
+    "clienti_proprietario_id",
+    ...CLIENTI_RECORD_COLUMNS,
+  ]),
 ].join(",")
 
 // Whitelist ordinamento: campo UI → colonna DB. Fallback su updated_at.

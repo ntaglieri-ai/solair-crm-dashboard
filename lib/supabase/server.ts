@@ -4,6 +4,8 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
+import { clientMcpDalContesto } from "@/lib/mcp/context"
+
 type CookieToSet = {
   name: string
   value: string
@@ -22,6 +24,14 @@ type CookieToSet = {
  * descrivere la postazione reale di chi si e' collegato.
  */
 export async function createClient(options?: { headers?: Record<string, string> }) {
+  // Dentro una richiesta /api/mcp non esistono cookie di sessione: il client
+  // arriva gia' pronto dal contesto (lib/mcp/context.ts), autenticato col JWT
+  // dell'utente reale e con il perimetro applicato. Fuori da li' il contesto e'
+  // vuoto e questa funzione si comporta esattamente come prima — e' il modo per
+  // far girare i repository esistenti sotto MCP senza cambiarne le firme.
+  const clientMcp = clientMcpDalContesto()
+  if (clientMcp) return clientMcp
+
   const cookieStore = await cookies()
 
   return createServerClient(

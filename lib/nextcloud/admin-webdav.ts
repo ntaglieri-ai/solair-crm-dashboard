@@ -267,6 +267,40 @@ export async function downloadFile(fullPath: string): Promise<{
   }
 }
 
+/**
+ * Sposta o rinomina: in WebDAV sono la stessa operazione, MOVE con la
+ * destinazione in header. La destinazione va passata come URL assoluto, non
+ * come path relativo — Nextcloud rifiuta la forma relativa con un 400.
+ *
+ * Overwrite: F di proposito. Un MOVE che sovrascrive cancellerebbe il file di
+ * destinazione senza dirlo a nessuno: meglio un 412 e un errore leggibile.
+ */
+export async function moveFile(fromPath: string, toPath: string): Promise<WebDavResult> {
+  const cfg = nextcloudAdminConfig()
+  if (!cfg) return { ok: false, status: 0, error: "Credenziali admin Nextcloud non configurate" }
+
+  const cartella = toPath.split("/").slice(0, -1).join("/")
+  if (cartella) {
+    const esito = await ensureFolder(cartella)
+    if (!esito.ok) return esito
+  }
+
+  const { res, error } = await davRequest("MOVE", fromPath, undefined, {
+    Destination: davUrl(toPath, cfg.baseUrl, cfg.adminUser),
+    Overwrite: "F",
+  })
+  if (error) return { ok: false, status: 0, error }
+  if (res?.status === 412) {
+    return { ok: false, status: 412, error: "Destinazione gia' esistente" }
+  }
+  if (res?.status === 404) {
+    return { ok: false, status: 404, error: "Origine non trovata" }
+  }
+  // 201 = creato nella nuova posizione, 204 = destinazione sovrascritta.
+  const ok = res?.status === 201 || res?.status === 204
+  return { ok, status: res?.status ?? 0, ...(ok ? {} : { error: `MOVE fallita (${res?.status})` }) }
+}
+
 export async function deleteFile(fullPath: string): Promise<WebDavResult> {
   const { res, error } = await davRequest("DELETE", fullPath)
   if (error) return { ok: false, status: 0, error }

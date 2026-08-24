@@ -103,6 +103,11 @@ export async function middleware(request: NextRequest) {
     // sessione CRM: si autentica da sola via API key per sorgente
     // (vedi app/api/public/lead-intake/route.ts), come /api/keep-warm sopra.
     "/api/public",
+    // Server MCP: il client e' Claude, non un browser, quindi non ha e non
+    // puo' avere il cookie di sessione CRM. Si difende da solo con il bearer
+    // MCP_ACCESS_TOKEN, verificato prima di leggere il corpo della richiesta
+    // (vedi app/api/mcp/route.ts).
+    "/api/mcp",
   ]
   const isPublicRoute = publicRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route)

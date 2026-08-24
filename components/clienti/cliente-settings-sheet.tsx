@@ -6,7 +6,6 @@ import {
   IconTag,
   IconColumns3,
   IconAdjustmentsHorizontal,
-  IconRoute,
   IconDatabaseCog,
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
@@ -29,7 +28,6 @@ import {
 } from "@/lib/mock-data"
 import type { Density } from "./cliente-table"
 import { GeneralSection } from "@/components/leads/lead-settings-sheet"
-import { RulesSection } from "@/components/leads/assignment-rules"
 import { ClienteTagSection } from "./cliente-tag-section"
 import { ModuleGovernanceSection } from "@/components/crm-settings/module-governance-section"
 
@@ -137,7 +135,6 @@ function ColumnsSection({
 
 export type ClienteSettingsSectionId =
   | "tag"
-  | "regole"
   | "colonne"
   | "generali"
   | "amministrazione"
@@ -165,13 +162,6 @@ const SECTIONS: {
     label: "Tag",
     description: "Gestisci i tag: rinomina, cambia colore o elimina.",
     icon: IconTag,
-  },
-  {
-    id: "regole",
-    label: "Regole di assegnazione",
-    description:
-      "Assegna automaticamente i nuovi clienti ai commerciali in base a criteri.",
-    icon: IconRoute,
   },
   {
     id: "amministrazione",
@@ -263,7 +253,6 @@ export function ClienteSettingsSheet({
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               {section === "tag" && <ClienteTagSection />}
-              {section === "regole" && <RulesSection />}
               {section === "amministrazione" && (
                 <ModuleGovernanceSection module="clienti" label="Clienti" />
               )}

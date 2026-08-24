@@ -5,7 +5,6 @@ import { usePermissions } from "@/lib/permissions/provider"
 import {
   IconDotsVertical,
   IconTags,
-  IconRoute,
   IconMail,
   IconFileText,
   IconDownload,
@@ -271,10 +270,6 @@ export function ClienteActionsMenu({
                 <DropdownMenuItem onClick={() => onOpenSettings("tag")}>
                   <IconTags size={16} stroke={1.8} data-icon="inline-start" />
                   Gestisci tag
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onOpenSettings("regole")}>
-                  <IconRoute size={16} stroke={1.8} data-icon="inline-start" />
-                  Regole di assegnazione
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={onCheckDuplicates}>
                   <IconCopyCheck size={16} stroke={1.8} data-icon="inline-start" />

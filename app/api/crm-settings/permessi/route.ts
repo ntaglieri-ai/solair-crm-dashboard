@@ -70,14 +70,6 @@ function buildPermissionRows(ruoloId: string, permessi: RuoloPermessi) {
     }),
   )
 
-  const scopeRows = Object.entries(permessi.scope_dati ?? {}).map(
-    ([risorsa, scope]) => ({
-      ruolo_id: ruoloId,
-      risorsa,
-      scope,
-    }),
-  )
-
   const fieldRows = Object.entries(permessi.campi ?? {}).flatMap(
     ([modulo, fields]) =>
       Object.entries(fields).map(([campo, accesso]) => ({
@@ -89,12 +81,12 @@ function buildPermissionRows(ruoloId: string, permessi: RuoloPermessi) {
       })),
   )
 
-  return { paginaRows, recordRows, uiRows, actionRows, scopeRows, fieldRows }
+  return { paginaRows, recordRows, uiRows, actionRows, fieldRows }
 }
 
 async function savePermissions(ruoloId: string, permessi: RuoloPermessi) {
   const supabase = await createClient()
-  const { paginaRows, recordRows, uiRows, actionRows, scopeRows, fieldRows } =
+  const { paginaRows, recordRows, uiRows, actionRows, fieldRows } =
     buildPermissionRows(ruoloId, permessi)
 
   const paginaRes = await supabase
@@ -133,9 +125,13 @@ async function savePermissions(ruoloId: string, permessi: RuoloPermessi) {
   // configurazione che decide cosa un ruolo vede a schermo. Un loro fallimento
   // deve risalire, non finire in un console.warn che nessuno legge.
   //
-  // permessi_scope resta a parte perche' la tabella non esiste nello schema
-  // remoto (accertato il 25/07): scriverci fallisce sempre, ed e' una lacuna
-  // nota, non un errore di questo salvataggio.
+  // permessi_scope non compare piu': la tabella non esiste nello schema remoto
+  // e non e' stata creata di proposito. Lo scope per risorsa ha gia' due vie
+  // che funzionano — il default del ruolo in lib/permissions/constants.ts e le
+  // chiavi `visibilita_sedi` / `scope:<risorsa>:<scope>` di permessi_ui — e il
+  // pannello Permessi lo mostra in sola lettura, senza alcun controllo per
+  // cambiarlo. Una terza tabella sarebbe schema per una funzione che nessuno
+  // puo' configurare.
   if (actionRows.length > 0) {
     const res = await supabase
       .from("permessi_azione")
@@ -148,18 +144,6 @@ async function savePermissions(ruoloId: string, permessi: RuoloPermessi) {
       .from("permessi_campo")
       .upsert(fieldRows, { onConflict: "ruolo_id,modulo,campo" })
     if (res.error) return res.error
-  }
-
-  if (scopeRows.length > 0) {
-    const res = await supabase
-      .from("permessi_scope")
-      .upsert(scopeRows, { onConflict: "ruolo_id,risorsa" })
-    if (res.error) {
-      console.warn(
-        "[crm-settings/permessi] permessi_scope non disponibile:",
-        res.error.message,
-      )
-    }
   }
 
   if (fieldRows.length > 0) {

@@ -14,6 +14,10 @@ import {
 import { PermissionManagementClient } from "./permission-management-client"
 import { NextcloudPathsEditor } from "./nextcloud-paths-editor"
 import { completeFieldPermissions } from "@/lib/permissions/field-catalog"
+import {
+  buildDefaultPermissionSnapshot,
+  normalizeRoleCode,
+} from "@/lib/permissions/constants"
 
 // Tabelle Supabase normalizzate per la gestione permessi.
 type RuoloRow = {
@@ -38,7 +42,6 @@ type PermessoRecordRow = {
 }
 type PermessoUiRow = { ruolo_id: string; chiave: string; abilitato: boolean }
 type PermessoAzioneRow = { ruolo_id: string; azione: string; abilitato: boolean }
-type PermessoScopeRow = { ruolo_id: string; risorsa: string; scope: string }
 type PermessoCampoRow = {
   ruolo_id: string
   modulo: string
@@ -84,7 +87,6 @@ function buildRuoli(
   permessiRecord: PermessoRecordRow[],
   permessiUi: PermessoUiRow[],
   permessiAzione: PermessoAzioneRow[],
-  permessiScope: PermessoScopeRow[],
   permessiCampo: PermessoCampoRow[],
   utenti: UtenteRuoloRow[],
 ): Ruolo[] {
@@ -130,11 +132,17 @@ function buildRuoli(
         .filter((row) => row.ruolo_id === r.id)
         .map((row) => [row.azione, row.abilitato]),
     )
-    const scope_dati = Object.fromEntries(
-      permessiScope
-        .filter((row) => row.ruolo_id === r.id)
-        .map((row) => [row.risorsa, row.scope]),
-    )
+    // Lo scope per risorsa non ha una tabella propria: `permessi_scope` non
+    // esiste nello schema remoto e non e' stata creata, perche' lo scope arriva
+    // gia' dal default del ruolo (lib/permissions/constants.ts) e dalle chiavi
+    // `visibilita_sedi` / `scope:<risorsa>:<scope>` di permessi_ui.
+    //
+    // Qui si mostra quindi lo scope EFFETTIVO del ruolo, non una riga salvata.
+    // Prima si leggeva da una tabella inesistente e il badge diceva "none" a
+    // tutti: un'informazione sbagliata su ogni ruolo del CRM.
+    const scope_dati = buildDefaultPermissionSnapshot({
+      ruoloCode: normalizeRoleCode(r.code ?? undefined),
+    }).scopes
     const campi: Record<string, Record<string, string>> = {}
     for (const row of permessiCampo) {
       if (row.ruolo_id !== r.id) continue
@@ -174,7 +182,6 @@ export default async function PermissionManagementPage() {
     { data: permessiRecord },
     { data: permessiUi },
     { data: permessiAzione },
-    { data: permessiScope },
     { data: permessiCampo },
     { data: utenti },
     { data: permessiCartelle },
@@ -189,7 +196,6 @@ export default async function PermissionManagementPage() {
       supabase.from("permessi_record").select("ruolo_id, modulo, azione, abilitato"),
       supabase.from("permessi_ui").select("ruolo_id, chiave, abilitato"),
       supabase.from("permessi_azione").select("ruolo_id, azione, abilitato"),
-      supabase.from("permessi_scope").select("ruolo_id, risorsa, scope"),
       supabase.from("permessi_campo").select("ruolo_id, modulo, campo, accesso"),
       supabase.from("utenti").select("ruolo, ruolo_id"),
       supabase
@@ -204,7 +210,6 @@ export default async function PermissionManagementPage() {
     (permessiRecord as PermessoRecordRow[] | null) ?? [],
     (permessiUi as PermessoUiRow[] | null) ?? [],
     (permessiAzione as PermessoAzioneRow[] | null) ?? [],
-    (permessiScope as PermessoScopeRow[] | null) ?? [],
     (permessiCampo as PermessoCampoRow[] | null) ?? [],
     (utenti as UtenteRuoloRow[] | null) ?? [],
   )

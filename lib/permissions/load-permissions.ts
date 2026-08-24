@@ -70,7 +70,6 @@ type CachedRolePermissions = {
   ui: PermessoUiRow[]
   actions: PermessoAzioneRow[]
   fields: PermessoCampoRow[]
-  scopes: PermessoScopeRow[]
 }
 
 const rolePermissionCache = new Map<string, CachedRolePermissions>()
@@ -138,7 +137,7 @@ async function loadRolePermissionRows(
   const cached = rolePermissionCache.get(roleId)
   if (cached && cached.expiresAt > Date.now()) return cached
 
-  const [pagesRes, recordsRes, uiRes, fields, actions, scopes] = await Promise.all([
+  const [pagesRes, recordsRes, uiRes, fields, actions] = await Promise.all([
     supabase
       .from("permessi_pagina")
       .select("pagina, accesso")
@@ -163,20 +162,15 @@ async function loadRolePermissionRows(
       "azione, abilitato",
       roleId,
     ),
-    selectOptionalPermissionRows<PermessoScopeRow>(
-      supabase,
-      "permessi_scope",
-      "risorsa, scope",
-      roleId,
-    ),
   ])
-  // permessi_azione/permessi_scope confermate ASSENTI dallo schema remoto
-  // (25/07, durante la diagnosi di lentezza) — interrogarle costava un
-  // giro di rete completo verso Supabase per fallire ogni volta (~190ms),
-  // ripetuto ad ogni cold start serverless nonostante la cache "tabella
-  // mancante" a livello di processo. Risultato comunque sempre vuoto sia
-  // prima che ora: nessun cambiamento di comportamento, solo niente piu'
-  // sprecato a chiamarle.
+  // permessi_scope non viene piu' interrogata: la tabella non esiste nello
+  // schema remoto (accertato il 25/07) e non e' stata creata di proposito —
+  // lo scope per risorsa arriva dal default del ruolo e dalle chiavi di
+  // permessi_ui. Interrogarla costava un giro di rete completo per fallire
+  // ogni volta (~190ms), a ogni cold start serverless.
+  //
+  // permessi_azione invece ESISTE (era assente nel 2026-07, lo e' piu'):
+  // resta interrogata, e dal 24/08 le sue policy la rendono anche scrivibile.
 
   const rows: CachedRolePermissions = {
     expiresAt: Date.now() + rolePermissionCacheMs,
@@ -185,19 +179,36 @@ async function loadRolePermissionRows(
     ui: (uiRes.data ?? []) as PermessoUiRow[],
     actions,
     fields,
-    scopes,
   }
 
   rolePermissionCache.set(roleId, rows)
   return rows
 }
 
-function applyUiPermission(snapshot: PermissionSnapshot, row: PermessoUiRow) {
+/**
+ * Esportata per il test: e' la funzione che traduce una riga di permessi_ui in
+ * una modifica dello snapshot, ed e' dove viveva la mappatura sbagliata di
+ * visibilita_sedi. Un errore qui non da' nessun sintomo visibile — allarga o
+ * stringe l'ambito dati in silenzio — quindi va coperto.
+ */
+export function applyUiPermission(snapshot: PermissionSnapshot, row: PermessoUiRow) {
   const key = row.chiave
   const enabled = row.abilitato === true
 
   if (key === "visibilita_sedi") {
-    const scope = enabled ? "all" : "own_sede"
+    // Spento significa "own", non "own_sede".
+    //
+    // La chiave e' binaria e il pannello la presenta come "Tutte le sedi" /
+    // "Solo sede assegnata", ma il valore che conta e' lo scope applicato ai
+    // moduli. Mappare lo spento su "own_sede" ALLARGAVA l'ambito di un AGENT,
+    // il cui default in lib/permissions/constants.ts e' "own": salvare il
+    // ruolo dal pannello — cosa che fino a ieri non funzionava, quindi il
+    // problema non si vedeva — gli avrebbe dato accesso a tutti i record
+    // della propria sede invece che ai soli propri.
+    //
+    // "own" e' anche la direzione sicura: fra due letture possibili di un
+    // interruttore spento, si prende la piu' stretta.
+    const scope = enabled ? "all" : "own"
     for (const moduleKey of Object.keys(snapshot.scopes)) snapshot.scopes[moduleKey] = scope
     return
   }
@@ -373,8 +384,6 @@ async function loadCurrentPermissionSnapshotUncached(): Promise<PermissionSnapsh
         snapshot.fields[row.modulo] ??= {}
         snapshot.fields[row.modulo][row.campo] = row.accesso ?? "hidden"
       }
-      for (const row of roleRows.scopes)
-        snapshot.scopes[row.risorsa] = row.scope ?? "none"
     }
 
     return rememberSnapshot(fastAuthUser.id, snapshot)
@@ -448,10 +457,6 @@ async function loadCurrentPermissionSnapshotUncached(): Promise<PermissionSnapsh
   for (const row of roleRows.fields) {
     snapshot.fields[row.modulo] ??= {}
     snapshot.fields[row.modulo][row.campo] = row.accesso ?? "hidden"
-  }
-
-  for (const row of roleRows.scopes) {
-    snapshot.scopes[row.risorsa] = row.scope ?? "none"
   }
 
   return rememberSnapshot(fastAuthUser.id, snapshot)

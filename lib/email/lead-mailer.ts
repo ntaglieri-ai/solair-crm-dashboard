@@ -58,7 +58,15 @@ type SystemSmtpConfig = {
 
 type OutboundTransport = {
   transport: Transporter
+  /** Header From gia' formattato, pronto per nodemailer. */
   from: string
+  /**
+   * Le due parti grezze del From effettivamente usato. Servono a chi deve
+   * registrare l'invio (lib/email/email-log.ts) senza ri-derivare qui la
+   * logica di scelta fra casella scelta, mittente di sistema e fallback.
+   */
+  fromEmail: string
+  fromName: string | null
   replyTo?: string
   pacingMs: number
   provider: "ses" | "smtp" | "personal-aruba"
@@ -114,6 +122,11 @@ export function createAgentOutboundTransport(params: {
     const replyTo =
       params.replyToMode === "company" ? companyReplyTo : params.smtpUser || companyReplyTo
 
+    // Con una casella scelta, il nome della casella ha la precedenza sul nome
+    // mittente di policy: "Info Solair" e non "Solair CRM".
+    const fromEmail = params.fromEmail || system.fromEmail
+    const fromName = params.fromEmail ? (params.fromName || null) : system.fromName
+
     return {
       transport: nodemailer.createTransport({
         host: system.host,
@@ -121,12 +134,9 @@ export function createAgentOutboundTransport(params: {
         secure: system.port === 465,
         auth: { user: system.user, pass: system.password },
       }),
-      from: formatAddress(
-        params.fromEmail || system.fromEmail,
-        // Con una casella scelta, il nome della casella ha la precedenza sul
-        // nome mittente di policy: "Info Solair" e non "Solair CRM".
-        params.fromEmail ? (params.fromName || "") : system.fromName,
-      ),
+      from: formatAddress(fromEmail, fromName || ""),
+      fromEmail,
+      fromName,
       replyTo,
       pacingMs: policy.bulkPacing === "prudente" ? PACING_MS : SES_PACING_MS,
       provider: process.env.EMAIL_PROVIDER?.trim().toLowerCase() === "ses" ? "ses" : "smtp",
@@ -144,6 +154,8 @@ export function createAgentOutboundTransport(params: {
   return {
     transport: createPersonalTransport(params.smtpUser, params.smtpPassword),
     from: params.smtpUser,
+    fromEmail: params.smtpUser,
+    fromName: null,
     pacingMs: PACING_MS,
     provider: "personal-aruba",
   }
@@ -164,7 +176,13 @@ export async function sendLeadEmails(params: {
   /** Casella scelta dall'utente; assente = mittente di sistema. */
   fromEmail?: string | null
   fromName?: string | null
-}): Promise<{ results: LeadEmailResult[]; truncated: boolean }> {
+}): Promise<{
+  results: LeadEmailResult[]
+  truncated: boolean
+  /** Mittente realmente usato, per lo storico invii. */
+  fromEmail: string
+  fromName: string | null
+}> {
   const truncated = params.recipients.length > MAX_RECIPIENTS_PER_REQUEST
   const recipients = params.recipients.slice(0, MAX_RECIPIENTS_PER_REQUEST)
   const policy = await getCommunicationEmailPolicy()
@@ -197,5 +215,5 @@ export async function sendLeadEmails(params: {
   }
 
   outbound.transport.close()
-  return { results, truncated }
+  return { results, truncated, fromEmail: outbound.fromEmail, fromName: outbound.fromName }
 }

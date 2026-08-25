@@ -29,6 +29,14 @@ export type BulkProgress = {
 export type BulkSendOutcome = {
   inviate: number
   fallite: number
+  /**
+   * Chi ha ricevuto davvero, per lo storico invii. Non ricavabile dai soli
+   * contatori: i saltati per consenso revocato e i falliti non ci sono.
+   */
+  destinatariRaggiunti: Array<{ id: string; email: string }>
+  /** Mittente realmente usato per il batch. */
+  fromEmail: string
+  fromName: string | null
   /** Primi errori distinti, per il log server (non esposti in UI). */
   errori: string[]
   /**
@@ -102,6 +110,7 @@ export async function sendBulkEmails(params: {
   let fallite = 0
   let revocatiInCorsa = 0
   const errori: string[] = []
+  const destinatariRaggiunti: Array<{ id: string; email: string }> = []
 
   for (const recipient of params.recipients) {
     if (ammessi && !ammessi.has(recipient.id)) {
@@ -125,6 +134,7 @@ export async function sendBulkEmails(params: {
         html: textToSafeHtml(body),
       })
       inviate++
+      destinatariRaggiunti.push({ id: recipient.id, email: recipient.email })
     } catch (error) {
       fallite++
       const message = error instanceof Error ? error.message : "Errore invio"
@@ -137,5 +147,13 @@ export async function sendBulkEmails(params: {
   }
 
   outbound.transport.close()
-  return { inviate, fallite, errori, revocatiInCorsa }
+  return {
+    inviate,
+    fallite,
+    errori,
+    revocatiInCorsa,
+    destinatariRaggiunti,
+    fromEmail: outbound.fromEmail,
+    fromName: outbound.fromName,
+  }
 }

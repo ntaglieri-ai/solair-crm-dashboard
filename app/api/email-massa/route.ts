@@ -4,6 +4,7 @@ import { getPersonalEmailPassword, getPersonalEmailStatus } from "@/lib/email/pe
 import { getCommunicationEmailPolicy } from "@/lib/email/communication-policy"
 import { sendBulkEmails } from "@/lib/email/bulk-mailer"
 import { resolveSender } from "@/lib/email/sender-accounts"
+import { logEmailInviate } from "@/lib/email/email-log"
 import { hasSystemOutboundSmtp } from "@/lib/email/lead-mailer"
 import { MAX_BULK_RECIPIENTS } from "@/lib/email/bulk-template"
 import {
@@ -222,6 +223,20 @@ export async function POST(request: Request) {
           await updateEmailMassaProgress(job.id, progress)
         },
       })
+      // Storico invii: gli installatori non hanno una scheda con storico e
+      // config.consentEntita e' gia' il discriminante giusto (null solo per
+      // loro), quindi si registra solo lead e clienti.
+      if (config.consentEntita) {
+        await logEmailInviate({
+          entita: config.consentEntita,
+          destinatari: outcome.destinatariRaggiunti,
+          fromEmail: outcome.fromEmail,
+          fromNome: outcome.fromName,
+          oggetto,
+          inviataDa: subject.userId,
+        })
+      }
+
       if (outcome.revocatiInCorsa > 0) {
         console.warn(
           `[email-massa] job ${job.id}: ${outcome.revocatiInCorsa} destinatari saltati per consenso revocato dopo l'accodamento`,

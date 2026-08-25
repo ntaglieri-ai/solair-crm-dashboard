@@ -4,6 +4,7 @@ import { attoreDaPermessi } from "@/lib/audit/log"
 import { getPersonalEmailPassword, getPersonalEmailStatus } from "@/lib/email/personal-credentials"
 import { hasSystemOutboundSmtp, sendLeadEmails } from "@/lib/email/lead-mailer"
 import { resolveSender } from "@/lib/email/sender-accounts"
+import { logEmailInviate } from "@/lib/email/email-log"
 import {
   filtraDestinatariConsenzienti,
   logInvioBloccatoSenzaConsenso,
@@ -120,7 +121,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: mittente.error }, { status: 403 })
   }
 
-  const { results, truncated } = await sendLeadEmails({
+  const { results, truncated, fromEmail, fromName } = await sendLeadEmails({
     smtpUser: emailStatus.smtpUser ?? subject.email ?? undefined,
     smtpPassword,
     fromEmail: mittente.sender.fromEmail,
@@ -132,6 +133,29 @@ export async function POST(request: Request) {
 
   const sent = results.filter((r) => r.ok).length
   const failed = results.filter((r) => !r.ok)
+
+  // Storico: solo gli invii andati a buon fine, uno per destinatario. Si
+  // rimappano gli esiti sugli id dei destinatari, che sendLeadEmails non
+  // conosce (riceve solo indirizzi). Va in after(): una riga di storico non
+  // deve allungare la risposta di un invio gia' partito.
+  const inviatiOk = new Set(results.filter((r) => r.ok).map((r) => r.to))
+  const daRegistrare = consenso.destinatari.filter((d) => inviatiOk.has(d.email))
+  if (daRegistrare.length > 0) {
+    after(() =>
+      logEmailInviate({
+        entita: "cliente",
+        destinatari: daRegistrare,
+        // Il mittente REALE come risolto dal transport: la casella scelta,
+        // oppure quella di sistema se l'utente non ne ha una propria. Non
+        // ri-derivato qui, altrimenti lo storico e l'header From potrebbero
+        // divergere.
+        fromEmail,
+        fromNome: fromName,
+        oggetto: emailSubject,
+        inviataDa: subject.userId,
+      }),
+    )
+  }
 
   if (bloccatiSenzaConsenso > 0) {
     after(() =>

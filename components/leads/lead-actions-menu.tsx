@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import { usePermissions } from "@/lib/permissions/provider"
 import { MittenteSelect, useMittenti } from "@/components/shared/mittente-select"
@@ -129,27 +129,8 @@ export function LeadActionsMenu({
   const [body, setBody] = useState("")
   const [keepers, setKeepers] = useState<Record<string, string>>({})
 
-  // Stato casella email personale (per l'invio reale ai lead, vedi dialog
-  // "compose" piu' sotto): null = non ancora verificato, true/false = esito.
-  const [emailConfigured, setEmailConfigured] = useState<boolean | null>(null)
   const [sendingEmail, setSendingEmail] = useState(false)
   const mittenti = useMittenti(dialog === "compose")
-
-  useEffect(() => {
-    if (dialog !== "compose") return
-    let cancelled = false
-    fetch("/api/profilo/email-credentials", { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((data: { configured?: boolean }) => {
-        if (!cancelled) setEmailConfigured(Boolean(data.configured))
-      })
-      .catch(() => {
-        if (!cancelled) setEmailConfigured(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [dialog])
 
   async function sendEmailToFiltered() {
     setSendingEmail(true)
@@ -471,11 +452,12 @@ export function LeadActionsMenu({
               />
             </div>
           </div>
-          {emailConfigured === false && (
+          {!mittenti.canSend && (
             <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-sm text-amber-700">
-              Prima di scrivere ai lead devi configurare la tua casella email personale.{" "}
+              Invio non disponibile: nessun SMTP di sistema configurato e nessuna casella
+              personale nel tuo{" "}
               <Link href="/profilo" className="font-semibold underline">
-                Vai al Profilo
+                Profilo
               </Link>
               .
             </p>
@@ -485,7 +467,7 @@ export function LeadActionsMenu({
               Annulla
             </Button>
             <Button
-              disabled={!subject.trim() || emailConfigured !== true || sendingEmail}
+              disabled={!subject.trim() || !mittenti.canSend || sendingEmail}
               onClick={sendEmailToFiltered}
             >
               <IconMail size={16} stroke={1.8} data-icon="inline-start" />

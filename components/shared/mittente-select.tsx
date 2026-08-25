@@ -10,7 +10,7 @@
 // Il valore selezionato non e' una garanzia di niente: le route di invio
 // rivalidano l'id con resolveSender() (lib/email/sender-accounts.ts).
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -30,12 +30,20 @@ export type MittenteOption = {
 }
 
 type MittentiResponse = {
+  /** Se l'invio e' possibile del tutto (SES di sistema o casella personale). */
+  canSend: boolean
   canChoose: boolean
   defaultAccountId: string | null
   accounts: MittenteOption[]
 }
 
 export type MittenteState = {
+  /**
+   * Se l'invio e' possibile. Sostituisce il vecchio controllo dei dialog su
+   * /api/profilo/email-credentials, che disabilitava il pulsante a chi non
+   * aveva una casella personale anche quando l'SMTP di sistema bastava.
+   */
+  canSend: boolean
   canChoose: boolean
   accounts: MittenteOption[]
   /** `null` finche' non e' arrivata la risposta, o se non si puo' scegliere. */
@@ -49,6 +57,9 @@ export type MittenteState = {
  */
 export function useMittenti(enabled: boolean): MittenteState {
   const [state, setState] = useState<MittentiResponse>({
+    // Ottimista: un dialog appena aperto non deve mostrare il pulsante
+    // disabilitato per un istante prima che la risposta arrivi.
+    canSend: true,
     canChoose: false,
     defaultAccountId: null,
     accounts: [],
@@ -70,8 +81,11 @@ export function useMittenti(enabled: boolean): MittenteState {
       })
       .catch(() => {
         // Un errore qui non deve impedire l'invio: si ricade sul mittente
-        // deciso dal server, che e' lo stesso default.
-        if (!cancelled) setState({ canChoose: false, defaultAccountId: null, accounts: [] })
+        // deciso dal server, che e' lo stesso default. `canSend` resta true —
+        // meglio un 400 dal server che un pulsante spento per un errore di rete.
+        if (!cancelled) {
+          setState({ canSend: true, canChoose: false, defaultAccountId: null, accounts: [] })
+        }
       })
 
     return () => {
@@ -80,11 +94,16 @@ export function useMittenti(enabled: boolean): MittenteState {
   }, [enabled])
 
   return {
+    canSend: state.canSend,
     canChoose: state.canChoose,
     accounts: state.accounts,
     selectedId,
     setSelectedId,
   }
+}
+
+function optionLabel(account: MittenteOption) {
+  return `${account.nomeVisualizzato} <${account.email}>${account.condivisa ? " · condivisa" : ""}`
 }
 
 export function MittenteSelect({
@@ -94,12 +113,21 @@ export function MittenteSelect({
   state: MittenteState
   disabled?: boolean
 }) {
+  // `items` mappa valore -> etichetta. Senza, <SelectValue /> rende il valore
+  // grezzo del Select, che qui e' l'id della riga: nel trigger comparirebbe un
+  // UUID invece del nome della casella.
+  const items = useMemo(
+    () => Object.fromEntries(state.accounts.map((account) => [account.id, optionLabel(account)])),
+    [state.accounts],
+  )
+
   if (!state.canChoose || state.accounts.length === 0) return null
 
   return (
     <div className="flex flex-col gap-1.5">
       <Label>Invia da</Label>
       <Select
+        items={items}
         value={state.selectedId ?? ""}
         onValueChange={(value) => state.setSelectedId(value as string)}
         disabled={disabled}
@@ -111,8 +139,7 @@ export function MittenteSelect({
           <SelectGroup>
             {state.accounts.map((account) => (
               <SelectItem key={account.id} value={account.id}>
-                {account.nomeVisualizzato} &lt;{account.email}&gt;
-                {account.condivisa ? " · condivisa" : ""}
+                {optionLabel(account)}
               </SelectItem>
             ))}
           </SelectGroup>

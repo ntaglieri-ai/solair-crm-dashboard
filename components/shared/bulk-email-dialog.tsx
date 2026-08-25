@@ -87,7 +87,6 @@ export function BulkEmailDialog({
     data: PreviewResponse | null
     error: string | null
   } | null>(null)
-  const [emailConfigured, setEmailConfigured] = useState<boolean | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [jobId, setJobId] = useState<string | null>(null)
   const [job, setJob] = useState<JobStatus | null>(null)
@@ -108,7 +107,8 @@ export function BulkEmailDialog({
     setJob(null)
   }, [])
 
-  // Anteprima destinatari + stato casella personale, all'apertura.
+  // Anteprima destinatari, all'apertura. Se l'invio sia possibile lo dice
+  // useMittenti (canSend), non piu' lo stato della casella personale.
   useEffect(() => {
     if (!open) return
     let cancelled = false
@@ -140,15 +140,6 @@ export function BulkEmailDialog({
           data: null,
           error: "Impossibile leggere i destinatari: errore di rete.",
         })
-      })
-
-    fetch("/api/profilo/email-credentials", { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((data: { configured?: boolean }) => {
-        if (!cancelled) setEmailConfigured(Boolean(data.configured))
-      })
-      .catch(() => {
-        if (!cancelled) setEmailConfigured(false)
       })
 
     return () => {
@@ -205,7 +196,7 @@ export function BulkEmailDialog({
   const canSend =
     !submitting &&
     jobId === null &&
-    emailConfigured === true &&
+    mittenti.canSend &&
     destinatari > 0 &&
     oggetto.trim().length > 0 &&
     template.trim().length > 0 &&
@@ -384,11 +375,12 @@ export function BulkEmailDialog({
               </div>
             ) : null}
 
-            {emailConfigured === false ? (
+            {!mittenti.canSend ? (
               <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-sm text-amber-700">
-                Prima di inviare devi configurare la tua casella email personale.{" "}
+                Invio non disponibile: nessun SMTP di sistema configurato e nessuna casella
+                personale nel tuo{" "}
                 <Link href="/profilo" className="font-semibold underline">
-                  Vai al Profilo
+                  Profilo
                 </Link>
                 .
               </p>

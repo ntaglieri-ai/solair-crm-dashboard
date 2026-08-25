@@ -158,27 +158,22 @@ export async function POST(request: Request) {
 
   const emailPolicy = await getCommunicationEmailPolicy()
   const systemSmtpAvailable = hasSystemOutboundSmtp(emailPolicy)
-  const needsAgentMailbox = !systemSmtpAvailable || emailPolicy.bulkReplyTo === "agente"
-  const emailStatus = needsAgentMailbox ? await getPersonalEmailStatus(subject.userId) : null
 
-  if (needsAgentMailbox && (!emailStatus?.configured || !emailStatus.smtpUser)) {
+  // La casella personale e' obbligatoria solo quando l'SMTP di sistema manca e
+  // resta il fallback Aruba, l'unico percorso che si autentica su quella
+  // casella. Prima la si esigeva anche con bulkReplyTo = "agente", che e' il
+  // default: ma il Reply-To e' un indirizzo, non una credenziale, e utenti.email
+  // lo soddisfa senza chiedere nulla nel Profilo.
+  const emailStatus = await getPersonalEmailStatus(subject.userId)
+  const smtpPassword = emailStatus.configured
+    ? ((await getPersonalEmailPassword(subject.userId)) ?? undefined)
+    : undefined
+
+  if (!systemSmtpAvailable && (!emailStatus.smtpUser || !smtpPassword)) {
     return NextResponse.json(
       {
         error:
           "Configura prima la tua casella email personale nel tuo Profilo per poter inviare email di massa.",
-        needsEmailSetup: true,
-      },
-      { status: 400 },
-    )
-  }
-
-  const smtpPassword = needsAgentMailbox
-    ? (await getPersonalEmailPassword(subject.userId)) || undefined
-    : undefined
-  if (needsAgentMailbox && !smtpPassword) {
-    return NextResponse.json(
-      {
-        error: "Impossibile leggere la password della tua casella. Riconfigurala dal Profilo.",
         needsEmailSetup: true,
       },
       { status: 400 },
@@ -206,7 +201,7 @@ export async function POST(request: Request) {
   }
 
   const recipients = resolved.recipients
-  const smtpUser = emailStatus?.smtpUser || subject.email || undefined
+  const smtpUser = emailStatus.smtpUser || subject.email || undefined
 
   after(async () => {
     let lastFlush = 0

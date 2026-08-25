@@ -150,8 +150,14 @@ export function createAgentOutboundTransport(params: {
 }
 
 export async function sendLeadEmails(params: {
-  smtpUser: string
-  smtpPassword: string
+  /**
+   * Casella personale dell'agente. Sul percorso SES serve solo come Reply-To
+   * (e' un indirizzo, non una credenziale): basta utenti.email. La password e'
+   * richiesta unicamente dal fallback Aruba, che si autentica davvero su
+   * quella casella.
+   */
+  smtpUser?: string
+  smtpPassword?: string
   recipients: string[]
   subject: string
   body: string

@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server"
 import { getCurrentPermissions, requireApiRecord } from "@/lib/permissions/server"
 import { attoreDaPermessi } from "@/lib/audit/log"
 import { getPersonalEmailPassword, getPersonalEmailStatus } from "@/lib/email/personal-credentials"
-import { sendLeadEmails } from "@/lib/email/lead-mailer"
+import { hasSystemOutboundSmtp, sendLeadEmails } from "@/lib/email/lead-mailer"
 import { resolveSender } from "@/lib/email/sender-accounts"
 import {
   filtraDestinatariConsenzienti,
@@ -86,23 +86,25 @@ export async function POST(request: Request) {
     )
   }
 
+  // La casella personale del Profilo serve SOLO al fallback Aruba, che si
+  // autentica davvero su di essa. Con l'SMTP di sistema disponibile (SES) le
+  // credenziali di invio sono quelle di sistema e la casella personale entra
+  // al piu' come Reply-To, per cui basta l'indirizzo dell'utente.
+  //
+  // Prima questo controllo era incondizionato e bloccava chiunque non avesse
+  // una riga in email_credentials_personali — cioe' tutti, visto che quella
+  // tabella e' vuota. Il mittente vero arriva da crm_email_accounts.
+  const systemSmtpAvailable = hasSystemOutboundSmtp()
   const emailStatus = await getPersonalEmailStatus(subject.userId)
-  if (!emailStatus.configured || !emailStatus.smtpUser) {
+  const smtpPassword = emailStatus.configured
+    ? ((await getPersonalEmailPassword(subject.userId)) ?? undefined)
+    : undefined
+
+  if (!systemSmtpAvailable && (!emailStatus.smtpUser || !smtpPassword)) {
     return NextResponse.json(
       {
         error:
           "Configura prima la tua casella email personale nel tuo Profilo per poter scrivere ai lead.",
-        needsEmailSetup: true,
-      },
-      { status: 400 },
-    )
-  }
-
-  const smtpPassword = await getPersonalEmailPassword(subject.userId)
-  if (!smtpPassword) {
-    return NextResponse.json(
-      {
-        error: "Impossibile leggere la password della tua casella. Riconfigurala dal Profilo.",
         needsEmailSetup: true,
       },
       { status: 400 },
@@ -118,7 +120,7 @@ export async function POST(request: Request) {
   }
 
   const { results, truncated } = await sendLeadEmails({
-    smtpUser: emailStatus.smtpUser,
+    smtpUser: emailStatus.smtpUser ?? subject.email ?? undefined,
     smtpPassword,
     fromEmail: mittente.sender.fromEmail,
     fromName: mittente.sender.fromName,

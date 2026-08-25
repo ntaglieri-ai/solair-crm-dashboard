@@ -53,6 +53,7 @@ import { useClienteTags } from "@/lib/cliente-tag-store"
 import { usePermissions } from "@/lib/permissions/provider"
 import { EditRecordDialog } from "@/components/shared/edit-record-dialog"
 import { useCampoVisibile } from "@/components/shared/campo-protetto"
+import { telHref } from "@/components/shared/quick-contact-icons"
 
 // "Crea nota"/"Crea attività" — costruiti il 25/07 (endpoint note dedicato
 // app/api/clienti/[id]/notes, i compiti gia' accettavano "Correlato a"
@@ -207,11 +208,17 @@ export function ClienteRowContextMenu({
               <IconPencil size={15} stroke={1.8} />
               Modifica cliente
             </ContextMenuItem>
+            {/* Link tel: vero nel DOM, non navigazione via JS all'onClick:
+                le estensioni click-to-call (3CX) intercettano solo un <a>
+                gia' presente, altrimenti la chiamata passa all'app di
+                sistema (FaceTime) invece che al centralino. */}
             <ContextMenuItem
               disabled={!cliente.Cellulare}
-              onClick={() => {
-                if (cliente.Cellulare) window.location.href = `tel:${cliente.Cellulare}`
-              }}
+              render={
+                cliente.Cellulare ? (
+                  <a href={`tel:${telHref(cliente.Cellulare)}`} />
+                ) : undefined
+              }
             >
               <IconPhone size={15} stroke={1.8} />
               Chiama

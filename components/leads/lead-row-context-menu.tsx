@@ -50,6 +50,7 @@ import { TagPicker } from "./tag-controls"
 import { useTags } from "@/lib/tag-store"
 import { usePermissions } from "@/lib/permissions/provider"
 import { formatDMY } from "@/components/compiti/new-compito-dialog"
+import { telHref } from "@/components/shared/quick-contact-icons"
 
 const STATI: StatoLead[] = [
   "Non contattato",
@@ -195,11 +196,17 @@ export function LeadRowContextMenu({
               <IconPencil size={15} stroke={1.8} />
               Modifica lead
             </ContextMenuItem>
+            {/* Link tel: vero nel DOM, non navigazione via JS all'onClick:
+                le estensioni click-to-call (3CX) intercettano solo un <a>
+                gia' presente, altrimenti la chiamata passa all'app di
+                sistema (FaceTime) invece che al centralino. */}
             <ContextMenuItem
               disabled={!lead.Telefono}
-              onClick={() => {
-                if (lead.Telefono) window.location.href = `tel:${lead.Telefono}`
-              }}
+              render={
+                lead.Telefono ? (
+                  <a href={`tel:${telHref(lead.Telefono)}`} />
+                ) : undefined
+              }
             >
               <IconPhone size={15} stroke={1.8} />
               Chiama

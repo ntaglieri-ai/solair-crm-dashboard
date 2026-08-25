@@ -18,16 +18,40 @@ import { Textarea } from "@/components/ui/textarea"
 import { MittenteSelect, useMittenti } from "@/components/shared/mittente-select"
 
 // Icone di contatto rapido (telefono/email/WhatsApp) accanto al nome, per
-// Lead e Cliente. Telefono e WhatsApp sono oggi un fallback semplice
-// (tel:/wa.me, aprono l'app di sistema) — verranno sostituiti quando 3CX
-// (click-to-call) e Spoki (invio WhatsApp reale) saranno collegati, senza
-// dover cambiare la UI: cambia solo l'onClick sotto il cofano.
+// Lead e Cliente. Il telefono e' un <a href="tel:"> vero, presente nel DOM
+// senza aspettare il click: e' l'unica forma che le estensioni click-to-call
+// del browser (3CX Click2Call) sanno intercettare. Con la vecchia navigazione
+// via JS (window.location.href nell'onClick) l'estensione non vedeva nessun
+// link e la chiamata finiva all'app di sistema — FaceTime su macOS — invece
+// che al centralino. WhatsApp resta un fallback wa.me finche' Spoki non e'
+// collegato.
 // L'email invece e' gia' reale: riusa la stessa infrastruttura di invio
 // costruita per "Invia email ai lead filtrati" (casella Aruba personale
 // dell'agente), qui applicata a un solo destinatario.
 
 function digitsOnly(value: string) {
   return value.replace(/[^\d]/g, "")
+}
+
+/**
+ * Numero normalizzato per un `href="tel:"`: tiene il "+" del prefisso
+ * internazionale e toglie tutto il resto che non sia una cifra (spazi,
+ * trattini, parentesi, punti, barre).
+ *
+ * Volutamente separata da digitsOnly() e non costruita sopra di essa: quella
+ * serve a wa.me, che vuole solo cifre e rifiuta il "+", ed e' usata anche
+ * altrove. Qui il "+" invece va conservato — un numero in formato
+ * internazionale che arriva al centralino senza prefisso viene letto come
+ * nazionale e la chiamata parte verso il numero sbagliato. Le due funzioni
+ * hanno requisiti opposti: non vanno unificate.
+ */
+export function telHref(value: string) {
+  // Il "+" si cerca come primo carattere SIGNIFICATIVO, saltando spazi e
+  // parentesi di apertura: in anagrafica il prefisso capita scritto
+  // "(+39) 347 …", e guardare solo il primo carattere lo perderebbe insieme
+  // alla parentesi, degradando il numero a nazionale.
+  const prefisso = /^[\s(]*\+/.test(value) ? "+" : ""
+  return prefisso + value.replace(/[^\d]/g, "")
 }
 
 export function QuickContactIcons({
@@ -102,21 +126,35 @@ export function QuickContactIcons({
       className="flex shrink-0 items-center gap-0.5"
       onClick={(event) => event.stopPropagation()}
     >
-      {show.includes("phone") && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-6 text-muted-foreground hover:text-foreground disabled:opacity-25"
-          disabled={!hasPhone}
-          title={hasPhone ? `Chiama ${telefono}` : "Nessun numero disponibile"}
-          onClick={() => {
-            if (hasPhone) window.location.href = `tel:${phoneDigits}`
-          }}
-        >
-          <Phone className="size-3.5" />
-        </Button>
-      )}
+      {show.includes("phone") &&
+        (hasPhone ? (
+          // Il <a> e' renderizzato dal Button (stesse classi, stesso hover):
+          // cambia l'elemento nel DOM, non l'aspetto.
+          <Button
+            variant="ghost"
+            size="icon"
+            nativeButton={false}
+            render={<a href={`tel:${telHref(telefono ?? "")}`} />}
+            className="size-6 text-muted-foreground hover:text-foreground"
+            title={`Chiama ${telefono}`}
+          >
+            <Phone className="size-3.5" />
+          </Button>
+        ) : (
+          // Senza numero resta un <button> nativo: è l'unico elemento su cui
+          // `disabled:` di Tailwind fa presa, e un link senza href non si
+          // disabilita.
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-6 text-muted-foreground hover:text-foreground disabled:opacity-25"
+            disabled
+            title="Nessun numero disponibile"
+          >
+            <Phone className="size-3.5" />
+          </Button>
+        ))}
       {show.includes("email") &&
         (emailAsButton ? (
           <Button

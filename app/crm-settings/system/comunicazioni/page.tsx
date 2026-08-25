@@ -28,6 +28,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { SectionHeader } from "@/components/impostazioni/settings-ui"
 import { ConsensoEnforcementCard } from "@/components/crm-settings/consenso-enforcement-card"
+import { CaselleCondiviseCard } from "@/components/crm-settings/caselle-condivise-card"
 import { usePersistentSystemSetting } from "@/lib/crm-settings/use-persistent-system-setting"
 import { usePermissions } from "@/lib/permissions/provider"
 import { cn } from "@/lib/utils"
@@ -327,6 +328,8 @@ function save() {
           <EnvPill label="AWS credentials" value="solo Vercel env" />
         </div>
       </section>
+
+      <CaselleCondiviseCard />
 
       <ConfigCard
         title="WhatsApp Spoki"

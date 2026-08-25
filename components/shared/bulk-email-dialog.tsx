@@ -35,6 +35,7 @@ import {
   MAX_BULK_RECIPIENTS,
   renderTemplate,
 } from "@/lib/email/bulk-template"
+import { MittenteSelect, useMittenti } from "@/components/shared/mittente-select"
 
 export type BulkEmailRecordTipo = "lead" | "cliente" | "installatore"
 
@@ -90,6 +91,9 @@ export function BulkEmailDialog({
   const [submitting, setSubmitting] = useState(false)
   const [jobId, setJobId] = useState<string | null>(null)
   const [job, setJob] = useState<JobStatus | null>(null)
+  // Una sola casella per tutto il batch: si sceglie in composizione e vale per
+  // ogni destinatario del job.
+  const mittenti = useMittenti(open)
 
   // Gli id sono un array nuovo a ogni render del genitore: la fetch di
   // anteprima si aggancia alla chiave stabile, non al riferimento.
@@ -213,7 +217,13 @@ export function BulkEmailDialog({
       const res = await fetch("/api/email-massa", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recordTipo, recordIds, oggetto, template }),
+        body: JSON.stringify({
+          recordTipo,
+          recordIds,
+          oggetto,
+          template,
+          mittenteId: mittenti.selectedId,
+        }),
       })
       const data = (await res.json().catch(() => null)) as
         | { jobId?: string; totale?: number; error?: string }
@@ -331,6 +341,8 @@ export function BulkEmailDialog({
                 includere.
               </p>
             ) : null}
+
+            <MittenteSelect state={mittenti} disabled={submitting} />
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="bulk-mail-subject">Oggetto</Label>

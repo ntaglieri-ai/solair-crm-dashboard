@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { MittenteSelect, useMittenti } from "@/components/shared/mittente-select"
 
 // Icone di contatto rapido (telefono/email/WhatsApp) accanto al nome, per
 // Lead e Cliente. Telefono e WhatsApp sono oggi un fallback semplice
@@ -53,6 +54,9 @@ export function QuickContactIcons({
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
   const [sending, setSending] = useState(false)
+  // Caselle disponibili caricate all'apertura del dialog, non al mount: la
+  // riga di icone compare in ogni cella della tabella.
+  const mittenti = useMittenti(emailOpen)
 
   const phoneDigits = digitsOnly(telefono ?? "")
   const hasPhone = phoneDigits.length > 0
@@ -67,7 +71,12 @@ export function QuickContactIcons({
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [idsKey]: [recordId], subject, body }),
+        body: JSON.stringify({
+          [idsKey]: [recordId],
+          subject,
+          body,
+          mittenteId: mittenti.selectedId,
+        }),
       })
       const result = (await res.json().catch(() => null)) as {
         error?: string
@@ -160,6 +169,7 @@ export function QuickContactIcons({
             <DialogDescription>{email}</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3 py-1">
+            <MittenteSelect state={mittenti} disabled={sending} />
             <div className="flex flex-col gap-1.5">
               <Label htmlFor={`quick-subject-${recordId}`}>Oggetto</Label>
               <Input

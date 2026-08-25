@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { usePermissions } from "@/lib/permissions/provider"
+import { MittenteSelect, useMittenti } from "@/components/shared/mittente-select"
 import {
   IconDotsVertical,
   IconMail,
@@ -132,6 +133,7 @@ export function LeadActionsMenu({
   // "compose" piu' sotto): null = non ancora verificato, true/false = esito.
   const [emailConfigured, setEmailConfigured] = useState<boolean | null>(null)
   const [sendingEmail, setSendingEmail] = useState(false)
+  const mittenti = useMittenti(dialog === "compose")
 
   useEffect(() => {
     if (dialog !== "compose") return
@@ -159,6 +161,7 @@ export function LeadActionsMenu({
           leadIds: filtered.map((lead) => lead.id),
           subject,
           body,
+          mittenteId: mittenti.selectedId,
         }),
       })
       const result = (await res.json().catch(() => null)) as {
@@ -447,6 +450,7 @@ export function LeadActionsMenu({
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3 py-1">
+            <MittenteSelect state={mittenti} disabled={sendingEmail} />
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="mail-subject">Oggetto</Label>
               <Input

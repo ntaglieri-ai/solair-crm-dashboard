@@ -1,38 +1,26 @@
 import "server-only"
 
-import { clientMcpObbligatorio } from "@/lib/mcp/context"
+import { identitaMcpDalContesto } from "@/lib/mcp/context"
 
 /**
- * L'id in `utenti` della persona che il server MCP impersona.
+ * L'id in `utenti` della persona che sta usando il server MCP.
  *
  * Serve alle scritture che portano una firma — note della timeline, link
  * esterni — perche' la RLS accetta solo `utente_id`/`creato_da` nullo oppure
  * uguale a current_utente_id(): una nota senza autore passerebbe, ma
  * comparirebbe nel CRM come "Sistema" invece che come chi l'ha davvero scritta.
  *
- * VITO_USER_ID e' l'id in auth.users; qui serve quello della riga in `utenti`,
- * che e' un'altra cosa. La corrispondenza non cambia mai, quindi si risolve
- * una volta per istanza.
+ * Fino al 25/08/2026 questo valore era una costante, risolta una volta per
+ * istanza a partire da VITO_USER_ID e tenuta in cache. Con piu' utenti quella
+ * cache diventerebbe il modo piu' rapido per firmare le note di uno col nome
+ * di un altro: ora l'id arriva dal contesto della singola richiesta, dove
+ * l'ha messo la verifica del token, e non esiste piu' un "utente corrente"
+ * globale da sbagliare.
  */
-
-let cache: string | null = null
-
 export async function utenteCorrenteId(): Promise<string> {
-  if (cache) return cache
-
-  const authUserId = process.env.VITO_USER_ID
-  if (!authUserId) throw new Error("Variabile d'ambiente VITO_USER_ID non configurata")
-
-  const supabase = clientMcpObbligatorio()
-  const { data, error } = await supabase
-    .from("utenti")
-    .select("id")
-    .eq("auth_user_id", authUserId)
-    .maybeSingle()
-
-  if (error) throw new Error(`Utente MCP non risolto: ${error.message}`)
-  if (!data) throw new Error(`Nessuna riga in utenti con auth_user_id ${authUserId}`)
-
-  cache = (data as { id: string }).id
-  return cache
+  const identita = identitaMcpDalContesto()
+  if (!identita) {
+    throw new Error("Contesto MCP non attivo: nessuna identita' utente disponibile")
+  }
+  return identita.utenteId
 }

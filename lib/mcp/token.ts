@@ -3,11 +3,13 @@ import "server-only"
 import { createClient, type Session } from "@supabase/supabase-js"
 
 /**
+ * JWT Supabase dell'utente che sta usando il server MCP.
+ *
  * Il server MCP non ha una sessione browser: nessun cookie, nessun login
- * interattivo. Per interrogare Supabase come farebbe Vito serve un JWT suo,
- * e l'unico modo di ottenerlo senza conoscerne la password e' la coppia
- * `generateLink` (service_role) + `verifyOtp` (anon) — la stessa tecnica gia'
- * usata su questo progetto per i test E2E.
+ * interattivo. Per interrogare Supabase come farebbe quella persona serve un
+ * JWT suo, e l'unico modo di ottenerlo senza conoscerne la password e' la
+ * coppia `generateLink` (service_role) + `verifyOtp` (anon) — la stessa
+ * tecnica gia' usata su questo progetto per i test E2E.
  *
  * Il service_role compare qui dentro e SOLO qui dentro: serve a coniare il
  * token, mai a leggere o scrivere un dato business. Da quel momento in poi
@@ -15,12 +17,19 @@ import { createClient, type Session } from "@supabase/supabase-js"
  * normale (verificato: `listino_cache` restituisce 0 righe col JWT e 27 in
  * service_role).
  *
- * Il token si tiene in memoria e si rinnova col refresh token: ogni conio
- * crea una riga in `auth.sessions`, che finirebbe in "Sessioni attive". Con
- * la cache la riga e' una per istanza serverless, non una per tool call.
+ * Dal 25/08/2026 la cache e' per utente e non piu' una sola: il connettore e'
+ * multi-utente, e due persone che chiamano la stessa istanza serverless devono
+ * ottenere due sessioni distinte. Se la cache restasse unica, la seconda
+ * leggerebbe i dati con il JWT della prima — cioe' con la RLS di qualcun
+ * altro. E' il motivo per cui la chiave della mappa e' l'auth user id e non
+ * c'e' nessuna variabile globale "utente corrente".
+ *
+ * Ogni conio crea una riga in `auth.sessions`, che finirebbe in "Sessioni
+ * attive": con la cache la riga e' una per utente per istanza serverless, non
+ * una per tool call.
  */
 
-type SessioneVito = {
+type SessioneUtente = {
   accessToken: string
   refreshToken: string
   /** Epoch ms di scadenza dichiarata dal token. */
@@ -30,9 +39,16 @@ type SessioneVito = {
 /** Si rinnova con questo anticipo sulla scadenza, mai all'ultimo istante. */
 const MARGINE_RINNOVO_MS = 120_000
 
-let sessione: SessioneVito | null = null
+/**
+ * Quante sessioni tenere in memoria per istanza. Il tetto esiste perche' la
+ * mappa vive quanto l'istanza serverless: senza, un'istanza longeva
+ * accumulerebbe una sessione per ogni utente che passa di li'.
+ */
+const MAX_SESSIONI = 20
+
+const sessioni = new Map<string, SessioneUtente>()
 /** Conio/rinnovo in corso: evita che N tool call paralleli coniino N sessioni. */
-let inVolo: Promise<SessioneVito> | null = null
+const inVolo = new Map<string, Promise<SessioneUtente>>()
 
 function env(nome: string): string {
   const valore = process.env[nome]
@@ -52,7 +68,7 @@ function clientServiceRole() {
   })
 }
 
-function daSessioneSupabase(session: Session | null): SessioneVito {
+function daSessioneSupabase(session: Session | null): SessioneUtente {
   if (!session?.access_token || !session.refresh_token) {
     throw new Error("Supabase non ha restituito una sessione utilizzabile")
   }
@@ -63,16 +79,15 @@ function daSessioneSupabase(session: Session | null): SessioneVito {
   return { accessToken: session.access_token, refreshToken: session.refresh_token, scadeAt }
 }
 
-async function conia(): Promise<SessioneVito> {
+async function conia(authUserId: string): Promise<SessioneUtente> {
   const admin = clientServiceRole()
-  const userId = env("VITO_USER_ID")
 
-  // L'env var e' l'id utente, non l'email: l'email la risolviamo qui, cosi'
-  // un cambio indirizzo non richiede di toccare la configurazione.
-  const { data: utente, error: erroreUtente } = await admin.auth.admin.getUserById(userId)
+  // Si parte dall'id e non dall'email: un cambio indirizzo non deve rompere
+  // il collegamento gia' autorizzato.
+  const { data: utente, error: erroreUtente } = await admin.auth.admin.getUserById(authUserId)
   if (erroreUtente) throw new Error(`Utente MCP non risolto: ${erroreUtente.message}`)
   const email = utente.user?.email
-  if (!email) throw new Error(`L'utente ${userId} non ha un'email associata`)
+  if (!email) throw new Error(`L'utente ${authUserId} non ha un'email associata`)
 
   const { data: link, error: erroreLink } = await admin.auth.admin.generateLink({
     type: "magiclink",
@@ -91,43 +106,70 @@ async function conia(): Promise<SessioneVito> {
   return daSessioneSupabase(data.session)
 }
 
-async function rinnova(refreshToken: string): Promise<SessioneVito> {
+async function rinnova(refreshToken: string): Promise<SessioneUtente> {
   const { data, error } = await clientAnon().auth.refreshSession({ refresh_token: refreshToken })
   if (error) throw new Error(`refreshSession fallita: ${error.message}`)
   return daSessioneSupabase(data.session)
 }
 
-async function ottieni(): Promise<SessioneVito> {
-  const corrente = sessione
+function potaCache(): void {
+  if (sessioni.size <= MAX_SESSIONI) return
+  const adesso = Date.now()
+  for (const [chiave, sessione] of sessioni) {
+    if (sessione.scadeAt <= adesso) sessioni.delete(chiave)
+  }
+  // Se non bastasse, si buttano le piu' vecchie: riconiarle costa una
+  // chiamata, tenerle tutte costa memoria per sempre.
+  while (sessioni.size > MAX_SESSIONI) {
+    const primaChiave = sessioni.keys().next().value
+    if (primaChiave === undefined) break
+    sessioni.delete(primaChiave)
+  }
+}
+
+async function ottieni(authUserId: string): Promise<SessioneUtente> {
+  const corrente = sessioni.get(authUserId)
   if (corrente && corrente.scadeAt - Date.now() > MARGINE_RINNOVO_MS) return corrente
 
   // Un refresh fallito non e' fatale: il refresh token puo' essere scaduto o
   // gia' ruotato da un'altra istanza. Si riconia e si va avanti.
   if (corrente?.refreshToken) {
     try {
-      sessione = await rinnova(corrente.refreshToken)
-      return sessione
+      const rinnovata = await rinnova(corrente.refreshToken)
+      sessioni.set(authUserId, rinnovata)
+      return rinnovata
     } catch {
-      sessione = null
+      sessioni.delete(authUserId)
     }
   }
 
-  sessione = await conia()
-  return sessione
+  const nuova = await conia(authUserId)
+  sessioni.set(authUserId, nuova)
+  potaCache()
+  return nuova
 }
 
-/** Access token valido di Vito. Conia o rinnova solo se serve. */
-export async function accessTokenVito(): Promise<string> {
-  if (!inVolo) {
-    inVolo = ottieni().finally(() => {
-      inVolo = null
+/** Access token Supabase valido per quell'utente. Conia o rinnova solo se serve. */
+export async function accessTokenUtente(authUserId: string): Promise<string> {
+  if (!authUserId) throw new Error("accessTokenUtente richiede un auth user id")
+
+  let promessa = inVolo.get(authUserId)
+  if (!promessa) {
+    promessa = ottieni(authUserId).finally(() => {
+      inVolo.delete(authUserId)
     })
+    inVolo.set(authUserId, promessa)
   }
-  return (await inVolo).accessToken
+  return (await promessa).accessToken
 }
 
-/** Solo per i test e per la diagnostica: dimentica la sessione in cache. */
-export function scordaSessioneVito(): void {
-  sessione = null
-  inVolo = null
+/** Solo per i test e per la diagnostica: dimentica le sessioni in cache. */
+export function scordaSessioniMcp(authUserId?: string): void {
+  if (authUserId) {
+    sessioni.delete(authUserId)
+    inVolo.delete(authUserId)
+    return
+  }
+  sessioni.clear()
+  inVolo.clear()
 }

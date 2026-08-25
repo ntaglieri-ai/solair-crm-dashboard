@@ -2,6 +2,7 @@ import "server-only"
 
 import { timingSafeEqual } from "node:crypto"
 
+import type { IdentitaContestoMcp } from "@/lib/mcp/context"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { MOTIVO_RUOLO_NON_AMMESSO, ruoloAmmesso } from "@/lib/mcp/oauth/config"
 import { chiaveDiFirma, verificaAccessToken } from "@/lib/mcp/oauth/cripto"
@@ -19,15 +20,12 @@ import { chiaveDiFirma, verificaAccessToken } from "@/lib/mcp/oauth/cripto"
  * al lavoro che fa un tool, e l'unico modo di rendere vera la revoca.
  */
 
-export type IdentitaMcp = {
-  /** `utenti.id`: l'identita' con cui si firmano note e attivita'. */
-  utenteId: string
-  /** `auth.users.id`: serve a coniare il JWT Supabase di questa persona. */
-  authUserId: string
-  ruolo: string
-  nome: string
-  email: string
-}
+/**
+ * Alias, non una copia: e' esattamente cio' che viaggia nel contesto della
+ * richiesta MCP. Ridefinirlo qui vorrebbe dire due tipi identici oggi e
+ * divergenti al primo campo aggiunto.
+ */
+export type IdentitaMcp = IdentitaContestoMcp
 
 export type EsitoAutenticazione =
   | { ok: true; identita: IdentitaMcp }

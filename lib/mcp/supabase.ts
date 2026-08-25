@@ -3,12 +3,15 @@ import "server-only"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 
 import { applicaPerimetro } from "@/lib/mcp/denylist"
-import { accessTokenVito } from "@/lib/mcp/token"
+import { accessTokenUtente } from "@/lib/mcp/token"
 
 /**
- * Client Supabase del server MCP: autenticato col JWT dell'utente reale
- * (quindi RLS attiva come per una sessione normale) e avvolto dal perimetro
- * definito in lib/mcp/denylist.ts.
+ * Client Supabase del server MCP: autenticato col JWT dell'utente che ha
+ * presentato il token (quindi RLS attiva come per una sessione normale) e
+ * avvolto dal perimetro definito in lib/mcp/denylist.ts.
+ *
+ * L'utente arriva come parametro e non da una variabile d'ambiente: e' la
+ * differenza fra un connettore per una persona sola e uno per tutti.
  */
 
 function env(nome: string): string {
@@ -17,8 +20,8 @@ function env(nome: string): string {
   return valore
 }
 
-export async function creaClientMcp(): Promise<SupabaseClient> {
-  const token = await accessTokenVito()
+export async function creaClientMcp(authUserId: string): Promise<SupabaseClient> {
+  const token = await accessTokenUtente(authUserId)
   const client = createClient(
     env("NEXT_PUBLIC_SUPABASE_URL"),
     env("NEXT_PUBLIC_SUPABASE_ANON_KEY"),

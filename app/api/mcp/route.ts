@@ -1,9 +1,9 @@
-import { timingSafeEqual } from "node:crypto"
-
 import { NextResponse, after } from "next/server"
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
 
 import { eseguiNelContestoMcp } from "@/lib/mcp/context"
+import { PERCORSO_METADATA_PR, origineRichiesta } from "@/lib/mcp/oauth/config"
+import { autenticaRichiestaMcp, type EsitoAutenticazione } from "@/lib/mcp/oauth/identita"
 import { creaServerMcp } from "@/lib/mcp/server"
 import { creaClientMcp } from "@/lib/mcp/supabase"
 
@@ -12,11 +12,17 @@ import { creaClientMcp } from "@/lib/mcp/supabase"
  * connector.
  *
  * Autenticazione in due passaggi distinti:
- *  1. Claude -> qui: bearer statico MCP_ACCESS_TOKEN, confrontato in tempo
- *     costante PRIMA di leggere il corpo della richiesta. Nessun token, nessun
- *     parsing: una richiesta non autenticata non arriva mai al protocollo.
+ *  1. Claude -> qui: access token OAuth firmato da noi, che dice QUALE utente
+ *     sta chiamando (oppure il vecchio bearer statico, tenuto vivo per il
+ *     connettore gia' configurato). Verificato PRIMA di leggere il corpo della
+ *     richiesta: senza token valido non si arriva mai al protocollo.
  *  2. qui -> Supabase: JWT dell'utente reale, coniato in service_role ma usato
  *     come una sessione qualunque, cosi' la RLS resta in mezzo.
+ *
+ * Fra i due passaggi c'e' il controllo che rende revocabile l'accesso: utente
+ * esistente, attivo, e con ruolo fra SUPERADMIN/ADMIN/DIRECTOR *adesso*, non
+ * al momento del login. Chi viene disattivato o retrocesso perde l'accesso
+ * alla richiesta successiva, senza aspettare la scadenza del token.
  *
  * La rotta e' fra i publicRoutes del middleware: il gate di sessione del CRM
  * cerca un cookie che un client MCP non ha e non puo' avere. Si difende da
@@ -26,35 +32,41 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
 
-function confrontoCostante(a: string, b: string): boolean {
-  const bufferA = Buffer.from(a)
-  const bufferB = Buffer.from(b)
-  // timingSafeEqual pretende la stessa lunghezza: il confronto va fatto
-  // comunque, altrimenti la lunghezza del token trapelerebbe dal tempo.
-  if (bufferA.length !== bufferB.length) {
-    timingSafeEqual(bufferA, bufferA)
-    return false
-  }
-  return timingSafeEqual(bufferA, bufferB)
-}
+/**
+ * Risposta di rifiuto in forma standard.
+ *
+ * `WWW-Authenticate` con `resource_metadata` non e' decorazione: e' il modo
+ * previsto da RFC 9728 perche' un client MCP scopra dove autenticarsi, ed e'
+ * la strada che rimette in carreggiata claude.ai quando decide da solo di
+ * fare OAuth (anthropics/claude-ai-mcp#644). Senza questo header il client
+ * tira a indovinare sull'origine.
+ */
+function rifiuta(request: Request, esito: Extract<EsitoAutenticazione, { ok: false }>) {
+  const risorsaMetadata = `${origineRichiesta(request)}${PERCORSO_METADATA_PR}`
+  const parametri =
+    esito.stato === 401
+      ? `error="invalid_token", error_description="${esito.descrizione.replace(/"/g, "'")}"`
+      : `error="insufficient_scope", error_description="${esito.descrizione.replace(/"/g, "'")}"`
 
-function verificaBearer(request: Request): NextResponse | null {
-  const atteso = process.env.MCP_ACCESS_TOKEN
-  if (!atteso) {
-    console.error("[mcp] MCP_ACCESS_TOKEN non configurata: endpoint disattivato")
-    return NextResponse.json({ error: "Server MCP non configurato" }, { status: 503 })
-  }
-  const fornito = (request.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "")
-  if (!fornito || !confrontoCostante(fornito, atteso)) {
-    console.warn("[mcp] richiesta senza token valido")
-    return NextResponse.json({ error: "Non autorizzato" }, { status: 401 })
-  }
-  return null
+  console.warn(`[mcp] accesso negato (${esito.stato} ${esito.codice}): ${esito.descrizione}`)
+
+  return NextResponse.json(
+    { error: esito.codice, error_description: esito.descrizione },
+    {
+      status: esito.stato,
+      headers: {
+        "WWW-Authenticate": `Bearer resource_metadata="${risorsaMetadata}", ${parametri}`,
+        "Access-Control-Expose-Headers": "WWW-Authenticate",
+        "Cache-Control": "no-store",
+      },
+    },
+  )
 }
 
 export async function POST(request: Request) {
-  const negato = verificaBearer(request)
-  if (negato) return negato
+  const esito = await autenticaRichiestaMcp(request)
+  if (!esito.ok) return rifiuta(request, esito)
+  const identita = esito.identita
 
   const server = creaServerMcp()
   const transport = new WebStandardStreamableHTTPServerTransport({
@@ -66,11 +78,14 @@ export async function POST(request: Request) {
 
   try {
     await server.connect(transport)
-    const client = await creaClientMcp()
+    const client = await creaClientMcp(identita.authUserId)
     // Il contesto avvolge l'intera gestione della richiesta: i tool girano
     // dentro handleRequest, quindi e' li' che i repository devono trovare il
-    // client di Vito al posto di quello a cookie.
-    const risposta = await eseguiNelContestoMcp(client, () => transport.handleRequest(request))
+    // client di QUESTO utente al posto di quello a cookie — e li' che il
+    // registro trova a chi attribuire la chiamata.
+    const risposta = await eseguiNelContestoMcp(client, identita, () =>
+      transport.handleRequest(request),
+    )
     after(() => {
       void server.close().catch(() => {})
     })
@@ -85,16 +100,28 @@ export async function POST(request: Request) {
   }
 }
 
-// In modalita' stateless non c'e' uno stream server -> client da riaprire ne'
-// una sessione da chiudere: la specifica Streamable HTTP prevede 405.
-export async function GET() {
+/**
+ * In modalita' stateless non c'e' uno stream server -> client da riaprire ne'
+ * una sessione da chiudere: la specifica Streamable HTTP prevede 405.
+ *
+ * Il 401 pero' viene prima: una GET senza token e' spesso il primo colpo che
+ * un client MCP tira per scoprire come autenticarsi, e rispondergli "metodo
+ * non consentito" lo lascerebbe senza l'indicazione dei metadata.
+ */
+export async function GET(request: Request) {
+  const esito = await autenticaRichiestaMcp(request)
+  if (!esito.ok) return rifiuta(request, esito)
+
   return NextResponse.json(
     { jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed" }, id: null },
     { status: 405, headers: { Allow: "POST" } },
   )
 }
 
-export async function DELETE() {
+export async function DELETE(request: Request) {
+  const esito = await autenticaRichiestaMcp(request)
+  if (!esito.ok) return rifiuta(request, esito)
+
   return NextResponse.json(
     { jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed" }, id: null },
     { status: 405, headers: { Allow: "POST" } },

@@ -2,6 +2,7 @@ import "server-only"
 
 import { after } from "next/server"
 
+import { identitaMcpDalContesto } from "@/lib/mcp/context"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 /**
@@ -62,12 +63,15 @@ export type RigaLogMcp = {
   errore?: string | null
   righe?: number | null
   durataMs: number
+  /** `utenti.id` di chi ha chiamato: null solo fuori dal contesto MCP. */
+  utenteId?: string | null
 }
 
 function scriviSuStdout(riga: RigaLogMcp, argomentiRidotti: unknown): void {
   const parti = [
     `tool=${riga.tool}`,
     `esito=${riga.esito}`,
+    riga.utenteId ? `utente=${riga.utenteId}` : null,
     riga.righe != null ? `righe=${riga.righe}` : null,
     `durata_ms=${riga.durataMs}`,
     riga.errore ? `errore=${JSON.stringify(riga.errore)}` : null,
@@ -89,6 +93,7 @@ async function scriviSuTabella(riga: RigaLogMcp, argomentiRidotti: unknown): Pro
     errore: riga.errore ?? null,
     righe: riga.righe ?? null,
     durata_ms: riga.durataMs,
+    utente_id: riga.utenteId ?? null,
   })
   // Un registro che non riesce a scrivere non deve far fallire l'operazione
   // gia' eseguita: si segnala e basta.
@@ -96,6 +101,11 @@ async function scriviSuTabella(riga: RigaLogMcp, argomentiRidotti: unknown): Pro
 }
 
 export function registraChiamataMcp(riga: RigaLogMcp): void {
+  // L'attore si risolve adesso, non dentro `after`: li' il contesto della
+  // richiesta e' gia' stato smontato e l'identita' sarebbe nulla. Stessa
+  // lezione gia' imparata su audit_log.
+  const utenteId = riga.utenteId ?? identitaMcpDalContesto()?.utenteId ?? null
+  riga = { ...riga, utenteId }
   const argomentiRidotti = riduci(riga.argomenti) ?? {}
   scriviSuStdout(riga, argomentiRidotti)
 

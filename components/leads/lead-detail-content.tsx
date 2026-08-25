@@ -19,8 +19,6 @@ import {
   IconTimeline,
   IconPlus,
   IconPhone,
-  IconSend,
-  IconX,
   IconPencil,
   IconStar,
   IconTag,
@@ -56,6 +54,8 @@ import {
   type Compito,
   STATO_LEAD_ORDER,
 } from "@/lib/mock-data"
+import type { EmailLogEntry } from "@/lib/email/email-log"
+import { formatEmailLogDate } from "./email-log-format"
 import { LeadAvatar } from "./lead-utils"
 import { QuickCompitoDialog } from "@/components/compiti/quick-compito-dialog"
 import { AllegatiSection } from "@/components/shared/allegati-section"
@@ -233,24 +233,10 @@ interface Task {
   completato: boolean
 }
 
-interface EmailItem {
-  id: string
-  oggetto: string
-  data: string
-  stato: "Aperta" | "Recapitata" | "Non recapitata"
-  aperture: number
-}
-
 const PRIORITY_TONE: Record<string, string> = {
   Alta: "bg-destructive/10 text-destructive",
   Media: "bg-warning/10 text-warning",
   Bassa: "bg-muted text-muted-foreground",
-}
-
-const EMAIL_STATO_TONE: Record<string, string> = {
-  Aperta: "bg-success/10 text-success",
-  Recapitata: "bg-info/10 text-info",
-  "Non recapitata": "bg-destructive/10 text-destructive",
 }
 
 /* ---------- Sezione Informazioni principali ---------- */
@@ -799,101 +785,40 @@ function AttivitaChiuse({ lead }: { lead: Lead }) {
 
 /* ---------- Sezione E-mail ---------- */
 
-function EmailSection({ lead }: { lead: Lead }) {
-  const [compose, setCompose] = useState(false)
-  const emails = trackedEmails(lead)
+function EmailSection({ emailLog }: { emailLog: EmailLogEntry[] }) {
   return (
-    <div className="flex flex-col gap-3">
-      <ul className="flex flex-col gap-2">
-        {emails.length === 0 ? (
-          <li className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
-            Nessuna email tracciata sul lead.
-          </li>
-        ) : null}
-        {emails.map((e) => (
-          <li
-            key={e.id}
-            className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5"
-          >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success">
-              <IconMail size={16} stroke={1.8} />
-            </span>
-            <div className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate text-[13px] font-medium text-foreground">
-                {e.oggetto}
-              </span>
-              <span className="text-[11px] text-muted-foreground">
-                {[e.data, e.aperture > 0 ? `aperta ${e.aperture} volte` : null]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </span>
-            </div>
-            <Badge
-              className={cn(
-                "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium",
-                EMAIL_STATO_TONE[e.stato],
-              )}
-            >
-              {e.stato}
-            </Badge>
-          </li>
-        ))}
-      </ul>
-      {compose ? (
-        <div className="flex flex-col gap-2 rounded-lg border border-border bg-secondary/40 p-3 animate-in fade-in slide-in-from-top-1 duration-150">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-foreground">
-              Nuova email
-            </span>
-            <button
-              type="button"
-              aria-label="Chiudi"
-              onClick={() => setCompose(false)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <IconX size={15} stroke={1.8} />
-            </button>
-          </div>
-          <Input placeholder="Oggetto" className="h-8 bg-card text-[13px]" />
-          <Textarea
-            rows={3}
-            placeholder="Scrivi il messaggio…"
-            className="bg-card text-[13px]"
-          />
-          <div className="flex justify-end">
-            <Button
-              size="sm"
-              className="bg-teal text-teal-foreground hover:bg-teal/90"
-              onClick={() => {
-                setCompose(false)
-                toast.success("Email inviata", {
-                  description: lead["E-mail"],
-                })
-              }}
-            >
-              <IconSend size={15} stroke={1.8} data-icon="inline-start" />
-              Invia
-            </Button>
-          </div>
-        </div>
+    <ul className="flex flex-col gap-2">
+      {emailLog.length === 0 ? (
+        <li className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
+          Nessuna email inviata a questo lead dal CRM.
+        </li>
       ) : null}
-    </div>
+      {emailLog.map((email) => (
+        <li
+          key={email.id}
+          className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5"
+        >
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success">
+            <IconMail size={16} stroke={1.8} />
+          </span>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-[13px] font-medium text-foreground">
+              {email.oggetto}
+            </span>
+            <span className="truncate text-[11px] text-muted-foreground">
+              {[
+                formatEmailLogDate(email.dataInvio),
+                `da ${email.fromEmail}`,
+                email.inviataDaNome ? `inviata da ${email.inviataDaNome}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          </div>
+        </li>
+      ))}
+    </ul>
   )
-}
-
-function trackedEmails(lead: Lead): EmailItem[] {
-  if (lead.Stato === "—" && lead.emailAperture <= 0) return []
-  return [
-    {
-      id: "email-status",
-      oggetto: "Ultima email tracciata",
-      data: formatTimelineDateTime(
-        lead["Ora ultima attività"] || lead["Data Click"] || lead["Ora creazione"],
-      ),
-      stato: lead.Stato === "—" ? "Recapitata" : lead.Stato,
-      aperture: lead.emailAperture,
-    },
-  ]
 }
 
 /* ---------- Sezione Record collegati ---------- */
@@ -957,18 +882,6 @@ const TL_TONE = {
   modifica: "bg-muted text-muted-foreground",
   creato: "bg-teal/10 text-teal",
 } as const
-
-function formatTimelineDateTime(value: string | null | undefined) {
-  if (!value) return "—"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat("it-IT", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date)
-}
 
 function formatTimelineDay(value: string | null | undefined) {
   if (!value) return "Senza data"
@@ -1166,9 +1079,12 @@ function SequenzaTemporale({ lead }: { lead: Lead }) {
 export function LeadDetailContent({
   lead,
   clienteCollegatoNome,
+  emailLog,
 }: {
   lead: Lead
   clienteCollegatoNome?: string | null
+  /** Storico invii reali (crm_email_log), risolto lato server dalla pagina. */
+  emailLog: EmailLogEntry[]
 }) {
   const [openTasks, setOpenTasks] = useState<Task[]>(() =>
     (lead.compiti ?? []).filter((task) => !task.completato).map(taskFromLeadTask),
@@ -1217,7 +1133,7 @@ export function LeadDetailContent({
     "section-note": lead.attivita.filter((activity) => activity.tipo === "nota").length,
     "section-attivita-aperte": openTasks.length,
     "section-attivita-chiuse": (lead.compiti ?? []).filter((task) => task.completato).length,
-    "section-email": trackedEmails(lead).length,
+    "section-email": emailLog.length,
     "section-record": lead["Account convertito"] ? 1 : 0,
   }
 
@@ -1322,7 +1238,7 @@ export function LeadDetailContent({
         title="E-mail"
         icon={IconMail}
       >
-        <EmailSection lead={lead} />
+        <EmailSection emailLog={emailLog} />
       </Section>
 
       <Section id="section-record" title="Record collegati" icon={IconLink}>

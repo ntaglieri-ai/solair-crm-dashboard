@@ -1,8 +1,7 @@
 "use client"
 
 import {
-  IconMailOpened,
-  IconFlame,
+  IconMail,
   IconMapPin,
   IconExternalLink,
   IconPlus,
@@ -14,10 +13,11 @@ import {
 } from "@tabler/icons-react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { type Lead } from "@/lib/mock-data"
+import type { EmailLogEntry } from "@/lib/email/email-log"
+import { formatEmailLogDate } from "./email-log-format"
 import { LeadMiniMap } from "./lead-mini-map"
 import { scoreColor } from "./lead-utils"
 
@@ -34,12 +34,6 @@ function scoreFactors(lead: Lead): ScoreFactor[] {
     factors.push({
       label: "Arrivato da configuratore",
       pts: 35,
-      tone: "positive",
-    })
-  if (lead.emailAperture > 0)
-    factors.push({
-      label: `Email aperta ×${lead.emailAperture}`,
-      pts: 30,
       tone: "positive",
     })
   if (lead.kWp > 0)
@@ -173,45 +167,41 @@ function ScoreBreakdownCard({ lead }: { lead: Lead }) {
   )
 }
 
-function EmailTrackingCard({ lead }: { lead: Lead }) {
+function EmailInviateCard({ emailLog }: { emailLog: EmailLogEntry[] }) {
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-[13px]">
-          <IconMailOpened size={17} stroke={1.8} className="text-teal" />
-          Tracciamento email
+          <IconMail size={17} stroke={1.8} className="text-teal" />
+          Email inviate
+          {emailLog.length > 0 ? (
+            <span className="ml-auto text-[11px] font-normal tabular-nums text-muted-foreground">
+              {emailLog.length}
+            </span>
+          ) : null}
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Stato</span>
-          {lead.Stato === "Aperta" ? (
-            <Badge className="rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
-              Aperta
-            </Badge>
-          ) : (
-            <span className="text-xs font-medium text-foreground">
-              {lead.Stato}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Aperture</span>
-          <span className="text-xs font-bold tabular-nums text-foreground">
-            {lead.emailAperture}
+      <CardContent className="flex flex-col gap-2.5">
+        {emailLog.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Nessuna email inviata a questo lead dal CRM.
+          </p>
+        ) : (
+          emailLog.slice(0, 5).map((email) => (
+            <div key={email.id} className="flex flex-col gap-0.5">
+              <span className="truncate text-xs font-medium text-foreground">
+                {email.oggetto}
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                {formatEmailLogDate(email.dataInvio)} · da {email.fromEmail}
+              </span>
+            </div>
+          ))
+        )}
+        {emailLog.length > 5 ? (
+          <span className="text-[11px] text-muted-foreground">
+            e altre {emailLog.length - 5} nella sezione E-mail.
           </span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Ultima apertura</span>
-          <span className="text-xs font-medium text-foreground">
-            {lead["Ora ultima attività"]}
-          </span>
-        </div>
-        {lead.leadCaldo ? (
-          <Badge className="w-fit gap-1.5 rounded-md bg-warning/15 px-2.5 py-1 text-[11px] font-medium text-warning">
-            <IconFlame size={14} stroke={2} />
-            Lead caldo · aperta nelle ultime 24h
-          </Badge>
         ) : null}
       </CardContent>
     </Card>
@@ -408,11 +398,17 @@ function ConnessioniCard({ lead }: { lead: Lead }) {
   )
 }
 
-export function LeadIntelligencePanel({ lead }: { lead: Lead }) {
+export function LeadIntelligencePanel({
+  lead,
+  emailLog,
+}: {
+  lead: Lead
+  emailLog: EmailLogEntry[]
+}) {
   return (
     <aside className="flex w-full flex-col gap-4 lg:sticky lg:top-20 lg:w-[340px] lg:shrink-0">
       <ScoreBreakdownCard lead={lead} />
-      <EmailTrackingCard lead={lead} />
+      <EmailInviateCard emailLog={emailLog} />
       <UpcomingTasksCard lead={lead} />
       <PosizioneCard lead={lead} />
       <ConnessioniCard lead={lead} />

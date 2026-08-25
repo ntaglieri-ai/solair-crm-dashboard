@@ -5,6 +5,7 @@ import { LeadDetailHeader } from "@/components/leads/lead-detail-header"
 import { LeadDetailContent } from "@/components/leads/lead-detail-content"
 import { LeadIntelligencePanel } from "@/components/leads/lead-intelligence-panel"
 import { requirePage } from "@/lib/permissions/server"
+import { listEmailLog } from "@/lib/email/email-log"
 
 export default async function LeadDetailPage({
   params,
@@ -24,6 +25,11 @@ export default async function LeadDetailPage({
     ? await getClienteById(clienteCollegatoId)
     : null
 
+  // Storico invii reali. Letto qui e passato ai due consumatori (pannello e
+  // sezione E-mail) invece che fatto fetchare a ciascuno: e' la stessa lista,
+  // e la policy di SELECT su crm_email_log eredita gia' lo scoping di leads.
+  const emailLog = await listEmailLog("lead", id)
+
   return (
     <div className="flex flex-col gap-6">
       <LeadDetailHeader lead={lead} />
@@ -31,8 +37,9 @@ export default async function LeadDetailPage({
         <LeadDetailContent
           lead={lead}
           clienteCollegatoNome={clienteCollegato?.["Nome Clienti"]}
+          emailLog={emailLog}
         />
-        <LeadIntelligencePanel lead={lead} />
+        <LeadIntelligencePanel lead={lead} emailLog={emailLog} />
       </div>
     </div>
   )

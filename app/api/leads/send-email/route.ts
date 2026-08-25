@@ -3,6 +3,7 @@ import { getCurrentPermissions, requireApiRecord } from "@/lib/permissions/serve
 import { attoreDaPermessi } from "@/lib/audit/log"
 import { getPersonalEmailPassword, getPersonalEmailStatus } from "@/lib/email/personal-credentials"
 import { sendLeadEmails } from "@/lib/email/lead-mailer"
+import { resolveSender } from "@/lib/email/sender-accounts"
 import {
   filtraDestinatariConsenzienti,
   logInvioBloccatoSenzaConsenso,
@@ -15,6 +16,8 @@ type SendEmailPayload = {
   leadIds?: unknown
   subject?: unknown
   body?: unknown
+  /** Id della casella crm_email_accounts scelta nel dropdown "Invia da". */
+  mittenteId?: unknown
 }
 
 export async function POST(request: Request) {
@@ -33,6 +36,7 @@ export async function POST(request: Request) {
     : []
   const emailSubject = typeof payload?.subject === "string" ? payload.subject.trim() : ""
   const emailBody = typeof payload?.body === "string" ? payload.body : ""
+  const mittenteId = typeof payload?.mittenteId === "string" ? payload.mittenteId : null
 
   if (leadIds.length === 0) {
     return NextResponse.json({ error: "Nessun lead selezionato." }, { status: 400 })
@@ -105,9 +109,19 @@ export async function POST(request: Request) {
     )
   }
 
+  // Mittente rivalidato QUI e non solo nel dropdown: la route e' raggiungibile
+  // direttamente, e chi non ha ruoli.puo_scegliere_mittente non deve poter
+  // spedire a nome di una casella condivisa passando l'id a mano.
+  const mittente = await resolveSender({ utenteId: subject.userId, accountId: mittenteId })
+  if (!mittente.ok) {
+    return NextResponse.json({ error: mittente.error }, { status: 403 })
+  }
+
   const { results, truncated } = await sendLeadEmails({
     smtpUser: emailStatus.smtpUser,
     smtpPassword,
+    fromEmail: mittente.sender.fromEmail,
+    fromName: mittente.sender.fromName,
     recipients: consenso.destinatari.map((destinatario) => destinatario.email),
     subject: emailSubject,
     body: emailBody,

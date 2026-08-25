@@ -3,6 +3,7 @@ import { getCurrentPermissions, requireApiRecord } from "@/lib/permissions/serve
 import { getPersonalEmailPassword, getPersonalEmailStatus } from "@/lib/email/personal-credentials"
 import { getCommunicationEmailPolicy } from "@/lib/email/communication-policy"
 import { sendBulkEmails } from "@/lib/email/bulk-mailer"
+import { resolveSender } from "@/lib/email/sender-accounts"
 import { hasSystemOutboundSmtp } from "@/lib/email/lead-mailer"
 import { MAX_BULK_RECIPIENTS } from "@/lib/email/bulk-template"
 import {
@@ -47,6 +48,8 @@ type Payload = {
   recordIds?: unknown
   oggetto?: unknown
   template?: unknown
+  /** Casella scelta nel dropdown "Invia da": una sola per tutto il batch. */
+  mittenteId?: unknown
 }
 
 export async function POST(request: Request) {
@@ -72,6 +75,7 @@ export async function POST(request: Request) {
     : []
   const oggetto = typeof payload?.oggetto === "string" ? payload.oggetto.trim() : ""
   const template = typeof payload?.template === "string" ? payload.template : ""
+  const mittenteId = typeof payload?.mittenteId === "string" ? payload.mittenteId : null
 
   if (recordIds.length === 0) {
     return NextResponse.json({ error: "Nessun record selezionato." }, { status: 400 })
@@ -181,6 +185,13 @@ export async function POST(request: Request) {
     )
   }
 
+  // Mittente validato PRIMA di accodare il job: un rifiuto dopo la creazione
+  // lascerebbe una riga email_massa_jobs in "in_corso" che nessuno chiude.
+  const mittente = await resolveSender({ utenteId: subject.userId, accountId: mittenteId })
+  if (!mittente.ok) {
+    return NextResponse.json({ error: mittente.error }, { status: 403 })
+  }
+
   const { job, error: jobError } = await createEmailMassaJob({
     recordTipo,
     oggetto,
@@ -203,6 +214,8 @@ export async function POST(request: Request) {
       const outcome = await sendBulkEmails({
         smtpUser,
         smtpPassword,
+        fromEmail: mittente.sender.fromEmail,
+        fromName: mittente.sender.fromName,
         subject: oggetto,
         template,
         recipients,

@@ -99,6 +99,13 @@ export function createAgentOutboundTransport(params: {
   smtpPassword?: string
   policy?: CommunicationEmailPolicy
   replyToMode?: "agent" | "company"
+  /**
+   * Casella scelta dall'utente (crm_email_accounts). Cambia SOLO l'header
+   * From: credenziali SMTP, Reply-To e ritmo restano quelli della policy.
+   * Assente o null = mittente di sistema, comportamento invariato.
+   */
+  fromEmail?: string | null
+  fromName?: string | null
 }): OutboundTransport {
   const policy = params.policy ?? DEFAULT_COMMUNICATION_EMAIL_POLICY
   const system = systemSmtpConfig(policy)
@@ -114,7 +121,12 @@ export function createAgentOutboundTransport(params: {
         secure: system.port === 465,
         auth: { user: system.user, pass: system.password },
       }),
-      from: formatAddress(system.fromEmail, system.fromName),
+      from: formatAddress(
+        params.fromEmail || system.fromEmail,
+        // Con una casella scelta, il nome della casella ha la precedenza sul
+        // nome mittente di policy: "Info Solair" e non "Solair CRM".
+        params.fromEmail ? (params.fromName || "") : system.fromName,
+      ),
       replyTo,
       pacingMs: policy.bulkPacing === "prudente" ? PACING_MS : SES_PACING_MS,
       provider: process.env.EMAIL_PROVIDER?.trim().toLowerCase() === "ses" ? "ses" : "smtp",
@@ -125,6 +137,10 @@ export function createAgentOutboundTransport(params: {
     throw new Error("SMTP personale non configurato e SMTP di sistema non disponibile")
   }
 
+  // Sul fallback Aruba il From scelto viene ignorato di proposito: quel
+  // transport si autentica sulla casella personale dell'agente, che non puo'
+  // spedire a nome di un altro indirizzo. Meglio spedire dal proprio che
+  // fallire l'autenticazione.
   return {
     transport: createPersonalTransport(params.smtpUser, params.smtpPassword),
     from: params.smtpUser,
@@ -139,6 +155,9 @@ export async function sendLeadEmails(params: {
   recipients: string[]
   subject: string
   body: string
+  /** Casella scelta dall'utente; assente = mittente di sistema. */
+  fromEmail?: string | null
+  fromName?: string | null
 }): Promise<{ results: LeadEmailResult[]; truncated: boolean }> {
   const truncated = params.recipients.length > MAX_RECIPIENTS_PER_REQUEST
   const recipients = params.recipients.slice(0, MAX_RECIPIENTS_PER_REQUEST)
@@ -149,6 +168,8 @@ export async function sendLeadEmails(params: {
     smtpPassword: params.smtpPassword,
     policy,
     replyToMode: "agent",
+    fromEmail: params.fromEmail,
+    fromName: params.fromName,
   })
 
   const results: LeadEmailResult[] = []

@@ -41,6 +41,12 @@ export type BulkSendOutcome = {
 export async function sendBulkEmails(params: {
   smtpUser?: string
   smtpPassword?: string
+  /**
+   * Casella mittente scelta in fase di composizione: la STESSA per tutto il
+   * batch, non per destinatario. Assente = mittente di sistema.
+   */
+  fromEmail?: string | null
+  fromName?: string | null
   subject: string
   template: string
   recipients: BulkRecipient[]
@@ -88,6 +94,8 @@ export async function sendBulkEmails(params: {
     smtpPassword: params.smtpPassword,
     policy,
     replyToMode: policy.bulkReplyTo === "azienda" ? "company" : "agent",
+    fromEmail: params.fromEmail,
+    fromName: params.fromName,
   })
 
   let inviate = 0

@@ -1,6 +1,11 @@
-// Invio email transazionali via SMTP (nodemailer). Provvisorio: oggi punta a
-// un account Gmail personale, in futuro alla casella Aruba — stesso codice,
-// cambia solo la config SMTP_* in .env.
+// Invio email transazionali via SMTP (nodemailer), oggi Amazon SES con il
+// dominio solairgroup.it verificato per intero.
+//
+// `fromEmail` e' opzionale su tutte le funzioni di questo modulo: valorizzato
+// sostituisce il solo header From (le credenziali SMTP restano quelle di
+// sistema, il dominio e' gia' verificato); assente lascia SMTP_FROM, che e' il
+// caso delle email automatiche — benvenuto e reset password partono dal
+// mittente di sistema e non sono toccate dalla scelta del mittente.
 import nodemailer, { type Transporter } from "nodemailer"
 import { escapeHtml } from "./html"
 
@@ -48,6 +53,8 @@ export async function sendWelcomeEmail(params: {
   to: string
   nome: string
   tempPassword: string
+  /** Mittente alternativo; assente = SMTP_FROM, comportamento invariato. */
+  fromEmail?: string | null
 }): Promise<{ ok: boolean; error: string | null }> {
   const cfg = smtpConfig()
   if (!cfg) {
@@ -64,7 +71,7 @@ export async function sendWelcomeEmail(params: {
     const safeTempPassword = escapeHtml(params.tempPassword)
     const safeLoginUrl = escapeHtml(loginUrl())
     await transport.sendMail({
-      from: cfg.from,
+      from: params.fromEmail || cfg.from,
       to: params.to,
       subject: "Il tuo accesso a Solair CRM",
       text: [
@@ -100,6 +107,8 @@ export async function sendPasswordResetEmail(params: {
   to: string
   nome: string
   tempPassword: string
+  /** Mittente alternativo; assente = SMTP_FROM, comportamento invariato. */
+  fromEmail?: string | null
 }): Promise<{ ok: boolean; error: string | null }> {
   const cfg = smtpConfig()
   if (!cfg) {
@@ -116,7 +125,7 @@ export async function sendPasswordResetEmail(params: {
     const safeTempPassword = escapeHtml(params.tempPassword)
     const safeLoginUrl = escapeHtml(loginUrl())
     await transport.sendMail({
-      from: cfg.from,
+      from: params.fromEmail || cfg.from,
       to: params.to,
       subject: "Reimposta la password di Solair CRM",
       text: [

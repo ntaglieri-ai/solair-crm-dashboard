@@ -104,14 +104,28 @@ export async function middleware(request: NextRequest) {
     // (vedi app/api/public/lead-intake/route.ts), come /api/keep-warm sopra.
     "/api/public",
     // Server MCP: il client e' Claude, non un browser, quindi non ha e non
-    // puo' avere il cookie di sessione CRM. Si difende da solo con il bearer
-    // MCP_ACCESS_TOKEN, verificato prima di leggere il corpo della richiesta
-    // (vedi app/api/mcp/route.ts).
+    // puo' avere il cookie di sessione CRM. Si difende da solo verificando il
+    // token di accesso prima di leggere il corpo della richiesta
+    // (vedi app/api/mcp/route.ts e lib/mcp/oauth/identita.ts).
     "/api/mcp",
+    // OAuth del connettore MCP. Metadata, registrazione dinamica e /token
+    // vengono chiamati da chi una sessione non ce l'ha ancora, per
+    // definizione: il gate qui sotto li respingerebbe tutti verso /login.
+    // La pagina /oauth/mcp/authorize e' pubblica per lo stesso motivo per cui
+    // lo e' /oauth/consent: deve poter ricevere la richiesta senza sessione e
+    // rimandare lei a /login preservando i parametri OAuth, altrimenti il
+    // redirect qui sotto li perderebbe per strada.
+    "/api/oauth-mcp",
+    "/oauth/mcp",
+    "/.well-known/oauth-",
   ]
-  const isPublicRoute = publicRoutes.some((route) =>
-    request.nextUrl.pathname.startsWith(route)
-  )
+  // Alias sulla radice del dominio, riscritti in next.config.mjs verso gli
+  // endpoint OAuth. Confronto esatto e non per prefisso: "/token" come
+  // prefisso renderebbe pubblica qualunque rotta futura che inizi per token.
+  const aliasOAuthMcp = ["/authorize", "/token", "/register"]
+  const isPublicRoute =
+    publicRoutes.some((route) => request.nextUrl.pathname.startsWith(route)) ||
+    aliasOAuthMcp.includes(request.nextUrl.pathname)
   const isSessionTouchRoute = request.nextUrl.pathname === "/api/auth/session/touch"
   const hasCrmSession =
     request.cookies.get(CRM_SESSION_COOKIE)?.value === "1" &&
@@ -121,7 +135,16 @@ export async function middleware(request: NextRequest) {
     if (request.nextUrl.pathname === "/login") {
       return clearAuthCookies(supabaseResponse, request)
     }
-    if (!isPublicRoute || request.nextUrl.pathname === "/oauth/consent") {
+    // Le pagine di autorizzazione OAuth (Nextcloud e connettore MCP) sono
+    // pubbliche per necessita', ma con una sessione Supabase viva e la
+    // sessione CRM scaduta devono comunque passare da un login fresco: sono
+    // l'unico punto in cui una sessione dimenticata diventerebbe un accesso
+    // concesso a un'applicazione esterna.
+    const isPaginaAutorizzazione =
+      request.nextUrl.pathname === "/oauth/consent" ||
+      request.nextUrl.pathname.startsWith("/oauth/mcp") ||
+      request.nextUrl.pathname === "/authorize"
+    if (!isPublicRoute || isPaginaAutorizzazione) {
       return redirectToExpiredLogin(request)
     }
   }

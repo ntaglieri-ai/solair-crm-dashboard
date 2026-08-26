@@ -176,10 +176,15 @@ export async function bulkUpdateRecords(
 
   // Stesso valore per tutti i lead → singola query update().in("id", ids).
   const supabase = await createClient()
+  const now = new Date().toISOString()
   const { count, error } = await supabase
     .from("leads")
     .update(
-      { [BULK_COLUMN[field]]: value, updated_at: new Date().toISOString() },
+      {
+        [BULK_COLUMN[field]]: value,
+        ora_ultima_attivita: now,
+        updated_at: now,
+      },
       { count: "exact" },
     )
     .in("id", ids)

@@ -401,7 +401,12 @@ export async function getLeadById(id: string): Promise<Lead | undefined> {
   const lead = mapRow(leadResult.data as Record<string, unknown>)
   lead.attivita = (activityResult.data ?? []).map((item) => ({
     id: item.id,
-    tipo: item.tipo === "nota" ? "nota" : "cambio-stato",
+    tipo:
+      item.tipo === "nota"
+        ? "nota"
+        : item.tipo === "nuovo-lead"
+          ? "nuovo-lead"
+          : "cambio-stato",
     descrizione: item.testo ?? "",
     timestamp: item.created_at ?? "",
     autore: item.utente_id ? names.get(item.utente_id) ?? "Utente CRM" : "Sistema",
@@ -476,7 +481,11 @@ export async function insertLead(lead: Lead): Promise<Lead> {
 
 export async function patchLead(id: string, patch: Partial<Lead>): Promise<Lead | undefined> {
   const supabase = await createClient()
-  const row: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  const now = new Date().toISOString()
+  const row: Record<string, unknown> = {
+    ora_ultima_attivita: now,
+    updated_at: now,
+  }
   if (patch["Nome Lead"] !== undefined) row.nome_lead = patch["Nome Lead"]
   if (patch.Nome !== undefined) row.nome = patch.Nome
   if (patch.Cognome !== undefined) row.cognome = patch.Cognome

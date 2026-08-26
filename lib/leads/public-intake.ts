@@ -4,6 +4,11 @@
 // (vedi app/api/public/lead-intake/route.ts), non via cookie di sessione.
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assignLeadTag, ensureLeadTag } from "@/lib/leads/discount-tag"
+import {
+  buildLeadUpdateActivityText,
+  insertLeadUpdateActivity,
+  type LeadUpdateSource,
+} from "@/lib/leads/update-activity-log"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 export type LeadIntakeOrigine = "chatbot" | "meta_ads" | "configuratore" | "manuale"
@@ -36,6 +41,9 @@ export interface LeadIntakePayload {
   consensoWhatsapp?: boolean
   consensoEmail?: boolean
   consensoMarketingEmail?: boolean
+  source?: string
+  sourcePlatform?: string
+  piattaforma?: string
   codiceSconto?: string
   codice_sconto?: string
   scontoPercentuale?: number | string
@@ -288,6 +296,17 @@ export function normalizeLeadIntakePayload(input: unknown): Partial<LeadIntakePa
       ),
     campaignName: direct.campaignName ?? pickField(fields, ["campaign_name", "campaign", "campagna"]),
     interesse: direct.interesse ?? pickField(fields, ["interesse", "interest"]),
+    source: direct.source ?? pickField(fields, ["source", "sorgente", "source_name"]),
+    sourcePlatform:
+      direct.sourcePlatform ??
+      direct.piattaforma ??
+      pickField(fields, [
+        "source_platform",
+        "publisher_platform",
+        "platform",
+        "piattaforma",
+        "placement",
+      ]),
     note,
     consensoTelefono:
       direct.consensoTelefono ??
@@ -527,6 +546,61 @@ function buildDescription(payload: LeadIntakePayload) {
   return parts.length ? parts.join("\n") : null
 }
 
+function intakeSource(payload: LeadIntakePayload): {
+  source: LeadUpdateSource
+  detail: string
+} {
+  const platform = normalizeIntakeFieldName(
+    normalizeText(payload.sourcePlatform ?? payload.piattaforma ?? payload.source) ?? "",
+  )
+
+  if (payload.origine === "configuratore") {
+    return { source: "configuratore", detail: "Configuratore sito" }
+  }
+  if (payload.origine === "chatbot") {
+    return { source: "api", detail: "Chatbot" }
+  }
+  if (payload.origine === "manuale") {
+    return { source: "manuale", detail: "Inserimento manuale via API" }
+  }
+  if (platform.includes("instagram")) {
+    return { source: "instagram", detail: "Instagram tramite Make/API pubblica" }
+  }
+  if (platform.includes("facebook") || platform === "fb") {
+    return { source: "facebook", detail: "Facebook Lead Ads tramite Make/API pubblica" }
+  }
+  return { source: "meta", detail: "Meta Ads tramite Make/API pubblica" }
+}
+
+function intakeReceivedDetails(payload: LeadIntakePayload) {
+  return [
+    `Dati ricevuti: nome ${payload.nome}`,
+    payload.telefono ? `Telefono: ${payload.telefono}` : null,
+    payload.email ? `Email: ${payload.email}` : null,
+    payload.provincia ? `Provincia: ${payload.provincia}` : null,
+    payload.citta ? `Citta': ${payload.citta}` : null,
+    payload.campaignName ? `Campagna: ${payload.campaignName}` : null,
+  ]
+}
+
+function intakeChangedFields(params: {
+  scoreChanged: boolean
+  consensoTelefono: boolean | null
+  consensoWhatsapp: boolean | null
+  consensoEmail: boolean | null
+  tipoDocumento: LeadIntakeTipoDocumento | null
+}) {
+  return [
+    "Descrizione",
+    params.scoreChanged ? "Valutazione" : null,
+    "Ora ultima attivita'",
+    params.consensoTelefono !== null ? "Consenso telefono" : null,
+    params.consensoWhatsapp !== null ? "Consenso WhatsApp" : null,
+    params.consensoEmail !== null ? "Consenso e-mail" : null,
+    params.tipoDocumento !== null ? "Tipo documento" : null,
+  ].filter((field): field is string => Boolean(field))
+}
+
 export interface LeadIntakeResult {
   id: string
   duplicate: boolean
@@ -675,10 +749,12 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
   const quoteConfigured = hasConfiguredQuote(payload)
   const configuratorLead = payload.origine === "configuratore"
   const outOfHours = isOutOfBusinessHours(now)
+  const sourceInfo = intakeSource(payload)
 
   const existing = await findExistingLead(telefonoNorm, emailNorm)
 
   if (existing) {
+    const nextScore = Math.max(existing.valutazione ?? 0, calculatedScore)
     const timestamp = now.toLocaleString("it-IT", { timeZone: ROME_TIME_ZONE })
     const notaIngresso = `[${timestamp}] Nuovo contatto da ${ORIGINE_LABELS[payload.origine]}${
       description ? `:\n${description}` : ""
@@ -689,7 +765,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
 
     const updateRow: Record<string, unknown> = {
       descrizione: descrizioneAggiornata,
-      valutazione: Math.max(existing.valutazione ?? 0, calculatedScore),
+      valutazione: nextScore,
       ora_ultima_attivita: now.toISOString(),
       updated_at: now.toISOString(),
     }
@@ -704,6 +780,24 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       .eq("id", existing.id)
 
     if (updateError) throw new Error(`ingestLead update: ${updateError.message}`)
+    await insertLeadUpdateActivity(supabase, {
+      leadId: existing.id,
+      text: buildLeadUpdateActivityText({
+        source: sourceInfo.source,
+        sourceDetail: sourceInfo.detail,
+        reason: configuratorLead ? "preventivo_aggiornato" : "duplicato_aggiornato",
+        changedFields: intakeChangedFields({
+          scoreChanged: nextScore !== (existing.valutazione ?? 0),
+          consensoTelefono,
+          consensoWhatsapp,
+          consensoEmail,
+          tipoDocumento,
+        }),
+        details: intakeReceivedDetails(payload),
+        note: "Esito: lead gia' presente nel CRM, nessun duplicato creato.",
+      }),
+      logPrefix: "[lead-intake] attivita aggiornamento",
+    })
     if (hasDiscountCode) {
       const tagId = await ensureLeadTag(supabase)
       await assignLeadTag(supabase, existing.id, tagId)
@@ -765,6 +859,19 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
     .single()
 
   if (error) throw new Error(`ingestLead insert: ${error.message}`)
+  await insertLeadUpdateActivity(supabase, {
+    leadId: data.id as string,
+    text: buildLeadUpdateActivityText({
+      action: "creato",
+      source: sourceInfo.source,
+      sourceDetail: sourceInfo.detail,
+      reason: "nuova_richiesta",
+      changedFields: ["Nome Lead", "Telefono", "E-mail", "Origine Lead", "Ora ultima attivita'"],
+      details: intakeReceivedDetails(payload),
+      note: "Esito: nuovo lead creato nel CRM.",
+    }),
+    logPrefix: "[lead-intake] attivita creazione",
+  })
   if (hasDiscountCode) {
     const tagId = await ensureLeadTag(supabase)
     await assignLeadTag(supabase, data.id as string, tagId)

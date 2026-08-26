@@ -2,8 +2,13 @@ import { NextResponse, after } from "next/server"
 import type { Lead } from "@/lib/mock-data"
 import { updateLeadRecord, deleteLeadRecords } from "@/lib/leads/repository"
 import { requireApiRecord } from "@/lib/permissions/server"
+import { createClient } from "@/lib/supabase/server"
 import { attoreDaPermessi, logAudit } from "@/lib/audit/log"
 import { campiModificati, descriviModifica, diffCampi, etichettaRecord } from "@/lib/audit/describe"
+import {
+  buildLeadUpdateActivityText,
+  insertLeadUpdateActivity,
+} from "@/lib/leads/update-activity-log"
 
 export async function PATCH(
   request: Request,
@@ -23,10 +28,12 @@ export async function PATCH(
   // percorso caldo (ogni cambio di stato dalla kanban passa di qui). La patch
   // e' gia' il delta inviato dal client, quindi basta a dire cosa e' cambiato.
   const campi = campiModificati(null, patch as Record<string, unknown>)
-  after(() =>
-    logAudit({
+  const attore = attoreDaPermessi(guard.permissions)
+  const supabase = await createClient()
+  after(async () => {
+    await logAudit({
       tipo_evento: "modifica_record",
-      attore: attoreDaPermessi(guard.permissions),
+      attore,
       modulo: "lead",
       record_id: id,
       descrizione: descriviModifica(
@@ -36,8 +43,21 @@ export async function PATCH(
       ),
       dati_dopo: diffCampi(patch as Record<string, unknown>, campi),
       request,
-    }),
-  )
+    })
+    await insertLeadUpdateActivity(supabase, {
+      leadId: id,
+      userId: attore.id,
+      text: buildLeadUpdateActivityText({
+        source: "manuale",
+        sourceDetail: attore.nome
+          ? `Modifica manuale eseguita da ${attore.nome}`
+          : "Modifica manuale dal CRM",
+        reason: "modifica_campi",
+        changedFields: [...campi, "Ora ultima attivita'"],
+      }),
+      logPrefix: "[api/leads] attivita modifica",
+    })
+  })
 
   return NextResponse.json(updated)
 }

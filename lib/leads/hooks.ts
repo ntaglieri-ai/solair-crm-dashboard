@@ -57,6 +57,15 @@ export function useLeadsQuery(
     // I dati restano "freschi" 60s: niente refetch ridondanti col viavai
     // di decine di operatori sulla stessa lista.
     staleTime: 60_000,
+    // Polling leggero (stesso pattern di useLeadStats sotto): un lead
+    // creato da configuratore/chatbot/Meta compare da solo entro ~8s,
+    // senza che l'operatore debba ricordarsi di ricaricare la pagina.
+    // Non e' realtime vero (richiederebbe Postgres Realtime + RLS sul
+    // canale, complesso con le regole di visibilita' per ruolo/sede) ma
+    // silenzioso grazie a keepPreviousData: nessun flash, nessuna perdita
+    // di scroll/filtri in corso.
+    refetchInterval: 8_000,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
     initialData: hasInitial ? initial!.data : undefined,
     // Quando usiamo il prefetch server-side, lo marchiamo come appena

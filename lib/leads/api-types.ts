@@ -67,7 +67,7 @@ export interface LeadStats {
 export const DEFAULT_LIST_PARAMS: LeadListParams = {
   page: 1,
   pageSize: 10,
-  sortBy: "Ora creazione",
+  sortBy: "Ora ultima attività",
   sortDir: "desc",
   search: "",
   stato: "all",

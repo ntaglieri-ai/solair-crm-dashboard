@@ -56,6 +56,9 @@ export interface LeadIntakePayload {
   }
 }
 
+type IntakeInputRecord = Record<string, unknown>
+type IntakeFieldMap = Record<string, string>
+
 const ORIGINE_LABELS: Record<LeadIntakeOrigine, string> = {
   chatbot: "Chat",
   meta_ads: "Pubblicità",
@@ -72,6 +75,258 @@ const CONFIGURATOR_TAGS = {
   fuoriOrario: { name: "Fuori orario", color: "#8B5CF6" },
   nuovo: { name: "Nuovo lead", color: "#22C55E" },
   aggiornato: { name: "Lead aggiornato", color: "#EC4899" },
+}
+
+function isRecord(value: unknown): value is IntakeInputRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function normalizeIntakeFieldName(name: string) {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+}
+
+function stringFromUnknown(value: unknown): string | undefined {
+  if (typeof value === "string") return value.trim() || undefined
+  if (typeof value === "number" && Number.isFinite(value)) return String(value)
+  if (typeof value === "boolean") return value ? "true" : "false"
+  if (Array.isArray(value)) {
+    const parts = value.map(stringFromUnknown).filter(Boolean)
+    return parts.length ? parts.join(", ") : undefined
+  }
+  return undefined
+}
+
+function booleanFromUnknown(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value
+  const text = stringFromUnknown(value)?.toLowerCase()
+  if (!text) return undefined
+  if (["1", "true", "yes", "si", "sì", "ok", "accepted", "accetto"].includes(text)) return true
+  if (["0", "false", "no", "non", "declined", "rifiuto"].includes(text)) return false
+  return undefined
+}
+
+function flattenFieldsFromRecord(record: IntakeInputRecord): IntakeFieldMap {
+  const fields: IntakeFieldMap = {}
+
+  for (const [key, value] of Object.entries(record)) {
+    if (key === "field_data" || key === "custom_disclaimer_responses") continue
+    const text = stringFromUnknown(value)
+    if (text) fields[normalizeIntakeFieldName(key)] = text
+  }
+
+  return fields
+}
+
+function flattenFieldData(value: unknown): IntakeFieldMap {
+  const fields: IntakeFieldMap = {}
+
+  if (Array.isArray(value)) {
+    for (const field of value) {
+      if (!isRecord(field)) continue
+      const name =
+        stringFromUnknown(field.name) ??
+        stringFromUnknown(field.key) ??
+        stringFromUnknown(field.label) ??
+        stringFromUnknown(field.question)
+      if (!name) continue
+      const text =
+        stringFromUnknown(field.values) ??
+        stringFromUnknown(field.value) ??
+        stringFromUnknown(field.answer) ??
+        stringFromUnknown(field.response)
+      if (text) fields[normalizeIntakeFieldName(name)] = text
+    }
+    return fields
+  }
+
+  if (isRecord(value)) return flattenFieldsFromRecord(value)
+  return fields
+}
+
+function pickField(fields: IntakeFieldMap, names: string[]) {
+  for (const name of names) {
+    const value = fields[normalizeIntakeFieldName(name)]
+    if (value) return value
+  }
+  return undefined
+}
+
+function normalizeOrigine(value: unknown, fields: IntakeFieldMap): LeadIntakeOrigine | undefined {
+  const raw = stringFromUnknown(value)
+  const normalized = raw ? normalizeIntakeFieldName(raw) : ""
+
+  if (normalized === "chatbot" || normalized === "chat") return "chatbot"
+  if (
+    normalized === "meta_ads" ||
+    normalized === "facebook" ||
+    normalized === "facebook_lead_ads" ||
+    normalized === "fb" ||
+    normalized === "make" ||
+    normalized === "pabbly"
+  ) return "meta_ads"
+  if (normalized === "configuratore" || normalized === "website" || normalized === "sito") {
+    return "configuratore"
+  }
+  if (normalized === "manuale" || normalized === "manual") return "manuale"
+
+  const hasMetaMarkers = Boolean(
+    pickField(fields, ["leadgen_id", "lead_id", "form_id", "ad_id", "adgroup_id", "page_id"]),
+  )
+  return hasMetaMarkers ? "meta_ads" : undefined
+}
+
+function normalizeTipoProprietaFromField(value: string | undefined) {
+  if (!value) return undefined
+  const normalized = normalizeIntakeFieldName(value)
+  if (normalized.includes("commercial")) return "commerciale"
+  if (normalized.includes("privat") || normalized.includes("residen")) return "privata"
+  return undefined
+}
+
+function buildMakeMetaNote(fields: IntakeFieldMap, existingNote?: string) {
+  const leadgenId = pickField(fields, ["leadgen_id", "lead_id", "id"])
+  const pageId = pickField(fields, ["page_id"])
+  const formId = pickField(fields, ["form_id"])
+  const adId = pickField(fields, ["ad_id"])
+  const adgroupId = pickField(fields, ["adgroup_id"])
+  const createdAt = pickField(fields, ["created_time", "created_at"])
+  const metadata = [
+    leadgenId ? `Leadgen ID: ${leadgenId}` : null,
+    pageId ? `Page ID: ${pageId}` : null,
+    formId ? `Form ID: ${formId}` : null,
+    adId ? `Ad ID: ${adId}` : null,
+    adgroupId ? `Adgroup ID: ${adgroupId}` : null,
+    createdAt ? `Creato Meta: ${createdAt}` : null,
+  ].filter(Boolean)
+
+  const answerKeys = new Set([
+    "full_name",
+    "nome",
+    "nome_e_cognome",
+    "name",
+    "first_name",
+    "last_name",
+    "phone_number",
+    "phone",
+    "telefono",
+    "email",
+    "city",
+    "citta",
+    "comune",
+    "state",
+    "province",
+    "provincia",
+  ])
+  const answers = Object.entries(fields)
+    .filter(([key]) => !answerKeys.has(key))
+    .map(([key, value]) => `${key}: ${value}`)
+    .join("; ")
+
+  return (
+    [existingNote, metadata.length ? metadata.join("\n") : null, answers ? `Dati sorgente: ${answers}` : null]
+      .filter(Boolean)
+      .join("\n\n") || undefined
+  )
+}
+
+export function normalizeLeadIntakePayload(input: unknown): Partial<LeadIntakePayload> {
+  if (!isRecord(input)) return {}
+
+  const nestedRecords = ["lead", "data", "payload", "event"]
+    .map((key) => input[key])
+    .filter(isRecord)
+  const records = [input, ...nestedRecords]
+  const fields: IntakeFieldMap = {}
+  for (const record of records) {
+    Object.assign(fields, flattenFieldsFromRecord(record))
+    Object.assign(fields, flattenFieldData(record.field_data))
+    Object.assign(fields, flattenFieldData(record.custom_disclaimer_responses))
+  }
+
+  const direct = input as Partial<LeadIntakePayload>
+  const nome = (
+    direct.nome ??
+    pickField(fields, ["full_name", "nome", "nome_e_cognome", "name"]) ??
+    [pickField(fields, ["first_name", "nome_di_battesimo"]), pickField(fields, ["last_name", "cognome"])]
+      .filter(Boolean)
+      .join(" ")
+  ) || undefined
+  const telefono =
+    direct.telefono ??
+    pickField(fields, [
+      "phone_number",
+      "phone",
+      "telefono",
+      "mobile_phone",
+      "cellulare",
+      "numero_di_telefono",
+    ])
+  const email = direct.email ?? pickField(fields, ["email", "e_mail", "indirizzo_email"])
+  const note = buildMakeMetaNote(fields, direct.note)
+  const origine = normalizeOrigine(direct.origine ?? fields.origine, fields)
+
+  return {
+    ...direct,
+    origine,
+    nome,
+    telefono,
+    email,
+    provincia: direct.provincia ?? pickField(fields, ["state", "province", "provincia"]),
+    citta: direct.citta ?? pickField(fields, ["city", "citta", "comune"]),
+    codicePostale:
+      direct.codicePostale ??
+      pickField(fields, ["zip_code", "postal_code", "codice_postale", "cap"]),
+    tipoProprieta:
+      direct.tipoProprieta ??
+      normalizeTipoProprietaFromField(
+        pickField(fields, ["tipo_proprieta", "tipo_di_proprieta", "property_type"]),
+      ),
+    campaignName: direct.campaignName ?? pickField(fields, ["campaign_name", "campaign", "campagna"]),
+    interesse: direct.interesse ?? pickField(fields, ["interesse", "interest"]),
+    note,
+    consensoTelefono:
+      direct.consensoTelefono ??
+      direct.consenso_contatto_telefono ??
+      booleanFromUnknown(
+        pickField(fields, [
+          "consenso_telefono",
+          "consenso_contatto_telefono",
+          "contatto_telefono",
+          "chiamata",
+          "chiamami",
+        ]),
+      ),
+    consensoWhatsapp:
+      direct.consensoWhatsapp ??
+      direct.consenso_contatto_whatsapp ??
+      booleanFromUnknown(
+        pickField(fields, [
+          "consenso_whatsapp",
+          "consenso_contatto_whatsapp",
+          "whatsapp",
+          "contatto_whatsapp",
+        ]),
+      ),
+    consensoEmail:
+      direct.consensoEmail ??
+      direct.consensoMarketingEmail ??
+      direct.consenso_contatto_email ??
+      booleanFromUnknown(
+        pickField(fields, [
+          "consenso_email",
+          "consenso_e_mail",
+          "consenso_contatto_email",
+          "consenso_marketing_email",
+          "marketing_email",
+          "newsletter",
+        ]),
+      ),
+  }
 }
 
 function normalizePhone(phone: string): string {

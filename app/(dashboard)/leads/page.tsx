@@ -1,5 +1,5 @@
 // Server Component: pre-carica i primi 50 lead + statistiche da Supabase
-// (selezione colonne mirata, ordine created_at desc) e li passa a LeadsClient
+// (selezione colonne mirata, ordine ultima attività desc) e li passa a LeadsClient
 // come initialData, evitando il loading lato client dopo il mount.
 import { cookies } from "next/headers"
 import {

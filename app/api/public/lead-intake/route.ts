@@ -1,7 +1,12 @@
 import { NextResponse, after } from "next/server"
 import { ensureFolder } from "@/lib/nextcloud/admin-webdav"
 import { folderPathForRecord } from "@/lib/allegati/paths"
-import { ingestLead, type LeadIntakeOrigine, type LeadIntakePayload } from "@/lib/leads/public-intake"
+import {
+  ingestLead,
+  normalizeLeadIntakePayload,
+  type LeadIntakeOrigine,
+  type LeadIntakePayload,
+} from "@/lib/leads/public-intake"
 
 const KEY_BY_ORIGINE: Record<LeadIntakeOrigine, string | undefined> = {
   chatbot: process.env.LEAD_INTAKE_KEY_CHATBOT,
@@ -22,12 +27,14 @@ function isValidTipoDocumento(value: unknown) {
 }
 
 export async function POST(request: Request) {
-  let body: Partial<LeadIntakePayload>
+  let rawBody: unknown
   try {
-    body = await request.json()
+    rawBody = await request.json()
   } catch {
     return NextResponse.json({ error: "Body non valido, atteso JSON" }, { status: 400 })
   }
+
+  const body = normalizeLeadIntakePayload(rawBody)
 
   if (!isValidOrigine(body.origine)) {
     return NextResponse.json(
@@ -38,7 +45,11 @@ export async function POST(request: Request) {
 
   const expectedKey = KEY_BY_ORIGINE[body.origine]
   const authHeader = request.headers.get("authorization") ?? ""
-  const providedKey = authHeader.replace(/^Bearer\s+/i, "")
+  const bearerKey = authHeader.match(/^Bearer\s+(.+)$/i)?.[1]?.trim()
+  const providedKey =
+    bearerKey ||
+    request.headers.get("x-api-key")?.trim() ||
+    authHeader.trim()
 
   if (!expectedKey) {
     console.error(`[lead-intake] Nessuna API key configurata per origine "${body.origine}"`)

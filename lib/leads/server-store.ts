@@ -71,7 +71,7 @@ const LIST_COLUMNS = [
 ].join(",")
 
 // Whitelist sicura: id colonna UI -> colonna DB ordinabile. Qualsiasi valore
-// non presente qui ricade su "created_at" (fallback sicuro, nessun crash).
+// non presente qui ricade su "ora_ultima_attivita" (fallback sicuro, nessun crash).
 const SORT_COLUMN: Record<string, string> = {
   "Nome Lead": "nome_lead",
   Nome: "nome",
@@ -94,9 +94,9 @@ const SORT_COLUMN: Record<string, string> = {
 }
 
 // Risolve la colonna DB di ordinamento e la direzione, con fallback su
-// created_at desc quando la colonna non è ordinabile lato DB.
+// ora_ultima_attivita desc quando la colonna non è ordinabile lato DB.
 function resolveSort(sortBy?: string | null, sortDir?: "asc" | "desc") {
-  const column = (sortBy && SORT_COLUMN[sortBy]) || "created_at"
+  const column = (sortBy && SORT_COLUMN[sortBy]) || "ora_ultima_attivita"
   const ascending = sortDir === "asc"
   return { column, ascending }
 }

@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { usePermissions } from "@/lib/permissions/provider"
@@ -198,17 +199,21 @@ function BatterieSection({ onClose, documenti, marche }: { onClose: () => void; 
   const gruppi = raggruppaSchedeBatteria(documenti, marche)
   return <section className="overflow-hidden rounded-xl border border-amber-100 bg-white shadow-sm">
     <HeaderSezione icon={BatteryCharging} titolo="Batterie" descrizione="Schede tecniche degli accumuli, lette dalle cartelle per marca su Nextcloud (solo marche presenti a listino)." tone="amber" onClose={onClose} />
-    {gruppi.length === 0 ? <div className="p-4"><Empty>Nessuna scheda trovata per le marche a listino. Verifica di aver sincronizzato dopo aver caricato i file.</Empty></div> : <div className="divide-y divide-border">
-      {gruppi.map(({ cartella, files }) => <div key={cartella} className="p-4">
-        <div className="mb-2 flex items-center gap-2"><FolderOpen className="size-4 text-amber-700" /><h3 className="font-semibold">{cartella}</h3><Badge variant="outline">{files.length} file</Badge></div>
-        <ul className="space-y-1">
-          {files.map((doc) => <li key={doc.id} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-amber-50">
-            <span className="truncate">{doc.nome}</span>
-            <Button variant="ghost" size="icon-sm" aria-label={`Apri ${doc.nome}`} nativeButton={false} render={<a href={`/api/offerta-commerciale/documenti?path=${encodeURIComponent(doc.path)}`} target="_blank" rel="noreferrer" />}><ExternalLink className="size-4" /></Button>
-          </li>)}
-        </ul>
-      </div>)}
-    </div>}
+    {gruppi.length === 0 ? <div className="p-4"><Empty>Nessuna scheda trovata per le marche a listino. Verifica di aver sincronizzato dopo aver caricato i file.</Empty></div> : <Accordion className="px-4 pb-2">
+      {gruppi.map(({ cartella, files }) => <AccordionItem key={cartella} value={cartella}>
+        <AccordionTrigger>
+          <span className="flex items-center gap-2"><FolderOpen className="size-4 text-amber-700" />{cartella}<Badge variant="outline">{files.length} file</Badge></span>
+        </AccordionTrigger>
+        <AccordionContent>
+          <ul className="space-y-1 pb-2">
+            {files.map((doc) => <li key={doc.id} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-amber-50">
+              <span className="truncate">{doc.nome}</span>
+              <Button variant="ghost" size="icon-sm" aria-label={`Apri ${doc.nome}`} nativeButton={false} render={<a href={`/api/offerta-commerciale/documenti?path=${encodeURIComponent(doc.path)}`} target="_blank" rel="noreferrer" />}><ExternalLink className="size-4" /></Button>
+            </li>)}
+          </ul>
+        </AccordionContent>
+      </AccordionItem>)}
+    </Accordion>}
   </section>
 }
 

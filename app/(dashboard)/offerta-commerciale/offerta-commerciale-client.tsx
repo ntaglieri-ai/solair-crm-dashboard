@@ -169,14 +169,46 @@ function HeaderSezione({ icon: Icon, titolo, descrizione, tone, onClose, childre
 }
 
 /**
- * Contenitore delle schede batteria: predisposto ma ancora senza dati. Quando
- * verra' definita la forma di specifiche_prodotto.batterie prendera' il posto
- * del placeholder, sullo stesso modello di PannelliSection.
+ * Raggruppa i documenti sincronizzati da Nextcloud sotto .../Batterie/<Marca>/
+ * per marca, mostrando solo le marche presenti a listino (catalogo.accumuli).
+ * Il confronto e' case-insensitive e tollerante a piccole differenze di nome
+ * cartella (es. "Deye - Vtac" vs marca a listino "Deye").
  */
-function BatterieSection({ onClose }: { onClose: () => void }) {
+function raggruppaSchedeBatteria(documenti: DocumentoCommerciale[], marche: string[]) {
+  const cartelle = new Map<string, DocumentoCommerciale[]>()
+  for (const doc of documenti) {
+    const match = doc.path.match(/\/Batterie\/([^/]+)\//)
+    if (!match) continue
+    const cartella = match[1]
+    if (!cartelle.has(cartella)) cartelle.set(cartella, [])
+    cartelle.get(cartella)!.push(doc)
+  }
+  const normalizza = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
+  const marcheNorm = marche.map(normalizza)
+  return [...cartelle.entries()]
+    .filter(([cartella]) => {
+      const n = normalizza(cartella)
+      return marcheNorm.some((m) => n.includes(m) || m.includes(n))
+    })
+    .map(([cartella, files]) => ({ cartella, files }))
+    .sort((a, b) => a.cartella.localeCompare(b.cartella))
+}
+
+function BatterieSection({ onClose, documenti, marche }: { onClose: () => void; documenti: DocumentoCommerciale[]; marche: string[] }) {
+  const gruppi = raggruppaSchedeBatteria(documenti, marche)
   return <section className="overflow-hidden rounded-xl border border-amber-100 bg-white shadow-sm">
-    <HeaderSezione icon={BatteryCharging} titolo="Batterie" descrizione="Schede prodotto degli accumuli, separate dai prezzi per taglia." tone="amber" onClose={onClose} />
-    <div className="p-4"><Empty>Nessuna scheda batteria configurata.</Empty></div>
+    <HeaderSezione icon={BatteryCharging} titolo="Batterie" descrizione="Schede tecniche degli accumuli, lette dalle cartelle per marca su Nextcloud (solo marche presenti a listino)." tone="amber" onClose={onClose} />
+    {gruppi.length === 0 ? <div className="p-4"><Empty>Nessuna scheda trovata per le marche a listino. Verifica di aver sincronizzato dopo aver caricato i file.</Empty></div> : <div className="divide-y divide-border">
+      {gruppi.map(({ cartella, files }) => <div key={cartella} className="p-4">
+        <div className="mb-2 flex items-center gap-2"><FolderOpen className="size-4 text-amber-700" /><h3 className="font-semibold">{cartella}</h3><Badge variant="outline">{files.length} file</Badge></div>
+        <ul className="space-y-1">
+          {files.map((doc) => <li key={doc.id} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-amber-50">
+            <span className="truncate">{doc.nome}</span>
+            <Button variant="ghost" size="icon-sm" aria-label={`Apri ${doc.nome}`} nativeButton={false} render={<a href={`/api/offerta-commerciale/documenti?path=${encodeURIComponent(doc.path)}`} target="_blank" rel="noreferrer" />}><ExternalLink className="size-4" /></Button>
+          </li>)}
+        </ul>
+      </div>)}
+    </div>}
   </section>
 }
 
@@ -1177,7 +1209,7 @@ const VISTE_CATALOGO: Record<VistaCatalogo, { icona: typeof BadgeEuro; titolo: s
  * nessun salvataggio, quindi resta disponibile anche senza
  * "offerta_commerciale.manage". I dati sono gia' nel payload della pagina.
  */
-function VistaCatalogoSheet({ vista, onChiudi, catalogo, offerte }: { vista: VistaCatalogo | null; onChiudi: () => void; catalogo: CatalogoCommerciale; offerte: OffertaPeriodo[] }) {
+function VistaCatalogoSheet({ vista, onChiudi, catalogo, offerte, documenti }: { vista: VistaCatalogo | null; onChiudi: () => void; catalogo: CatalogoCommerciale; offerte: OffertaPeriodo[]; documenti: DocumentoCommerciale[] }) {
   const meta = vista ? VISTE_CATALOGO[vista] : null
   const Icona = meta?.icona ?? BookOpenCheck
   const accessori = catalogo.accessori.filter((item) => item.nome.trim() && item.prezzo >= 0)
@@ -1586,7 +1618,7 @@ export function OffertaCommercialeClient({
                 <TabsContent value="accumulo" className="space-y-5 pt-5">
                   <div className="rounded-xl border border-amber-100 bg-amber-50/70 px-5 py-4"><div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-lg bg-white text-amber-700 ring-1 ring-amber-200"><BatteryCharging className="size-5" /></span><div><h2 className="text-xl font-bold text-amber-950">Prezzi accumulo per taglia di impianto</h2><p className="mt-1 text-sm font-medium text-amber-800/80">Ogni tabella mostra il sovrapprezzo accumulo in base ai kWp dell&apos;impianto fotovoltaico.</p></div></div><ToggleSezione aperta={batterieAperte} onToggle={() => setBatterieAperte((v) => !v)} tone="amber">Batterie Disponibili</ToggleSezione></div></div>
                   <TesterPrezzoAccumulo catalogo={catalogo} />
-                  {batterieAperte ? <BatterieSection onClose={() => setBatterieAperte(false)} /> : null}
+                  {batterieAperte ? <BatterieSection onClose={() => setBatterieAperte(false)} documenti={documenti} marche={catalogo.accumuli.map((m) => m.marca)} /> : null}
                   {catalogo.accumuli.map((battery, batteryIndex) => <section key={battery.marca} className="overflow-hidden rounded-xl border border-amber-100 bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-100 bg-amber-50/60 p-4"><div><h2 className="text-lg font-bold text-amber-950">{battery.marca}</h2><p className="text-sm font-medium text-amber-800/80">{battery.tensione ? `${battery.tensione} tensione` : ""} {battery.ip ? `· ${battery.ip}` : ""} {battery.garanzia_anni ? `· ${battery.garanzia_anni} anni` : ""}</p></div><Badge variant="outline" className="border-amber-200 bg-white text-amber-800">Sovrapprezzo accumulo</Badge></div><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead className="bg-slate-50"><tr><th className="px-3 py-3 text-left text-base font-bold">Taglia impianto</th>{battery.taglie.map((kwh) => <th key={kwh} className="px-3 py-3 text-right text-base font-bold">{kwh} kWh</th>)}</tr></thead><tbody>{Object.keys(battery.prezzi).sort((a,b) => Number(a)-Number(b)).map((kwp) => <tr key={kwp} className="border-t border-border"><td className="px-3 py-2 font-bold">{kwp} kWp</td>{battery.taglie.map((_, priceIndex) => <td key={priceIndex} className="px-3 py-2 text-right"><Input className="ml-auto w-28 text-right font-semibold" type="number" value={battery.prezzi[kwp]?.[priceIndex] ?? 0} onChange={(e) => { const accumuli = structuredClone(catalogo.accumuli); accumuli[batteryIndex].prezzi[kwp][priceIndex] = numberValue(e.target.value); setCatalogo({ ...catalogo, accumuli }) }} /></td>)}</tr>)}</tbody></table></div></section>)}
                 </TabsContent>
 
@@ -1672,7 +1704,7 @@ export function OffertaCommercialeClient({
       <Metric icon={PackageOpen} label="Offerte" value={String(activeOffers)} hint="offerte del periodo" tone="slate" azione="Vedi" onClick={() => setVistaCatalogo("offerte")} />
     </div>
 
-    <VistaCatalogoSheet vista={vistaCatalogo} onChiudi={() => setVistaCatalogo(null)} catalogo={catalogo} offerte={publishedOffers} />
+    <VistaCatalogoSheet vista={vistaCatalogo} onChiudi={() => setVistaCatalogo(null)} catalogo={catalogo} offerte={publishedOffers} documenti={data.documenti} />
 
     <section className="offerta-panel px-5 py-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">

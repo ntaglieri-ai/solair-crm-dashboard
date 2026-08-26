@@ -1,0 +1,37 @@
+diff --git a/app/api/offerta-commerciale/documenti/route.ts b/app/api/offerta-commerciale/documenti/route.ts
+index e631e2b..b490e30 100644
+--- a/app/api/offerta-commerciale/documenti/route.ts
++++ b/app/api/offerta-commerciale/documenti/route.ts
+@@ -17,6 +17,14 @@ export const runtime = "nodejs"
+  * catalogo (a differenza di /api/public/asset, che e' senza autenticazione e
+  * non deve servire i listini).
+  */
++const MIME_DA_ESTENSIONE: Record<string, string> = {
++  pdf: "application/pdf",
++  png: "image/png",
++  jpg: "image/jpeg",
++  jpeg: "image/jpeg",
++  webp: "image/webp",
++}
++
+ export async function GET(request: Request) {
+   const guard = await requireApiPage("offerta_commerciale")
+   if (guard.response) return guard.response
+@@ -35,9 +43,16 @@ export async function GET(request: Request) {
+   }
+ 
+   const nome = path.split("/").pop() || "documento.pdf"
++  // Nextcloud a volte risponde con "application/octet-stream" anche per PDF e
++  // immagini: con quel Content-Type il browser forza il download anche se
++  // Content-Disposition dice "inline". Deriviamo il tipo dall'estensione
++  // (gli unici formati sincronizzati, vedi DOCUMENT_EXTENSIONS in sync.ts)
++  // invece di fidarci dell'header grezzo di Nextcloud.
++  const estensione = nome.split(".").pop()?.toLowerCase() ?? ""
++  const contentType = MIME_DA_ESTENSIONE[estensione] ?? file.headers.get("content-type") ?? "application/pdf"
+   return new Response(file.body, {
+     headers: {
+-      "Content-Type": file.headers.get("content-type") ?? "application/pdf",
++      "Content-Type": contentType,
+       ...(file.headers.get("content-length") ? { "Content-Length": file.headers.get("content-length")! } : {}),
+       "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(nome)}`,
+       "Cache-Control": "private, max-age=300",

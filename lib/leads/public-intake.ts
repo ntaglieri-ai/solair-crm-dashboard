@@ -674,31 +674,14 @@ export function parseLeadSourceCreatedAt(value: unknown): Date | null {
   return utcDateFromRomeParts(year, month, day, hour, minute)
 }
 
-function metaLeadMaxAgeMs() {
-  const hours = Number(process.env.LEAD_INTAKE_META_MAX_AGE_HOURS ?? 36)
-  return Number.isFinite(hours) && hours > 0 ? hours * 60 * 60 * 1000 : null
+export function leadSourceCreatedAtIso(payload: LeadIntakePayload) {
+  return parseLeadSourceCreatedAt(payload.sourceCreatedAt)?.toISOString() ?? null
 }
 
-export function staleMetaLeadReason(payload: LeadIntakePayload, now: Date) {
-  if (payload.origine !== "meta_ads") return null
-  const sourceCreatedAt = parseLeadSourceCreatedAt(payload.sourceCreatedAt)
-  const maxAgeMs = metaLeadMaxAgeMs()
-  if (maxAgeMs === null) return null
-  if (!sourceCreatedAt) {
-    return {
-      reason: "missing_source_created_at",
-      sourceCreatedAt: null,
-      maxAgeHours: Math.round(maxAgeMs / 60 / 60 / 1000),
-    }
-  }
-
-  return now.getTime() - sourceCreatedAt.getTime() > maxAgeMs
-    ? {
-        reason: "stale_meta_lead",
-        sourceCreatedAt: sourceCreatedAt.toISOString(),
-        maxAgeHours: Math.round(maxAgeMs / 60 / 60 / 1000),
-      }
-    : null
+function sameTimestamp(left: unknown, right: string) {
+  const leftTime = typeof left === "string" ? Date.parse(left) : NaN
+  const rightTime = Date.parse(right)
+  return Number.isFinite(leftTime) && Number.isFinite(rightTime) && Math.abs(leftTime - rightTime) < 1000
 }
 
 function addLocalDays(parts: ReturnType<typeof romeDateParts>, days: number) {
@@ -814,6 +797,7 @@ function intakeSource(payload: LeadIntakePayload): {
 }
 
 function intakeReceivedDetails(payload: LeadIntakePayload) {
+  const sourceCreatedAt = leadSourceCreatedAtIso(payload)
   return [
     `Dati ricevuti: nome ${payload.nome}`,
     payload.telefono ? `Telefono: ${payload.telefono}` : null,
@@ -821,6 +805,7 @@ function intakeReceivedDetails(payload: LeadIntakePayload) {
     payload.provincia ? `Provincia: ${payload.provincia}` : null,
     payload.citta ? `Citta': ${payload.citta}` : null,
     payload.campaignName ? `Campagna: ${payload.campaignName}` : null,
+    sourceCreatedAt ? `Creato su Meta: ${sourceCreatedAt}` : null,
   ]
 }
 
@@ -878,6 +863,7 @@ export interface LeadIntakeResult {
 
 type ExistingLead = {
   id: string
+  created_at: string | null
   nome_lead: string | null
   nome: string | null
   cognome: string | null
@@ -904,6 +890,7 @@ type ExistingLead = {
 
 const EXISTING_LEAD_SELECT = [
   "id",
+  "created_at",
   "nome_lead",
   "nome",
   "cognome",
@@ -1120,26 +1107,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
   const sourceInfo = intakeSource(payload)
   const nameParts = leadNameParts(payload)
   const socialLeadId = normalizeText(payload.socialLeadId)
-  const staleMetaLead = staleMetaLeadReason(payload, now)
-
-  if (staleMetaLead) {
-    console.info("[lead-intake] Meta lead ignorato", {
-      reason: staleMetaLead.reason,
-      nome: payload.nome,
-      telefono: telefonoNorm,
-      socialLeadId,
-      sourceCreatedAt: staleMetaLead.sourceCreatedAt,
-      maxAgeHours: staleMetaLead.maxAgeHours,
-    })
-    return {
-      id: null,
-      duplicate: false,
-      nomeLead: payload.nome,
-      skipped: true,
-      skipReason: staleMetaLead.reason,
-      sourceCreatedAt: staleMetaLead.sourceCreatedAt,
-    }
-  }
+  const sourceCreatedAt = leadSourceCreatedAtIso(payload)
 
   const existing = await findExistingLead(telefonoNorm, emailNorm, socialLeadId)
 
@@ -1173,6 +1141,10 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
     assignTextField(updateRow, existing, changedFields, "codice_postale", "Codice postale", payload.codicePostale)
     assignTextField(updateRow, existing, changedFields, "social_lead_id", "Social Lead ID", socialLeadId)
     assignTextField(updateRow, existing, changedFields, "campaign_name", "campaign name", payload.campaignName)
+    if (sourceCreatedAt && !sameTimestamp(existing.created_at, sourceCreatedAt)) {
+      updateRow.created_at = sourceCreatedAt
+      addChangedField(changedFields, "Ora creazione")
+    }
     assignNumberField(updateRow, existing, changedFields, "kwp", "kWp", kwp)
     assignNumberField(updateRow, existing, changedFields, "kwh", "kWh accumulo", kwh)
     assignTextField(updateRow, existing, changedFields, "modello_pannello", "Modello pannello", payload.modelloPannello)
@@ -1295,6 +1267,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       consenso_contatto_email: consensoEmail ?? false,
       descrizione: description,
       paese: "Italia",
+      created_at: sourceCreatedAt ?? now.toISOString(),
       ora_ultima_attivita: now.toISOString(),
     })
     .select("id, nome_lead")

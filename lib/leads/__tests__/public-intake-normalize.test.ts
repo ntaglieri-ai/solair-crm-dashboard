@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest"
 import {
+  leadSourceCreatedAtIso,
   leadPhoneMatchKeys,
   normalizeLeadIntakePayload,
   parseLeadSourceCreatedAt,
-  staleMetaLeadReason,
 } from "@/lib/leads/public-intake"
 
 describe("normalizeLeadIntakePayload", () => {
@@ -80,26 +80,22 @@ describe("normalizeLeadIntakePayload", () => {
     )
   })
 
-  it("scarta i Meta lead senza data sorgente o con data vecchia", () => {
-    const now = new Date("2026-08-27T06:00:00.000Z")
+  it("usa la data sorgente Meta come data creazione del lead", () => {
+    expect(
+      leadSourceCreatedAtIso({
+        origine: "meta_ads",
+        nome: "Mario Rossi",
+        telefono: "3331234567",
+        sourceCreatedAt: "4 agosto 2026 23:35",
+      }),
+    ).toBe("2026-08-04T21:35:00.000Z")
 
     expect(
-      staleMetaLeadReason(
-        { origine: "meta_ads", nome: "Mario Rossi", telefono: "3331234567" },
-        now,
-      )?.reason,
-    ).toBe("missing_source_created_at")
-
-    expect(
-      staleMetaLeadReason(
-        {
-          origine: "meta_ads",
-          nome: "Mario Rossi",
-          telefono: "3331234567",
-          sourceCreatedAt: "4 agosto 2026 23:35",
-        },
-        now,
-      )?.reason,
-    ).toBe("stale_meta_lead")
+      leadSourceCreatedAtIso({
+        origine: "meta_ads",
+        nome: "Mario Rossi",
+        telefono: "3331234567",
+      }),
+    ).toBeNull()
   })
 })

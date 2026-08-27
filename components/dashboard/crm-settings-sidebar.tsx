@@ -46,7 +46,7 @@ function SettingsCard({
     <button
       type="button"
       onClick={onClick}
-      className="group relative flex min-h-[110px] w-full items-center gap-[17px] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.045] p-[17px] text-left shadow-[0_18px_60px_rgba(0,0,0,0.16)] transition-all hover:-translate-y-0.5 hover:border-[#55C2A4]/70 hover:bg-white/[0.075] hover:shadow-[0_22px_70px_rgba(0,0,0,0.25)] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#55C2A4]"
+      className="group relative flex min-h-[110px] w-full min-w-0 items-start gap-3 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-left shadow-[0_18px_60px_rgba(0,0,0,0.16)] transition-all hover:-translate-y-0.5 hover:border-[#55C2A4]/70 hover:bg-white/[0.075] hover:shadow-[0_22px_70px_rgba(0,0,0,0.25)] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#55C2A4] sm:items-center sm:gap-[17px] sm:p-[17px]"
     >
       <span className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#55C2A4]/50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
       <span
@@ -58,9 +58,9 @@ function SettingsCard({
       >
         <Icon className="size-[21px]" />
       </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <h3 className="text-base font-black leading-tight text-white">
+      <div className="min-w-0 flex-1 overflow-hidden">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h3 className="min-w-0 break-words text-[15px] font-black leading-tight text-white sm:text-base">
             {title}
           </h3>
           {status === "restricted" ? (
@@ -69,9 +69,11 @@ function SettingsCard({
             </span>
           ) : null}
         </div>
-        <p className="mt-1 text-[15px] leading-relaxed text-gray-400">{description}</p>
+        <p className="mt-1 min-w-0 break-words text-sm leading-relaxed text-gray-400 sm:text-[15px]">
+          {description}
+        </p>
         {meta ? (
-          <p className="mt-2 text-[12px] font-bold uppercase tracking-[0.14em] text-[#55C2A4]/80">
+          <p className="mt-2 min-w-0 break-words text-[12px] font-bold uppercase tracking-[0.14em] text-[#55C2A4]/80">
             {meta}
           </p>
         ) : null}
@@ -193,8 +195,8 @@ export function CrmSettingsSidebar() {
             aria-modal="true"
             aria-label="Impostazioni CRM"
             className={cn(
-              "absolute flex flex-col overflow-hidden border-t-2 border-t-[#2E8B72] bg-[#0B1620] shadow-[-24px_0_80px_rgba(0,0,0,0.55)] inset-x-0 bottom-0 h-[92vh] rounded-t-3xl md:inset-y-0 md:right-0 md:left-auto md:h-full md:rounded-none",
-              "md:w-[640px]",
+              "absolute flex min-w-0 flex-col overflow-hidden border-t-2 border-t-[#2E8B72] bg-[#0B1620] shadow-[-24px_0_80px_rgba(0,0,0,0.55)] inset-x-0 bottom-0 h-[92vh] rounded-t-3xl md:inset-y-0 md:right-0 md:left-auto md:h-full md:rounded-none",
+              "md:w-[min(720px,calc(100vw-248px))]",
             )}
             initial={panelInitial}
             animate={panelAnimate}
@@ -202,7 +204,7 @@ export function CrmSettingsSidebar() {
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
           >
             {/* Header */}
-            <div className="relative border-b border-white/8 px-7 pb-5 pt-7">
+            <div className="relative border-b border-white/8 px-4 pb-4 pt-5 sm:px-6 sm:pb-5 sm:pt-7 md:px-7">
               <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-[radial-gradient(circle_at_18%_0%,rgba(85,194,164,0.18),transparent_42%),radial-gradient(circle_at_85%_10%,rgba(49,95,197,0.16),transparent_38%)]" />
               <div className="relative flex items-start justify-between gap-4">
               <div className="flex min-w-0 items-start gap-2">
@@ -220,10 +222,12 @@ export function CrmSettingsSidebar() {
                   <span className="text-[11px] font-black uppercase tracking-[0.24em] text-[#55C2A4]">
                     {header.eyebrow}
                   </span>
-                  <h2 className="text-3xl font-black leading-tight text-white">
+                  <h2 className="break-words text-2xl font-black leading-tight text-white sm:text-3xl">
                     {header.title}
                   </h2>
-                  <p className="text-base font-medium text-gray-400">{header.subtitle}</p>
+                  <p className="break-words text-sm font-medium text-gray-400 sm:text-base">
+                    {header.subtitle}
+                  </p>
                 </div>
               </div>
               <button
@@ -240,8 +244,8 @@ export function CrmSettingsSidebar() {
 
             {/* Breadcrumb (solo Layer 2) */}
             {header.breadcrumb ? (
-              <div className="px-7 py-3">
-                <span className="text-xs font-semibold text-gray-500">
+              <div className="px-4 py-3 sm:px-6 md:px-7">
+                <span className="block break-words text-xs font-semibold text-gray-500">
                   {header.breadcrumb}
                 </span>
               </div>
@@ -262,8 +266,8 @@ export function CrmSettingsSidebar() {
                 <motion.div
                   key={layer}
                   className={cn(
-                    "grid h-full content-start gap-4 overflow-y-auto px-7 pb-5 pt-1",
-                    isRoot ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1",
+                    "grid h-full min-w-0 content-start gap-4 overflow-y-auto px-4 pb-5 pt-1 sm:px-6 md:px-7",
+                    isRoot ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1",
                   )}
                   initial={{ x: isRoot ? "-100%" : "100%" }}
                   animate={{ x: 0 }}
@@ -305,8 +309,8 @@ export function CrmSettingsSidebar() {
             </div>
 
             {/* Footer fisso in tutti i layer */}
-            <div className="border-t border-white/10 px-7 py-4">
-              <div className="flex items-center justify-between">
+            <div className="border-t border-white/10 px-4 py-4 sm:px-6 md:px-7">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm font-medium text-gray-300">
                   Solair CRM v1.0
                 </span>

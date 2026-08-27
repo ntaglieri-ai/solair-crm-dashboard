@@ -68,7 +68,7 @@ function CrmSettingsHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-      <div className="flex h-16 items-center justify-between gap-4 px-5">
+      <div className="flex h-16 items-center justify-between gap-3 px-4 sm:gap-4 sm:px-5">
         <div className="flex h-12 w-28 shrink-0 items-center justify-start overflow-hidden" aria-label="Solair Group">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={companyLogo} alt="Solair CRM" className="h-10 w-24 object-contain object-left" />
@@ -81,14 +81,15 @@ function CrmSettingsHeader() {
         <button
           type="button"
           onClick={() => navigate("/")}
-          className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-3"
         >
           <ArrowLeft className="size-4" />
-          Torna al CRM
+          <span className="hidden sm:inline">Torna al CRM</span>
+          <span className="sm:hidden">CRM</span>
         </button>
       </div>
 
-      <div className="flex justify-start border-t border-border px-5 py-2 md:hidden">
+      <div className="flex justify-start border-t border-border px-4 py-2 sm:px-5 md:hidden">
         <CrmBreadcrumb items={items} />
       </div>
     </header>
@@ -102,7 +103,9 @@ export function CrmSettingsShell({ children }: { children: ReactNode }) {
         <CrmSettingsRouteProgress />
         <div className="flex min-h-screen flex-col bg-muted/30">
           <CrmSettingsHeader />
-          <main className="w-full flex-1 px-5 py-6">{children}</main>
+          <main className="w-full min-w-0 flex-1 px-4 py-5 sm:px-5 sm:py-6">
+            {children}
+          </main>
         </div>
         <CrmSettingsSidebar />
       </CrmSettingsLauncherProvider>

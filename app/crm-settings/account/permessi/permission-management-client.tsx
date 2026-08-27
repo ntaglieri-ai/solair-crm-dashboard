@@ -594,7 +594,7 @@ export function PermissionManagementClient({
       <AccountProfileCard profile={currentProfile} />
 
       {/* Card ruoli */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {ruoli.map((r) => {
           const isActive = activeId === r.id
           const isCurrentRole = currentProfile?.ruoloId === r.id
@@ -602,7 +602,7 @@ export function PermissionManagementClient({
             <div
               key={r.id}
               className={cn(
-                "group relative flex flex-col gap-3 rounded-xl border bg-card p-4 transition-all hover:-translate-y-px hover:border-foreground/25 hover:shadow-sm focus-within:ring-2 focus-within:ring-teal/30",
+                  "group relative flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4 transition-all hover:-translate-y-px hover:border-foreground/25 hover:shadow-sm focus-within:ring-2 focus-within:ring-teal/30",
                 isActive
                   ? "border-teal ring-1 ring-teal/30"
                   : isCurrentRole
@@ -625,11 +625,11 @@ export function PermissionManagementClient({
                 <div className="flex min-w-0 items-center gap-2">
                   <span
                     className={cn(
-                      "inline-flex h-6 items-center rounded-full px-2.5 text-xs font-semibold",
+                      "inline-flex min-w-0 items-center rounded-full px-2.5 py-1 text-xs font-semibold",
                       RUOLO_COLOR_CLASS[r.colore],
                     )}
                   >
-                    {r.nome}
+                    <span className="min-w-0 break-words">{r.nome}</span>
                   </span>
                   {isCurrentRole ? (
                     <Badge variant="outline" className="shrink-0 gap-1 text-[11px]">
@@ -638,21 +638,21 @@ export function PermissionManagementClient({
                     </Badge>
                   ) : null}
                 </div>
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
                   <Users className="size-3.5" />
                   {r.utenti} utenti
                 </span>
               </div>
-              <p className="pointer-events-none relative z-10 text-sm leading-relaxed text-muted-foreground">
+              <p className="pointer-events-none relative z-10 min-w-0 break-words text-sm leading-relaxed text-muted-foreground">
                 {r.descrizione}
               </p>
               <div className="pointer-events-none relative z-10 flex flex-wrap gap-1.5">
                 {permessiHighlights(r.permessi).map((p) => (
                   <span
                     key={p}
-                    className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                    className="inline-flex min-w-0 items-center rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
                   >
-                    {p}
+                    <span className="break-words">{p}</span>
                   </span>
                 ))}
               </div>
@@ -673,9 +673,9 @@ export function PermissionManagementClient({
 
       {/* Pannello configurazione permessi */}
       {active && draft ? (
-        <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-base font-semibold text-foreground">
+        <div className="flex min-w-0 flex-col gap-4 rounded-xl border border-border bg-card p-4 sm:p-5">
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <h3 className="min-w-0 break-words text-base font-semibold text-foreground">
               Configura permessi · {active.nome}
             </h3>
           </div>
@@ -685,13 +685,15 @@ export function PermissionManagementClient({
             <AccordionItem value="pagine">
               <AccordionTrigger>Pagine visibili</AccordionTrigger>
               <AccordionContent>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   {PAGINE.map((p) => (
                     <label
                       key={p.id}
-                      className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm"
+                      className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm"
                     >
-                      <span className="truncate text-foreground">{p.label}</span>
+                      <span className="min-w-0 break-words text-foreground">
+                        {p.label}
+                      </span>
                       <Switch
                         checked={draft.pagine[p.id]}
                         onCheckedChange={() => togglePagina(p.id)}
@@ -745,7 +747,9 @@ export function PermissionManagementClient({
                       >
                         <AccordionTrigger className="py-3">
                           <span className="flex min-w-0 flex-1 items-center gap-2">
-                            <span>{FIELD_MODULE_LABELS[module]}</span>
+                            <span className="min-w-0 break-words">
+                              {FIELD_MODULE_LABELS[module]}
+                            </span>
                             <Badge variant="outline" className="text-[11px]">
                               {total - hidden}/{total} visibili
                             </Badge>
@@ -797,13 +801,13 @@ export function PermissionManagementClient({
                                       ))}
                                     </div>
                                   </div>
-                                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                                  <div className="grid gap-2 lg:grid-cols-2 2xl:grid-cols-3">
                                     {fields.map((field) => (
                                       <div
                                         key={field.key}
-                                        className="grid grid-cols-[minmax(0,1fr)_8.5rem] items-center gap-2 rounded-md border border-border px-2.5 py-2"
+                                        className="grid min-w-0 gap-2 rounded-md border border-border px-2.5 py-2 sm:grid-cols-[minmax(0,1fr)_8.5rem] sm:items-center"
                                       >
-                                        <span className="truncate text-sm text-foreground">
+                                        <span className="min-w-0 break-words text-sm text-foreground">
                                           {field.key}
                                         </span>
                                         <Select
@@ -918,7 +922,7 @@ export function PermissionManagementClient({
             </Button>
             <Button
               variant="outline"
-              className="ml-auto"
+              className="sm:ml-auto"
               disabled={saving}
               onClick={openDuplicateRole}
             >
@@ -940,7 +944,7 @@ export function PermissionManagementClient({
               e azioni avanzate.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid min-h-0 gap-5 overflow-y-auto py-2 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="grid min-h-0 gap-5 overflow-y-auto py-2 xl:grid-cols-[1.15fr_0.85fr]">
             <div className="flex flex-col gap-5">
               <section className="rounded-lg border border-border p-4">
                 <div className="mb-4 flex items-center gap-2">
@@ -961,7 +965,7 @@ export function PermissionManagementClient({
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label>Colore badge</Label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       {ROLE_COLORS.map((color) => (
                         <button
                           key={color.id}

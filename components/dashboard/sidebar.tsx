@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { User, Settings, LogOut, ChevronsUpDown, Menu } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -261,6 +261,7 @@ function SidebarContent({
 export function Sidebar() {
   const permissions = usePermissions()
   const pathname = usePathname()
+  const previousPathname = useRef(pathname)
   const [companyLogo, setCompanyLogo] = useState(DEFAULT_COMPANY_LOGO)
   const [mobileOpen, setMobileOpen] = useState(false)
   const visiblePrincipale = NAV_PRINCIPALE.filter((item) => {
@@ -292,44 +293,49 @@ export function Sidebar() {
   }, [permissions])
 
   useEffect(() => {
-    if (!mobileOpen) return
+    if (previousPathname.current === pathname) return
+    previousPathname.current = pathname
     const frame = window.requestAnimationFrame(() => setMobileOpen(false))
     return () => window.cancelAnimationFrame(frame)
-  }, [mobileOpen, pathname])
+  }, [pathname])
 
   return (
     <>
-      <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur lg:hidden">
-        <div className="flex min-w-0 items-center gap-3">
+      <header className="fixed inset-x-0 top-0 z-50 flex h-20 items-center justify-between border-b border-border bg-card/98 px-4 shadow-[0_8px_26px_rgb(15_23_42/7%)] backdrop-blur supports-[backdrop-filter]:bg-card/92 lg:hidden">
+        <div className="flex min-w-0 items-center gap-4">
           <Button
             type="button"
             variant="outline"
             size="icon"
             aria-label="Apri menu"
+            aria-expanded={mobileOpen}
+            aria-controls="mobile-main-menu"
             onClick={() => setMobileOpen(true)}
+            className="size-14 touch-manipulation rounded-2xl border-border bg-background text-foreground shadow-sm active:scale-[0.98]"
           >
-            <Menu className="size-5" />
+            <Menu className="size-7" />
           </Button>
           <div className="flex min-w-0 items-center gap-2">
-            <span className="flex h-8 w-20 items-center justify-start overflow-hidden">
+            <span className="flex h-12 w-32 items-center justify-start overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={companyLogo}
                 alt="Solair CRM"
-                className="h-7 w-20 object-contain object-left"
+                className="h-11 w-32 object-contain object-left"
               />
             </span>
           </div>
         </div>
-        <span className="truncate pl-3 text-right text-xs font-semibold capitalize text-muted-foreground">
+        <span className="min-w-0 max-w-[44vw] truncate pl-3 text-right text-sm font-bold capitalize leading-tight text-muted-foreground">
           {OGGI}
         </span>
       </header>
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent
+          id="mobile-main-menu"
           side="left"
-          className="w-[min(88vw,320px)] gap-0 bg-sidebar p-0 text-sidebar-foreground sm:max-w-[320px]"
+          className="w-[min(88vw,340px)] gap-0 bg-sidebar p-0 text-sidebar-foreground sm:max-w-[340px]"
         >
           <SheetTitle className="sr-only">Menu principale</SheetTitle>
           <SidebarContent

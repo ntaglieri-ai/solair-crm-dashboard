@@ -177,6 +177,26 @@ export function LeadsClient({
       setRowsPerPage(20)
     }
   }, [isMobile, rowsPerPage])
+  // Blocca lo scroll della pagina (body/html) su mobile mentre questa vista è
+  // montata: il glitch visto in produzione era il classico "doppio scroll" di
+  // Safari iOS — pagina esterna e lista interna scrollabili insieme, il dito
+  // a volte muove quella sbagliata creando lo strappo tra header e lista.
+  // Con l'esterno bloccato resta scrollabile solo la lista lead.
+  useEffect(() => {
+    if (!isMobile) return
+    const html = document.documentElement
+    const prevHtmlOverflow = html.style.overflow
+    const prevBodyOverflow = document.body.style.overflow
+    const prevBodyOverscroll = document.body.style.overscrollBehavior
+    html.style.overflow = "hidden"
+    document.body.style.overflow = "hidden"
+    document.body.style.overscrollBehavior = "none"
+    return () => {
+      html.style.overflow = prevHtmlOverflow
+      document.body.style.overflow = prevBodyOverflow
+      document.body.style.overscrollBehavior = prevBodyOverscroll
+    }
+  }, [isMobile])
   const [page, setPage] = useState(1)
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
   const [convertTarget, setConvertTarget] = useState<Lead | null>(null)

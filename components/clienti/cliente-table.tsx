@@ -94,7 +94,7 @@ function ClienteMobileList({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
       {clienti.map((cliente) => {
         const owner =
           owners.find((item) => item.id === cliente["Clienti Proprietario"])?.nome ??
@@ -106,7 +106,7 @@ function ClienteMobileList({
             key={cliente.id}
             role="button"
             tabIndex={0}
-            className="cursor-pointer rounded-xl border border-border bg-card p-4 shadow-sm"
+            className="flex min-h-[76px] cursor-pointer items-center gap-2.5 bg-card px-2.5 py-2.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             onClick={() => {
               startNavigationFeedback()
               router.push(`/clienti/${cliente.id}`)
@@ -118,98 +118,83 @@ function ClienteMobileList({
               router.push(`/clienti/${cliente.id}`)
             }}
           >
-            <div className="flex items-start gap-3">
-              <div onClick={(event) => event.stopPropagation()}>
-                <Checkbox
-                  checked={selected.has(cliente.id)}
-                  onCheckedChange={() => onToggle(cliente.id)}
-                  aria-label={`Seleziona ${cliente["Nome Clienti"]}`}
-                />
-              </div>
-
-              <ClienteAvatar nome={cliente["Nome Clienti"]} className="size-11 text-sm" />
-
-              <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3 className="truncate text-base font-bold text-foreground">
-                      {cliente["Nome Clienti"]}
-                    </h3>
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <StatoClienteBadge stato={cliente.Stato} />
-                      {cliente["Badge dell'attività"] ? (
-                        <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-semibold text-warning">
-                          Attività
-                        </span>
-                      ) : null}
-                      {cliente["Badge di nota"] ? (
-                        <span className="rounded-full bg-info/12 px-2 py-0.5 text-[11px] font-semibold text-info">
-                          Note
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div onClick={(event) => event.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button variant="ghost" size="icon-sm" aria-label="Azioni cliente">
-                            <MoreHorizontal className="size-4" />
-                          </Button>
-                        }
-                      />
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuGroup>
-                          <DropdownMenuItem
-                            onClick={() => router.push(`/clienti/${cliente.id}`)}
-                          >
-                            <ExternalLink data-icon="inline-start" />
-                            Apri scheda
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onClick={() => onDelete(cliente)}
-                          >
-                            <Trash2 data-icon="inline-start" />
-                            Elimina
-                          </DropdownMenuItem>
-                        </DropdownMenuGroup>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-
-                <div className="mt-3" onClick={(event) => event.stopPropagation()}>
-                  <QuickContactIcons
-                    kind="cliente"
-                    recordId={cliente.id}
-                    nome={cliente["Nome Clienti"]}
-                    telefono={cliente.Cellulare}
-                    email={cliente["E-mail"]}
-                  />
-                </div>
-              </div>
+            <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
+              <Checkbox
+                checked={selected.has(cliente.id)}
+                onCheckedChange={() => onToggle(cliente.id)}
+                aria-label={`Seleziona ${cliente["Nome Clienti"]}`}
+              />
             </div>
 
-            <div className="mt-4 grid gap-2 text-sm text-muted-foreground">
-              <span className="flex min-w-0 items-center gap-2">
-                <UserRound className="size-4 shrink-0" />
+            <ClienteAvatar nome={cliente["Nome Clienti"]} className="size-8 text-xs" />
+
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <h3 className="truncate text-sm font-bold text-foreground">
+                  {cliente["Nome Clienti"]}
+                </h3>
+                <StatoClienteBadge stato={cliente.Stato} />
+              </div>
+
+              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <UserRound className="size-3.5 shrink-0" />
                 <span className="truncate">{owner}</span>
-              </span>
-              <span className="flex min-w-0 items-center gap-2">
-                <Wrench className="size-4 shrink-0" />
-                <span className="truncate">{cliente.Installatore || "Installatore non assegnato"}</span>
-              </span>
-              <span className="flex min-w-0 items-center gap-2">
-                <MapPin className="size-4 shrink-0" />
-                <span className="truncate">{cliente.Sede}</span>
-              </span>
+                <span className="shrink-0 text-muted-foreground/50">·</span>
+                <Wrench className="size-3.5 shrink-0" />
+                <span className="truncate">
+                  {cliente.Installatore || "Installatore non assegnato"}
+                </span>
+              </div>
+
+              <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                  <MapPin className="size-3.5 shrink-0" />
+                  <span className="truncate">{cliente.Sede}</span>
+                </span>
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <ClienteTagBadges clienteId={cliente.id} max={1} />
+                </div>
+              </div>
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              <ClienteTagBadges clienteId={cliente.id} max={3} />
+            <div
+              className="flex shrink-0 items-center gap-0.5"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <QuickContactIcons
+                kind="cliente"
+                recordId={cliente.id}
+                nome={cliente["Nome Clienti"]}
+                telefono={cliente.Cellulare}
+                email={cliente["E-mail"]}
+              />
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button variant="ghost" size="icon-sm" aria-label="Azioni cliente">
+                      <MoreHorizontal className="size-4" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end">
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem
+                      onClick={() => router.push(`/clienti/${cliente.id}`)}
+                    >
+                      <ExternalLink data-icon="inline-start" />
+                      Apri scheda
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => onDelete(cliente)}
+                    >
+                      <Trash2 data-icon="inline-start" />
+                      Elimina
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </article>
         )

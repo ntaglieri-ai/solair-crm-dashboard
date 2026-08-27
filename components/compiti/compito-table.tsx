@@ -81,7 +81,7 @@ function CompitoMobileList({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
       {compiti.map((compito) => {
         const scaduto = isCompitoScaduto(compito)
         const completato = compito.Stato === "Completato"
@@ -91,7 +91,7 @@ function CompitoMobileList({
             key={compito.id}
             role="button"
             tabIndex={0}
-            className="cursor-pointer rounded-xl border border-border bg-card p-4 shadow-sm"
+            className="flex min-h-[76px] cursor-pointer items-center gap-2.5 bg-card px-2.5 py-2.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             onClick={() => {
               startNavigationFeedback()
               router.push(`/compiti/${compito.id}`)
@@ -103,111 +103,99 @@ function CompitoMobileList({
               router.push(`/compiti/${compito.id}`)
             }}
           >
-            <div className="flex items-start gap-3">
-              <div onClick={(event) => event.stopPropagation()}>
-                <Checkbox
-                  checked={selected.has(compito.id)}
-                  onCheckedChange={() => onToggle(compito.id)}
-                  aria-label={`Seleziona ${compito.Oggetto}`}
-                />
-              </div>
-
-              <CompitoAvatar nome={compito["Proprietario del compito"]} size={44} />
-
-              <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3
-                      className={cn(
-                        "line-clamp-2 text-base font-bold text-foreground",
-                        completato && "text-muted-foreground line-through",
-                      )}
-                    >
-                      {compito.Oggetto}
-                    </h3>
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      <StatoBadge stato={compito.Stato} />
-                      <PrioritaBadge priorita={compito.Priorità} />
-                      {compito.Tag ? (
-                        <span className="inline-flex max-w-full items-center rounded-full bg-teal/10 px-2.5 py-1 text-xs font-bold text-teal">
-                          <span className="truncate">{compito.Tag}</span>
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div onClick={(event) => event.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={`Azioni per ${compito.Oggetto}`}
-                          >
-                            <MoreHorizontal className="size-4" />
-                          </Button>
-                        }
-                      />
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem onClick={() => router.push(`/compiti/${compito.id}`)}>
-                          <ExternalLink data-icon="inline-start" />
-                          Apri compito
-                        </DropdownMenuItem>
-                        {!completato ? (
-                          <DropdownMenuItem onClick={() => onComplete(compito)}>
-                            <Check data-icon="inline-start" />
-                            Segna completato
-                          </DropdownMenuItem>
-                        ) : null}
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onClick={() => onDelete(compito)}
-                        >
-                          <Trash2 data-icon="inline-start" />
-                          Elimina
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              </div>
+            <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
+              <Checkbox
+                checked={selected.has(compito.id)}
+                onCheckedChange={() => onToggle(compito.id)}
+                aria-label={`Seleziona ${compito.Oggetto}`}
+              />
             </div>
 
-            <div className="mt-4 grid gap-2 text-sm text-muted-foreground">
-              <span className="flex min-w-0 items-center gap-2">
-                <CalendarClock className={cn("size-4 shrink-0", scaduto && "text-destructive")} />
+            <CompitoAvatar nome={compito["Proprietario del compito"]} size={32} />
+
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <h3
+                  className={cn(
+                    "truncate text-sm font-bold text-foreground",
+                    completato && "text-muted-foreground line-through",
+                  )}
+                >
+                  {compito.Oggetto}
+                </h3>
+                <PrioritaBadge priorita={compito.Priorità} />
+              </div>
+
+              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <CalendarClock className={cn("size-3.5 shrink-0", scaduto && "text-destructive")} />
                 <span className={cn("truncate", scaduto && "font-medium text-destructive")}>
                   {compito["Data di scadenza"]}
                 </span>
-              </span>
-              <span className="flex min-w-0 items-center gap-2">
-                <UserRound className="size-4 shrink-0" />
+                <span className="shrink-0 text-muted-foreground/50">·</span>
+                <UserRound className="size-3.5 shrink-0" />
                 <span className="truncate">{compito["Proprietario del compito"]}</span>
-              </span>
-              {compito["Nome contatto"] ? (
-                <span className="flex min-w-0 items-center gap-2">
-                  <UserRound className="size-4 shrink-0" />
-                  <span className="truncate">{compito["Nome contatto"]}</span>
-                </span>
-              ) : null}
-              {compito["Correlato a"] ? (
-                <span className="flex min-w-0 items-center gap-2">
-                  <LinkIcon className="size-4 shrink-0" />
-                  {compito["Correlato a"].linkable ? (
-                    <Link
-                      href={correlatoHref(compito["Correlato a"])}
-                      onClick={(event) => event.stopPropagation()}
-                      className="truncate text-info hover:underline"
+              </div>
+
+              <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                <StatoBadge stato={compito.Stato} />
+                {compito.Tag ? (
+                  <span className="inline-flex max-w-[120px] items-center rounded-full bg-teal/10 px-2 py-0.5 text-[11px] font-bold text-teal">
+                    <span className="truncate">{compito.Tag}</span>
+                  </span>
+                ) : null}
+                {compito["Correlato a"] ? (
+                  <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                    <LinkIcon className="size-3.5 shrink-0" />
+                    {compito["Correlato a"].linkable ? (
+                      <Link
+                        href={correlatoHref(compito["Correlato a"])}
+                        onClick={(event) => event.stopPropagation()}
+                        className="truncate text-info hover:underline"
+                      >
+                        {compito["Correlato a"].nome}
+                      </Link>
+                    ) : (
+                      <span className="truncate">{compito["Correlato a"].nome}</span>
+                    )}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Azioni per ${compito.Oggetto}`}
                     >
-                      {compito["Correlato a"].nome}
-                    </Link>
-                  ) : (
-                    <span className="truncate">{compito["Correlato a"].nome}</span>
-                  )}
-                </span>
-              ) : null}
+                      <MoreHorizontal className="size-4" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={() => router.push(`/compiti/${compito.id}`)}>
+                    <ExternalLink data-icon="inline-start" />
+                    Apri compito
+                  </DropdownMenuItem>
+                  {!completato ? (
+                    <DropdownMenuItem onClick={() => onComplete(compito)}>
+                      <Check data-icon="inline-start" />
+                      Segna completato
+                    </DropdownMenuItem>
+                  ) : null}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => onDelete(compito)}
+                  >
+                    <Trash2 data-icon="inline-start" />
+                    Elimina
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </article>
         )

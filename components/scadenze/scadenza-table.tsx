@@ -75,7 +75,7 @@ function ScadenzaMobileList({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
       {scadenze.map((scadenza) => {
         const scaduta = isScaduta(scadenza)
 
@@ -84,7 +84,7 @@ function ScadenzaMobileList({
             key={scadenza.id}
             role="button"
             tabIndex={0}
-            className="cursor-pointer rounded-xl border border-border bg-card p-4 shadow-sm"
+            className="flex min-h-[72px] cursor-pointer items-center gap-2.5 bg-card px-2.5 py-2.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             onClick={() => {
               startNavigationFeedback()
               router.push(`/scadenze/${scadenza.id}`)
@@ -96,89 +96,83 @@ function ScadenzaMobileList({
               router.push(`/scadenze/${scadenza.id}`)
             }}
           >
-            <div className="flex items-start gap-3">
-              <div onClick={(event) => event.stopPropagation()}>
-                <Checkbox
-                  checked={selected.has(scadenza.id)}
-                  onCheckedChange={() => onToggle(scadenza.id)}
-                  aria-label={`Seleziona ${scadenza.nome}`}
-                />
-              </div>
-
-              <ScadenzaAvatar nome={scadenza.proprietario_nome ?? scadenza.nome} size={44} />
-
-              <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3 className="line-clamp-2 text-base font-bold text-foreground">
-                      {scadenza.nome}
-                    </h3>
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      <ScadenzaTagChip tag={scadenza.tag} />
-                      {scaduta ? <ScadutaBadge /> : null}
-                    </div>
-                  </div>
-
-                  <div onClick={(event) => event.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={`Azioni per ${scadenza.nome}`}
-                          >
-                            <MoreHorizontal className="size-4" />
-                          </Button>
-                        }
-                      />
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem onClick={() => router.push(`/scadenze/${scadenza.id}`)}>
-                          <ExternalLink data-icon="inline-start" />
-                          Apri scadenza
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onEdit(scadenza)}>
-                          <Pencil data-icon="inline-start" />
-                          Modifica
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onClick={() => onDelete(scadenza)}
-                        >
-                          <Trash2 data-icon="inline-start" />
-                          Elimina
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              </div>
+            <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
+              <Checkbox
+                checked={selected.has(scadenza.id)}
+                onCheckedChange={() => onToggle(scadenza.id)}
+                aria-label={`Seleziona ${scadenza.nome}`}
+              />
             </div>
 
-            <div className="mt-4 grid gap-2 text-sm text-muted-foreground">
-              <span className="flex min-w-0 items-center gap-2">
-                <CalendarClock className={cn("size-4 shrink-0", scaduta && "text-destructive")} />
+            <ScadenzaAvatar nome={scadenza.proprietario_nome ?? scadenza.nome} size={32} />
+
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <h3 className="truncate text-sm font-bold text-foreground">
+                  {scadenza.nome}
+                </h3>
+                {scaduta ? <ScadutaBadge /> : null}
+              </div>
+
+              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <CalendarClock className={cn("size-3.5 shrink-0", scaduta && "text-destructive")} />
                 <span className={cn("truncate", scaduta && "font-medium text-destructive")}>
                   {formatDateTime(scadenza.data_scadenza)}
                 </span>
-              </span>
-              <span className="flex min-w-0 items-center gap-2">
-                <UserRound className="size-4 shrink-0" />
+                <span className="shrink-0 text-muted-foreground/50">·</span>
+                <UserRound className="size-3.5 shrink-0" />
                 <span className="truncate">
                   {scadenza.proprietario_nome ?? "Proprietario non assegnato"}
                 </span>
-              </span>
-              <span className="flex min-w-0 items-center gap-2">
-                <LinkIcon className="size-4 shrink-0" />
-                <span className="truncate">
-                  {scadenza.connesso_a_tipo
-                    ? scadenza.connesso_a_tipo === "lead"
-                      ? "Collegata a lead"
-                      : "Collegata a cliente"
-                    : "Nessun collegamento"}
+              </div>
+
+              <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                <ScadenzaTagChip tag={scadenza.tag} />
+                <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                  <LinkIcon className="size-3.5 shrink-0" />
+                  <span className="truncate">
+                    {scadenza.connesso_a_tipo
+                      ? scadenza.connesso_a_tipo === "lead"
+                        ? "Collegata a lead"
+                        : "Collegata a cliente"
+                      : "Nessun collegamento"}
+                  </span>
                 </span>
-              </span>
+              </div>
+            </div>
+
+            <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Azioni per ${scadenza.nome}`}
+                    >
+                      <MoreHorizontal className="size-4" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={() => router.push(`/scadenze/${scadenza.id}`)}>
+                    <ExternalLink data-icon="inline-start" />
+                    Apri scadenza
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onEdit(scadenza)}>
+                    <Pencil data-icon="inline-start" />
+                    Modifica
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => onDelete(scadenza)}
+                  >
+                    <Trash2 data-icon="inline-start" />
+                    Elimina
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </article>
         )

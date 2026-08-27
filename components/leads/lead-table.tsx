@@ -67,7 +67,6 @@ import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
 import {
   LeadAvatar,
   OrigineBadge,
-  ScoreBar,
   StatoLeadBadge,
 } from "./lead-utils"
 import { useTags } from "@/lib/tag-store"
@@ -106,19 +105,22 @@ function LeadMobileList({
   }
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto pb-2 [-webkit-overflow-scrolling:touch]">
+    <div className="flex h-full flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card [-webkit-overflow-scrolling:touch]">
       {leads.map((lead) => {
         const owner =
           owners.find((item) => item.id === lead["Lead Proprietario"])?.nome ??
           lead["Lead Proprietario"] ??
           "Non assegnato"
+        const luogo = [lead["Città"], lead.Provincia, lead.Sede]
+          .filter(Boolean)
+          .join(" · ")
 
         return (
           <article
             key={lead.id}
             role="button"
             tabIndex={0}
-            className="cursor-pointer rounded-xl border border-border bg-card p-4 shadow-sm"
+            className="flex min-h-[76px] cursor-pointer items-center gap-2.5 bg-card px-2.5 py-2.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             onClick={() => {
               startNavigationFeedback()
               router.push(`/leads/${lead.id}`)
@@ -130,100 +132,90 @@ function LeadMobileList({
               router.push(`/leads/${lead.id}`)
             }}
           >
-            <div className="flex items-start gap-3">
-              <div onClick={(event) => event.stopPropagation()}>
-                <Checkbox
-                  checked={selected.has(lead.id)}
-                  onCheckedChange={() => onToggle(lead.id)}
-                  aria-label={`Seleziona ${lead["Nome Lead"]}`}
-                />
-              </div>
-
-              <LeadAvatar nome={lead["Nome Lead"]} className="size-11 text-sm" />
-
-              <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3 className="truncate text-base font-bold text-foreground">
-                      {lead["Nome Lead"]}
-                    </h3>
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <StatoLeadBadge stato={lead["Stato Lead"]} />
-                      <OrigineBadge origine={lead["Origine Lead"]} />
-                    </div>
-                  </div>
-
-                  <div onClick={(event) => event.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button variant="ghost" size="icon-sm" aria-label="Azioni lead">
-                            <MoreHorizontal className="size-4" />
-                          </Button>
-                        }
-                      />
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuGroup>
-                          <DropdownMenuItem onClick={() => router.push(`/leads/${lead.id}`)}>
-                            <ExternalLink data-icon="inline-start" />
-                            Apri scheda
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => onConvert(lead)}>
-                            <UserCheck data-icon="inline-start" />
-                            Converti
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => onDuplicate(lead)}>
-                            <ExternalLink data-icon="inline-start" />
-                            Duplica
-                          </DropdownMenuItem>
-                          {canDelete ? (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                variant="destructive"
-                                onClick={() => onDelete(lead)}
-                              >
-                                <Trash2 data-icon="inline-start" />
-                                Elimina
-                              </DropdownMenuItem>
-                            </>
-                          ) : null}
-                        </DropdownMenuGroup>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <div onClick={(event) => event.stopPropagation()}>
-                    <QuickContactIcons
-                      kind="lead"
-                      recordId={lead.id}
-                      nome={lead["Nome Lead"]}
-                      telefono={lead.Telefono}
-                      email={lead["E-mail"]}
-                    />
-                  </div>
-                  <ScoreBar score={lead.Valutazione} />
-                </div>
-              </div>
+            <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
+              <Checkbox
+                checked={selected.has(lead.id)}
+                onCheckedChange={() => onToggle(lead.id)}
+                aria-label={`Seleziona ${lead["Nome Lead"]}`}
+              />
             </div>
 
-            <div className="mt-4 grid gap-2 text-sm text-muted-foreground">
-              <span className="flex min-w-0 items-center gap-2">
-                <UserRound className="size-4 shrink-0" />
+            <LeadAvatar nome={lead["Nome Lead"]} className="size-8 text-xs" />
+
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <h3 className="truncate text-sm font-bold text-foreground">
+                  {lead["Nome Lead"]}
+                </h3>
+                <StatoLeadBadge stato={lead["Stato Lead"]} />
+              </div>
+              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <UserRound className="size-3.5 shrink-0" />
                 <span className="truncate">{owner}</span>
-              </span>
-              <span className="flex min-w-0 items-center gap-2">
-                <MapPin className="size-4 shrink-0" />
-                <span className="truncate">
-                  {[lead["Città"], lead.Provincia, lead.Sede].filter(Boolean).join(" · ")}
-                </span>
-              </span>
+                {luogo ? (
+                  <>
+                    <span className="shrink-0 text-muted-foreground/50">·</span>
+                    <MapPin className="size-3.5 shrink-0" />
+                    <span className="truncate">{luogo}</span>
+                  </>
+                ) : null}
+              </div>
+              <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                <OrigineBadge origine={lead["Origine Lead"]} />
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <LeadTagBadges leadId={lead.id} max={1} />
+                </div>
+              </div>
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              <LeadTagBadges leadId={lead.id} max={3} />
+            <div
+              className="flex shrink-0 items-center gap-0.5"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <QuickContactIcons
+                kind="lead"
+                recordId={lead.id}
+                nome={lead["Nome Lead"]}
+                telefono={lead.Telefono}
+                email={lead["E-mail"]}
+              />
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button variant="ghost" size="icon-sm" aria-label="Azioni lead">
+                      <MoreHorizontal className="size-4" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end">
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem onClick={() => router.push(`/leads/${lead.id}`)}>
+                      <ExternalLink data-icon="inline-start" />
+                      Apri scheda
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onConvert(lead)}>
+                      <UserCheck data-icon="inline-start" />
+                      Converti
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onDuplicate(lead)}>
+                      <ExternalLink data-icon="inline-start" />
+                      Duplica
+                    </DropdownMenuItem>
+                    {canDelete ? (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => onDelete(lead)}
+                        >
+                          <Trash2 data-icon="inline-start" />
+                          Elimina
+                        </DropdownMenuItem>
+                      </>
+                    ) : null}
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </article>
         )

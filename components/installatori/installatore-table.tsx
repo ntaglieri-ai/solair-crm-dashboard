@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { MoreHorizontal, ExternalLink, Trash2, Pencil } from "lucide-react"
+import { CalendarClock, ExternalLink, Mail, MoreHorizontal, Pencil, Phone, Trash2, UserRound } from "lucide-react"
+import { startNavigationFeedback } from "@/components/navigation/navigation-feedback"
 import { IconArrowUp } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import {
@@ -61,6 +62,159 @@ function InstallatoreAvatar({ nome, size = 26 }: { nome: string; size?: number }
   )
 }
 
+function InstallatoreMobileList({
+  installatori,
+  selected,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  installatori: InstallatoreRecord[]
+  selected: Set<string>
+  onToggle: (id: string) => void
+  onEdit: (installatore: InstallatoreRecord) => void
+  onDelete: (installatore: InstallatoreRecord) => void
+}) {
+  const router = useRouter()
+
+  if (installatori.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
+        Nessun installatore trovato con i filtri correnti.
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {installatori.map((installatore) => (
+        <article
+          key={installatore.id}
+          role="button"
+          tabIndex={0}
+          className="cursor-pointer rounded-xl border border-border bg-card p-4 shadow-sm"
+          onClick={() => {
+            startNavigationFeedback()
+            router.push(`/installatori/${installatore.id}`)
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return
+            event.preventDefault()
+            startNavigationFeedback()
+            router.push(`/installatori/${installatore.id}`)
+          }}
+        >
+          <div className="flex items-start gap-3">
+            <div onClick={(event) => event.stopPropagation()}>
+              <Checkbox
+                checked={selected.has(installatore.id)}
+                onCheckedChange={() => onToggle(installatore.id)}
+                aria-label={`Seleziona ${installatore.nome}`}
+              />
+            </div>
+
+            <InstallatoreAvatar nome={installatore.nome} size={44} />
+
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="truncate text-base font-bold text-foreground">
+                    {installatore.nome}
+                  </h3>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <StatoPill tone={installatore.attivo ? "success" : "muted"}>
+                      {installatore.attivo ? "Attivo" : "Non attivo"}
+                    </StatoPill>
+                    <InstallatoreTagBadges installatoreId={installatore.id} max={2} />
+                  </div>
+                </div>
+
+                <div onClick={(event) => event.stopPropagation()}>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Azioni per ${installatore.nome}`}
+                        >
+                          <MoreHorizontal className="size-4" />
+                        </Button>
+                      }
+                    />
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuGroup>
+                        <DropdownMenuItem
+                          onClick={() => router.push(`/installatori/${installatore.id}`)}
+                        >
+                          <ExternalLink data-icon="inline-start" />
+                          Apri installatore
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onEdit(installatore)}>
+                          <Pencil data-icon="inline-start" />
+                          Modifica
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => onDelete(installatore)}
+                        >
+                          <Trash2 data-icon="inline-start" />
+                          Elimina
+                        </DropdownMenuItem>
+                      </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-1">
+                {installatore.telefono ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    nativeButton={false}
+                    render={<a href={`tel:${installatore.telefono.replace(/[^\d+]/g, "")}`} />}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <Phone data-icon="inline-start" />
+                    Chiama
+                  </Button>
+                ) : null}
+                {installatore.email ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    nativeButton={false}
+                    render={<a href={`mailto:${installatore.email}`} />}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <Mail data-icon="inline-start" />
+                    Email
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2 text-sm text-muted-foreground">
+            <span className="flex min-w-0 items-center gap-2">
+              <UserRound className="size-4 shrink-0" />
+              <span className="truncate">
+                {installatore.proprietario_nome ?? "Proprietario non assegnato"}
+              </span>
+            </span>
+            <span className="flex min-w-0 items-center gap-2">
+              <CalendarClock className="size-4 shrink-0" />
+              <span className="truncate">Aggiornato: {formatDate(installatore.updated_at)}</span>
+            </span>
+          </div>
+        </article>
+      ))}
+    </div>
+  )
+}
+
 // Questa tabella non ha il selettore di densita' di Lead/Clienti: usa la
 // densita' di default, cosi' le tre restano visivamente allineate.
 const CELL_PAD = LIGHTNING_DENSITY.normale
@@ -114,7 +268,19 @@ export function InstallatoreTable({
   ]
 
   return (
-    <DataTableShell
+    <>
+      <div className="lg:hidden">
+        <InstallatoreMobileList
+          installatori={installatori}
+          selected={selected}
+          onToggle={onToggle}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      </div>
+
+      <div className="hidden lg:block">
+        <DataTableShell
       ariaLabel="Tabella installatori"
       minTableWidth={tableWidth}
       alwaysShowVerticalScrollbar
@@ -323,6 +489,8 @@ export function InstallatoreTable({
           ))
         )}
       </TableBody>
-    </DataTableShell>
+        </DataTableShell>
+      </div>
+    </>
   )
 }

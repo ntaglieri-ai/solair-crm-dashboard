@@ -18,6 +18,8 @@ import {
   UserCheck,
   Trash2,
   GripVertical,
+  MapPin,
+  UserRound,
 } from "lucide-react"
 import {
   IconChevronRight,
@@ -58,13 +60,177 @@ import {
   type LeadColumnId,
 } from "@/lib/mock-data"
 import { LeadCell, NUMERIC_COLUMNS } from "./lead-cell"
+import { LeadTagBadges } from "./tag-controls"
 import { LeadRowContextMenu } from "./lead-row-context-menu"
 import { usePermissions } from "@/lib/permissions/provider"
+import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
+import {
+  LeadAvatar,
+  OrigineBadge,
+  ScoreBar,
+  StatoLeadBadge,
+} from "./lead-utils"
+import { useTags } from "@/lib/tag-store"
 
 export type SortDir = "asc" | "desc"
 // Ri-esportata per i chiamanti che la importavano da qui prima che le tre
 // tabelle condividessero lo stesso contratto di stile.
 export type { Density }
+
+function LeadMobileList({
+  leads,
+  selected,
+  onToggle,
+  onConvert,
+  onDelete,
+  onDuplicate,
+}: {
+  leads: Lead[]
+  selected: Set<string>
+  onToggle: (id: string) => void
+  onConvert: (lead: Lead) => void
+  onDelete: (lead: Lead) => void
+  onDuplicate: (lead: Lead) => void
+}) {
+  const router = useRouter()
+  const permissions = usePermissions()
+  const canDelete = permissions.canRecord("lead", "delete")
+  const { owners } = useTags()
+
+  if (leads.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
+        Nessun lead corrisponde ai filtri selezionati.
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-full flex-col gap-3 overflow-y-auto pb-2 [-webkit-overflow-scrolling:touch]">
+      {leads.map((lead) => {
+        const owner =
+          owners.find((item) => item.id === lead["Lead Proprietario"])?.nome ??
+          lead["Lead Proprietario"] ??
+          "Non assegnato"
+
+        return (
+          <article
+            key={lead.id}
+            role="button"
+            tabIndex={0}
+            className="cursor-pointer rounded-xl border border-border bg-card p-4 shadow-sm"
+            onClick={() => {
+              startNavigationFeedback()
+              router.push(`/leads/${lead.id}`)
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return
+              event.preventDefault()
+              startNavigationFeedback()
+              router.push(`/leads/${lead.id}`)
+            }}
+          >
+            <div className="flex items-start gap-3">
+              <div onClick={(event) => event.stopPropagation()}>
+                <Checkbox
+                  checked={selected.has(lead.id)}
+                  onCheckedChange={() => onToggle(lead.id)}
+                  aria-label={`Seleziona ${lead["Nome Lead"]}`}
+                />
+              </div>
+
+              <LeadAvatar nome={lead["Nome Lead"]} className="size-11 text-sm" />
+
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h3 className="truncate text-base font-bold text-foreground">
+                      {lead["Nome Lead"]}
+                    </h3>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <StatoLeadBadge stato={lead["Stato Lead"]} />
+                      <OrigineBadge origine={lead["Origine Lead"]} />
+                    </div>
+                  </div>
+
+                  <div onClick={(event) => event.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button variant="ghost" size="icon-sm" aria-label="Azioni lead">
+                            <MoreHorizontal className="size-4" />
+                          </Button>
+                        }
+                      />
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuGroup>
+                          <DropdownMenuItem onClick={() => router.push(`/leads/${lead.id}`)}>
+                            <ExternalLink data-icon="inline-start" />
+                            Apri scheda
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => onConvert(lead)}>
+                            <UserCheck data-icon="inline-start" />
+                            Converti
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => onDuplicate(lead)}>
+                            <ExternalLink data-icon="inline-start" />
+                            Duplica
+                          </DropdownMenuItem>
+                          {canDelete ? (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() => onDelete(lead)}
+                              >
+                                <Trash2 data-icon="inline-start" />
+                                Elimina
+                              </DropdownMenuItem>
+                            </>
+                          ) : null}
+                        </DropdownMenuGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <div onClick={(event) => event.stopPropagation()}>
+                    <QuickContactIcons
+                      kind="lead"
+                      recordId={lead.id}
+                      nome={lead["Nome Lead"]}
+                      telefono={lead.Telefono}
+                      email={lead["E-mail"]}
+                    />
+                  </div>
+                  <ScoreBar score={lead.Valutazione} />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-2 text-sm text-muted-foreground">
+              <span className="flex min-w-0 items-center gap-2">
+                <UserRound className="size-4 shrink-0" />
+                <span className="truncate">{owner}</span>
+              </span>
+              <span className="flex min-w-0 items-center gap-2">
+                <MapPin className="size-4 shrink-0" />
+                <span className="truncate">
+                  {[lead["Città"], lead.Provincia, lead.Sede].filter(Boolean).join(" · ")}
+                </span>
+              </span>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <LeadTagBadges leadId={lead.id} max={3} />
+            </div>
+          </article>
+        )
+      })}
+    </div>
+  )
+}
 
 export function LeadTable({
   leads,
@@ -578,7 +744,19 @@ export function LeadTable({
   )
 
   return (
-    <div className="flex h-full max-h-full flex-col">
+    <>
+      <div className="h-full lg:hidden">
+        <LeadMobileList
+          leads={leads}
+          selected={selected}
+          onToggle={onToggle}
+          onConvert={onConvert}
+          onDelete={onDelete}
+          onDuplicate={onDuplicate}
+        />
+      </div>
+
+      <div className="hidden h-full lg:flex lg:max-h-full lg:flex-col">
       {/* Area scrollabile: header sticky + body virtualizzato in un'unica table.
           Scrolla verticalmente; orizzontalmente è pilotata dalla barra dedicata. */}
       <div
@@ -799,6 +977,7 @@ export function LeadTable({
           <div style={{ width: contentWidth }} className="h-px" />
         </div>
       ) : null}
-    </div>
+      </div>
+    </>
   )
 }

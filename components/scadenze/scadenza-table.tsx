@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { MoreHorizontal, ExternalLink, Trash2, Pencil } from "lucide-react"
+import { CalendarClock, ExternalLink, LinkIcon, MoreHorizontal, Pencil, Trash2, UserRound } from "lucide-react"
+import { startNavigationFeedback } from "@/components/navigation/navigation-feedback"
 import { IconArrowUp } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import {
@@ -50,6 +51,142 @@ const COLUMN_WIDTH: Record<string, number> = {
   updated_at: 210,
 }
 
+function ScadenzaMobileList({
+  scadenze,
+  selected,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  scadenze: ScadenzaRecord[]
+  selected: Set<string>
+  onToggle: (id: string) => void
+  onEdit: (s: ScadenzaRecord) => void
+  onDelete: (s: ScadenzaRecord) => void
+}) {
+  const router = useRouter()
+
+  if (scadenze.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
+        Nessuna scadenza trovata con i filtri correnti.
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {scadenze.map((scadenza) => {
+        const scaduta = isScaduta(scadenza)
+
+        return (
+          <article
+            key={scadenza.id}
+            role="button"
+            tabIndex={0}
+            className="cursor-pointer rounded-xl border border-border bg-card p-4 shadow-sm"
+            onClick={() => {
+              startNavigationFeedback()
+              router.push(`/scadenze/${scadenza.id}`)
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return
+              event.preventDefault()
+              startNavigationFeedback()
+              router.push(`/scadenze/${scadenza.id}`)
+            }}
+          >
+            <div className="flex items-start gap-3">
+              <div onClick={(event) => event.stopPropagation()}>
+                <Checkbox
+                  checked={selected.has(scadenza.id)}
+                  onCheckedChange={() => onToggle(scadenza.id)}
+                  aria-label={`Seleziona ${scadenza.nome}`}
+                />
+              </div>
+
+              <ScadenzaAvatar nome={scadenza.proprietario_nome ?? scadenza.nome} size={44} />
+
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h3 className="line-clamp-2 text-base font-bold text-foreground">
+                      {scadenza.nome}
+                    </h3>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <ScadenzaTagChip tag={scadenza.tag} />
+                      {scaduta ? <ScadutaBadge /> : null}
+                    </div>
+                  </div>
+
+                  <div onClick={(event) => event.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Azioni per ${scadenza.nome}`}
+                          >
+                            <MoreHorizontal className="size-4" />
+                          </Button>
+                        }
+                      />
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem onClick={() => router.push(`/scadenze/${scadenza.id}`)}>
+                          <ExternalLink data-icon="inline-start" />
+                          Apri scadenza
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onEdit(scadenza)}>
+                          <Pencil data-icon="inline-start" />
+                          Modifica
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => onDelete(scadenza)}
+                        >
+                          <Trash2 data-icon="inline-start" />
+                          Elimina
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-2 text-sm text-muted-foreground">
+              <span className="flex min-w-0 items-center gap-2">
+                <CalendarClock className={cn("size-4 shrink-0", scaduta && "text-destructive")} />
+                <span className={cn("truncate", scaduta && "font-medium text-destructive")}>
+                  {formatDateTime(scadenza.data_scadenza)}
+                </span>
+              </span>
+              <span className="flex min-w-0 items-center gap-2">
+                <UserRound className="size-4 shrink-0" />
+                <span className="truncate">
+                  {scadenza.proprietario_nome ?? "Proprietario non assegnato"}
+                </span>
+              </span>
+              <span className="flex min-w-0 items-center gap-2">
+                <LinkIcon className="size-4 shrink-0" />
+                <span className="truncate">
+                  {scadenza.connesso_a_tipo
+                    ? scadenza.connesso_a_tipo === "lead"
+                      ? "Collegata a lead"
+                      : "Collegata a cliente"
+                    : "Nessun collegamento"}
+                </span>
+              </span>
+            </div>
+          </article>
+        )
+      })}
+    </div>
+  )
+}
+
 export function ScadenzaTable({
   scadenze,
   selected,
@@ -81,7 +218,19 @@ export function ScadenzaTable({
     44 + colIds.reduce((sum, id) => sum + COLUMN_WIDTH[id], 0) + 64
 
   return (
-    <DataTableShell
+    <>
+      <div className="lg:hidden">
+        <ScadenzaMobileList
+          scadenze={scadenze}
+          selected={selected}
+          onToggle={onToggle}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      </div>
+
+      <div className="hidden lg:block">
+        <DataTableShell
       ariaLabel="Tabella scadenze"
       minTableWidth={tableWidth}
       alwaysShowVerticalScrollbar
@@ -296,6 +445,8 @@ export function ScadenzaTable({
           })
         )}
       </TableBody>
-    </DataTableShell>
+        </DataTableShell>
+      </div>
+    </>
   )
 }

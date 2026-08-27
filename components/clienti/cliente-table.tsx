@@ -3,7 +3,15 @@
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { startNavigationFeedback } from "@/components/navigation/navigation-feedback"
-import { MoreHorizontal, ExternalLink, Trash2, GripVertical } from "lucide-react"
+import {
+  MoreHorizontal,
+  ExternalLink,
+  Trash2,
+  GripVertical,
+  MapPin,
+  UserRound,
+  Wrench,
+} from "lucide-react"
 import { IconArrowUp } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import {
@@ -23,6 +31,7 @@ import {
 import { ClienteRowContextMenu } from "./cliente-row-context-menu"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
+import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +46,9 @@ import {
   type ClienteColumnId,
 } from "@/lib/mock-data"
 import { ClienteCell } from "./cliente-cell"
+import { useClienteTags } from "@/lib/cliente-tag-store"
+import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
+import { ClienteTagBadges } from "./cliente-tag-controls"
 
 export type SortDir = "asc" | "desc"
 // Ri-esportata per i chiamanti che la importavano da qui prima che le tre
@@ -57,6 +69,153 @@ function columnWidth(id: ClienteColumnId) {
   if (id === "Installatore") return 210
   if (id === "Ora modifica" || id === "Ora creazione") return 190
   return 170
+}
+
+function ClienteMobileList({
+  clienti,
+  selected,
+  onToggle,
+  onDelete,
+}: {
+  clienti: ClienteRecord[]
+  selected: Set<string>
+  onToggle: (id: string) => void
+  onDelete: (cliente: ClienteRecord) => void
+}) {
+  const router = useRouter()
+  const { owners } = useClienteTags()
+
+  if (clienti.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
+        Nessun cliente corrisponde ai filtri selezionati.
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {clienti.map((cliente) => {
+        const owner =
+          owners.find((item) => item.id === cliente["Clienti Proprietario"])?.nome ??
+          cliente["Clienti Proprietario"] ??
+          "Non assegnato"
+
+        return (
+          <article
+            key={cliente.id}
+            role="button"
+            tabIndex={0}
+            className="cursor-pointer rounded-xl border border-border bg-card p-4 shadow-sm"
+            onClick={() => {
+              startNavigationFeedback()
+              router.push(`/clienti/${cliente.id}`)
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return
+              event.preventDefault()
+              startNavigationFeedback()
+              router.push(`/clienti/${cliente.id}`)
+            }}
+          >
+            <div className="flex items-start gap-3">
+              <div onClick={(event) => event.stopPropagation()}>
+                <Checkbox
+                  checked={selected.has(cliente.id)}
+                  onCheckedChange={() => onToggle(cliente.id)}
+                  aria-label={`Seleziona ${cliente["Nome Clienti"]}`}
+                />
+              </div>
+
+              <ClienteAvatar nome={cliente["Nome Clienti"]} className="size-11 text-sm" />
+
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h3 className="truncate text-base font-bold text-foreground">
+                      {cliente["Nome Clienti"]}
+                    </h3>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <StatoClienteBadge stato={cliente.Stato} />
+                      {cliente["Badge dell'attività"] ? (
+                        <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-semibold text-warning">
+                          Attività
+                        </span>
+                      ) : null}
+                      {cliente["Badge di nota"] ? (
+                        <span className="rounded-full bg-info/12 px-2 py-0.5 text-[11px] font-semibold text-info">
+                          Note
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div onClick={(event) => event.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button variant="ghost" size="icon-sm" aria-label="Azioni cliente">
+                            <MoreHorizontal className="size-4" />
+                          </Button>
+                        }
+                      />
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuGroup>
+                          <DropdownMenuItem
+                            onClick={() => router.push(`/clienti/${cliente.id}`)}
+                          >
+                            <ExternalLink data-icon="inline-start" />
+                            Apri scheda
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() => onDelete(cliente)}
+                          >
+                            <Trash2 data-icon="inline-start" />
+                            Elimina
+                          </DropdownMenuItem>
+                        </DropdownMenuGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+
+                <div className="mt-3" onClick={(event) => event.stopPropagation()}>
+                  <QuickContactIcons
+                    kind="cliente"
+                    recordId={cliente.id}
+                    nome={cliente["Nome Clienti"]}
+                    telefono={cliente.Cellulare}
+                    email={cliente["E-mail"]}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-2 text-sm text-muted-foreground">
+              <span className="flex min-w-0 items-center gap-2">
+                <UserRound className="size-4 shrink-0" />
+                <span className="truncate">{owner}</span>
+              </span>
+              <span className="flex min-w-0 items-center gap-2">
+                <Wrench className="size-4 shrink-0" />
+                <span className="truncate">{cliente.Installatore || "Installatore non assegnato"}</span>
+              </span>
+              <span className="flex min-w-0 items-center gap-2">
+                <MapPin className="size-4 shrink-0" />
+                <span className="truncate">{cliente.Sede}</span>
+              </span>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <ClienteTagBadges clienteId={cliente.id} max={3} />
+            </div>
+          </article>
+        )
+      })}
+    </div>
+  )
 }
 
 export function ClienteTable({
@@ -134,11 +293,22 @@ export function ClienteTable({
   }
 
   return (
-    <DataTableShell
-      ariaLabel="Tabella clienti"
-      minTableWidth={tableWidth}
-      onScroll={(el) => setStuck(el.scrollTop > 0)}
-    >
+    <>
+      <div className="lg:hidden">
+        <ClienteMobileList
+          clienti={clienti}
+          selected={selected}
+          onToggle={onToggle}
+          onDelete={onDelete}
+        />
+      </div>
+
+      <div className="hidden lg:block">
+        <DataTableShell
+          ariaLabel="Tabella clienti"
+          minTableWidth={tableWidth}
+          onScroll={(el) => setStuck(el.scrollTop > 0)}
+        >
       <colgroup>
         <col style={{ width: 44 }} />
         {columns.map((column) => (
@@ -375,6 +545,8 @@ export function ClienteTable({
             </TableRow>
           ) : null}
       </TableBody>
-    </DataTableShell>
+        </DataTableShell>
+      </div>
+    </>
   )
 }

@@ -94,7 +94,14 @@ export function CalendarioRecordSection({
                 }.`}
         </p>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" render={<Link href="/calendario" />}>
+          {/* nativeButton={false}: il render e' un <a>, e senza questo Base UI
+              avverte in console che sta perdendo le semantiche del <button>. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            nativeButton={false}
+            render={<Link href="/calendario" />}
+          >
             <IconExternalLink size={14} data-icon="inline-start" />
             Apri calendario
           </Button>

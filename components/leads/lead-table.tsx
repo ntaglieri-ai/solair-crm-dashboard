@@ -105,7 +105,7 @@ function LeadMobileList({
   }
 
   return (
-    <div className="flex h-full flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card [-webkit-overflow-scrolling:touch]">
+    <div className="flex h-full flex-col gap-2 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
       {leads.map((lead) => {
         const owner =
           owners.find((item) => item.id === lead["Lead Proprietario"])?.nome ??
@@ -120,7 +120,7 @@ function LeadMobileList({
             key={lead.id}
             role="button"
             tabIndex={0}
-            className="flex min-h-[76px] cursor-pointer items-center gap-2.5 bg-card px-2.5 py-2.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="flex min-h-[76px] shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             onClick={() => {
               startNavigationFeedback()
               router.push(`/leads/${lead.id}`)

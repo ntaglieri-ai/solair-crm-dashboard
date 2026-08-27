@@ -104,14 +104,14 @@ export function LeadFilters({
   ].filter(Boolean) as Array<[keyof LeadFilterState, string]>
 
   return (
-    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-      <div className="relative min-w-0 flex-[1_1_100%] sm:flex-[1_1_280px]">
-        <Search className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
+    <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
+      <div className="relative min-w-0 flex-[1_1_140px]">
+        <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground sm:left-4 sm:size-5" />
         <Input
           value={filters.search}
           onChange={(event) => set("search", event.target.value)}
           placeholder="Cerca lead per nome, email o telefono"
-          className="h-12 rounded-lg border-border bg-card pl-12 text-[15px] shadow-sm"
+          className="h-10 rounded-lg border-border bg-card pl-10 text-sm shadow-sm sm:h-12 sm:pl-12 sm:text-[15px]"
           aria-label="Cerca lead"
         />
       </div>
@@ -119,11 +119,11 @@ export function LeadFilters({
       <Popover>
         <PopoverTrigger
           render={
-            <Button variant="outline" size="lg" className="w-full bg-card sm:w-auto">
+            <Button variant="outline" size="lg" className="h-10 shrink-0 bg-card sm:h-11">
               <SlidersHorizontal data-icon="inline-start" />
-              Filtri
+              <span className="hidden sm:inline">Filtri</span>
               {active.length > 0 ? (
-                <span className="ml-1 rounded-md bg-primary px-2 py-0.5 text-xs text-primary-foreground">
+                <span className="ml-0.5 rounded-md bg-primary px-2 py-0.5 text-xs text-primary-foreground sm:ml-1">
                   {active.length}
                 </span>
               ) : null}

@@ -85,6 +85,7 @@ import {
   type LeadViewPreferences,
 } from "@/lib/leads/view-preferences"
 import { leadsKeys } from "@/lib/leads/hooks"
+import { useIsMobile } from "@/hooks/use-is-mobile"
 
 type StoredLeadPreferences = {
   visibleCols: LeadColumnId[]
@@ -94,6 +95,7 @@ type StoredLeadPreferences = {
 
 const ROWS_ITEMS: Record<string, string> = {
   "10": "10 righe",
+  "20": "20 righe",
   "30": "30 righe",
   "50": "50 righe",
 }
@@ -165,6 +167,16 @@ export function LeadsClient({
   const [exportTruncato, setExportTruncato] = useState<ExportTruncatoInfo | null>(null)
   const pendingExport = useRef<(() => void) | null>(null)
   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
+  const isMobile = useIsMobile()
+  // Su mobile una pagina da 20 lead scrolla molto meno di una da 50: applichiamo
+  // il default più contenuto solo finché l'utente non ha scelto altro lui stesso.
+  const mobileDefaultApplied = useRef(false)
+  useEffect(() => {
+    if (isMobile && !mobileDefaultApplied.current && rowsPerPage === INITIAL_PAGE_SIZE) {
+      mobileDefaultApplied.current = true
+      setRowsPerPage(20)
+    }
+  }, [isMobile, rowsPerPage])
   const [page, setPage] = useState(1)
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
   const [convertTarget, setConvertTarget] = useState<Lead | null>(null)
@@ -694,7 +706,7 @@ export function LeadsClient({
             ) : null}
           </p>
         </div>
-        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+        <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch] lg:w-auto lg:flex-wrap lg:justify-end lg:overflow-visible lg:pb-0">
           {/* Impostazioni lead (generali, vista colonne) */}
           <LeadSettingsSheet
             open={settingsOpen}
@@ -715,7 +727,7 @@ export function LeadsClient({
                 variant="outline"
                 size="icon"
                 aria-label="Impostazioni lead"
-                className="bg-card"
+                className="shrink-0 bg-card"
               >
                 <IconSettings size={18} stroke={1.8} />
               </Button>
@@ -723,49 +735,52 @@ export function LeadsClient({
           />
 
           {/* Menu azioni (cambia in base alla selezione) */}
-          <LeadActionsMenu
-            selectedCount={selected.size}
-            filtered={pageRows}
-            selectedRows={selectedRows}
-            tags={allTags}
-            onOpenSettings={openSettings}
-            onCheckDuplicates={handleCheckDuplicates}
-            onImport={() => setImportOpen(true)}
-            onExportFiltered={handleExportFiltered}
-            onExportSelection={handleBulkExport}
-            onBulkTransfer={handleBulkOwner}
-            onBulkUpdate={handleBulkUpdate}
-            onBulkConvert={handleBulkConvert}
-            onBulkApprove={handleBulkApprove}
-            onBulkDedup={handleBulkDedup}
-            onBulkEmail={() => setBulkEmailOpen(true)}
-            onBulkDelete={() => setBulkDeleteOpen(true)}
-          />
+          <div className="shrink-0">
+            <LeadActionsMenu
+              selectedCount={selected.size}
+              filtered={pageRows}
+              selectedRows={selectedRows}
+              tags={allTags}
+              onOpenSettings={openSettings}
+              onCheckDuplicates={handleCheckDuplicates}
+              onImport={() => setImportOpen(true)}
+              onExportFiltered={handleExportFiltered}
+              onExportSelection={handleBulkExport}
+              onBulkTransfer={handleBulkOwner}
+              onBulkUpdate={handleBulkUpdate}
+              onBulkConvert={handleBulkConvert}
+              onBulkApprove={handleBulkApprove}
+              onBulkDedup={handleBulkDedup}
+              onBulkEmail={() => setBulkEmailOpen(true)}
+              onBulkDelete={() => setBulkDeleteOpen(true)}
+            />
+          </div>
 
           <Button
             variant="outline"
-            className="bg-card"
+            className="shrink-0 bg-card"
             onClick={() => setImportOpen(true)}
           >
             <Upload data-icon="inline-start" />
-            Importa
+            <span className="hidden lg:inline">Importa</span>
           </Button>
 
           <Button
             variant="outline"
-            className="bg-card"
+            className="shrink-0 bg-card"
             onClick={handleExportFiltered}
           >
             <Download data-icon="inline-start" />
-            Esporta
+            <span className="hidden lg:inline">Esporta</span>
           </Button>
 
           <Button
-            className="min-w-0 bg-teal text-teal-foreground hover:bg-teal/90"
+            className="min-w-0 shrink-0 bg-teal text-teal-foreground hover:bg-teal/90"
             onClick={() => setNewLeadOpen(true)}
           >
             <Plus data-icon="inline-start" />
-            Nuovo lead
+            <span className="lg:hidden">Nuovo</span>
+            <span className="hidden lg:inline">Nuovo lead</span>
           </Button>
         </div>
       </div>
@@ -821,8 +836,8 @@ export function LeadsClient({
         </div>
       ) : null}
 
-      {/* Barra filtri + pannello filtri avanzati */}
-      <div className="flex min-w-0 flex-col items-stretch gap-2 rounded-lg border border-border bg-card p-2 shadow-sm sm:flex-row sm:items-start">
+      {/* Barra filtri + pannello filtri avanzati — sempre su una riga, anche su mobile */}
+      <div className="flex min-w-0 flex-row items-center gap-2 rounded-lg border border-border bg-card p-2 shadow-sm">
         <AdvancedFilters
           applied={advanced}
           onApply={handleAdvancedApply}
@@ -896,12 +911,14 @@ export function LeadsClient({
       </div>
 
       {/* Footer paginazione — sempre visibile e in primo piano */}
-      <div className="sticky bottom-0 z-30 -mx-5 flex shrink-0 flex-col gap-2 border-t border-border bg-background/95 px-5 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-3">
-          <span className="break-words text-sm text-muted-foreground">
+      <div className="sticky bottom-0 z-30 -mx-5 flex shrink-0 items-center justify-between gap-2 border-t border-border bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-5 sm:py-3">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <span className="hidden truncate text-sm text-muted-foreground sm:inline">
             {rangeStart}-{rangeEnd} di {total.toLocaleString("it-IT")}
             {selected.size > 0 ? ` · ${selected.size} selezionati` : ""}
+          </span>
+          <span className="truncate text-xs text-muted-foreground sm:hidden">
+            {rangeStart}-{rangeEnd}/{total.toLocaleString("it-IT")}
           </span>
           <select
             aria-label="Numero di righe per pagina"
@@ -910,7 +927,7 @@ export function LeadsClient({
               setRowsPerPage(Number(event.target.value))
               setPage(1)
             }}
-            className="h-8 rounded-md border border-input bg-card px-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+            className="h-8 shrink-0 rounded-md border border-input bg-card px-1.5 text-xs text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 sm:px-2 sm:text-sm"
           >
             {Object.entries(ROWS_ITEMS).map(([value, label]) => (
               <option key={value} value={value}>
@@ -920,16 +937,17 @@ export function LeadsClient({
           </select>
         </div>
 
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <Button
             size="sm"
             variant="outline"
             className="bg-card"
             disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
+            aria-label="Pagina precedente"
           >
             <ChevronLeft data-icon="inline-start" />
-            Precedente
+            <span className="hidden sm:inline">Precedente</span>
           </Button>
           <span className="text-sm tabular-nums text-muted-foreground">
             {page} / {totalPages}
@@ -940,11 +958,11 @@ export function LeadsClient({
             className="bg-card"
             disabled={page >= totalPages}
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            aria-label="Pagina successiva"
           >
-            Successivo
+            <span className="hidden sm:inline">Successivo</span>
             <ChevronRight data-icon="inline-end" />
           </Button>
-        </div>
         </div>
       </div>
 

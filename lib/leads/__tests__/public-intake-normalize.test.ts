@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { leadPhoneMatchKeys, normalizeLeadIntakePayload } from "@/lib/leads/public-intake"
+import {
+  leadPhoneMatchKeys,
+  normalizeLeadIntakePayload,
+  parseLeadSourceCreatedAt,
+} from "@/lib/leads/public-intake"
 
 describe("normalizeLeadIntakePayload", () => {
   it("normalizza il payload Facebook Lead Ads passato da Make", () => {
@@ -42,6 +46,7 @@ describe("normalizeLeadIntakePayload", () => {
       provincia: "Frosinone",
       campaign_name: "Lead FV Lazio",
       lead_id: "meta-lead-42",
+      date_created: "3 agosto 2026 14:09",
     })
 
     expect(payload).toMatchObject({
@@ -52,6 +57,7 @@ describe("normalizeLeadIntakePayload", () => {
       provincia: "Frosinone",
       campaignName: "Lead FV Lazio",
       socialLeadId: "meta-lead-42",
+      sourceCreatedAt: "3 agosto 2026 14:09",
     })
   })
 
@@ -65,5 +71,11 @@ describe("normalizeLeadIntakePayload", () => {
     expect(leadPhoneMatchKeys("+39 333 1234567")).toContain("3331234567")
     expect(leadPhoneMatchKeys("00393331234567")).toContain("3331234567")
     expect(leadPhoneMatchKeys("333-123-4567")).toContain("393331234567")
+  })
+
+  it("legge la data sorgente Meta in formato italiano di Make", () => {
+    expect(parseLeadSourceCreatedAt("3 agosto 2026 14:09")?.toISOString()).toBe(
+      "2026-08-03T12:09:00.000Z",
+    )
   })
 })

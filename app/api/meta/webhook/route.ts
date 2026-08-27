@@ -183,8 +183,9 @@ async function processLeadgenEvent(event: MetaLeadgenEvent) {
     }
 
     const result = await ingestLead(intakePayload)
+    if (result.skipped) return
 
-    if (!result.duplicate) {
+    if (!result.duplicate && result.id) {
       const path = folderPathForRecord("lead", result.id, result.nomeLead)
       const folderResult = await ensureFolder(path)
       if (!folderResult.ok) {
@@ -301,6 +302,7 @@ function mapMetaLeadToIntakePayload(
     consensoTelefono: consensi.telefono,
     consensoWhatsapp: consensi.whatsapp,
     consensoEmail: consensi.email,
+    sourceCreatedAt: metaLead.created_time ?? event.createdTime ?? undefined,
     note: buildNote(metaLead, event, rawFields),
   }
 }

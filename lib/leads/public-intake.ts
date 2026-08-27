@@ -30,6 +30,7 @@ export interface LeadIntakePayload {
   tipoProprieta?: "privata" | "commerciale"
   campaignName?: string
   socialLeadId?: string
+  sourceCreatedAt?: string | number
   kwp?: number | string
   kwh?: number | string
   potenzaKw?: number | string
@@ -336,6 +337,9 @@ export function normalizeLeadIntakePayload(input: unknown): Partial<LeadIntakePa
     socialLeadId:
       direct.socialLeadId ??
       pickField(fields, ["leadgen_id", "lead_id", "social_lead_id"]),
+    sourceCreatedAt:
+      direct.sourceCreatedAt ??
+      pickField(fields, ["created_time", "created_at", "date_created", "date created"]),
     kwp:
       direct.kwp ??
       direct.potenzaKw ??
@@ -475,6 +479,21 @@ function normalizeTipoDocumento(value: unknown): LeadIntakeTipoDocumento | null 
   return null
 }
 
+const ITALIAN_MONTHS: Record<string, number> = {
+  gennaio: 1,
+  febbraio: 2,
+  marzo: 3,
+  aprile: 4,
+  maggio: 5,
+  giugno: 6,
+  luglio: 7,
+  agosto: 8,
+  settembre: 9,
+  ottobre: 10,
+  novembre: 11,
+  dicembre: 12,
+}
+
 function hasConfiguredQuote(payload: LeadIntakePayload) {
   return Boolean(
     normalizeNumber(payload.kwp ?? payload.potenzaKw) != null ||
@@ -609,6 +628,57 @@ function utcDateFromRomeParts(
   )
   const intendedAsUtc = Date.UTC(year, month - 1, day, hour, minute)
   return new Date(guess.getTime() - (renderedAsUtc - intendedAsUtc))
+}
+
+export function parseLeadSourceCreatedAt(value: unknown): Date | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return new Date(value > 1_000_000_000_000 ? value : value * 1000)
+  }
+
+  const text = stringFromUnknown(value)
+  if (!text) return null
+
+  const parsed = Date.parse(text)
+  if (Number.isFinite(parsed)) return new Date(parsed)
+
+  const italian = text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .match(/^(\d{1,2})\s+([a-z]+)\s+(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/)
+
+  if (!italian) return null
+
+  const [, dayText, monthText, yearText, hourText, minuteText] = italian
+  const month = ITALIAN_MONTHS[monthText]
+  if (!month) return null
+
+  const day = Number(dayText)
+  const year = Number(yearText)
+  const hour = Number(hourText ?? 0)
+  const minute = Number(minuteText ?? 0)
+  if (![day, year, hour, minute].every(Number.isFinite)) return null
+
+  return utcDateFromRomeParts(year, month, day, hour, minute)
+}
+
+function metaLeadMaxAgeMs() {
+  const hours = Number(process.env.LEAD_INTAKE_META_MAX_AGE_HOURS ?? 36)
+  return Number.isFinite(hours) && hours > 0 ? hours * 60 * 60 * 1000 : null
+}
+
+function staleMetaLeadReason(payload: LeadIntakePayload, now: Date) {
+  if (payload.origine !== "meta_ads") return null
+  const sourceCreatedAt = parseLeadSourceCreatedAt(payload.sourceCreatedAt)
+  const maxAgeMs = metaLeadMaxAgeMs()
+  if (!sourceCreatedAt || maxAgeMs === null) return null
+
+  return now.getTime() - sourceCreatedAt.getTime() > maxAgeMs
+    ? {
+        sourceCreatedAt: sourceCreatedAt.toISOString(),
+        maxAgeHours: Math.round(maxAgeMs / 60 / 60 / 1000),
+      }
+    : null
 }
 
 function addLocalDays(parts: ReturnType<typeof romeDateParts>, days: number) {
@@ -778,9 +848,12 @@ function intakeCreatedFields(params: {
 }
 
 export interface LeadIntakeResult {
-  id: string
+  id: string | null
   duplicate: boolean
   nomeLead: string
+  skipped?: boolean
+  skipReason?: string
+  sourceCreatedAt?: string
 }
 
 type ExistingLead = {
@@ -1027,6 +1100,25 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
   const sourceInfo = intakeSource(payload)
   const nameParts = leadNameParts(payload)
   const socialLeadId = normalizeText(payload.socialLeadId)
+  const staleMetaLead = staleMetaLeadReason(payload, now)
+
+  if (staleMetaLead) {
+    console.info("[lead-intake] Meta lead ignorato per data sorgente vecchia", {
+      nome: payload.nome,
+      telefono: telefonoNorm,
+      socialLeadId,
+      sourceCreatedAt: staleMetaLead.sourceCreatedAt,
+      maxAgeHours: staleMetaLead.maxAgeHours,
+    })
+    return {
+      id: null,
+      duplicate: false,
+      nomeLead: payload.nome,
+      skipped: true,
+      skipReason: "stale_meta_lead",
+      sourceCreatedAt: staleMetaLead.sourceCreatedAt,
+    }
+  }
 
   const existing = await findExistingLead(telefonoNorm, emailNorm, socialLeadId)
 

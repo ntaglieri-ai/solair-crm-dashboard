@@ -73,8 +73,20 @@ export async function POST(request: Request) {
   try {
     const result = await ingestLead(body as LeadIntakePayload)
 
+    if (result.skipped) {
+      return NextResponse.json(
+        {
+          skipped: true,
+          reason: result.skipReason,
+          sourceCreatedAt: result.sourceCreatedAt,
+        },
+        { status: 202 },
+      )
+    }
+
     if (!result.duplicate) {
       after(async () => {
+        if (!result.id) return
         const path = folderPathForRecord("lead", result.id, result.nomeLead)
         const folderResult = await ensureFolder(path)
         if (!folderResult.ok) {

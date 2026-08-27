@@ -407,6 +407,33 @@ function normalizePhone(phone: string): string {
   return phone.replace(/[^\d+]/g, "")
 }
 
+export function leadPhoneMatchKeys(value: unknown): string[] {
+  const text = stringFromUnknown(value)
+  if (!text) return []
+
+  const digits = text.replace(/\D/g, "")
+  if (!digits) return []
+
+  const withoutInternationalPrefix = digits.startsWith("00") ? digits.slice(2) : digits
+  const national =
+    withoutInternationalPrefix.startsWith("39") && withoutInternationalPrefix.length > 10
+      ? withoutInternationalPrefix.slice(2)
+      : withoutInternationalPrefix
+  const keys = [
+    digits,
+    withoutInternationalPrefix,
+    national,
+    national.length >= 8 ? `39${national}` : null,
+  ].filter((key): key is string => Boolean(key))
+
+  return Array.from(new Set(keys))
+}
+
+function phonesMatch(left: unknown, right: unknown) {
+  const leftKeys = new Set(leadPhoneMatchKeys(left))
+  return leadPhoneMatchKeys(right).some((key) => leftKeys.has(key))
+}
+
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase()
 }
@@ -782,52 +809,105 @@ type ExistingLead = {
   consenso_contatto_email: boolean | null
 }
 
-async function findExistingLead(
-  telefonoNorm: string,
-  emailNorm: string | null,
-): Promise<ExistingLead | null> {
-  const supabase = createAdminClient()
-  if (!supabase) throw new Error("Supabase admin client non configurato")
+const EXISTING_LEAD_SELECT = [
+  "id",
+  "nome_lead",
+  "nome",
+  "cognome",
+  "email",
+  "telefono",
+  "provincia",
+  "citta",
+  "codice_postale",
+  "social_lead_id",
+  "campaign_name",
+  "descrizione",
+  "lead_proprietario_id",
+  "valutazione",
+  "kwp",
+  "kwh",
+  "modello_pannello",
+  "wallbox_richiesto",
+  "residente_in_sicilia",
+  "tipo_documento",
+  "consenso_contatto_telefono",
+  "consenso_contatto_whatsapp",
+  "consenso_contatto_email",
+].join(", ")
 
-  const orParts = [`telefono.eq.${telefonoNorm}`]
-  if (emailNorm) orParts.push(`email.eq.${emailNorm}`)
+async function findExistingLeadByExactField(
+  supabase: SupabaseClient,
+  column: "social_lead_id" | "telefono",
+  value: string | null,
+) {
+  if (!value) return null
 
   const { data, error } = await supabase
     .from("leads")
-    .select(
-      [
-        "id",
-        "nome_lead",
-        "nome",
-        "cognome",
-        "email",
-        "telefono",
-        "provincia",
-        "citta",
-        "codice_postale",
-        "social_lead_id",
-        "campaign_name",
-        "descrizione",
-        "lead_proprietario_id",
-        "valutazione",
-        "kwp",
-        "kwh",
-        "modello_pannello",
-        "wallbox_richiesto",
-        "residente_in_sicilia",
-        "tipo_documento",
-        "consenso_contatto_telefono",
-        "consenso_contatto_whatsapp",
-        "consenso_contatto_email",
-      ].join(", "),
-    )
-    .or(orParts.join(","))
+    .select(EXISTING_LEAD_SELECT)
+    .eq(column, value)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle()
 
-  if (error) throw new Error(`findExistingLead: ${error.message}`)
+  if (error) throw new Error(`findExistingLead ${column}: ${error.message}`)
   return data as ExistingLead | null
+}
+
+async function findExistingLeadByEmail(
+  supabase: SupabaseClient,
+  emailNorm: string | null,
+) {
+  if (!emailNorm) return null
+
+  const { data, error } = await supabase
+    .from("leads")
+    .select(EXISTING_LEAD_SELECT)
+    .ilike("email", emailNorm)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw new Error(`findExistingLead email: ${error.message}`)
+  return data as ExistingLead | null
+}
+
+async function findExistingLeadBySimilarPhone(
+  supabase: SupabaseClient,
+  telefonoNorm: string,
+) {
+  const phoneKeys = leadPhoneMatchKeys(telefonoNorm)
+  const suffix = phoneKeys
+    .toSorted((left, right) => right.length - left.length)[0]
+    ?.slice(-4)
+
+  if (!suffix || suffix.length < 4) return null
+
+  const { data, error } = await supabase
+    .from("leads")
+    .select(EXISTING_LEAD_SELECT)
+    .ilike("telefono", `%${suffix}%`)
+    .order("created_at", { ascending: false })
+    .limit(50)
+
+  if (error) throw new Error(`findExistingLead telefono simile: ${error.message}`)
+  return ((data ?? []) as unknown as ExistingLead[]).find((lead) => phonesMatch(lead.telefono, telefonoNorm)) ?? null
+}
+
+async function findExistingLead(
+  telefonoNorm: string,
+  emailNorm: string | null,
+  socialLeadId: string | null,
+): Promise<ExistingLead | null> {
+  const supabase = createAdminClient()
+  if (!supabase) throw new Error("Supabase admin client non configurato")
+
+  return (
+    (await findExistingLeadByExactField(supabase, "social_lead_id", socialLeadId)) ??
+    (await findExistingLeadByEmail(supabase, emailNorm)) ??
+    (await findExistingLeadByExactField(supabase, "telefono", telefonoNorm)) ??
+    (await findExistingLeadBySimilarPhone(supabase, telefonoNorm))
+  )
 }
 
 async function assignTags(
@@ -948,7 +1028,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
   const nameParts = leadNameParts(payload)
   const socialLeadId = normalizeText(payload.socialLeadId)
 
-  const existing = await findExistingLead(telefonoNorm, emailNorm)
+  const existing = await findExistingLead(telefonoNorm, emailNorm, socialLeadId)
 
   if (existing) {
     const nextScore = Math.max(existing.valutazione ?? 0, calculatedScore)

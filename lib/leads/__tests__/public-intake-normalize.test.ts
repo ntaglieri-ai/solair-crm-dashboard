@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { normalizeLeadIntakePayload } from "@/lib/leads/public-intake"
+import { leadPhoneMatchKeys, normalizeLeadIntakePayload } from "@/lib/leads/public-intake"
 
 describe("normalizeLeadIntakePayload", () => {
   it("normalizza il payload Facebook Lead Ads passato da Make", () => {
@@ -59,5 +59,11 @@ describe("normalizeLeadIntakePayload", () => {
     expect(normalizeLeadIntakePayload({ origine: "facebook" }).origine).toBe("meta_ads")
     expect(normalizeLeadIntakePayload({ origine: "make" }).origine).toBe("meta_ads")
     expect(normalizeLeadIntakePayload({ origine: "sito" }).origine).toBe("configuratore")
+  })
+
+  it("genera chiavi telefono compatibili con vecchi formati Zoho", () => {
+    expect(leadPhoneMatchKeys("+39 333 1234567")).toContain("3331234567")
+    expect(leadPhoneMatchKeys("00393331234567")).toContain("3331234567")
+    expect(leadPhoneMatchKeys("333-123-4567")).toContain("393331234567")
   })
 })

@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
+import { StatoPill } from "@/components/shared/lightning-table"
 import { Check, Minus } from "lucide-react"
 import {
   type StatoLead,
@@ -55,17 +56,7 @@ export function LeadAvatar({
 }
 
 export function StatoLeadBadge({ stato }: { stato: StatoLead }) {
-  const tone = STATO_LEAD_TONE[stato]
-  return (
-    <Badge
-      className={cn(
-        "rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap",
-        TONE_STYLES[tone],
-      )}
-    >
-      {stato}
-    </Badge>
-  )
+  return <StatoPill tone={STATO_LEAD_TONE[stato]}>{stato}</StatoPill>
 }
 
 export function TagList({ tags }: { tags: string[] }) {

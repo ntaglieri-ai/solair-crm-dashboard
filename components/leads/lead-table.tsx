@@ -38,6 +38,13 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import {
+  LIGHTNING,
+  LIGHTNING_DENSITY,
+  LIGHTNING_ROW_HEIGHT,
+  RowInlineActions,
+  type Density,
+} from "@/components/shared/lightning-table"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
@@ -55,13 +62,9 @@ import { LeadRowContextMenu } from "./lead-row-context-menu"
 import { usePermissions } from "@/lib/permissions/provider"
 
 export type SortDir = "asc" | "desc"
-export type Density = "comoda" | "normale" | "densa"
-
-const DENSITY_CELL: Record<Density, string> = {
-  comoda: "py-4 text-sm",
-  normale: "py-2.5 text-sm",
-  densa: "py-1 text-xs",
-}
+// Ri-esportata per i chiamanti che la importavano da qui prima che le tre
+// tabelle condividessero lo stesso contratto di stile.
+export type { Density }
 
 export function LeadTable({
   leads,
@@ -117,7 +120,7 @@ export function LeadTable({
   const scrollRef = externalScrollRef ?? internalScrollRef
   const allSelected = leads.length > 0 && leads.every((l) => selected.has(l.id))
   const colSpan = columns.length + 3
-  const cellPad = DENSITY_CELL[density]
+  const cellPad = LIGHTNING_DENSITY[density]
   const naturalWidths = useMemo(() => {
     const widths = {} as Record<LeadColumnId, number>
     for (const column of columns) {
@@ -214,8 +217,9 @@ export function LeadTable({
     return out
   }, [leads, expanded])
 
-  const estimateSize =
-    density === "densa" ? 34 : density === "comoda" ? 58 : 46
+  // Deve seguire LIGHTNING_DENSITY: con le righe piu' basse, le stime
+  // vecchie facevano saltare la scrollbar durante lo scorrimento.
+  const estimateSize = LIGHTNING_ROW_HEIGHT[density]
 
   const rowVirtualizer = useVirtualizer({
     count: visualRows.length,
@@ -370,7 +374,7 @@ export function LeadTable({
             router.push(`/leads/${lead.id}`)
           }}
           className={cn(
-            "cursor-pointer",
+            LIGHTNING.row,
             isActive &&
               "bg-secondary/60 ring-1 ring-inset ring-teal/40 hover:bg-secondary/60",
           )}
@@ -380,10 +384,7 @@ export function LeadTable({
           {/* Chevron espansione */}
           <TableCell
             onClick={(e) => e.stopPropagation()}
-            className={cn(
-              "sticky left-0 z-10 border-r border-border/70 bg-card",
-              cellPad,
-            )}
+            className={cn(LIGHTNING.cell, LIGHTNING.cellSticky, LIGHTNING.cellLeader, cellPad)}
             style={{ width: 36, minWidth: 36, maxWidth: 36 }}
           >
             <button
@@ -407,10 +408,7 @@ export function LeadTable({
           {/* Selezione */}
           <TableCell
             onClick={(e) => e.stopPropagation()}
-            className={cn(
-              "sticky left-9 z-10 border-r border-border/70 bg-card",
-              cellPad,
-            )}
+            className={cn(LIGHTNING.cell, LIGHTNING.cellSticky, "sticky left-9 z-10", cellPad)}
             style={{ width: 44, minWidth: 44, maxWidth: 44 }}
           >
             <Checkbox
@@ -426,7 +424,8 @@ export function LeadTable({
               <TableCell
                 key={col.id}
                 className={cn(
-                  "overflow-hidden whitespace-nowrap border-r border-border/70",
+                  LIGHTNING.cell,
+                  "overflow-hidden whitespace-nowrap",
                   cellPad,
                   isLeft ? "text-left" : "text-center",
                 )}
@@ -450,47 +449,54 @@ export function LeadTable({
 
           <TableCell
             onClick={(e) => e.stopPropagation()}
-            className={cn(
-              "sticky right-0 z-10 border-l border-border/70 bg-card text-right",
-              cellPad,
-            )}
+            className={cn(LIGHTNING.cellSticky, LIGHTNING.cellActions, cellPad)}
             style={{ width: 56, minWidth: 56, maxWidth: 56 }}
           >
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button variant="ghost" size="icon" aria-label="Azioni">
-                    <MoreHorizontal />
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="end">
-                <DropdownMenuGroup>
-                  <DropdownMenuItem
-                    onClick={() => router.push(`/leads/${lead.id}`)}
-                  >
-                    <ExternalLink data-icon="inline-start" />
-                    Apri
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onConvert(lead)}>
-                    <UserCheck data-icon="inline-start" />
-                    Converti a cliente
-                  </DropdownMenuItem>
-                  {canDelete ? (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onClick={() => onDelete(lead)}
-                      >
-                        <Trash2 data-icon="inline-start" />
-                        Elimina
-                      </DropdownMenuItem>
-                    </>
-                  ) : null}
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <RowInlineActions>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Converti ${lead["Nome Lead"]} a cliente`}
+                onClick={() => onConvert(lead)}
+              >
+                <UserCheck className="size-3.5" />
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button variant="ghost" size="icon-sm" aria-label="Azioni">
+                      <MoreHorizontal className="size-3.5" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end">
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem
+                      onClick={() => router.push(`/leads/${lead.id}`)}
+                    >
+                      <ExternalLink data-icon="inline-start" />
+                      Apri
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onConvert(lead)}>
+                      <UserCheck data-icon="inline-start" />
+                      Converti a cliente
+                    </DropdownMenuItem>
+                    {canDelete ? (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => onDelete(lead)}
+                        >
+                          <Trash2 data-icon="inline-start" />
+                          Elimina
+                        </DropdownMenuItem>
+                      </>
+                    ) : null}
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </RowInlineActions>
           </TableCell>
         </TableRow>
       </LeadRowContextMenu>
@@ -619,17 +625,12 @@ export function LeadTable({
           ))}
           <col style={{ width: 56 }} />
         </colgroup>
-        <TableHeader
-          className={cn(
-            "sticky top-0 z-20 bg-muted/95 backdrop-blur transition-shadow duration-150",
-            stuck && "shadow-[0_4px_8px_-4px_rgba(0,0,0,0.15)]",
-          )}
-        >
+        <TableHeader className={cn(LIGHTNING.header, stuck && LIGHTNING.headerStuck)}>
           <TableRow className="hover:bg-transparent">
             {/* Espansione */}
-            <TableHead className="sticky left-0 z-30 w-9 border-r border-foreground/30 bg-muted/95" />
+            <TableHead className={cn(LIGHTNING.headCell, "sticky left-0 z-30 w-9")} />
             {/* Selezione */}
-            <TableHead className="sticky left-9 z-30 w-11 border-r border-foreground/30 bg-muted/95">
+            <TableHead className={cn(LIGHTNING.headCell, "sticky left-9 z-30 w-11")}>
               <Checkbox
                 checked={allSelected}
                 onCheckedChange={onToggleAll}
@@ -669,7 +670,8 @@ export function LeadTable({
                     setDragOverColumn(null)
                   }}
                   className={cn(
-                    "group relative overflow-hidden whitespace-nowrap border-r border-foreground/30 transition-colors",
+                    LIGHTNING.headCell,
+                    "group relative overflow-hidden whitespace-nowrap transition-colors",
                     draggingColumn === col.id && "opacity-45",
                     dragOverColumn === col.id && "bg-teal/10",
                     numeric ? "text-right" : isLeft ? "text-left" : "text-center",
@@ -689,8 +691,9 @@ export function LeadTable({
                       type="button"
                       onClick={() => onSort(col.id)}
                       className={cn(
-                        "inline-flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-xs font-semibold transition-colors hover:text-foreground",
-                        active ? "text-navy" : "text-muted-foreground",
+                        "inline-flex min-w-0 flex-1 items-center gap-1 overflow-hidden",
+                        LIGHTNING.headLabel,
+                        active ? LIGHTNING.headLabelActive : LIGHTNING.headLabelIdle,
                         numeric
                           ? "flex-row-reverse justify-start"
                           : isLeft
@@ -726,7 +729,9 @@ export function LeadTable({
                 </TableHead>
               )
             })}
-            <TableHead className="sticky right-0 z-30 w-14 border-l border-foreground/30 bg-muted/95 text-right">
+            <TableHead
+              className={cn(LIGHTNING.headCell, LIGHTNING.headLabel, "sticky right-0 z-30 w-14 text-right")}
+            >
               Azioni
             </TableHead>
           </TableRow>

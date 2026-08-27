@@ -5,7 +5,7 @@ import { IconLoader2, IconSearch, IconX } from "@tabler/icons-react"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 
-export type CorrelatoTipo = "lead" | "cliente" | "scadenza"
+export type CorrelatoTipo = "lead" | "cliente" | "scadenza" | "installatore"
 
 export interface CorrelatoValue {
   tipo: CorrelatoTipo
@@ -17,9 +17,18 @@ const TIPO_LABEL: Record<CorrelatoTipo, string> = {
   lead: "Lead",
   cliente: "Cliente",
   scadenza: "Scadenza",
+  installatore: "Installatore",
 }
 
-const TIPO_ORDER: CorrelatoTipo[] = ["lead", "cliente", "scadenza"]
+const TIPO_ORDER: CorrelatoTipo[] = ["lead", "cliente", "scadenza", "installatore"]
+
+/**
+ * Endpoint di default: la ricerca dei correlabili di un compito. Chi ha
+ * un perimetro diverso — il Calendario, che collega installatori e non
+ * scadenze — passa il proprio, perche' l'autorizzazione vive nella route
+ * e non nel combobox.
+ */
+const DEFAULT_ENDPOINT = "/api/search/correlabili"
 
 /**
  * Combobox di ricerca per collegare un compito a Lead/Cliente/Scadenza.
@@ -34,6 +43,7 @@ export function CorrelatoPicker({
   placeholder = "Cerca lead, cliente o scadenza…",
   disabled = false,
   allowedTipi,
+  endpoint = DEFAULT_ENDPOINT,
 }: {
   value: CorrelatoValue | null
   onSelect: (value: CorrelatoValue | null) => void
@@ -42,6 +52,8 @@ export function CorrelatoPicker({
   disabled?: boolean
   /** Se presente, limita i risultati mostrati/selezionabili a questi tipi. */
   allowedTipi?: CorrelatoTipo[]
+  /** Route di ricerca alternativa, con la sua autorizzazione. */
+  endpoint?: string
 }) {
   const [query, setQuery] = useState("")
   const [open, setOpen] = useState(false)
@@ -70,7 +82,7 @@ export function CorrelatoPicker({
     }
     setLoading(true)
     const t = setTimeout(() => {
-      fetch(`/api/search/correlabili?q=${encodeURIComponent(q)}&limit=10`)
+      fetch(`${endpoint}?q=${encodeURIComponent(q)}&limit=10`)
         .then((res) => {
           if (!res.ok) throw new Error("Ricerca non riuscita")
           return res.json() as Promise<{ results: CorrelatoValue[] }>
@@ -86,7 +98,7 @@ export function CorrelatoPicker({
         .finally(() => setLoading(false))
     }, 300)
     return () => clearTimeout(t)
-  }, [query, locked, allowedTipi])
+  }, [query, locked, allowedTipi, endpoint])
 
   if (locked) {
     return (
@@ -109,6 +121,7 @@ export function CorrelatoPicker({
     lead: [],
     cliente: [],
     scadenza: [],
+    installatore: [],
   }
   for (const r of results) grouped[r.tipo].push(r)
 

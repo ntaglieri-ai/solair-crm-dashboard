@@ -426,6 +426,7 @@ export interface NavItem {
     | "leads"
     | "clienti"
     | "compiti"
+    | "calendario"
     | "scadenze"
     | "documenti"
     | "installatori"

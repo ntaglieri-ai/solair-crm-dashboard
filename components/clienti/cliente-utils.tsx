@@ -1,19 +1,10 @@
 import { cn } from "@/lib/utils"
-import { Badge } from "@/components/ui/badge"
+import { StatoPill } from "@/components/shared/lightning-table"
 import {
   type StatoCliente,
   STATO_CLIENTE_TONE,
   leadInitials,
 } from "@/lib/mock-data"
-
-const TONE_STYLES: Record<string, string> = {
-  success: "bg-success/10 text-success",
-  info: "bg-info/10 text-info",
-  warning: "bg-warning/10 text-warning",
-  muted: "bg-muted text-muted-foreground",
-  teal: "bg-teal/10 text-teal",
-  destructive: "bg-destructive/10 text-destructive",
-}
 
 const AVATAR_COLORS = [
   "bg-navy text-navy-foreground",
@@ -51,15 +42,5 @@ export function ClienteAvatar({
 }
 
 export function StatoClienteBadge({ stato }: { stato: StatoCliente }) {
-  const tone = STATO_CLIENTE_TONE[stato]
-  return (
-    <Badge
-      className={cn(
-        "rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap",
-        TONE_STYLES[tone],
-      )}
-    >
-      {stato}
-    </Badge>
-  )
+  return <StatoPill tone={STATO_CLIENTE_TONE[stato]}>{stato}</StatoPill>
 }

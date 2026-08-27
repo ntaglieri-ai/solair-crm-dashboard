@@ -13,6 +13,7 @@ export const PAGE_KEYS = [
   "lead",
   "clienti",
   "compiti",
+  "calendario",
   "scadenze",
   "documenti",
   "installatori",
@@ -46,6 +47,7 @@ export const ROUTE_PAGE_MAP: Record<string, string> = {
   "/leads": "lead",
   "/clienti": "clienti",
   "/compiti": "compiti",
+  "/calendario": "calendario",
   "/scadenze": "scadenze",
   "/documenti": "documenti",
   "/installatori": "installatori",
@@ -266,6 +268,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       "lead",
       "clienti",
       "compiti",
+      "calendario",
       "scadenze",
       "documenti",
       "installatori",
@@ -316,7 +319,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       scopes[moduleKey] = "all"
     }
   } else if (roleCode === "AGENT") {
-    grantPages("rw", ["lead", "compiti", "scadenze", "installatori"])
+    grantPages("rw", ["lead", "compiti", "calendario", "scadenze", "installatori"])
     grantPages("r", ["offerta_commerciale"])
     // CRM Settings negato: restano leggibili solo azienda/sedi/aspetto (info
     // aziendali + personalizzazione aspetto proprio).
@@ -333,6 +336,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       "lead",
       "clienti",
       "compiti",
+      "calendario",
       "scadenze",
       "installatori",
       "offerta_commerciale",
@@ -369,7 +373,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       scopes[moduleKey] = "own_sede"
     }
   } else {
-    grantPages("rw", ["lead", "clienti", "compiti", "scadenze", "installatori"])
+    grantPages("rw", ["lead", "clienti", "compiti", "calendario", "scadenze", "installatori"])
     // CRM Settings negato tranne azienda/sedi/aspetto leggibili; Documenti in
     // sola lettura; Automazioni e Manutenzione negate.
     grantPages("r", ["dashboard", "documenti", "offerta_commerciale", "crm_settings.system.azienda", "crm_settings.system.sedi", "crm_settings.system.aspetto"])

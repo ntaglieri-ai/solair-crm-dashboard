@@ -15,7 +15,12 @@ import {
 import { DataTableShell } from "@/components/ui/data-table-shell"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import {
+  LIGHTNING,
+  LIGHTNING_DENSITY,
+  RowInlineActions,
+  StatoPill,
+} from "@/components/shared/lightning-table"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,6 +60,10 @@ function InstallatoreAvatar({ nome, size = 26 }: { nome: string; size?: number }
     </span>
   )
 }
+
+// Questa tabella non ha il selettore di densita' di Lead/Clienti: usa la
+// densita' di default, cosi' le tre restano visivamente allineate.
+const CELL_PAD = LIGHTNING_DENSITY.normale
 
 const COLUMN_WIDTH: Record<string, number> = {
   nome: 240,
@@ -118,14 +127,9 @@ export function InstallatoreTable({
         ))}
         <col style={{ width: 64 }} />
       </colgroup>
-      <TableHeader
-        className={cn(
-          "sticky top-0 z-20 bg-muted/95 backdrop-blur transition-shadow duration-150",
-          stuck && "shadow-[0_4px_8px_-4px_rgba(0,0,0,0.15)]",
-        )}
-      >
+      <TableHeader className={cn(LIGHTNING.header, stuck && LIGHTNING.headerStuck)}>
         <TableRow className="hover:bg-transparent">
-          <TableHead className="sticky left-0 z-30 w-11 border-r border-foreground/30 bg-muted/95">
+          <TableHead className={cn(LIGHTNING.headCell, "sticky left-0 z-30 w-11")}>
             <Checkbox
               checked={allSelected}
               onCheckedChange={onToggleAll}
@@ -136,7 +140,10 @@ export function InstallatoreTable({
             <TableHead
               key={col.id}
               className={cn(
-                "overflow-hidden whitespace-nowrap border-r border-foreground/30 font-semibold text-muted-foreground",
+                LIGHTNING.headCell,
+                LIGHTNING.headLabel,
+                "overflow-hidden whitespace-nowrap",
+                sortBy === col.sortKey ? LIGHTNING.headLabelActive : LIGHTNING.headLabelIdle,
                 col.sortKey && "cursor-pointer select-none",
               )}
               style={{
@@ -158,7 +165,11 @@ export function InstallatoreTable({
               </span>
             </TableHead>
           ))}
-          <TableHead className="sticky right-0 z-30 w-16 border-l border-foreground/30 bg-muted/95 text-right" />
+          <TableHead
+            className={cn(LIGHTNING.headCell, LIGHTNING.headLabel, "sticky right-0 z-30 w-16 text-right")}
+          >
+            Azioni
+          </TableHead>
         </TableRow>
       </TableHeader>
 
@@ -174,12 +185,12 @@ export function InstallatoreTable({
             <InstallatoreRowContextMenu key={i.id} installatore={i} onEdit={onEdit} onDelete={onDelete}>
             <TableRow
               data-state={selected.has(i.id) ? "selected" : undefined}
-              className="group cursor-pointer"
+              className={LIGHTNING.row}
               onClick={() => router.push(`/installatori/${i.id}`)}
             >
               <TableCell
                 onClick={(e) => e.stopPropagation()}
-                className="sticky left-0 z-10 border-r border-border/70 bg-card"
+                className={cn(LIGHTNING.cell, LIGHTNING.cellSticky, LIGHTNING.cellLeader, CELL_PAD)}
                 style={{ width: 44, minWidth: 44, maxWidth: 44 }}
               >
                 <Checkbox
@@ -190,7 +201,7 @@ export function InstallatoreTable({
               </TableCell>
 
               <TableCell
-                className="border-r border-border/70"
+                className={cn(LIGHTNING.cell, CELL_PAD)}
                 style={{ width: COLUMN_WIDTH.nome, minWidth: COLUMN_WIDTH.nome, maxWidth: COLUMN_WIDTH.nome }}
               >
                 <div className="flex items-center gap-2">
@@ -200,103 +211,112 @@ export function InstallatoreTable({
               </TableCell>
 
               <TableCell
-                className="border-r border-border/70"
+                className={cn(LIGHTNING.cell, CELL_PAD)}
                 style={{ width: COLUMN_WIDTH.email, minWidth: COLUMN_WIDTH.email, maxWidth: COLUMN_WIDTH.email }}
               >
-                <span className="truncate text-sm text-foreground">{i.email ?? "—"}</span>
+                <span className="truncate text-foreground">{i.email ?? "—"}</span>
               </TableCell>
 
               <TableCell
-                className="border-r border-border/70"
+                className={cn(LIGHTNING.cell, CELL_PAD)}
                 style={{ width: COLUMN_WIDTH.stato, minWidth: COLUMN_WIDTH.stato, maxWidth: COLUMN_WIDTH.stato }}
               >
-                <Badge variant={i.attivo ? "secondary" : "outline"}>
+                <StatoPill tone={i.attivo ? "success" : "muted"}>
                   {i.attivo ? "Attivo" : "Non attivo"}
-                </Badge>
+                </StatoPill>
               </TableCell>
 
               <TableCell
-                className="border-r border-border/70"
+                className={cn(LIGHTNING.cell, CELL_PAD)}
                 style={{
                   width: COLUMN_WIDTH.proprietario_nome,
                   minWidth: COLUMN_WIDTH.proprietario_nome,
                   maxWidth: COLUMN_WIDTH.proprietario_nome,
                 }}
               >
-                <span className="whitespace-nowrap text-sm text-foreground">
+                <span className="whitespace-nowrap text-foreground">
                   {i.proprietario_nome ?? "—"}
                 </span>
               </TableCell>
 
               <TableCell
-                className="border-r border-border/70"
+                className={cn(LIGHTNING.cell, CELL_PAD)}
                 style={{ width: COLUMN_WIDTH.tag, minWidth: COLUMN_WIDTH.tag, maxWidth: COLUMN_WIDTH.tag }}
               >
                 <InstallatoreTagBadges installatoreId={i.id} max={2} />
               </TableCell>
 
               <TableCell
-                className="border-r border-border/70"
+                className={cn(LIGHTNING.cell, CELL_PAD)}
                 style={{
                   width: COLUMN_WIDTH.telefono,
                   minWidth: COLUMN_WIDTH.telefono,
                   maxWidth: COLUMN_WIDTH.telefono,
                 }}
               >
-                <span className="whitespace-nowrap text-sm text-muted-foreground">
+                <span className="whitespace-nowrap text-muted-foreground">
                   {i.telefono ?? "—"}
                 </span>
               </TableCell>
 
               <TableCell
-                className="border-r border-border/70"
+                className={cn(LIGHTNING.cell, CELL_PAD)}
                 style={{
                   width: COLUMN_WIDTH.updated_at,
                   minWidth: COLUMN_WIDTH.updated_at,
                   maxWidth: COLUMN_WIDTH.updated_at,
                 }}
               >
-                <span className="whitespace-nowrap text-sm tabular-nums text-muted-foreground">
+                <span className="whitespace-nowrap tabular-nums text-muted-foreground">
                   {formatDate(i.updated_at)}
                 </span>
               </TableCell>
 
               <TableCell
                 onClick={(e) => e.stopPropagation()}
-                className="sticky right-0 z-10 border-l border-border/70 bg-card text-right"
+                className={cn(LIGHTNING.cellSticky, LIGHTNING.cellActions, CELL_PAD)}
                 style={{ width: 64, minWidth: 64, maxWidth: 64 }}
               >
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 opacity-0 transition-opacity group-hover:opacity-100 data-[popup-open]:opacity-100"
-                        aria-label={`Azioni per ${i.nome}`}
-                      >
-                        <MoreHorizontal className="size-4" />
-                      </Button>
-                    }
-                  />
-                  <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuGroup>
-                      <DropdownMenuItem onClick={() => router.push(`/installatori/${i.id}`)}>
-                        <ExternalLink data-icon="inline-start" />
-                        Apri installatore
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onEdit(i)}>
-                        <Pencil data-icon="inline-start" />
-                        Modifica
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem variant="destructive" onClick={() => onDelete(i)}>
-                        <Trash2 data-icon="inline-start" />
-                        Elimina
-                      </DropdownMenuItem>
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <RowInlineActions>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Modifica ${i.nome}`}
+                    onClick={() => onEdit(i)}
+                  >
+                    <Pencil className="size-3.5" />
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Azioni per ${i.nome}`}
+                        >
+                          <MoreHorizontal className="size-3.5" />
+                        </Button>
+                      }
+                    />
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuGroup>
+                        <DropdownMenuItem onClick={() => router.push(`/installatori/${i.id}`)}>
+                          <ExternalLink data-icon="inline-start" />
+                          Apri installatore
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onEdit(i)}>
+                          <Pencil data-icon="inline-start" />
+                          Modifica
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem variant="destructive" onClick={() => onDelete(i)}>
+                          <Trash2 data-icon="inline-start" />
+                          Elimina
+                        </DropdownMenuItem>
+                      </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </RowInlineActions>
               </TableCell>
             </TableRow>
             </InstallatoreRowContextMenu>

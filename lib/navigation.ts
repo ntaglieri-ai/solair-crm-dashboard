@@ -3,6 +3,7 @@ export type NavIcon =
   | "leads"
   | "clienti"
   | "compiti"
+  | "calendario"
   | "scadenze"
   | "documenti"
   | "installatori"
@@ -20,6 +21,7 @@ export const NAV_PRINCIPALE: NavItem[] = [
   { label: "Lead", href: "/leads", icon: "leads" },
   { label: "Clienti", href: "/clienti", icon: "clienti" },
   { label: "Compiti", href: "/compiti", icon: "compiti" },
+  { label: "Calendario", href: "/calendario", icon: "calendario" },
 ]
 
 export const NAV_GESTIONE: NavItem[] = [

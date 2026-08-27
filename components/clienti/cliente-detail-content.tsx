@@ -3,6 +3,10 @@
 import { useState } from "react"
 import { toast } from "sonner"
 import { AllegatiSection } from "@/components/shared/allegati-section"
+import { NoteInterneSection } from "./note-interne-section"
+import { CalendarioRecordSection } from "@/components/calendario/calendario-record-section"
+import { usePermissions } from "@/lib/permissions/provider"
+import { canAccessNoteInterne } from "@/lib/clienti/note-interne"
 import {
   IconChevronDown,
   IconChevronRight,
@@ -26,6 +30,7 @@ import {
   IconBuildingWarehouse,
   IconCalendarEvent,
   IconPlus,
+  IconLock,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -191,16 +196,24 @@ const NAV_ITEMS = [
   { id: "section-logistica", label: "Logistica" },
   { id: "section-documenti", label: "Documenti" },
   { id: "section-comunicazioni", label: "Comunicazioni" },
-  { id: "section-note", label: "Note" },
+  { id: "section-note", label: "Note cliente" },
+  { id: "section-note-interne", label: "Note interne" },
+  { id: "section-calendario", label: "Calendario" },
   { id: "section-attivita", label: "Attività" },
 ] as const
 
-function RelatedNav() {
+function RelatedNav({ vediNoteInterne }: { vediNoteInterne: boolean }) {
   const go = (id: string) =>
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+  // La voce "Note interne" sparisce con la sezione: lasciarla porterebbe
+  // a uno scroll verso un'ancora inesistente, e soprattutto rivelerebbe
+  // che quella sezione esiste per qualcun altro.
+  const items = NAV_ITEMS.filter(
+    (item) => vediNoteInterne || item.id !== "section-note-interne",
+  )
   return (
     <nav className="flex flex-wrap items-center gap-1 border-b border-border pb-3">
-      {NAV_ITEMS.map((item) => (
+      {items.map((item) => (
         <button
           key={item.id}
           type="button"
@@ -1342,9 +1355,12 @@ function Attivita({ cliente }: { cliente: ClienteRecord }) {
 /* ---------- Componente principale ---------- */
 
 export function ClienteDetailContent({ cliente }: { cliente: ClienteRecord }) {
+  const permissions = usePermissions()
+  const vediNoteInterne = canAccessNoteInterne(permissions.snapshot.subject.ruoloCode)
+
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1">
-      <RelatedNav />
+      <RelatedNav vediNoteInterne={vediNoteInterne} />
 
       <Section id="section-anagrafica" title="Anagrafica" icon={IconUser}>
         <Anagrafica cliente={cliente} />
@@ -1379,8 +1395,27 @@ export function ClienteDetailContent({ cliente }: { cliente: ClienteRecord }) {
         <Comunicazioni cliente={cliente} />
       </Section>
 
-      <Section id="section-note" title="Note" icon={IconNote}>
+      <Section id="section-note" title="Note cliente" icon={IconNote}>
         <NoteSection cliente={cliente} />
+      </Section>
+
+      {vediNoteInterne ? (
+        <Section id="section-note-interne" title="Note interne" icon={IconLock}>
+          <NoteInterneSection clienteId={cliente.id} />
+        </Section>
+      ) : null}
+
+      <Section
+        id="section-calendario"
+        title="Calendario"
+        icon={IconCalendarEvent}
+        defaultOpen={false}
+      >
+        <CalendarioRecordSection
+          recordTipo="cliente"
+          recordId={cliente.id}
+          nomeRecord={cliente["Nome Clienti"]}
+        />
       </Section>
 
       <Section id="section-attivita" title="Attività" icon={IconChecklist}>

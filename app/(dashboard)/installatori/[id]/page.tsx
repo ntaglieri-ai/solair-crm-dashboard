@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { InstallatoreDetailActions } from "@/components/installatori/installatore-detail-actions"
 import { InstallatoreTagBadges } from "@/components/installatori/installatore-tag-controls"
 import { AllegatiSection } from "@/components/shared/allegati-section"
+import { CalendarioRecordSection } from "@/components/calendario/calendario-record-section"
 
 function value(text: string | null) {
   return text?.trim() || "—"
@@ -115,6 +116,15 @@ export default async function InstallatoreDetailPage({
 
       <section className="border-b border-border pb-5">
         <AllegatiSection
+          recordTipo="installatore"
+          recordId={installatore.id}
+          nomeRecord={installatore.nome}
+        />
+      </section>
+
+      <section className="border-b border-border pb-5">
+        <h2 className="mb-3 text-[13px] font-bold text-navy">Calendario</h2>
+        <CalendarioRecordSection
           recordTipo="installatore"
           recordId={installatore.id}
           nomeRecord={installatore.nome}

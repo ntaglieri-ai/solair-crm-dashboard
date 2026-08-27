@@ -27,6 +27,7 @@ import {
   IconCalendarEvent,
   IconChevronRight,
 } from "@tabler/icons-react"
+import { CalendarioRecordSection } from "@/components/calendario/calendario-record-section"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -186,6 +187,7 @@ const NAV_ITEMS = [
   { id: "section-attivita-aperte", label: "Attività aperte" },
   { id: "section-attivita-chiuse", label: "Attività chiuse" },
   { id: "section-email", label: "E-mail" },
+  { id: "section-calendario", label: "Calendario" },
   { id: "section-record", label: "Record collegati" },
 ] as const
 
@@ -1239,6 +1241,19 @@ export function LeadDetailContent({
         icon={IconMail}
       >
         <EmailSection emailLog={emailLog} />
+      </Section>
+
+      <Section
+        id="section-calendario"
+        title="Calendario"
+        icon={IconCalendarEvent}
+        defaultOpen={false}
+      >
+        <CalendarioRecordSection
+          recordTipo="lead"
+          recordId={lead.id}
+          nomeRecord={lead["Nome Lead"]}
+        />
       </Section>
 
       <Section id="section-record" title="Record collegati" icon={IconLink}>

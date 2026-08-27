@@ -14,6 +14,12 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { DataTableShell } from "@/components/ui/data-table-shell"
+import {
+  LIGHTNING,
+  LIGHTNING_DENSITY,
+  RowInlineActions,
+  type Density,
+} from "@/components/shared/lightning-table"
 import { ClienteRowContextMenu } from "./cliente-row-context-menu"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
@@ -33,13 +39,9 @@ import {
 import { ClienteCell } from "./cliente-cell"
 
 export type SortDir = "asc" | "desc"
-export type Density = "comoda" | "normale" | "densa"
-
-const DENSITY_CELL: Record<Density, string> = {
-  comoda: "py-4 text-sm",
-  normale: "py-2.5 text-sm",
-  densa: "py-1 text-xs",
-}
+// Ri-esportata per i chiamanti che la importavano da qui prima che le tre
+// tabelle condividessero lo stesso contratto di stile.
+export type { Density }
 
 // Nome Clienti, E-mail e Tag sono allineati a sinistra; il resto è centrato.
 function isLeftAligned(id: ClienteColumnId) {
@@ -98,7 +100,7 @@ export function ClienteTable({
   const allSelected =
     clienti.length > 0 && clienti.every((c) => selected.has(c.id))
   const colSpan = columns.length + 2
-  const cellPad = DENSITY_CELL[density]
+  const cellPad = LIGHTNING_DENSITY[density]
   const resolvedWidths = useMemo(() => {
     const widths = {} as Record<ClienteColumnId, number>
     for (const column of columns) {
@@ -144,15 +146,10 @@ export function ClienteTable({
         ))}
         <col style={{ width: 64 }} />
       </colgroup>
-      <TableHeader
-          className={cn(
-            "sticky top-0 z-20 bg-muted/95 backdrop-blur transition-shadow duration-150",
-            stuck && "shadow-[0_4px_8px_-4px_rgba(0,0,0,0.15)]",
-          )}
-      >
+      <TableHeader className={cn(LIGHTNING.header, stuck && LIGHTNING.headerStuck)}>
           <TableRow className="hover:bg-transparent">
             {/* Selezione */}
-            <TableHead className="sticky left-0 z-30 w-11 border-r border-foreground/30 bg-muted/95">
+            <TableHead className={cn(LIGHTNING.headCell, "sticky left-0 z-30 w-11")}>
               <Checkbox
                 checked={allSelected}
                 onCheckedChange={onToggleAll}
@@ -191,7 +188,8 @@ export function ClienteTable({
                     setDragOverColumn(null)
                   }}
                   className={cn(
-                    "group relative overflow-hidden whitespace-nowrap border-r border-foreground/30 transition-colors",
+                    LIGHTNING.headCell,
+                    "group relative overflow-hidden whitespace-nowrap transition-colors",
                     draggingColumn === col.id && "opacity-45",
                     dragOverColumn === col.id && "bg-teal/10",
                     left ? "text-left" : "text-center",
@@ -211,8 +209,9 @@ export function ClienteTable({
                       type="button"
                       onClick={() => onSort(col.id)}
                       className={cn(
-                        "inline-flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-xs font-semibold transition-colors hover:text-foreground",
-                        active ? "text-navy" : "text-muted-foreground",
+                        "inline-flex min-w-0 flex-1 items-center gap-1 overflow-hidden",
+                        LIGHTNING.headLabel,
+                        active ? LIGHTNING.headLabelActive : LIGHTNING.headLabelIdle,
                         left ? "justify-start" : "justify-center",
                       )}
                     >
@@ -244,7 +243,9 @@ export function ClienteTable({
                 </TableHead>
               )
             })}
-            <TableHead className="sticky right-0 z-30 w-16 border-l border-foreground/30 bg-muted/95 text-right">
+            <TableHead
+              className={cn(LIGHTNING.headCell, LIGHTNING.headLabel, "sticky right-0 z-30 w-16 text-right")}
+            >
               Azioni
             </TableHead>
           </TableRow>
@@ -264,16 +265,13 @@ export function ClienteTable({
                 startNavigationFeedback()
                 router.push(`/clienti/${cliente.id}`)
               }}
-              className="cursor-pointer"
+              className={LIGHTNING.row}
               data-state={selected.has(cliente.id) ? "selected" : undefined}
             >
               {/* Selezione */}
               <TableCell
                 onClick={(e) => e.stopPropagation()}
-                className={cn(
-                  "sticky left-0 z-10 border-r border-border/70 bg-card",
-                  cellPad,
-                )}
+                className={cn(LIGHTNING.cell, LIGHTNING.cellSticky, LIGHTNING.cellLeader, cellPad)}
                 style={{ width: 44, minWidth: 44, maxWidth: 44 }}
               >
                 <Checkbox
@@ -289,7 +287,8 @@ export function ClienteTable({
                   <TableCell
                     key={col.id}
                     className={cn(
-                      "whitespace-nowrap border-r border-border/70",
+                      LIGHTNING.cell,
+                      "whitespace-nowrap",
                       cellPad,
                       left ? "text-left" : "text-center",
                     )}
@@ -317,39 +316,49 @@ export function ClienteTable({
 
               <TableCell
                 onClick={(e) => e.stopPropagation()}
-                className={cn(
-                  "sticky right-0 z-10 border-l border-border/70 bg-card text-right",
-                  cellPad,
-                )}
+                className={cn(LIGHTNING.cellSticky, LIGHTNING.cellActions, cellPad)}
                 style={{ width: 64, minWidth: 64, maxWidth: 64 }}
               >
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button variant="ghost" size="icon" aria-label="Azioni">
-                        <MoreHorizontal />
-                      </Button>
-                    }
-                  />
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuGroup>
-                      <DropdownMenuItem
-                        onClick={() => router.push(`/clienti/${cliente.id}`)}
-                      >
-                        <ExternalLink data-icon="inline-start" />
-                        Apri
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onClick={() => onDelete(cliente)}
-                      >
-                        <Trash2 data-icon="inline-start" />
-                        Elimina
-                      </DropdownMenuItem>
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <RowInlineActions>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Apri ${cliente["Nome Clienti"]}`}
+                    onClick={() => {
+                      startNavigationFeedback()
+                      router.push(`/clienti/${cliente.id}`)
+                    }}
+                  >
+                    <ExternalLink className="size-3.5" />
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button variant="ghost" size="icon-sm" aria-label="Azioni">
+                          <MoreHorizontal className="size-3.5" />
+                        </Button>
+                      }
+                    />
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuGroup>
+                        <DropdownMenuItem
+                          onClick={() => router.push(`/clienti/${cliente.id}`)}
+                        >
+                          <ExternalLink data-icon="inline-start" />
+                          Apri
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => onDelete(cliente)}
+                        >
+                          <Trash2 data-icon="inline-start" />
+                          Elimina
+                        </DropdownMenuItem>
+                      </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </RowInlineActions>
               </TableCell>
             </TableRow>
             </ClienteRowContextMenu>

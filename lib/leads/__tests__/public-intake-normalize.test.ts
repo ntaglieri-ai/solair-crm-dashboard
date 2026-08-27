@@ -3,6 +3,7 @@ import {
   leadPhoneMatchKeys,
   normalizeLeadIntakePayload,
   parseLeadSourceCreatedAt,
+  staleMetaLeadReason,
 } from "@/lib/leads/public-intake"
 
 describe("normalizeLeadIntakePayload", () => {
@@ -77,5 +78,28 @@ describe("normalizeLeadIntakePayload", () => {
     expect(parseLeadSourceCreatedAt("3 agosto 2026 14:09")?.toISOString()).toBe(
       "2026-08-03T12:09:00.000Z",
     )
+  })
+
+  it("scarta i Meta lead senza data sorgente o con data vecchia", () => {
+    const now = new Date("2026-08-27T06:00:00.000Z")
+
+    expect(
+      staleMetaLeadReason(
+        { origine: "meta_ads", nome: "Mario Rossi", telefono: "3331234567" },
+        now,
+      )?.reason,
+    ).toBe("missing_source_created_at")
+
+    expect(
+      staleMetaLeadReason(
+        {
+          origine: "meta_ads",
+          nome: "Mario Rossi",
+          telefono: "3331234567",
+          sourceCreatedAt: "4 agosto 2026 23:35",
+        },
+        now,
+      )?.reason,
+    ).toBe("stale_meta_lead")
   })
 })

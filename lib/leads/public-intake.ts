@@ -339,7 +339,19 @@ export function normalizeLeadIntakePayload(input: unknown): Partial<LeadIntakePa
       pickField(fields, ["leadgen_id", "lead_id", "social_lead_id"]),
     sourceCreatedAt:
       direct.sourceCreatedAt ??
-      pickField(fields, ["created_time", "created_at", "date_created", "date created"]),
+      pickField(fields, [
+        "created_time",
+        "created_at",
+        "created",
+        "date_created",
+        "date created",
+        "lead_created_time",
+        "lead_created_at",
+        "data_creazione",
+        "data creazione",
+        "data_creato",
+        "creato_il",
+      ]),
     kwp:
       direct.kwp ??
       direct.potenzaKw ??
@@ -667,14 +679,22 @@ function metaLeadMaxAgeMs() {
   return Number.isFinite(hours) && hours > 0 ? hours * 60 * 60 * 1000 : null
 }
 
-function staleMetaLeadReason(payload: LeadIntakePayload, now: Date) {
+export function staleMetaLeadReason(payload: LeadIntakePayload, now: Date) {
   if (payload.origine !== "meta_ads") return null
   const sourceCreatedAt = parseLeadSourceCreatedAt(payload.sourceCreatedAt)
   const maxAgeMs = metaLeadMaxAgeMs()
-  if (!sourceCreatedAt || maxAgeMs === null) return null
+  if (maxAgeMs === null) return null
+  if (!sourceCreatedAt) {
+    return {
+      reason: "missing_source_created_at",
+      sourceCreatedAt: null,
+      maxAgeHours: Math.round(maxAgeMs / 60 / 60 / 1000),
+    }
+  }
 
   return now.getTime() - sourceCreatedAt.getTime() > maxAgeMs
     ? {
+        reason: "stale_meta_lead",
         sourceCreatedAt: sourceCreatedAt.toISOString(),
         maxAgeHours: Math.round(maxAgeMs / 60 / 60 / 1000),
       }
@@ -853,7 +873,7 @@ export interface LeadIntakeResult {
   nomeLead: string
   skipped?: boolean
   skipReason?: string
-  sourceCreatedAt?: string
+  sourceCreatedAt?: string | null
 }
 
 type ExistingLead = {
@@ -1103,7 +1123,8 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
   const staleMetaLead = staleMetaLeadReason(payload, now)
 
   if (staleMetaLead) {
-    console.info("[lead-intake] Meta lead ignorato per data sorgente vecchia", {
+    console.info("[lead-intake] Meta lead ignorato", {
+      reason: staleMetaLead.reason,
       nome: payload.nome,
       telefono: telefonoNorm,
       socialLeadId,
@@ -1115,7 +1136,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       duplicate: false,
       nomeLead: payload.nome,
       skipped: true,
-      skipReason: "stale_meta_lead",
+      skipReason: staleMetaLead.reason,
       sourceCreatedAt: staleMetaLead.sourceCreatedAt,
     }
   }

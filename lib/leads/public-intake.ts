@@ -18,6 +18,9 @@ export interface LeadIntakePayload {
   origine: LeadIntakeOrigine
   tipo_documento?: LeadIntakeTipoDocumento
   nome: string
+  firstName?: string
+  lastName?: string
+  cognome?: string
   telefono: string
   email?: string
   provincia?: string
@@ -26,6 +29,7 @@ export interface LeadIntakePayload {
   residenteInSicilia?: boolean
   tipoProprieta?: "privata" | "commerciale"
   campaignName?: string
+  socialLeadId?: string
   kwp?: number | string
   kwh?: number | string
   potenzaKw?: number | string
@@ -229,6 +233,14 @@ function buildMakeMetaNote(fields: IntakeFieldMap, existingNote?: string) {
     "state",
     "province",
     "provincia",
+    "campaign_name",
+    "campaignname",
+    "campaign",
+    "campagna",
+    "nome_campagna",
+    "leadgen_id",
+    "lead_id",
+    "social_lead_id",
   ])
   const answers = Object.entries(fields)
     .filter(([key]) => !answerKeys.has(key))
@@ -257,10 +269,17 @@ export function normalizeLeadIntakePayload(input: unknown): Partial<LeadIntakePa
   }
 
   const direct = input as Partial<LeadIntakePayload>
+  const firstName =
+    direct.firstName ??
+    pickField(fields, ["first_name", "nome_di_battesimo", "given_name", "first"])
+  const lastName =
+    direct.lastName ??
+    direct.cognome ??
+    pickField(fields, ["last_name", "cognome", "surname", "family_name"])
   const nome = (
     direct.nome ??
     pickField(fields, ["full_name", "nome", "nome_e_cognome", "name"]) ??
-    [pickField(fields, ["first_name", "nome_di_battesimo"]), pickField(fields, ["last_name", "cognome"])]
+    [firstName, lastName]
       .filter(Boolean)
       .join(" ")
   ) || undefined
@@ -281,7 +300,14 @@ export function normalizeLeadIntakePayload(input: unknown): Partial<LeadIntakePa
   return {
     ...direct,
     origine,
+    tipo_documento:
+      direct.tipo_documento ??
+      normalizeTipoDocumento(pickField(fields, ["tipo_documento", "tipo documento", "documento"])) ??
+      undefined,
     nome,
+    firstName,
+    lastName,
+    cognome: direct.cognome ?? lastName,
     telefono,
     email,
     provincia: direct.provincia ?? pickField(fields, ["state", "province", "provincia"]),
@@ -289,12 +315,41 @@ export function normalizeLeadIntakePayload(input: unknown): Partial<LeadIntakePa
     codicePostale:
       direct.codicePostale ??
       pickField(fields, ["zip_code", "postal_code", "codice_postale", "cap"]),
+    residenteInSicilia:
+      direct.residenteInSicilia ??
+      booleanFromUnknown(
+        pickField(fields, [
+          "residente_in_sicilia",
+          "residente_sicilia",
+          "sicilia",
+          "sei_residente_in_sicilia",
+        ]),
+      ),
     tipoProprieta:
       direct.tipoProprieta ??
       normalizeTipoProprietaFromField(
         pickField(fields, ["tipo_proprieta", "tipo_di_proprieta", "property_type"]),
       ),
-    campaignName: direct.campaignName ?? pickField(fields, ["campaign_name", "campaign", "campagna"]),
+    campaignName:
+      direct.campaignName ??
+      pickField(fields, ["campaign_name", "campaignName", "campaign", "campagna", "nome_campagna"]),
+    socialLeadId:
+      direct.socialLeadId ??
+      pickField(fields, ["leadgen_id", "lead_id", "social_lead_id"]),
+    kwp:
+      direct.kwp ??
+      direct.potenzaKw ??
+      pickField(fields, ["kwp", "potenza_kw", "potenza", "potenza_impianto"]),
+    kwh:
+      direct.kwh ??
+      direct.accumuloKwh ??
+      pickField(fields, ["kwh", "accumulo_kwh", "accumulo", "batteria_kwh"]),
+    modelloPannello:
+      direct.modelloPannello ??
+      pickField(fields, ["modello_pannello", "pannello", "tipo_pannello"]),
+    wallboxRichiesto:
+      direct.wallboxRichiesto ??
+      booleanFromUnknown(pickField(fields, ["wallbox_richiesto", "wallbox", "colonnina"])),
     interesse: direct.interesse ?? pickField(fields, ["interesse", "interest"]),
     source: direct.source ?? pickField(fields, ["source", "sorgente", "source_name"]),
     sourcePlatform:
@@ -360,6 +415,21 @@ function normalizeText(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null
 }
 
+function splitNameParts(fullName: string): { nome: string | null; cognome: string | null } {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return { nome: null, cognome: null }
+  if (parts.length === 1) return { nome: parts[0], cognome: null }
+  return { nome: parts[0], cognome: parts.slice(1).join(" ") }
+}
+
+function leadNameParts(payload: LeadIntakePayload) {
+  const split = splitNameParts(payload.nome)
+  return {
+    nome: normalizeText(payload.firstName) ?? split.nome,
+    cognome: normalizeText(payload.lastName ?? payload.cognome) ?? split.cognome,
+  }
+}
+
 function normalizeNumber(value: unknown): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null
   if (typeof value !== "string" || !value.trim()) return null
@@ -372,7 +442,10 @@ function normalizeBoolean(value: unknown): boolean | null {
 }
 
 function normalizeTipoDocumento(value: unknown): LeadIntakeTipoDocumento | null {
-  return value === "preventivo" || value === "contratto" ? value : null
+  const normalized = normalizeIntakeFieldName(stringFromUnknown(value) ?? "")
+  if (normalized.includes("preventivo")) return "preventivo"
+  if (normalized.includes("contratto")) return "contratto"
+  return null
 }
 
 function hasConfiguredQuote(payload: LeadIntakePayload) {
@@ -386,6 +459,54 @@ function hasConfiguredQuote(payload: LeadIntakePayload) {
 
 function hasAnyConsent(...values: Array<boolean | null>) {
   return values.some((value) => value === true)
+}
+
+function addChangedField(changedFields: string[], field: string) {
+  if (!changedFields.includes(field)) changedFields.push(field)
+}
+
+function assignTextField(
+  updateRow: Record<string, unknown>,
+  existing: Record<string, unknown>,
+  changedFields: string[],
+  column: string,
+  label: string,
+  value: unknown,
+) {
+  const text = normalizeText(value)
+  if (!text) return
+
+  updateRow[column] = text
+  if (normalizeText(existing[column]) !== text) addChangedField(changedFields, label)
+}
+
+function assignNumberField(
+  updateRow: Record<string, unknown>,
+  existing: Record<string, unknown>,
+  changedFields: string[],
+  column: string,
+  label: string,
+  value: unknown,
+) {
+  const number = normalizeNumber(value)
+  if (number === null) return
+
+  updateRow[column] = number
+  if (normalizeNumber(existing[column]) !== number) addChangedField(changedFields, label)
+}
+
+function assignBooleanField(
+  updateRow: Record<string, unknown>,
+  existing: Record<string, unknown>,
+  changedFields: string[],
+  column: string,
+  label: string,
+  value: boolean | null,
+) {
+  if (value === null) return
+
+  updateRow[column] = value
+  if (existing[column] !== value) addChangedField(changedFields, label)
 }
 
 function clampScore(score: number) {
@@ -563,6 +684,9 @@ function intakeSource(payload: LeadIntakePayload): {
   if (payload.origine === "manuale") {
     return { source: "manuale", detail: "Inserimento manuale via API" }
   }
+  if (platform.includes("make") || platform.includes("pabbly")) {
+    return { source: "make", detail: "Scenario Make/Pabbly verso API pubblica" }
+  }
   if (platform.includes("instagram")) {
     return { source: "instagram", detail: "Instagram tramite Make/API pubblica" }
   }
@@ -584,20 +708,45 @@ function intakeReceivedDetails(payload: LeadIntakePayload) {
 }
 
 function intakeChangedFields(params: {
-  scoreChanged: boolean
+  changedFields: string[]
+}) {
+  return Array.from(new Set(params.changedFields))
+}
+
+function intakeCreatedFields(params: {
+  nameParts: ReturnType<typeof leadNameParts>
+  emailNorm: string | null
+  socialLeadId: string | null
+  payload: LeadIntakePayload
+  kwp: number | null
+  kwh: number | null
+  tipoDocumento: LeadIntakeTipoDocumento | null
   consensoTelefono: boolean | null
   consensoWhatsapp: boolean | null
   consensoEmail: boolean | null
-  tipoDocumento: LeadIntakeTipoDocumento | null
 }) {
   return [
-    "Descrizione",
-    params.scoreChanged ? "Valutazione" : null,
-    "Ora ultima attivita'",
+    "Nome Lead",
+    params.nameParts.nome ? "Nome" : null,
+    params.nameParts.cognome ? "Cognome" : null,
+    "Telefono",
+    params.emailNorm ? "E-mail" : null,
+    params.payload.provincia ? "Provincia" : null,
+    params.payload.citta ? "Citta'" : null,
+    params.payload.codicePostale ? "Codice postale" : null,
+    params.socialLeadId ? "Social Lead ID" : null,
+    params.payload.campaignName ? "campaign name" : null,
+    "Origine Lead",
+    params.kwp !== null ? "kWp" : null,
+    params.kwh !== null ? "kWh accumulo" : null,
+    params.payload.modelloPannello ? "Modello pannello" : null,
+    params.payload.wallboxRichiesto !== undefined ? "Wallbox richiesto" : null,
+    params.payload.residenteInSicilia !== undefined ? "Residente in Sicilia" : null,
+    params.tipoDocumento ? "Tipo documento" : null,
     params.consensoTelefono !== null ? "Consenso telefono" : null,
     params.consensoWhatsapp !== null ? "Consenso WhatsApp" : null,
     params.consensoEmail !== null ? "Consenso e-mail" : null,
-    params.tipoDocumento !== null ? "Tipo documento" : null,
+    "Ora ultima attivita'",
   ].filter((field): field is string => Boolean(field))
 }
 
@@ -607,16 +756,36 @@ export interface LeadIntakeResult {
   nomeLead: string
 }
 
-async function findExistingLead(
-  telefonoNorm: string,
-  emailNorm: string | null,
-): Promise<{
+type ExistingLead = {
   id: string
   nome_lead: string | null
+  nome: string | null
+  cognome: string | null
+  email: string | null
+  telefono: string | null
+  provincia: string | null
+  citta: string | null
+  codice_postale: string | null
+  social_lead_id: string | null
+  campaign_name: string | null
   descrizione: string | null
   lead_proprietario_id: string | null
   valutazione: number | null
-} | null> {
+  kwp: number | null
+  kwh: number | null
+  modello_pannello: string | null
+  wallbox_richiesto: boolean | null
+  residente_in_sicilia: boolean | null
+  tipo_documento: string | null
+  consenso_contatto_telefono: boolean | null
+  consenso_contatto_whatsapp: boolean | null
+  consenso_contatto_email: boolean | null
+}
+
+async function findExistingLead(
+  telefonoNorm: string,
+  emailNorm: string | null,
+): Promise<ExistingLead | null> {
   const supabase = createAdminClient()
   if (!supabase) throw new Error("Supabase admin client non configurato")
 
@@ -625,14 +794,40 @@ async function findExistingLead(
 
   const { data, error } = await supabase
     .from("leads")
-    .select("id, nome_lead, descrizione, lead_proprietario_id, valutazione")
+    .select(
+      [
+        "id",
+        "nome_lead",
+        "nome",
+        "cognome",
+        "email",
+        "telefono",
+        "provincia",
+        "citta",
+        "codice_postale",
+        "social_lead_id",
+        "campaign_name",
+        "descrizione",
+        "lead_proprietario_id",
+        "valutazione",
+        "kwp",
+        "kwh",
+        "modello_pannello",
+        "wallbox_richiesto",
+        "residente_in_sicilia",
+        "tipo_documento",
+        "consenso_contatto_telefono",
+        "consenso_contatto_whatsapp",
+        "consenso_contatto_email",
+      ].join(", "),
+    )
     .or(orParts.join(","))
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle()
 
   if (error) throw new Error(`findExistingLead: ${error.message}`)
-  return data
+  return data as ExistingLead | null
 }
 
 async function assignTags(
@@ -750,6 +945,8 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
   const configuratorLead = payload.origine === "configuratore"
   const outOfHours = isOutOfBusinessHours(now)
   const sourceInfo = intakeSource(payload)
+  const nameParts = leadNameParts(payload)
+  const socialLeadId = normalizeText(payload.socialLeadId)
 
   const existing = await findExistingLead(telefonoNorm, emailNorm)
 
@@ -763,16 +960,71 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       ? `${existing.descrizione}\n${notaIngresso}`
       : notaIngresso
 
+    const changedFields = ["Descrizione", "Ora ultima attivita'"]
+    if (nextScore !== (existing.valutazione ?? 0)) addChangedField(changedFields, "Valutazione")
+
     const updateRow: Record<string, unknown> = {
       descrizione: descrizioneAggiornata,
       valutazione: nextScore,
       ora_ultima_attivita: now.toISOString(),
       updated_at: now.toISOString(),
     }
-    if (consensoTelefono !== null) updateRow.consenso_contatto_telefono = consensoTelefono
-    if (consensoWhatsapp !== null) updateRow.consenso_contatto_whatsapp = consensoWhatsapp
-    if (consensoEmail !== null) updateRow.consenso_contatto_email = consensoEmail
-    if (tipoDocumento !== null) updateRow.tipo_documento = tipoDocumento
+
+    assignTextField(updateRow, existing, changedFields, "nome_lead", "Nome Lead", payload.nome)
+    assignTextField(updateRow, existing, changedFields, "nome", "Nome", nameParts.nome)
+    assignTextField(updateRow, existing, changedFields, "cognome", "Cognome", nameParts.cognome)
+    assignTextField(updateRow, existing, changedFields, "telefono", "Telefono", telefonoNorm)
+    assignTextField(updateRow, existing, changedFields, "email", "E-mail", emailNorm)
+    assignTextField(updateRow, existing, changedFields, "provincia", "Provincia", payload.provincia)
+    assignTextField(updateRow, existing, changedFields, "citta", "Citta'", payload.citta)
+    assignTextField(updateRow, existing, changedFields, "codice_postale", "Codice postale", payload.codicePostale)
+    assignTextField(updateRow, existing, changedFields, "social_lead_id", "Social Lead ID", socialLeadId)
+    assignTextField(updateRow, existing, changedFields, "campaign_name", "campaign name", payload.campaignName)
+    assignNumberField(updateRow, existing, changedFields, "kwp", "kWp", kwp)
+    assignNumberField(updateRow, existing, changedFields, "kwh", "kWh accumulo", kwh)
+    assignTextField(updateRow, existing, changedFields, "modello_pannello", "Modello pannello", payload.modelloPannello)
+    assignBooleanField(
+      updateRow,
+      existing,
+      changedFields,
+      "wallbox_richiesto",
+      "Wallbox richiesto",
+      normalizeBoolean(payload.wallboxRichiesto),
+    )
+    assignBooleanField(
+      updateRow,
+      existing,
+      changedFields,
+      "residente_in_sicilia",
+      "Residente in Sicilia",
+      normalizeBoolean(payload.residenteInSicilia),
+    )
+    assignTextField(updateRow, existing, changedFields, "tipo_documento", "Tipo documento", tipoDocumento)
+    assignBooleanField(
+      updateRow,
+      existing,
+      changedFields,
+      "consenso_contatto_telefono",
+      "Consenso telefono",
+      consensoTelefono,
+    )
+    assignBooleanField(
+      updateRow,
+      existing,
+      changedFields,
+      "consenso_contatto_whatsapp",
+      "Consenso WhatsApp",
+      consensoWhatsapp,
+    )
+    assignBooleanField(
+      updateRow,
+      existing,
+      changedFields,
+      "consenso_contatto_email",
+      "Consenso e-mail",
+      consensoEmail,
+    )
+    const updatedLeadName = normalizeText(updateRow.nome_lead) ?? existing.nome_lead ?? payload.nome
 
     const { error: updateError } = await supabase
       .from("leads")
@@ -786,13 +1038,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
         source: sourceInfo.source,
         sourceDetail: sourceInfo.detail,
         reason: configuratorLead ? "preventivo_aggiornato" : "duplicato_aggiornato",
-        changedFields: intakeChangedFields({
-          scoreChanged: nextScore !== (existing.valutazione ?? 0),
-          consensoTelefono,
-          consensoWhatsapp,
-          consensoEmail,
-          tipoDocumento,
-        }),
+        changedFields: intakeChangedFields({ changedFields }),
         details: intakeReceivedDetails(payload),
         note: "Esito: lead gia' presente nel CRM, nessun duplicato creato.",
       }),
@@ -818,7 +1064,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       )
       await ensureRecallTask(supabase, {
         leadId: existing.id,
-        leadName: existing.nome_lead ?? payload.nome,
+        leadName: updatedLeadName,
         ownerId: existing.lead_proprietario_id,
         dueDate: recallDueDate(now),
         highPriority: calculatedScore >= 80,
@@ -826,18 +1072,21 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       })
     }
 
-    return { id: existing.id, duplicate: true, nomeLead: existing.nome_lead ?? payload.nome }
+    return { id: existing.id, duplicate: true, nomeLead: updatedLeadName }
   }
 
   const { data, error } = await supabase
     .from("leads")
     .insert({
       nome_lead: payload.nome,
+      nome: nameParts.nome,
+      cognome: nameParts.cognome,
       telefono: telefonoNorm,
       email: emailNorm || null,
       provincia: payload.provincia || null,
       citta: payload.citta || null,
       codice_postale: payload.codicePostale || null,
+      social_lead_id: socialLeadId,
       residente_in_sicilia: payload.residenteInSicilia ?? false,
       stato_lead: "Non contattato",
       origine_lead: ORIGINE_LABELS[payload.origine],
@@ -866,7 +1115,18 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       source: sourceInfo.source,
       sourceDetail: sourceInfo.detail,
       reason: "nuova_richiesta",
-      changedFields: ["Nome Lead", "Telefono", "E-mail", "Origine Lead", "Ora ultima attivita'"],
+      changedFields: intakeCreatedFields({
+        nameParts,
+        emailNorm,
+        socialLeadId,
+        payload,
+        kwp,
+        kwh,
+        tipoDocumento,
+        consensoTelefono,
+        consensoWhatsapp,
+        consensoEmail,
+      }),
       details: intakeReceivedDetails(payload),
       note: "Esito: nuovo lead creato nel CRM.",
     }),

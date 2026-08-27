@@ -105,7 +105,7 @@ export function LeadFilters({
 
   return (
     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-      <div className="relative min-w-[280px] flex-1">
+      <div className="relative min-w-0 flex-[1_1_100%] sm:flex-[1_1_280px]">
         <Search className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={filters.search}
@@ -119,7 +119,7 @@ export function LeadFilters({
       <Popover>
         <PopoverTrigger
           render={
-            <Button variant="outline" size="lg" className="bg-card">
+            <Button variant="outline" size="lg" className="w-full bg-card sm:w-auto">
               <SlidersHorizontal data-icon="inline-start" />
               Filtri
               {active.length > 0 ? (
@@ -195,10 +195,10 @@ export function LeadFilters({
           type="button"
           key={key}
           onClick={() => set(key, "all" as never)}
-          className="flex h-10 items-center gap-2 rounded-lg border border-primary/15 bg-secondary px-3 text-sm font-semibold text-secondary-foreground transition-colors hover:bg-secondary/70"
+          className="flex min-w-0 max-w-full items-center gap-2 rounded-lg border border-primary/15 bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground transition-colors hover:bg-secondary/70"
         >
-          {label}
-          <X className="size-3.5" />
+          <span className="min-w-0 break-words">{label}</span>
+          <X className="size-3.5 shrink-0" />
         </button>
       ))}
     </div>

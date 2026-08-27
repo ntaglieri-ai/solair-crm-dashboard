@@ -608,7 +608,7 @@ export function LeadTable({
           const delta = shiftedWheel ? e.deltaY : e.deltaX
           el.scrollLeft += delta * 0.72
         }}
-        className="min-h-0 flex-1 touch-pan-y overscroll-contain overflow-y-auto overflow-x-hidden bg-card outline-none [scroll-behavior:auto] focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:w-2.5"
+        className="min-h-0 flex-1 overscroll-contain overflow-auto bg-card outline-none [scroll-behavior:auto] [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5 [&::-webkit-scrollbar]:w-2.5"
       >
         {/* table semplice (no wrapper shadcn): un solo contenitore di scroll,
             così l'header sticky e la barra orizzontale dedicata funzionano. */}

@@ -260,6 +260,7 @@ function SidebarContent({
 
 export function Sidebar() {
   const permissions = usePermissions()
+  const pathname = usePathname()
   const [companyLogo, setCompanyLogo] = useState(DEFAULT_COMPANY_LOGO)
   const [mobileOpen, setMobileOpen] = useState(false)
   const visiblePrincipale = NAV_PRINCIPALE.filter((item) => {
@@ -289,6 +290,12 @@ export function Sidebar() {
       cancelled = true
     }
   }, [permissions])
+
+  useEffect(() => {
+    if (!mobileOpen) return
+    const frame = window.requestAnimationFrame(() => setMobileOpen(false))
+    return () => window.cancelAnimationFrame(frame)
+  }, [mobileOpen, pathname])
 
   return (
     <>

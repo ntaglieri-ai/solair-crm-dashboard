@@ -394,14 +394,14 @@ export function CompitiClient({
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex min-w-0 flex-col gap-5">
       {/* Header pagina */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-col gap-0.5">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 flex flex-col gap-0.5">
+          <h1 className="break-words text-2xl font-bold tracking-tight text-foreground">
             Compiti
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="break-words text-sm text-muted-foreground">
             {total.toLocaleString("it-IT")} compiti · {scadutiTotal} in scadenza
             {isFetching && (
               <span className="ml-2 text-xs text-muted-foreground/60">
@@ -411,7 +411,7 @@ export function CompitiClient({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           {/* Toggle Lista / Kanban */}
           <div className="flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
             <button
@@ -470,7 +470,7 @@ export function CompitiClient({
           />
 
           <Button
-            className="bg-teal text-teal-foreground hover:bg-teal/90"
+            className="min-w-0 bg-teal text-teal-foreground hover:bg-teal/90"
             onClick={() => setNewOpen(true)}
           >
             <Plus data-icon="inline-start" />
@@ -616,9 +616,9 @@ export function CompitiClient({
           />
 
           {/* Footer paginazione */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-muted-foreground">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <span className="break-words text-sm text-muted-foreground">
                 {rangeStart}–{rangeEnd} di {total.toLocaleString("it-IT")}
                 {selected.size > 0 ? ` · ${selected.size} selezionati` : ""}
               </span>
@@ -646,7 +646,7 @@ export function CompitiClient({
               </Select>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Button
                 size="sm"
                 variant="outline"

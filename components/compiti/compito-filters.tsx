@@ -81,7 +81,7 @@ function FilterSelect({
       onValueChange={(v) => onValueChange(v ?? "")}
     >
       <SelectTrigger
-        className={className ?? "w-[160px] bg-card"}
+        className={className ?? "w-full bg-card sm:w-[160px]"}
         aria-label={ariaLabel}
       >
         <SelectValue placeholder={placeholder} />
@@ -134,8 +134,8 @@ export function CompitoFilters({
     filters.overdue
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="relative min-w-[220px] flex-1">
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <div className="relative min-w-0 flex-[1_1_100%] sm:flex-[1_1_220px]">
         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={filters.search}
@@ -150,7 +150,7 @@ export function CompitoFilters({
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <Button variant="outline" className="bg-card">
+            <Button variant="outline" className="w-full bg-card sm:w-auto">
               <IconFilter size={16} stroke={1.8} data-icon="inline-start" />
               Stato
               {filters.stati.length > 0 ? (
@@ -181,7 +181,7 @@ export function CompitoFilters({
 
       <FilterSelect
         ariaLabel="Filtra per Priorità"
-        className="w-[150px] bg-card"
+        className="w-full bg-card sm:w-[150px]"
         value={filters.priorita}
         onValueChange={(v) => set("priorita", v)}
         placeholder="Priorità"
@@ -193,7 +193,7 @@ export function CompitoFilters({
 
       <FilterSelect
         ariaLabel="Filtra per Proprietario"
-        className="w-[190px] bg-card"
+        className="w-full bg-card sm:w-[190px]"
         value={filters.proprietario}
         onValueChange={(v) => set("proprietario", v)}
         placeholder="Proprietario"
@@ -214,12 +214,12 @@ export function CompitoFilters({
         ]}
       />
 
-      <div className="flex items-center gap-1.5">
+      <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 sm:w-auto sm:grid-cols-[150px_auto_150px]">
         <Input
           type="date"
           value={filters.scadenzaDa}
           onChange={(e) => set("scadenzaDa", e.target.value)}
-          className="w-[150px] bg-card"
+          className="w-full bg-card"
           aria-label="Scadenza da"
         />
         <span className="text-sm text-muted-foreground">→</span>
@@ -227,7 +227,7 @@ export function CompitoFilters({
           type="date"
           value={filters.scadenzaA}
           onChange={(e) => set("scadenzaA", e.target.value)}
-          className="w-[150px] bg-card"
+          className="w-full bg-card"
           aria-label="Scadenza a"
         />
       </div>

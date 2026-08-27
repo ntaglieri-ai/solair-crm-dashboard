@@ -56,7 +56,7 @@ function FilterSelect({
 }) {
   return (
     <Select items={toItems(options)} value={value} onValueChange={(v) => onValueChange(v ?? "")}>
-      <SelectTrigger className={className ?? "w-[160px] bg-card"} aria-label={ariaLabel}>
+      <SelectTrigger className={className ?? "w-full bg-card sm:w-[160px]"} aria-label={ariaLabel}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
@@ -97,8 +97,8 @@ export function ScadenzaFilters({
     filters.collegamento !== "all"
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="relative min-w-[220px] flex-1">
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <div className="relative min-w-0 flex-[1_1_100%] sm:flex-[1_1_220px]">
         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={filters.search}
@@ -111,7 +111,7 @@ export function ScadenzaFilters({
 
       <FilterSelect
         ariaLabel="Filtra per Proprietario"
-        className="w-[190px] bg-card"
+        className="w-full bg-card sm:w-[190px]"
         value={filters.proprietario}
         onValueChange={(v) => set("proprietario", v)}
         placeholder="Proprietario"
@@ -123,7 +123,7 @@ export function ScadenzaFilters({
 
       <FilterSelect
         ariaLabel="Filtra per Tag"
-        className="w-[170px] bg-card"
+        className="w-full bg-card sm:w-[170px]"
         value={filters.tag}
         onValueChange={(v) => set("tag", v)}
         placeholder="Tag"
@@ -132,7 +132,7 @@ export function ScadenzaFilters({
 
       <FilterSelect
         ariaLabel="Filtra per Collegamento"
-        className="w-[170px] bg-card"
+        className="w-full bg-card sm:w-[170px]"
         value={filters.collegamento}
         onValueChange={(v) => set("collegamento", v as ScadenzeListParams["collegamento"])}
         placeholder="Collegamento"
@@ -143,12 +143,12 @@ export function ScadenzaFilters({
         ]}
       />
 
-      <div className="flex items-center gap-1.5">
+      <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 sm:w-auto sm:grid-cols-[150px_auto_150px]">
         <Input
           type="date"
           value={filters.scadenzaDa}
           onChange={(e) => set("scadenzaDa", e.target.value)}
-          className="w-[150px] bg-card"
+          className="w-full bg-card"
           aria-label="Data scadenza da"
         />
         <span className="text-sm text-muted-foreground">→</span>
@@ -156,7 +156,7 @@ export function ScadenzaFilters({
           type="date"
           value={filters.scadenzaA}
           onChange={(e) => set("scadenzaA", e.target.value)}
-          className="w-[150px] bg-card"
+          className="w-full bg-card"
           aria-label="Data scadenza a"
         />
       </div>

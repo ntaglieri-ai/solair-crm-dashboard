@@ -69,7 +69,7 @@ function FilterSelect({
       disabled={disabled}
     >
       <SelectTrigger
-        className={className ?? "w-[160px] bg-card"}
+        className={className ?? "w-full bg-card sm:w-[160px]"}
         aria-label={ariaLabel}
       >
         <SelectValue placeholder={placeholder} />
@@ -110,8 +110,8 @@ export function ClienteFilters({
     filters.tag !== "all"
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="relative min-w-[220px] flex-1">
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <div className="relative min-w-0 flex-[1_1_100%] sm:flex-[1_1_220px]">
         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={filters.search}
@@ -124,7 +124,7 @@ export function ClienteFilters({
 
       <FilterSelect
         ariaLabel="Filtra per Stato"
-        className="w-[200px] bg-card"
+        className="w-full bg-card sm:w-[200px]"
         value={filters.stato}
         onValueChange={(v) => set("stato", v)}
         placeholder="Stato"
@@ -147,7 +147,7 @@ export function ClienteFilters({
 
       <FilterSelect
         ariaLabel="Filtra per Clienti Proprietario"
-        className="w-[190px] bg-card"
+        className="w-full bg-card sm:w-[190px]"
         value={filters.proprietario}
         onValueChange={(v) => set("proprietario", v)}
         placeholder="Proprietario"
@@ -159,7 +159,7 @@ export function ClienteFilters({
 
       <FilterSelect
         ariaLabel="Filtra per Installatore"
-        className="w-[180px] bg-card"
+        className="w-full bg-card sm:w-[180px]"
         value={filters.installatore}
         onValueChange={(v) => set("installatore", v)}
         placeholder="Installatore"

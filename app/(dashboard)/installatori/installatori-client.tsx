@@ -217,11 +217,11 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-col gap-0.5">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Installatori</h1>
-          <p className="text-sm text-muted-foreground">
+    <div className="flex min-w-0 flex-col gap-5">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 flex flex-col gap-0.5">
+          <h1 className="break-words text-2xl font-bold tracking-tight text-foreground">Installatori</h1>
+          <p className="break-words text-sm text-muted-foreground">
             {total.toLocaleString("it-IT")} installatori
             {isFetching && (
               <span className="ml-2 text-xs text-muted-foreground/60">Aggiornamento…</span>
@@ -229,7 +229,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           <InstallatoreSettingsSheet
             open={settingsOpen}
             onOpenChange={setSettingsOpen}
@@ -255,7 +255,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
           />
 
           <Button
-            className="bg-teal text-teal-foreground hover:bg-teal/90"
+            className="min-w-0 bg-teal text-teal-foreground hover:bg-teal/90"
             onClick={() => setNewOpen(true)}
           >
             <Plus data-icon="inline-start" />
@@ -361,9 +361,9 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
             onSort={handleSort}
           />
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-muted-foreground">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <span className="break-words text-sm text-muted-foreground">
                 {rangeStart}–{rangeEnd} di {total.toLocaleString("it-IT")}
                 {selected.size > 0 ? ` · ${selected.size} selezionati` : ""}
               </span>
@@ -391,7 +391,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
               </Select>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Button
                 size="sm"
                 variant="outline"

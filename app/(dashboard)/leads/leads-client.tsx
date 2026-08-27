@@ -676,15 +676,15 @@ export function LeadsClient({
     <div
       ref={rootRef}
       style={availH ? { height: availH } : undefined}
-      className="flex h-[calc(100svh-9rem)] flex-col gap-4 lg:h-[calc(100svh-6rem)]"
+      className="flex h-[calc(100svh-9rem)] min-w-0 flex-col gap-4 lg:h-[calc(100svh-6rem)]"
     >
       {/* Header pagina */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-col gap-0.5">
-          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 flex flex-col gap-0.5">
+          <h1 className="break-words text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
             Lead
           </h1>
-          <p className="mt-1 flex items-center gap-2 text-[15px] text-muted-foreground">
+          <p className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-sm text-muted-foreground sm:text-[15px]">
             {headerTotal.toLocaleString("it-IT")} lead disponibili
             {isFetching ? (
               <Loader2
@@ -694,7 +694,7 @@ export function LeadsClient({
             ) : null}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           {/* Impostazioni lead (generali, vista colonne) */}
           <LeadSettingsSheet
             open={settingsOpen}
@@ -761,7 +761,7 @@ export function LeadsClient({
           </Button>
 
           <Button
-            className="bg-teal text-teal-foreground hover:bg-teal/90"
+            className="min-w-0 bg-teal text-teal-foreground hover:bg-teal/90"
             onClick={() => setNewLeadOpen(true)}
           >
             <Plus data-icon="inline-start" />
@@ -770,7 +770,7 @@ export function LeadsClient({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+      <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
         {[
           { label: "Tutti", stato: "all", commerciale: "all" },
           { label: "Da contattare", stato: "Non contattato", commerciale: "all" },
@@ -822,7 +822,7 @@ export function LeadsClient({
       ) : null}
 
       {/* Barra filtri + pannello filtri avanzati */}
-      <div className="flex items-start gap-2 rounded-lg border border-border bg-card p-2 shadow-sm">
+      <div className="flex min-w-0 flex-col items-stretch gap-2 rounded-lg border border-border bg-card p-2 shadow-sm sm:flex-row sm:items-start">
         <AdvancedFilters
           applied={advanced}
           onApply={handleAdvancedApply}
@@ -897,9 +897,9 @@ export function LeadsClient({
 
       {/* Footer paginazione — sempre visibile e in primo piano */}
       <div className="sticky bottom-0 z-30 -mx-5 flex shrink-0 flex-col gap-2 border-t border-border bg-background/95 px-5 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <span className="break-words text-sm text-muted-foreground">
             {rangeStart}-{rangeEnd} di {total.toLocaleString("it-IT")}
             {selected.size > 0 ? ` · ${selected.size} selezionati` : ""}
           </span>
@@ -920,7 +920,7 @@ export function LeadsClient({
           </select>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Button
             size="sm"
             variant="outline"

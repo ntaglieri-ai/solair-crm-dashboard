@@ -10,7 +10,7 @@ import {
 import { cn } from "@/lib/utils"
 
 const SCROLLER_CLASS =
-  "min-h-0 flex-1 overscroll-contain overflow-auto bg-card outline-none [scroll-behavior:auto] [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5 [&::-webkit-scrollbar]:w-2.5"
+  "min-h-0 flex-1 overscroll-contain overflow-y-auto overflow-x-hidden bg-card outline-none [scroll-behavior:auto] [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:w-2.5"
 
 const H_SCROLL_CLASS =
   "shrink-0 overscroll-contain overflow-x-auto overflow-y-hidden border-t border-border bg-card [scroll-behavior:auto] [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5"

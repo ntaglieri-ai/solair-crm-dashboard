@@ -608,8 +608,8 @@ export function LeadTable({
 
           <TableCell
             onClick={(e) => e.stopPropagation()}
-            className={cn(LIGHTNING.cellSticky, LIGHTNING.cellActions, cellPad)}
-            style={{ width: 56, minWidth: 56, maxWidth: 56 }}
+            className={cn(LIGHTNING.cellActions, cellPad)}
+            style={{ width: 84, minWidth: 84, maxWidth: 84 }}
           >
             <RowInlineActions>
               <Button
@@ -794,7 +794,7 @@ export function LeadTable({
           {columns.map((column) => (
             <col key={column.id} style={{ width: resolvedWidths[column.id] }} />
           ))}
-          <col style={{ width: 56 }} />
+          <col style={{ width: 84 }} />
         </colgroup>
         <TableHeader className={cn(LIGHTNING.header, stuck && LIGHTNING.headerStuck)}>
           <TableRow className="hover:bg-transparent">
@@ -901,7 +901,8 @@ export function LeadTable({
               )
             })}
             <TableHead
-              className={cn(LIGHTNING.headCell, LIGHTNING.headLabel, "sticky right-0 z-30 w-14 text-right")}
+              className={cn(LIGHTNING.headCell, LIGHTNING.headLabel, LIGHTNING.headActions)}
+              style={{ width: 84, minWidth: 84, maxWidth: 84 }}
             >
               Azioni
             </TableHead>

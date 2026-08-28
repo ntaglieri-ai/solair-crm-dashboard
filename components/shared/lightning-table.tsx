@@ -74,7 +74,10 @@ export const LIGHTNING = {
     "sticky left-0 z-10 transition-shadow group-hover/row:shadow-[inset_4px_0_0_0_var(--teal)] group-data-[state=selected]/row:shadow-[inset_4px_0_0_0_var(--info)]",
 
   /** Cella delle azioni (sticky a destra). */
-  cellActions: "sticky right-0 z-10 text-right",
+  headActions:
+    "sticky right-0 z-40 border-l border-l-border/80 bg-secondary text-center shadow-[-12px_0_20px_-16px_rgb(15_23_42/0.5)]",
+  cellActions:
+    "sticky right-0 z-20 border-l border-l-border/80 bg-card text-right shadow-[-12px_0_18px_-16px_rgb(15_23_42/0.55)] group-hover/row:bg-teal/10 group-data-[state=selected]/row:bg-info/10",
 } as const
 
 export type Density = "comoda" | "normale" | "densa"

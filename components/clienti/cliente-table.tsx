@@ -299,7 +299,7 @@ export function ClienteTable({
         {columns.map((column) => (
           <col key={column.id} style={{ width: resolvedWidths[column.id] }} />
         ))}
-        <col style={{ width: 64 }} />
+        <col style={{ width: 84 }} />
       </colgroup>
       <TableHeader className={cn(LIGHTNING.header, stuck && LIGHTNING.headerStuck)}>
           <TableRow className="hover:bg-transparent">
@@ -399,7 +399,8 @@ export function ClienteTable({
               )
             })}
             <TableHead
-              className={cn(LIGHTNING.headCell, LIGHTNING.headLabel, "sticky right-0 z-30 w-16 text-right")}
+              className={cn(LIGHTNING.headCell, LIGHTNING.headLabel, LIGHTNING.headActions)}
+              style={{ width: 84, minWidth: 84, maxWidth: 84 }}
             >
               Azioni
             </TableHead>
@@ -471,8 +472,8 @@ export function ClienteTable({
 
               <TableCell
                 onClick={(e) => e.stopPropagation()}
-                className={cn(LIGHTNING.cellSticky, LIGHTNING.cellActions, cellPad)}
-                style={{ width: 64, minWidth: 64, maxWidth: 64 }}
+                className={cn(LIGHTNING.cellActions, cellPad)}
+                style={{ width: 84, minWidth: 84, maxWidth: 84 }}
               >
                 <RowInlineActions>
                   <Button

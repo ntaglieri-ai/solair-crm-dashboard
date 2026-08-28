@@ -67,7 +67,7 @@ const campiLead = {
   kwp: z.number().optional().describe("Potenza dell'impianto di interesse, in kWp."),
   kwh: z.number().optional().describe("Capacita' di accumulo di interesse, in kWh."),
   modello_pannello: z.string().trim().optional(),
-  consenso_email: z.boolean().optional().describe("Consenso al contatto via email: senza questo, l'invio massivo salta il contatto."),
+  consenso_email: z.boolean().optional().describe("Consenso al contatto via email, salvato come dato informativo."),
   consenso_telefono: z.boolean().optional(),
   consenso_whatsapp: z.boolean().optional(),
 }
@@ -187,7 +187,7 @@ export function registraToolLeads(server: McpServer): void {
     titolo: "Crea lead",
     descrizione:
       "Crea un nuovo lead. Serve almeno un recapito o un nome. Lo stato predefinito e' 'Non contattato'. " +
-      "I consensi al contatto sono false se non specificati: senza consenso email il lead non riceve invii massivi.",
+      "I consensi al contatto sono false se non specificati e restano dati informativi.",
     schema: campiLead,
     annotazioni: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     esegui: async (args) => {

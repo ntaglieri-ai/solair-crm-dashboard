@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import type { Lead } from "@/lib/mock-data"
 import type { AdvancedFilterState } from "@/lib/leads/advanced-filter-logic"
+import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
 
 function mapRow(row: Record<string, unknown>): Lead {
   return {
@@ -486,34 +487,10 @@ export async function patchLead(id: string, patch: Partial<Lead>): Promise<Lead 
     ora_ultima_attivita: now,
     updated_at: now,
   }
-  if (patch["Nome Lead"] !== undefined) row.nome_lead = patch["Nome Lead"]
-  if (patch.Nome !== undefined) row.nome = patch.Nome
-  if (patch.Cognome !== undefined) row.cognome = patch.Cognome
-  if (patch["E-mail"] !== undefined) row.email = patch["E-mail"]
-  if (patch.Telefono !== undefined) row.telefono = patch.Telefono
-  if (patch["Mobile/Fisso"] !== undefined) row.mobile_fisso = patch["Mobile/Fisso"]
-  if (patch["Stato Lead"] !== undefined) row.stato_lead = patch["Stato Lead"]
-  if (patch.Stato !== undefined) row.stato_email = patch.Stato
-  if (patch.Valutazione !== undefined) row.valutazione = patch.Valutazione
-  if (patch["Lead Proprietario"] !== undefined) row.lead_proprietario_id = patch["Lead Proprietario"]
-  if (patch.Sede !== undefined) row.sede = patch.Sede
-  if (patch["Origine Lead"] !== undefined) row.origine_lead = patch["Origine Lead"]
-  if (patch.Descrizione !== undefined) row.descrizione = patch.Descrizione
-  if (patch["Città"] !== undefined) row.citta = patch["Città"]
-  if (patch.Provincia !== undefined) row.provincia = patch.Provincia
-  if (patch["campaign name"] !== undefined) row.campaign_name = patch["campaign name"]
-  if (patch["Residente in Sicilia"] !== undefined) row.residente_in_sicilia = patch["Residente in Sicilia"]
-  if (patch["Wallbox richiesto"] !== undefined) row.wallbox_richiesto = patch["Wallbox richiesto"]
-  if (patch["Consenso telefono"] !== undefined)
-    row.consenso_contatto_telefono = patch["Consenso telefono"]
-  if (patch["Consenso WhatsApp"] !== undefined)
-    row.consenso_contatto_whatsapp = patch["Consenso WhatsApp"]
-  if (patch["Consenso e-mail"] !== undefined)
-    row.consenso_contatto_email = patch["Consenso e-mail"]
-  if (patch.kWp !== undefined) row.kwp = patch.kWp
-  if (patch.kWh !== undefined) row.kwh = patch.kWh
-  if (patch["Account convertito"] !== undefined)
-    row.account_convertito_id = patch["Account convertito"]
+  const patchRecord = patch as Record<string, unknown>
+  for (const field of LEAD_RECORD_FIELDS) {
+    if (field.appField in patchRecord) row[field.column] = patchRecord[field.appField]
+  }
   const { data, error } = await supabase
     .from("leads")
     .update(row)

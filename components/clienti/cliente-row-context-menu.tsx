@@ -51,8 +51,7 @@ import {
 import { ClienteTagPicker } from "./cliente-tag-controls"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { usePermissions } from "@/lib/permissions/provider"
-import { EditRecordDialog } from "@/components/shared/edit-record-dialog"
-import { useCampoVisibile } from "@/components/shared/campo-protetto"
+import { EditRecordDialog, buildClienteEditFields } from "@/components/shared/edit-record-dialog"
 import { telHref } from "@/components/shared/quick-contact-icons"
 
 // "Crea nota"/"Crea attività" — costruiti il 25/07 (endpoint note dedicato
@@ -78,7 +77,6 @@ export function ClienteRowContextMenu({
   onUpdate: (cliente: ClienteRecord, patch: Partial<ClienteRecord>) => void
   onRefresh: () => void
 }) {
-  const vediCodiceFiscale = useCampoVisibile("clienti", "codice_fiscale")
   const { owners } = useClienteTags()
   const permissions = usePermissions()
   const router = useRouter()
@@ -344,29 +342,8 @@ export function ClienteRowContextMenu({
         onOpenChange={setEditOpen}
         title="Modifica cliente"
         endpoint={`/api/clienti/${cliente.id}`}
-        fields={[
-          { key: "nome", label: "Nome", value: cliente.Nome ?? "" },
-          { key: "cognome", label: "Cognome", value: cliente.Cognome ?? "" },
-          { key: "cellulare", label: "Cellulare", value: cliente.Cellulare ?? "", type: "tel" },
-          { key: "email", label: "E-mail", value: cliente["E-mail"] ?? "", type: "email" },
-          // Il codice fiscale sparisce anche dal form di modifica per chi non
-          // deve vederlo: lasciarlo qui lo avrebbe mostrato in chiaro proprio
-          // dove si sta per riscriverlo.
-          ...(vediCodiceFiscale
-            ? [{
-                key: "codiceFiscale",
-                label: "Codice fiscale",
-                value: cliente["Codice fiscale"] ?? "",
-              }]
-            : []),
-        ]}
-        buildBody={(v) => ({
-          Nome: v.nome,
-          Cognome: v.cognome,
-          Cellulare: v.cellulare,
-          "E-mail": v.email,
-          ...(vediCodiceFiscale ? { "Codice fiscale": v.codiceFiscale } : {}),
-        })}
+        fields={buildClienteEditFields(cliente, permissions)}
+        onSaved={onRefresh}
       />
 
       <Dialog open={noteOpen} onOpenChange={setNoteOpen}>

@@ -11,8 +11,7 @@ import { createAgentOutboundTransport, sleep } from "./lead-mailer"
 import { getCommunicationEmailPolicy } from "./communication-policy"
 import { type BulkPlaceholder, renderTemplate } from "./bulk-template"
 import { textToSafeHtml } from "./html"
-import { idsConConsensoEmail, type ConsentEntita } from "./consent"
-import { leggiConsensoEnforcement } from "./consent-enforcement"
+import type { ConsentEntita } from "./consent"
 
 export type BulkRecipient = {
   /** Id del record sorgente (lead/cliente/installatore) — solo per i log. */
@@ -39,10 +38,7 @@ export type BulkSendOutcome = {
   fromName: string | null
   /** Primi errori distinti, per il log server (non esposti in UI). */
   errori: string[]
-  /**
-   * Destinatari saltati alla ri-verifica del consenso, cioe' consenzienti
-   * all'accodamento e non piu' al momento dell'invio.
-   */
+  /** Compatibilita' con il vecchio esito: il consenso non salta destinatari. */
   revocatiInCorsa: number
 }
 
@@ -58,12 +54,7 @@ export async function sendBulkEmails(params: {
   subject: string
   template: string
   recipients: BulkRecipient[]
-  /**
-   * Entita' su cui ri-verificare il consenso appena prima di spedire, `null`
-   * per i destinatari a cui il consenso non si applica (installatori).
-   * Obbligatorio e non opzionale di proposito: un nuovo chiamante deve essere
-   * costretto a dichiarare cosa sta inviando, non a dimenticarsene.
-   */
+  /** Dato mantenuto per compatibilita': non attiva filtri di consenso. */
   consentEntita: ConsentEntita | null
   /**
    * Invocata dopo ogni invio. Il chiamante decide la frequenza di scrittura su
@@ -71,30 +62,7 @@ export async function sendBulkEmails(params: {
    */
   onProgress?: (progress: BulkProgress) => void | Promise<void>
 }): Promise<BulkSendOutcome> {
-  // Secondo controllo del consenso, dopo quello di resolveBulkRecipients.
-  // Non e' ridondante: un job di 100 destinatari con il ritmo prudente dura
-  // minuti, e in quei minuti un consenso puo' essere revocato.
-  // L'interruttore globale viene riletto qui e non ereditato dal chiamante:
-  // se qualcuno RIACCENDE il blocco mentre il job e' in corso, le email
-  // ancora da spedire devono tornare sotto filtro.
-  const { attivo: enforcementAttivo } = await leggiConsensoEnforcement()
-
-  let ammessi: Set<string> | null = null
-  if (params.consentEntita && enforcementAttivo) {
-    const { consenzienti, error } = await idsConConsensoEmail({
-      entita: params.consentEntita,
-      ids: params.recipients.map((recipient) => recipient.id),
-    })
-    if (error || !consenzienti) {
-      // Fail closed: non si spedisce niente se il consenso non e'
-      // verificabile. L'errore risale al chiamante, che chiude il job in
-      // errore invece di segnare "completato, 0 inviate".
-      throw new Error(
-        `Consenso email non verificabile, invio interrotto: ${error ?? "esito vuoto"}`,
-      )
-    }
-    ammessi = consenzienti
-  }
+  void params.consentEntita
 
   const policy = await getCommunicationEmailPolicy()
   const outbound = createAgentOutboundTransport({
@@ -108,19 +76,10 @@ export async function sendBulkEmails(params: {
 
   let inviate = 0
   let fallite = 0
-  let revocatiInCorsa = 0
   const errori: string[] = []
   const destinatariRaggiunti: Array<{ id: string; email: string }> = []
 
   for (const recipient of params.recipients) {
-    if (ammessi && !ammessi.has(recipient.id)) {
-      revocatiInCorsa++
-      console.warn(
-        `[consenso-email] ${recipient.id} saltato: consenso non piu' valido alla ri-verifica pre-invio`,
-      )
-      continue
-    }
-
     const body = renderTemplate(params.template, recipient.placeholders)
     const subject = renderTemplate(params.subject, recipient.placeholders)
 
@@ -151,7 +110,7 @@ export async function sendBulkEmails(params: {
     inviate,
     fallite,
     errori,
-    revocatiInCorsa,
+    revocatiInCorsa: 0,
     destinatariRaggiunti,
     fromEmail: outbound.fromEmail,
     fromName: outbound.fromName,

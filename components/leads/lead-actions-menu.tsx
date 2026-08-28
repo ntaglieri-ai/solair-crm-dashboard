@@ -154,34 +154,14 @@ export function LeadActionsMenu({
         failed?: number
         truncated?: boolean
         bloccatiSenzaConsenso?: number
-        consensoEnforcementAttivo?: boolean
-        inviatiSenzaConsenso?: number
       } | null
       if (!res.ok) {
         toast.error(result?.error ?? "Invio non riuscito")
         return
       }
-      // L'esclusione per consenso ha la precedenza sugli altri avvisi: e'
-      // l'unica per cui l'agente deve fare qualcosa (registrare il consenso),
-      // e passarla sotto silenzio e' esattamente cio' che il blocco evita.
-      const bloccati = result?.bloccatiSenzaConsenso ?? 0
-      const senzaConsenso = result?.inviatiSenzaConsenso ?? 0
-      // Blocco globale spento: e' un warning, non un success. L'invio e'
-      // riuscito ma ha raggiunto persone che non avevano acconsentito.
-      if (result?.consensoEnforcementAttivo === false && senzaConsenso > 0) {
-        toast.warning(`Inviate ${result?.sent ?? 0} email senza filtro di consenso`, {
-          description: `${senzaConsenso} destinatari non avevano dato il consenso. Registrato nell'audit log.`,
-        })
-        setDialog("none")
-        setSubject("")
-        setBody("")
-        return
-      }
       toast.success(`Inviate ${result?.sent ?? 0} email`, {
         description:
-          bloccati > 0
-            ? `${bloccati} destinatari esclusi: nessun consenso al contatto via email.`
-            : result?.failed && result.failed > 0
+          result?.failed && result.failed > 0
               ? `${result.failed} invii falliti — controlla gli indirizzi.`
               : result?.truncated
                 ? "Elenco troncato a 200 destinatari per invio: ripeti per il resto."

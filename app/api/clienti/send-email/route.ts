@@ -1,14 +1,11 @@
 import { NextResponse, after } from "next/server"
 import { getCurrentPermissions, requireApiRecord } from "@/lib/permissions/server"
-import { attoreDaPermessi } from "@/lib/audit/log"
 import { getPersonalEmailPassword, getPersonalEmailStatus } from "@/lib/email/personal-credentials"
 import { hasSystemOutboundSmtp, sendLeadEmails } from "@/lib/email/lead-mailer"
 import { resolveSender } from "@/lib/email/sender-accounts"
 import { logEmailInviate } from "@/lib/email/email-log"
 import {
   filtraDestinatariConsenzienti,
-  logInvioBloccatoSenzaConsenso,
-  logInvioSenzaEnforcement,
   messaggioNessunConsenziente,
   quantiBloccati,
 } from "@/lib/email/consent"
@@ -50,8 +47,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "L'oggetto e' obbligatorio." }, { status: 400 })
   }
 
-  // Stesso controllo di consenso della route Lead, stesso modulo: vedi
-  // lib/email/consent.ts. Server-side, prima di toccare il transport.
+  // Il nome storico della funzione resta, ma oggi risolve solo i destinatari
+  // con indirizzo email valido: il consenso non blocca invii e non genera avvisi.
   const { data: consenso, error: consensoError } = await filtraDestinatariConsenzienti({
     entita: "cliente",
     ids: clienteIds,
@@ -63,18 +60,6 @@ export async function POST(request: Request) {
   const bloccatiSenzaConsenso = quantiBloccati(consenso)
 
   if (consenso.destinatari.length === 0) {
-    if (bloccatiSenzaConsenso > 0) {
-      after(() =>
-        logInvioBloccatoSenzaConsenso({
-          entita: "cliente",
-          bloccati: consenso.senzaConsenso,
-          inviati: 0,
-          oggetto: emailSubject,
-          attore: attoreDaPermessi(permissions),
-          request,
-        }),
-      )
-    }
     return NextResponse.json(
       {
         error: messaggioNessunConsenziente({
@@ -153,34 +138,6 @@ export async function POST(request: Request) {
         fromNome: fromName,
         oggetto: emailSubject,
         inviataDa: subject.userId,
-      }),
-    )
-  }
-
-  if (bloccatiSenzaConsenso > 0) {
-    after(() =>
-      logInvioBloccatoSenzaConsenso({
-        entita: "cliente",
-        bloccati: consenso.senzaConsenso,
-        inviati: sent,
-        oggetto: emailSubject,
-        attore: attoreDaPermessi(permissions),
-        request,
-      }),
-    )
-  }
-
-  // Interruttore spento: si e' scritto a chi non aveva acconsentito. Evento
-  // opposto al precedente, e va registrato con la stessa cura.
-  if (!consenso.enforcementAttivo && consenso.senzaConsenso.length > 0) {
-    after(() =>
-      logInvioSenzaEnforcement({
-        entita: "cliente",
-        senzaConsenso: consenso.senzaConsenso,
-        destinatariTotali: consenso.destinatari.length,
-        oggetto: emailSubject,
-        attore: attoreDaPermessi(permissions),
-        request,
       }),
     )
   }

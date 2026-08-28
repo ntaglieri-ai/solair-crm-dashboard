@@ -10,9 +10,10 @@
 import { describe, expect, it } from "vitest"
 import { applyUiPermission } from "../load-permissions"
 import { buildDefaultPermissionSnapshot } from "../constants"
+import { createPermissionEngine } from "../engine"
 import type { PermissionSnapshot } from "../types"
 
-function snapshotDi(ruoloCode: "AGENT" | "DIRECTOR" | "ADMIN"): PermissionSnapshot {
+function snapshotDi(ruoloCode: "AGENT" | "DIRECTOR" | "ADMIN" | "SUPERADMIN"): PermissionSnapshot {
   return buildDefaultPermissionSnapshot({ ruoloCode })
 }
 
@@ -65,5 +66,40 @@ describe("applyUiPermission — altre chiavi", () => {
     const snapshot = snapshotDi("AGENT")
     applyUiPermission(snapshot, { chiave: "widget.bacheca.gestisci", abilitato: true })
     expect(snapshot.actions["widget.bacheca.gestisci"]).toBe(true)
+  })
+})
+
+describe("createPermissionEngine — campi Lead/Clienti admin", () => {
+  it("ADMIN puo' modificare i campi Lead e Clienti anche se lo snapshot li nasconde", () => {
+    const snapshot = snapshotDi("ADMIN")
+    snapshot.fields.lead.iban = "hidden"
+    snapshot.fields.clienti.iban = "hidden"
+
+    const permissions = createPermissionEngine(snapshot)
+
+    expect(permissions.canField("lead", "iban", "edit")).toBe(true)
+    expect(permissions.canField("clienti", "iban", "edit")).toBe(true)
+  })
+
+  it("l'override ADMIN non apre i campi degli altri moduli", () => {
+    const snapshot = snapshotDi("ADMIN")
+    snapshot.fields.compiti.oggetto = "hidden"
+
+    const permissions = createPermissionEngine(snapshot)
+
+    expect(permissions.canField("compiti", "oggetto", "edit")).toBe(false)
+  })
+
+  it("SUPERADMIN continua ad avere modifica completa su qualunque modulo", () => {
+    const snapshot = snapshotDi("SUPERADMIN")
+    snapshot.fields.lead.iban = "hidden"
+    snapshot.fields.clienti.iban = "hidden"
+    snapshot.fields.compiti.oggetto = "hidden"
+
+    const permissions = createPermissionEngine(snapshot)
+
+    expect(permissions.canField("lead", "iban", "edit")).toBe(true)
+    expect(permissions.canField("clienti", "iban", "edit")).toBe(true)
+    expect(permissions.canField("compiti", "oggetto", "edit")).toBe(true)
   })
 })

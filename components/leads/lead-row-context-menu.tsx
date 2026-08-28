@@ -51,6 +51,7 @@ import { useTags } from "@/lib/tag-store"
 import { usePermissions } from "@/lib/permissions/provider"
 import { formatDMY } from "@/components/compiti/new-compito-dialog"
 import { telHref } from "@/components/shared/quick-contact-icons"
+import { EditRecordDialog, buildLeadEditFields } from "@/components/shared/edit-record-dialog"
 
 const STATI: StatoLead[] = [
   "Non contattato",
@@ -87,13 +88,6 @@ export function LeadRowContextMenu({
   const [noteOpen, setNoteOpen] = useState(false)
   const [taskOpen, setTaskOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
-  const [editForm, setEditForm] = useState({
-    name: lead["Nome Lead"],
-    email: lead["E-mail"],
-    phone: lead.Telefono,
-    city: lead["Città"],
-    province: lead.Provincia,
-  })
   const [noteText, setNoteText] = useState("")
   const [taskTitle, setTaskTitle] = useState("")
   const [taskDueDate, setTaskDueDate] = useState("")
@@ -386,79 +380,14 @@ export function LeadRowContextMenu({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Modifica lead</DialogTitle>
-            <DialogDescription>
-              Aggiorna i dati principali di {lead["Nome Lead"]}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4">
-            <div className="grid gap-1.5">
-              <Label htmlFor={`edit-name-${lead.id}`}>Nome lead</Label>
-              <Input
-                id={`edit-name-${lead.id}`}
-                value={editForm.name}
-                onChange={(event) => setEditForm({ ...editForm, name: event.target.value })}
-              />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor={`edit-email-${lead.id}`}>Email</Label>
-                <Input
-                  id={`edit-email-${lead.id}`}
-                  type="email"
-                  value={editForm.email}
-                  onChange={(event) => setEditForm({ ...editForm, email: event.target.value })}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor={`edit-phone-${lead.id}`}>Telefono</Label>
-                <Input
-                  id={`edit-phone-${lead.id}`}
-                  value={editForm.phone}
-                  onChange={(event) => setEditForm({ ...editForm, phone: event.target.value })}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor={`edit-city-${lead.id}`}>Città</Label>
-                <Input
-                  id={`edit-city-${lead.id}`}
-                  value={editForm.city}
-                  onChange={(event) => setEditForm({ ...editForm, city: event.target.value })}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor={`edit-province-${lead.id}`}>Provincia</Label>
-                <Input
-                  id={`edit-province-${lead.id}`}
-                  value={editForm.province}
-                  onChange={(event) => setEditForm({ ...editForm, province: event.target.value })}
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>Annulla</Button>
-            <Button
-              disabled={!editForm.name.trim()}
-              onClick={() => {
-                onUpdate(lead, {
-                  "Nome Lead": editForm.name.trim(),
-                  "E-mail": editForm.email.trim(),
-                  Telefono: editForm.phone.trim(),
-                  "Città": editForm.city.trim(),
-                  Provincia: editForm.province.trim(),
-                })
-                setEditOpen(false)
-              }}
-            >
-              Salva modifiche
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EditRecordDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        title="Modifica lead"
+        endpoint={`/api/leads/${lead.id}`}
+        fields={buildLeadEditFields(lead, permissions)}
+        onSaved={onRefresh}
+      />
 
       <Dialog open={taskOpen} onOpenChange={setTaskOpen}>
         <DialogContent>

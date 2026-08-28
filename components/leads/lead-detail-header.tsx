@@ -19,7 +19,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
-import { EditRecordDialog } from "@/components/shared/edit-record-dialog"
+import { EditRecordDialog, buildLeadEditFields } from "@/components/shared/edit-record-dialog"
 import { useDeleteLead, useCreateLead } from "@/lib/leads/hooks"
 import { usePermissions } from "@/lib/permissions/provider"
 import { IconPlus } from "@tabler/icons-react"
@@ -444,28 +444,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
         onOpenChange={setEditOpen}
         title="Modifica lead"
         endpoint={`/api/leads/${lead.id}`}
-        fields={[
-          { key: "nome", label: "Nome", value: lead.Nome ?? "" },
-          { key: "cognome", label: "Cognome", value: lead.Cognome ?? "" },
-          { key: "telefono", label: "Telefono", value: lead.Telefono ?? "", type: "tel" },
-          { key: "email", label: "E-mail", value: lead["E-mail"] ?? "", type: "email" },
-          {
-            key: "mobileFisso",
-            label: "Mobile / Fisso",
-            value: lead["Mobile/Fisso"] ?? "",
-          },
-          { key: "citta", label: "Città", value: lead["Città"] ?? "" },
-          { key: "provincia", label: "Provincia", value: lead.Provincia ?? "" },
-        ]}
-        buildBody={(v) => ({
-          Nome: v.nome,
-          Cognome: v.cognome,
-          Telefono: v.telefono,
-          "E-mail": v.email,
-          "Mobile/Fisso": v.mobileFisso,
-          "Città": v.citta,
-          Provincia: v.provincia,
-        })}
+        fields={buildLeadEditFields(lead, permissions)}
       />
     </div>
   )

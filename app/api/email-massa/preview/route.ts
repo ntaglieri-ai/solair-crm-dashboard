@@ -71,16 +71,11 @@ export async function POST(request: Request) {
       destinatari: data.recipients.length,
       esclusiNonProprietari: data.esclusiNonProprietari,
       esclusiSenzaEmail: data.esclusiSenzaEmail,
-      // Chi ha un indirizzo valido ma non il consenso: l'agente deve vederlo
-      // qui, prima di scrivere il messaggio, non dopo aver premuto invia.
+      // Campi mantenuti a zero per compatibilita': il consenso non filtra piu'
+      // gli invii.
       esclusiSenzaConsenso: data.esclusiSenzaConsenso,
-      // Serve al dialog di composizione per mostrare l'avviso quando il blocco
-      // globale e' spento: l'agente deve sapere che sta per scrivere senza
-      // filtro, non scoprirlo dall'audit.
       consensoEnforcementAttivo: data.consensoEnforcementAttivo,
-      inviatiSenzaConsenso: data.consensoEnforcementAttivo
-        ? 0
-        : data.senzaConsenso.length,
+      inviatiSenzaConsenso: 0,
       // Solo il primo: serve a rendere l'anteprima, non a esporre l'intera
       // rubrica selezionata al client.
       esempio: primo ? { email: primo.email, placeholders: primo.placeholders } : null,

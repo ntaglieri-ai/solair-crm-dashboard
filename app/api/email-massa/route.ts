@@ -17,11 +17,6 @@ import {
   finishEmailMassaJob,
   updateEmailMassaProgress,
 } from "@/lib/email/bulk-job-store"
-import { attoreDaPermessi } from "@/lib/audit/log"
-import {
-  logInvioBloccatoSenzaConsenso,
-  logInvioSenzaEnforcement,
-} from "@/lib/email/consent"
 
 // Endpoint UNICO di invio di massa per Lead / Clienti / Installatori: la
 // differenza tra i tre moduli e' tutta dichiarativa in lib/email/bulk-targets.
@@ -98,9 +93,9 @@ export async function POST(request: Request) {
     )
   }
 
-  // Destinatari e consenso PRIMA della casella dell'agente: se non c'e'
-  // nessuno a cui si possa scrivere, chiedere di configurare la casella
-  // manderebbe l'agente a risolvere il problema sbagliato.
+  // Destinatari risolti PRIMA della casella dell'agente: se non c'e' nessuno
+  // a cui si possa scrivere, chiedere di configurare la casella manderebbe
+  // l'agente a risolvere il problema sbagliato.
   const { data: resolved, error: resolveError } = await resolveBulkRecipients({
     tipo: recordTipo,
     recordIds,
@@ -110,45 +105,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: resolveError ?? "Errore imprevisto" }, { status: 500 })
   }
 
-  // Il blocco per consenso mancante viene registrato anche quando l'invio
-  // parte lo stesso per gli altri: e' un evento GDPR, non un dettaglio di UI.
-  if (config.consentEntita && resolved.senzaConsenso.length > 0) {
-    const entita = config.consentEntita
-    const senzaConsenso = resolved.senzaConsenso
-    const destinatari = resolved.recipients.length
-    if (resolved.consensoEnforcementAttivo) {
-      after(() =>
-        logInvioBloccatoSenzaConsenso({
-          entita,
-          bloccati: senzaConsenso,
-          inviati: destinatari,
-          oggetto,
-          attore: attoreDaPermessi(permissions),
-          request,
-        }),
-      )
-    } else {
-      // Interruttore spento: l'invio include chi non ha acconsentito.
-      after(() =>
-        logInvioSenzaEnforcement({
-          entita,
-          senzaConsenso,
-          destinatariTotali: destinatari,
-          oggetto,
-          attore: attoreDaPermessi(permissions),
-          request,
-        }),
-      )
-    }
-  }
-
   if (resolved.recipients.length === 0) {
-    const perConsenso = resolved.esclusiSenzaConsenso > 0
     return NextResponse.json(
       {
-        error: perConsenso
-          ? `Invio annullato: nessuno dei ${config.label.plurale} selezionati ha dato il consenso al contatto via email. Registra il consenso nella scheda del contatto prima di scrivere.`
-          : `Nessuno dei ${config.label.plurale} selezionati e' inviabile: nessun destinatario con email valida di tua competenza.`,
+        error: `Nessuno dei ${config.label.plurale} selezionati e' inviabile: nessun destinatario con email valida di tua competenza.`,
         esclusiNonProprietari: resolved.esclusiNonProprietari,
         esclusiSenzaEmail: resolved.esclusiSenzaEmail,
         esclusiSenzaConsenso: resolved.esclusiSenzaConsenso,
@@ -237,11 +197,6 @@ export async function POST(request: Request) {
         })
       }
 
-      if (outcome.revocatiInCorsa > 0) {
-        console.warn(
-          `[email-massa] job ${job.id}: ${outcome.revocatiInCorsa} destinatari saltati per consenso revocato dopo l'accodamento`,
-        )
-      }
       await finishEmailMassaJob(job.id, {
         inviate: outcome.inviate,
         fallite: outcome.fallite,
@@ -264,9 +219,7 @@ export async function POST(request: Request) {
       esclusiSenzaEmail: resolved.esclusiSenzaEmail,
       esclusiSenzaConsenso: resolved.esclusiSenzaConsenso,
       consensoEnforcementAttivo: resolved.consensoEnforcementAttivo,
-      inviatiSenzaConsenso: resolved.consensoEnforcementAttivo
-        ? 0
-        : resolved.senzaConsenso.length,
+      inviatiSenzaConsenso: 0,
     },
     { status: 202 },
   )

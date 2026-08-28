@@ -1,14 +1,7 @@
-// Test del blocco invii senza consenso, con e senza l'interruttore globale.
+// Test della risoluzione destinatari con consensi non bloccanti.
 //
-// Perche' esiste: il ramo "interruttore spento" non e' verificabile dal vivo.
-// Il dev server punta al Supabase di produzione, quindi spegnere davvero
-// l'interruttore aprirebbe il filtro per tutti gli utenti reali per tutta la
-// durata del test — se in quella finestra un agente premesse invia, l'email
-// partirebbe. Qui il flag viene passato per iniezione e i destinatari sono
-// finti: nessuna query, nessun transport, nessun dato di produzione toccato.
-//
-// Cosa NON copre, dichiarato: la lettura vera della chiave da crm_settings e
-// il gate SUPERADMIN della route. Qui si verifica solo la decisione di filtro.
+// I consensi restano dati salvabili e leggibili, ma non devono escludere
+// destinatari, generare warning o cambiare il risultato di preview/invio.
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -121,34 +114,19 @@ describe("hasEmailConsent", () => {
 
 // --- Invio singolo / ai filtrati -------------------------------------------
 describe("filtraDestinatariConsenzienti", () => {
-  it("con interruttore ACCESO scarta chi non ha dato il consenso", async () => {
+  it("include tutti i contatti con email valida anche senza consenso", async () => {
     stato.enforcementAttivo = true
     const { data, error } = await filtraDestinatariConsenzienti({ entita: "lead", ids: ID_LEAD })
 
     expect(error).toBeNull()
-    expect(data!.enforcementAttivo).toBe(true)
-    expect(data!.destinatari.map((d) => d.id)).toEqual(["L1", "L3"])
-    expect(data!.senzaConsenso.map((d) => d.id)).toEqual(["L2", "L4"])
-    expect(data!.esclusiSenzaEmail).toBe(1)
-    expect(quantiBloccati(data!)).toBe(2)
-  })
-
-  it("con interruttore SPENTO non scarta nessuno per mancanza di consenso", async () => {
-    stato.enforcementAttivo = false
-    const { data, error } = await filtraDestinatariConsenzienti({ entita: "lead", ids: ID_LEAD })
-
-    expect(error).toBeNull()
     expect(data!.enforcementAttivo).toBe(false)
-    // Tutti e quattro i raggiungibili, compresi L2 e L4 che non consentono.
     expect(data!.destinatari.map((d) => d.id)).toEqual(["L1", "L2", "L3", "L4"])
-    // Nessuno bloccato...
+    expect(data!.senzaConsenso).toEqual([])
+    expect(data!.esclusiSenzaEmail).toBe(1)
     expect(quantiBloccati(data!)).toBe(0)
-    // ...ma l'elenco di chi non ha consentito resta popolato: e' quello che
-    // deve finire nell'audit come "scritto senza consenso".
-    expect(data!.senzaConsenso.map((d) => d.id)).toEqual(["L2", "L4"])
   })
 
-  it("l'interruttore non fa passare chi non ha un indirizzo", async () => {
+  it("non fa passare chi non ha un indirizzo", async () => {
     stato.enforcementAttivo = false
     const { data } = await filtraDestinatariConsenzienti({ entita: "lead", ids: ID_LEAD })
     expect(data!.destinatari.map((d) => d.id)).not.toContain("L5")
@@ -158,7 +136,7 @@ describe("filtraDestinatariConsenzienti", () => {
 
 // --- Invio di massa --------------------------------------------------------
 describe("resolveBulkRecipients", () => {
-  it("con interruttore ACCESO esclude i non consenzienti e li conta a parte", async () => {
+  it("include i non consenzienti e non li conta a parte", async () => {
     stato.enforcementAttivo = true
     const { data, error } = await resolveBulkRecipients({
       tipo: "lead",
@@ -167,14 +145,14 @@ describe("resolveBulkRecipients", () => {
     })
 
     expect(error).toBeNull()
-    expect(data!.consensoEnforcementAttivo).toBe(true)
-    expect(data!.recipients.map((r) => r.id)).toEqual(["L1", "L3"])
-    expect(data!.esclusiSenzaConsenso).toBe(2)
-    // Senza indirizzo, non "senza consenso": i due conteggi restano distinti.
+    expect(data!.consensoEnforcementAttivo).toBe(false)
+    expect(data!.recipients.map((r) => r.id)).toEqual(["L1", "L2", "L3", "L4"])
+    expect(data!.esclusiSenzaConsenso).toBe(0)
+    expect(data!.senzaConsenso).toEqual([])
     expect(data!.esclusiSenzaEmail).toBe(1)
   })
 
-  it("con interruttore SPENTO include tutti e azzera il conteggio degli esclusi", async () => {
+  it("l'interruttore storico non cambia il risultato", async () => {
     stato.enforcementAttivo = false
     const { data, error } = await resolveBulkRecipients({
       tipo: "lead",
@@ -186,7 +164,7 @@ describe("resolveBulkRecipients", () => {
     expect(data!.consensoEnforcementAttivo).toBe(false)
     expect(data!.recipients.map((r) => r.id)).toEqual(["L1", "L2", "L3", "L4"])
     expect(data!.esclusiSenzaConsenso).toBe(0)
-    expect(data!.senzaConsenso.map((d) => d.id)).toEqual(["L2", "L4"])
+    expect(data!.senzaConsenso).toEqual([])
   })
 
   it("sugli installatori il consenso non si applica, in nessuno dei due stati", async () => {
@@ -209,8 +187,8 @@ describe("resolveBulkRecipients", () => {
   })
 
   it("il filtro di proprieta' per gli AGENT resta indipendente dal consenso", async () => {
-    // L1 consente ma non e' suo, L2 e' suo ma non consente: acceso non deve
-    // restare nessuno, e per due motivi diversi.
+    // L1 consente ma non e' suo, L2 e' suo ma non consente: il consenso non
+    // blocca L2, mentre la proprieta' continua a escludere L1.
     stato.righe = [
       { id: "L1", nome: "Anna", email: "anna@example.test", consenso_contatto_email: true, lead_proprietario_id: "altro" },
       { id: "L2", nome: "Bruno", email: "bruno@example.test", consenso_contatto_email: false, lead_proprietario_id: "u1" },
@@ -223,8 +201,8 @@ describe("resolveBulkRecipients", () => {
       snapshot: snapshotFinto("AGENT"),
     })
 
-    expect(data!.recipients).toEqual([])
+    expect(data!.recipients.map((r) => r.id)).toEqual(["L2"])
     expect(data!.esclusiNonProprietari).toBe(1)
-    expect(data!.esclusiSenzaConsenso).toBe(1)
+    expect(data!.esclusiSenzaConsenso).toBe(0)
   })
 })

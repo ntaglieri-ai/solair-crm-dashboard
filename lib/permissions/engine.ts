@@ -10,6 +10,10 @@ function pageAccessAllows(access: PageAccess | undefined) {
   return access === "r" || access === "rw"
 }
 
+function adminCanAlwaysEditField(module: string, ruoloCode: string) {
+  return ruoloCode === "ADMIN" && (module === "lead" || module === "clienti")
+}
+
 export function createPermissionEngine(snapshot: PermissionSnapshot): PermissionEngine {
   const isSuperadmin = snapshot.subject.ruoloCode === "SUPERADMIN"
 
@@ -32,6 +36,7 @@ export function createPermissionEngine(snapshot: PermissionSnapshot): Permission
 
   function fieldAccess(module: string, field: string): FieldAccess {
     if (isSuperadmin) return "editable"
+    if (adminCanAlwaysEditField(module, snapshot.subject.ruoloCode)) return "editable"
     return snapshot.fields[module]?.[field] ?? snapshot.fields[module]?.["*"] ?? "hidden"
   }
 

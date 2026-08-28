@@ -7,11 +7,7 @@ import { Switch } from "@/components/ui/switch"
 // Toggle del consenso al contatto via email, condiviso da scheda Lead e
 // scheda Cliente.
 //
-// Esiste perche' il blocco degli invii (lib/email/consent.ts) sarebbe
-// altrimenti senza uscita: il consenso arriva solo dal webhook Meta o dai
-// form pubblici, e tutto cio' che e' stato importato da Zoho nasce a false.
-// Senza un modo di registrare in CRM un consenso raccolto a voce, l'agente
-// vedrebbe solo un invio che fallisce sempre.
+// Esiste per registrare il dato quando viene raccolto: non blocca gli invii.
 //
 // Il salvataggio e' immediato e ottimistico, con rollback in caso di errore:
 // stesso comportamento degli altri toggle della scheda.
@@ -44,8 +40,8 @@ export function ConsensoEmailToggle({
         nuovo ? "Consenso e-mail registrato" : "Consenso e-mail revocato",
         {
           description: nuovo
-            ? "Da ora e' possibile scrivere a questo contatto."
-            : "Gli invii email verso questo contatto sono bloccati.",
+            ? "Il dato e' stato salvato sulla scheda del contatto."
+            : "Il dato e' stato aggiornato sulla scheda del contatto.",
         },
       )
     } catch {
@@ -67,7 +63,7 @@ export function ConsensoEmailToggle({
       <span className="text-[11px] text-muted-foreground">
         {valore
           ? "E-mail: consenso registrato"
-          : "E-mail: nessun consenso — invii bloccati"}
+          : "E-mail: consenso non registrato"}
       </span>
     </div>
   )

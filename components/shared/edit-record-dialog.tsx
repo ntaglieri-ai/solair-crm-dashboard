@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -11,14 +11,90 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
+import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
+import type { Lead, ClienteRecord } from "@/lib/mock-data"
+import type { PermissionEngine } from "@/lib/permissions/types"
 
 export type EditField = {
   key: string
   label: string
-  value: string
-  type?: "text" | "email" | "tel"
+  value: unknown
+  type?: "text" | "email" | "tel" | "number" | "boolean" | "textarea"
+}
+
+type EditValue = string | boolean
+
+function fieldType(type: "text" | "numeric" | "boolean" | "timestamp") {
+  if (type === "boolean") return "boolean"
+  if (type === "numeric") return "number"
+  return "text"
+}
+
+function initialEditValue(field: EditField): EditValue {
+  if (field.type === "boolean") return field.value === true
+  if (field.value === null || field.value === undefined) return ""
+  return String(field.value)
+}
+
+function outgoingEditValue(field: EditField, value: EditValue) {
+  if (field.type === "boolean") return value === true
+  if (field.type === "number") {
+    const text = String(value).trim()
+    if (!text) return null
+    const number = Number(text)
+    return Number.isFinite(number) ? number : null
+  }
+  return String(value)
+}
+
+function isLongField(label: string) {
+  return /descrizione|note|materiali|assistenza|stratigrafia/i.test(label)
+}
+
+function isEditableRuntimeValue(value: unknown) {
+  return (
+    value === null ||
+    value === undefined ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  )
+}
+
+export function buildLeadEditFields(
+  lead: Lead,
+  permissions: PermissionEngine,
+): EditField[] {
+  return LEAD_RECORD_FIELDS
+    .filter((field) => permissions.canField("lead", field.column, "edit"))
+    .map((field) => ({
+      key: String(field.appField),
+      label: String(field.appField),
+      value: lead[field.appField],
+      type: isLongField(String(field.appField))
+        ? "textarea"
+        : fieldType(field.type),
+    }))
+}
+
+export function buildClienteEditFields(
+  cliente: ClienteRecord,
+  permissions: PermissionEngine,
+): EditField[] {
+  return CLIENTI_RECORD_FIELDS
+    .filter((field) => permissions.canField("clienti", field.column, "edit"))
+    .filter((field) => isEditableRuntimeValue(cliente[field.appField as keyof ClienteRecord]))
+    .map((field) => ({
+      key: field.appField,
+      label: field.appField,
+      value: cliente[field.appField as keyof ClienteRecord],
+      type: isLongField(field.appField) ? "textarea" : fieldType(field.type),
+    }))
 }
 
 /**
@@ -33,7 +109,8 @@ export function EditRecordDialog({
   title,
   fields,
   endpoint,
-  buildBody,
+  buildBody = (values) => values,
+  onSaved,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -41,25 +118,77 @@ export function EditRecordDialog({
   fields: EditField[]
   endpoint: string
   /** Mappa i valori del form (per key) nel body atteso dall'API PATCH. */
-  buildBody: (values: Record<string, string>) => Record<string, unknown>
+  buildBody?: (values: Record<string, unknown>) => Record<string, unknown>
+  onSaved?: () => void
 }) {
-  const router = useRouter()
-  const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(fields.map((f) => [f.key, f.value])),
+  const valueSignature = JSON.stringify(fields.map((field) => [field.key, field.value, field.type]))
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <EditRecordDialogBody
+          key={valueSignature}
+          fields={fields}
+          endpoint={endpoint}
+          buildBody={buildBody}
+          onOpenChange={onOpenChange}
+          onSaved={onSaved}
+        />
+      </DialogContent>
+    </Dialog>
   )
+}
+
+function EditRecordDialogBody({
+  fields,
+  endpoint,
+  buildBody,
+  onOpenChange,
+  onSaved,
+}: {
+  fields: EditField[]
+  endpoint: string
+  buildBody: (values: Record<string, unknown>) => Record<string, unknown>
+  onOpenChange: (open: boolean) => void
+  onSaved?: () => void
+}) {
+  const initialValues = useMemo(
+    () => Object.fromEntries(fields.map((field) => [field.key, initialEditValue(field)])),
+    [fields],
+  )
+  const [values, setValues] = useState<Record<string, EditValue>>(initialValues)
   const [saving, setSaving] = useState(false)
+  const router = useRouter()
 
   async function handleSave() {
+    const changed = Object.fromEntries(
+      fields
+        .filter((field) => values[field.key] !== initialValues[field.key])
+        .map((field) => [
+          field.key,
+          outgoingEditValue(field, values[field.key] ?? ""),
+        ]),
+    )
+
+    if (Object.keys(changed).length === 0) {
+      onOpenChange(false)
+      return
+    }
+
     setSaving(true)
     try {
       const res = await fetch(endpoint, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildBody(values)),
+        body: JSON.stringify(buildBody(changed)),
       })
       if (!res.ok) throw new Error("Salvataggio non riuscito")
       toast.success("Modifiche salvate")
       onOpenChange(false)
+      onSaved?.()
       router.refresh()
     } catch {
       toast.error("Salvataggio non riuscito")
@@ -69,23 +198,52 @@ export function EditRecordDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
-        <div className="grid grid-cols-1 gap-4 py-1 sm:grid-cols-2">
+    <>
+        <div className="grid max-h-[min(68dvh,720px)] grid-cols-1 gap-4 overflow-y-auto pr-1 py-1 sm:grid-cols-2 lg:grid-cols-3">
           {fields.map((field) => (
-            <div key={field.key} className="flex flex-col gap-1.5">
-              <Label htmlFor={`edit-${field.key}`}>{field.label}</Label>
-              <Input
-                id={`edit-${field.key}`}
-                type={field.type ?? "text"}
-                value={values[field.key] ?? ""}
-                onChange={(e) =>
-                  setValues((prev) => ({ ...prev, [field.key]: e.target.value }))
-                }
-              />
+            <div
+              key={field.key}
+              className={field.type === "textarea" ? "flex flex-col gap-1.5 sm:col-span-2 lg:col-span-3" : "flex flex-col gap-1.5"}
+            >
+              {field.type === "boolean" ? (
+                <label
+                  htmlFor={`edit-${field.key}`}
+                  className="flex min-h-10 items-center gap-2 rounded-lg border border-input px-3 py-2 text-sm"
+                >
+                  <Checkbox
+                    id={`edit-${field.key}`}
+                    checked={values[field.key] === true}
+                    onCheckedChange={(checked) =>
+                      setValues((prev) => ({ ...prev, [field.key]: checked === true }))
+                    }
+                  />
+                  <span>{field.label}</span>
+                </label>
+              ) : (
+                <>
+                  <Label htmlFor={`edit-${field.key}`}>{field.label}</Label>
+                  {field.type === "textarea" ? (
+                    <Textarea
+                      id={`edit-${field.key}`}
+                      value={String(values[field.key] ?? "")}
+                      onChange={(e) =>
+                        setValues((prev) => ({ ...prev, [field.key]: e.target.value }))
+                      }
+                      className="min-h-28"
+                    />
+                  ) : (
+                    <Input
+                      id={`edit-${field.key}`}
+                      type={field.type ?? "text"}
+                      step={field.type === "number" ? "any" : undefined}
+                      value={String(values[field.key] ?? "")}
+                      onChange={(e) =>
+                        setValues((prev) => ({ ...prev, [field.key]: e.target.value }))
+                      }
+                    />
+                  )}
+                </>
+              )}
             </div>
           ))}
         </div>
@@ -97,7 +255,6 @@ export function EditRecordDialog({
             {saving ? "Salvataggio..." : "Salva modifiche"}
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </>
   )
 }

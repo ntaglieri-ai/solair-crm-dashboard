@@ -11,13 +11,7 @@ import { createClient } from "@/lib/supabase/server"
 import type { PermissionSnapshot } from "@/lib/permissions/types"
 import type { BulkRecipient } from "./bulk-mailer"
 import type { BulkPlaceholder } from "./bulk-template"
-import {
-  EMAIL_CONSENT_COLUMN,
-  hasEmailConsent,
-  type ConsentEntita,
-  type DestinatarioConsenziente,
-} from "./consent"
-import { leggiConsensoEnforcement } from "./consent-enforcement"
+import { EMAIL_CONSENT_COLUMN, type ConsentEntita, type DestinatarioConsenziente } from "./consent"
 
 export const BULK_RECORD_TIPI = ["lead", "cliente", "installatore"] as const
 
@@ -127,29 +121,21 @@ export type ResolvedRecipients = {
   /** Esclusi perche' senza indirizzo email utilizzabile, o non piu' leggibili. */
   esclusiSenzaEmail: number
   /**
-   * Esclusi perche' senza consenso_contatto_email: hanno un indirizzo valido
-   * ma non si puo' scrivere loro. Zero sugli installatori, e zero anche quando
-   * l'interruttore globale e' spento (li' non vengono esclusi, vengono inclusi).
+   * Compatibilita' con la vecchia risposta API: il consenso non esclude piu'
+   * nessun destinatario.
    */
   esclusiSenzaConsenso: number
-  /**
-   * Chi non ha il consenso, a prescindere dall'interruttore: esclusi se e'
-   * acceso, destinatari da registrare in audit se e' spento.
-   */
+  /** Sempre vuoto: nessun warning/audit per consenso assente. */
   senzaConsenso: DestinatarioConsenziente[]
-  /** Stato dell'interruttore globale al momento della risoluzione. */
+  /** Compatibilita': l'enforcement consenso non e' operativo. */
   consensoEnforcementAttivo: boolean
 }
 
 /**
- * Applica, nell'ordine: filtro di proprieta' (solo per ruolo AGENT),
- * esclusione dei record senza email ed esclusione di chi non ha dato il
- * consenso al contatto via email. Non applica il tetto di
- * MAX_BULK_RECIPIENTS: quello e' un errore di validazione, non un
- * troncamento silenzioso, e va gestito dal chiamante.
- *
- * Il filtro di consenso sta QUI e non nella route proprio per il motivo per
- * cui esiste questo file: anteprima e invio devono contare gli stessi esclusi.
+ * Applica filtro di proprieta' (solo per ruolo AGENT) ed esclusione dei record
+ * senza email. Il consenso viene mantenuto come dato, ma non come filtro.
+ * Non applica il tetto di MAX_BULK_RECIPIENTS: quello e' un errore di
+ * validazione, non un troncamento silenzioso, e va gestito dal chiamante.
  */
 export async function resolveBulkRecipients(params: {
   tipo: BulkRecordTipo
@@ -158,7 +144,6 @@ export async function resolveBulkRecipients(params: {
 }): Promise<{ data: ResolvedRecipients | null; error: string | null }> {
   const config = TARGETS[params.tipo]
   const recordIds = [...new Set(params.recordIds)]
-  const { attivo: enforcementAttivo } = await leggiConsensoEnforcement()
 
   if (recordIds.length === 0) {
     return {
@@ -169,7 +154,7 @@ export async function resolveBulkRecipients(params: {
         esclusiSenzaEmail: 0,
         esclusiSenzaConsenso: 0,
         senzaConsenso: [],
-        consensoEnforcementAttivo: true,
+        consensoEnforcementAttivo: false,
       },
       error: null,
     }
@@ -194,20 +179,12 @@ export async function resolveBulkRecipients(params: {
     : rows
 
   const recipients: BulkRecipient[] = []
-  const senzaConsenso: DestinatarioConsenziente[] = []
   let conEmail = 0
 
   for (const row of owned) {
     const mapped = config.toRecipient(row)
     if (!mapped.email.includes("@")) continue
     conEmail++
-
-    // Un destinatario raggiungibile ma senza consenso non e' "un record senza
-    // email": va contato a parte, altrimenti l'agente legge "12 esclusi" e
-    // pensa a indirizzi mancanti invece che a un blocco di consenso.
-    const senza = Boolean(config.consentEntita) && !hasEmailConsent(row)
-    if (senza) senzaConsenso.push({ id: String(row.id), email: mapped.email })
-    if (senza && enforcementAttivo) continue
 
     recipients.push({
       id: String(row.id),
@@ -227,9 +204,9 @@ export async function resolveBulkRecipients(params: {
       // nel frattempo, o non leggibile per RLS): comunque non inviabili, e
       // attribuirli alla proprieta' sarebbe fuorviante per un Director.
       esclusiSenzaEmail: recordIds.length - esclusiNonProprietari - conEmail,
-      esclusiSenzaConsenso: enforcementAttivo ? senzaConsenso.length : 0,
-      senzaConsenso,
-      consensoEnforcementAttivo: enforcementAttivo,
+      esclusiSenzaConsenso: 0,
+      senzaConsenso: [],
+      consensoEnforcementAttivo: false,
     },
     error: null,
   }

@@ -5,8 +5,7 @@
 //
 // Due fasi nello stesso dialog:
 //  1. "compose" — oggetto, template con placeholder, anteprima resa sul primo
-//     destinatario reale e avviso sugli esclusi (proprieta' / email mancante /
-//     consenso mancante).
+//     destinatario reale e avviso sugli esclusi (proprieta' / email mancante).
 //     I conteggi arrivano da /api/email-massa/preview, che usa la STESSA
 //     risoluzione destinatari dell'invio: nessuna stima lato client.
 //  2. "sending" — l'invio non e' sincrono (pacing 400ms per destinatario, vedi
@@ -47,11 +46,8 @@ type PreviewResponse = {
   destinatari: number
   esclusiNonProprietari: number
   esclusiSenzaEmail: number
-  /** Con indirizzo valido ma senza consenso al contatto via email. */
   esclusiSenzaConsenso: number
-  /** Interruttore globale del blocco consenso. */
   consensoEnforcementAttivo: boolean
-  /** Destinatari senza consenso che verrebbero raggiunti lo stesso (blocco off). */
   inviatiSenzaConsenso: number
   esempio: { email: string; placeholders: Record<string, string> } | null
 }
@@ -183,11 +179,6 @@ export function BulkEmailDialog({
   const destinatari = preview?.destinatari ?? 0
   const esclusiProprieta = preview?.esclusiNonProprietari ?? 0
   const esclusiEmail = preview?.esclusiSenzaEmail ?? 0
-  const esclusiConsenso = preview?.esclusiSenzaConsenso ?? 0
-  // Default true finche' l'anteprima non risponde: non si mostra un avviso di
-  // "blocco spento" per un dato che non e' ancora arrivato.
-  const enforcementAttivo = preview?.consensoEnforcementAttivo ?? true
-  const senzaConsensoInclusi = preview?.inviatiSenzaConsenso ?? 0
   const esempio = preview?.esempio ?? null
 
   const oggettoPreview = esempio ? renderTemplate(oggetto, esempio.placeholders) : oggetto
@@ -309,30 +300,6 @@ export function BulkEmailDialog({
                 {esclusiEmail} esclusi perché senza indirizzo email.
               </p>
             ) : null}
-            {/* Blocco globale spento: l'avviso e' rosso e viene prima di tutto
-                il resto. L'agente sta per scrivere a chi non ha acconsentito, e
-                deve saperlo mentre compone, non dopo. */}
-            {!enforcementAttivo && senzaConsensoInclusi > 0 ? (
-              <p className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
-                <IconAlertTriangle size={16} stroke={1.8} className="mt-0.5 shrink-0" />
-                Blocco consenso disattivato — invii senza filtro attivi.{" "}
-                {senzaConsensoInclusi} destinatari di questa selezione non hanno dato
-                il consenso e riceveranno comunque il messaggio. L&apos;invio verra&apos;
-                registrato nell&apos;audit log.
-              </p>
-            ) : null}
-            {/* Distinto da "senza indirizzo email": questi un indirizzo ce
-                l'hanno, ma non si puo' scrivere loro. Confonderli
-                nasconderebbe la sola esclusione a cui l'agente puo' rimediare. */}
-            {esclusiConsenso > 0 ? (
-              <p className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-sm text-amber-700">
-                <IconAlertTriangle size={16} stroke={1.8} className="mt-0.5 shrink-0" />
-                {esclusiConsenso} esclusi perché senza consenso al contatto via email.
-                Registra il consenso nella scheda del contatto per poterli
-                includere.
-              </p>
-            ) : null}
-
             <MittenteSelect state={mittenti} disabled={submitting} />
 
             <div className="flex flex-col gap-1.5">

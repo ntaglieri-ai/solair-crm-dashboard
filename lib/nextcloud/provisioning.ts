@@ -12,11 +12,13 @@ import { randomBytes } from "node:crypto"
 import {
   basicAuth,
   nextcloudAdminConfig,
+  nextcloudProvisioningConfig,
   nextcloudUsernameFromEmail,
   ocsHeaders,
   type NextcloudAdminConfig,
 } from "./config"
 import {
+  getNextcloudAppPassword,
   storeNextcloudCredential,
   type NextcloudCredStatus,
 } from "./credentials"
@@ -31,6 +33,13 @@ type OcsMeta = { status: string; statuscode: number; message: string }
 // successo; 102 = risorsa gia' esistente.
 function isOcsOk(meta: OcsMeta): boolean {
   return meta.statuscode === 100 || meta.statuscode === 200
+}
+
+function provisioningFailure(action: string, meta: OcsMeta): string {
+  if (/password confirmation is required/i.test(meta.message)) {
+    return `${action}: Nextcloud richiede la password principale. Configurare NEXTCLOUD_PROVISIONING_USER e NEXTCLOUD_PROVISIONING_PASSWORD; le app-password non sono ammesse per le API amministrative.`
+  }
+  return `${action} (OCS ${meta.statuscode}: ${meta.message})`
 }
 
 async function parseOcs(res: Response): Promise<{ meta: OcsMeta; data: unknown }> {
@@ -264,41 +273,13 @@ export async function syncNextcloudUserGroup(
   userid: string,
   roleCode: string,
 ): Promise<{ ok: boolean; group: string | null; error: string | null }> {
-  const cfg = nextcloudAdminConfig()
+  const cfg = nextcloudProvisioningConfig()
   const desired = nextcloudGroupForRole(roleCode)
   if (!cfg) return { ok: false, group: desired, error: "Credenziali admin Nextcloud non configurate" }
   if (!desired) return { ok: false, group: null, error: `Ruolo CRM non supportato: ${roleCode}` }
 
   try {
-    const created = await ocsRequest(cfg, "groups", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ groupid: desired }),
-    })
-    // 102 = il gruppo esiste gia'.
-    if (!isOcsOk(created.meta) && created.meta.statuscode !== 102) {
-      return {
-        ok: false,
-        group: desired,
-        error: `Creazione gruppo ${desired} fallita (OCS ${created.meta.statuscode}: ${created.meta.message})`,
-      }
-    }
-
-    const added = await ocsRequest(cfg, `users/${encodeURIComponent(userid)}/groups`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ groupid: desired }),
-    })
-    // Alcune versioni rispondono 102 se l'utente e' gia' nel gruppo.
-    if (!isOcsOk(added.meta) && added.meta.statuscode !== 102) {
-      return {
-        ok: false,
-        group: desired,
-        error: `Assegnazione a ${desired} fallita (OCS ${added.meta.statuscode}: ${added.meta.message})`,
-      }
-    }
-
-    const current = await ocsRequest(cfg, `users/${encodeURIComponent(userid)}`)
+    let current = await ocsRequest(cfg, `users/${encodeURIComponent(userid)}`)
     if (!isOcsOk(current.meta)) {
       return {
         ok: false,
@@ -307,7 +288,45 @@ export async function syncNextcloudUserGroup(
       }
     }
     const groups = ((current.data as { groups?: unknown } | null)?.groups ?? []) as unknown
-    const currentGroups = Array.isArray(groups) ? groups.filter((g): g is string => typeof g === "string") : []
+    let currentGroups = Array.isArray(groups) ? groups.filter((g): g is string => typeof g === "string") : []
+
+    if (!currentGroups.includes(desired)) {
+      const created = await ocsRequest(cfg, "groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ groupid: desired }),
+      })
+      // 102 = il gruppo esiste gia'.
+      if (!isOcsOk(created.meta) && created.meta.statuscode !== 102) {
+        return {
+          ok: false,
+          group: desired,
+          error: provisioningFailure(`Creazione gruppo ${desired} fallita`, created.meta),
+        }
+      }
+
+      const added = await ocsRequest(cfg, `users/${encodeURIComponent(userid)}/groups`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ groupid: desired }),
+      })
+      if (!isOcsOk(added.meta) && added.meta.statuscode !== 102) {
+        return {
+          ok: false,
+          group: desired,
+          error: provisioningFailure(`Assegnazione a ${desired} fallita`, added.meta),
+        }
+      }
+
+      current = await ocsRequest(cfg, `users/${encodeURIComponent(userid)}`)
+      const refreshed = ((current.data as { groups?: unknown } | null)?.groups ?? []) as unknown
+      currentGroups = Array.isArray(refreshed)
+        ? refreshed.filter((g): g is string => typeof g === "string")
+        : []
+      if (!isOcsOk(current.meta) || !currentGroups.includes(desired)) {
+        return { ok: false, group: desired, error: `Verifica gruppo ${desired} fallita` }
+      }
+    }
 
     for (const group of currentGroups) {
       if (group === desired || (!CRM_NEXTCLOUD_GROUPS.has(group) && !LEGACY_CRM_GROUPS.has(group))) continue
@@ -377,13 +396,14 @@ export type ProvisionResult = {
  */
 async function createUser(
   cfg: NextcloudAdminConfig,
-  params: { userid: string; password: string; displayName: string },
+  params: { userid: string; password: string; displayName: string; group: string },
 ): Promise<OcsMeta> {
   const body = new URLSearchParams({
     userid: params.userid,
     password: params.password,
     displayName: params.displayName,
   })
+  body.append("groups[]", params.group)
   const res = await fetch(`${cfg.baseUrl}/ocs/v2.php/cloud/users?format=json`, {
     method: "POST",
     headers: ocsHeaders({
@@ -509,16 +529,23 @@ export async function provisionNextcloudUser(utente: {
   id: string
   email: string
   nome: string
+  ruolo: string
   /** Password principale condivisa con il CRM. Se omessa ne viene generata una. */
   password?: string
 }): Promise<ProvisionResult> {
-  const cfg = nextcloudAdminConfig()
+  const cfg = nextcloudProvisioningConfig()
   const username = nextcloudUsernameFromEmail(utente.email)
+  const group = nextcloudGroupForRole(utente.ruolo)
 
   if (!cfg) {
-    const error = "Credenziali admin Nextcloud non configurate (NEXTCLOUD_ADMIN_USER/PASSWORD)"
+    const error = "Credenziali provisioning Nextcloud non configurate"
     await storeNextcloudCredential({ utenteId: utente.id, username, status: "pending", lastError: error })
     return { status: "pending", username, appPassword: null, error }
+  }
+  if (!group) {
+    const error = `Ruolo CRM non supportato dal provisioning Nextcloud: ${utente.ruolo}`
+    await storeNextcloudCredential({ utenteId: utente.id, username, status: "failed", lastError: error })
+    return { status: "failed", username, appPassword: null, error }
   }
 
   try {
@@ -527,6 +554,7 @@ export async function provisionNextcloudUser(utente: {
       userid: username,
       password: initialPassword,
       displayName: utente.nome,
+      group,
     })
 
     // 102 = utente gia' esistente: non conosciamo la sua password, non
@@ -539,7 +567,7 @@ export async function provisionNextcloudUser(utente: {
     }
 
     if (!isOcsOk(meta)) {
-      const error = `Creazione account Nextcloud fallita (OCS ${meta.statuscode}: ${meta.message})`
+      const error = provisioningFailure("Creazione account Nextcloud fallita", meta)
       await storeNextcloudCredential({ utenteId: utente.id, username, status: "failed", lastError: error })
       return { status: "failed", username, appPassword: null, error }
     }
@@ -552,6 +580,13 @@ export async function provisionNextcloudUser(utente: {
       console.warn(
         `[nextcloud] impostazione email fallita per "${username}" (OCS ${emailMeta.statuscode}: ${emailMeta.message})`,
       )
+    }
+
+    const groupSync = await syncNextcloudUserGroup(username, utente.ruolo)
+    if (!groupSync.ok) {
+      const error = groupSync.error ?? `Assegnazione gruppo ${group} fallita`
+      await storeNextcloudCredential({ utenteId: utente.id, username, status: "failed", lastError: error })
+      return { status: "failed", username, appPassword: null, error }
     }
 
     const appPassword = await mintAppPassword(cfg, username, initialPassword)
@@ -578,4 +613,48 @@ export async function provisionNextcloudUser(utente: {
     await storeNextcloudCredential({ utenteId: utente.id, username, status: "failed", lastError: error })
     return { status: "failed", username, appPassword: null, error }
   }
+}
+
+/**
+ * Riconcilia un utente CRM in modo idempotente:
+ * - se l'account Nextcloud non esiste, lo crea gia' nel gruppo del ruolo;
+ * - se esiste, allinea e verifica il gruppo;
+ * - dichiara active solo se esistono anche le credenziali WebDAV cifrate.
+ */
+export async function reconcileNextcloudUser(utente: {
+  id: string
+  email: string
+  nome: string
+  ruolo: string
+}): Promise<ProvisionResult> {
+  const username = nextcloudUsernameFromEmail(utente.email)
+  const exists = await nextcloudUserExists(username)
+  if (exists === false) return provisionNextcloudUser(utente)
+  if (exists === null) {
+    const error = "Verifica account Nextcloud non riuscita"
+    await storeNextcloudCredential({ utenteId: utente.id, username, status: "failed", lastError: error })
+    return { status: "failed", username, appPassword: null, error }
+  }
+
+  const groupSync = await syncNextcloudUserGroup(username, utente.ruolo)
+  if (!groupSync.ok) {
+    const error = groupSync.error ?? "Sincronizzazione gruppo Nextcloud fallita"
+    await storeNextcloudCredential({ utenteId: utente.id, username, status: "failed", lastError: error })
+    return { status: "failed", username, appPassword: null, error }
+  }
+
+  const appPassword = await getNextcloudAppPassword(utente.id)
+  if (!appPassword) {
+    const error = `Account Nextcloud esistente e gruppo ${groupSync.group} corretto, ma credenziale WebDAV assente: riconciliazione credenziale necessaria`
+    await storeNextcloudCredential({ utenteId: utente.id, username, status: "failed", lastError: error })
+    return { status: "failed", username, appPassword: null, error }
+  }
+
+  await storeNextcloudCredential({
+    utenteId: utente.id,
+    username,
+    status: "active",
+    lastError: null,
+  })
+  return { status: "active", username, appPassword: null, error: null }
 }

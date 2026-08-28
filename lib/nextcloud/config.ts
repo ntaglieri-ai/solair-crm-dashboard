@@ -28,6 +28,24 @@ export function nextcloudAdminConfig(): NextcloudAdminConfig | null {
   return { baseUrl, adminUser, adminPassword }
 }
 
+/**
+ * Credenziale dedicata alle API di provisioning. Nextcloud 33 rifiuta le
+ * app-password sulle operazioni amministrative protette da conferma password:
+ * serve quindi la password principale di un account locale autorizzato.
+ *
+ * Il fallback mantiene compatibili gli ambienti esistenti, ma in produzione
+ * e' preferibile configurare le due variabili NEXTCLOUD_PROVISIONING_* con un
+ * account tecnico dedicato, senza riusare l'account umano amministratore.
+ */
+export function nextcloudProvisioningConfig(): NextcloudAdminConfig | null {
+  const baseUrl = process.env.NEXTCLOUD_URL?.replace(/\/+$/, "")
+  const adminUser = process.env.NEXTCLOUD_PROVISIONING_USER || process.env.NEXTCLOUD_ADMIN_USER
+  const adminPassword =
+    process.env.NEXTCLOUD_PROVISIONING_PASSWORD || process.env.NEXTCLOUD_ADMIN_PASSWORD
+  if (!baseUrl || !adminUser || !adminPassword) return null
+  return { baseUrl, adminUser, adminPassword }
+}
+
 /** Chiave simmetrica pgcrypto per cifrare/decifrare le app-password. */
 export function nextcloudCredKey(): string {
   const key = process.env.NEXTCLOUD_CRED_ENC_KEY

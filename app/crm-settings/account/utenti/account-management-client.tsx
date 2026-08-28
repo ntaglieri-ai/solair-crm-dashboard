@@ -7,6 +7,7 @@ import {
   MapPin,
   MoreHorizontal,
   Plus,
+  RefreshCw,
   Search,
   ShieldCheck,
   UserCheck,
@@ -262,6 +263,7 @@ export function AccountManagementClient({
   const [selected, setSelected] = useState<Utente | null>(null)
   const [editForm, setEditForm] = useState<UserForm>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const [syncingNextcloud, setSyncingNextcloud] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Utente | null>(null)
 
   const roleLabel = useMemo(
@@ -478,6 +480,72 @@ export function AccountManagementClient({
     }
   }
 
+  async function syncAllNextcloud() {
+    const targets = users.filter((user) => user.attivo)
+    if (targets.length === 0) return
+    setSyncingNextcloud(true)
+    setError(null)
+    let active = 0
+    const failures: string[] = []
+
+    try {
+      // Concorrenza limitata: evita un burst di richieste amministrative verso
+      // Nextcloud e mantiene la procedura utilizzabile anche con molti account.
+      for (let index = 0; index < targets.length; index += 3) {
+        const batch = targets.slice(index, index + 3)
+        const results = await Promise.all(
+          batch.map(async (user) => {
+            const response = await fetch(`/api/crm-settings/utenti/${user.id}/nextcloud`, {
+              method: "POST",
+            })
+            const body = (await response.json().catch(() => null)) as {
+              nextcloud?: { status: NextcloudStatus; error: string | null }
+              error?: string
+            } | null
+            if (!response.ok || !body?.nextcloud) {
+              return {
+                user,
+                status: "failed" as NextcloudStatus,
+                error: body?.error ?? "Sincronizzazione non riuscita",
+              }
+            }
+            return { user, ...body.nextcloud }
+          }),
+        )
+
+        for (const result of results) {
+          if (result.status === "active") active += 1
+          else failures.push(`${result.user.email}: ${result.error ?? "non riuscita"}`)
+          setUsers((previous) =>
+            previous.map((user) =>
+              user.id === result.user.id
+                ? {
+                    ...user,
+                    nextcloud_status: result.status,
+                    nextcloud_error: result.error,
+                  }
+                : user,
+            ),
+          )
+        }
+      }
+
+      if (failures.length > 0) {
+        setError(`Nextcloud: ${active} account allineati, ${failures.length} da correggere. ${failures.slice(0, 3).join(" | ")}`)
+        toast.error("Sincronizzazione Nextcloud incompleta", {
+          description: `${active} allineati, ${failures.length} non riusciti`,
+        })
+      } else {
+        toast.success("Nextcloud sincronizzato", {
+          description: `${active} account e relativi gruppi verificati`,
+        })
+      }
+      router.refresh()
+    } finally {
+      setSyncingNextcloud(false)
+    }
+  }
+
   async function retryWelcomeEmail(user: Utente) {
     setSaving(true)
     setError(null)
@@ -557,16 +625,26 @@ export function AccountManagementClient({
               Gestisci account nominativi, ruolo, sede, stato di accesso e profilo operativo.
             </p>
           </div>
-          <Button
-            className="bg-[#0176d3] text-white shadow-[0_14px_30px_rgb(1_118_211/24%)] hover:bg-[#095ca8]"
-            onClick={() => {
-              setNewForm(EMPTY_FORM)
-              setNewOpen(true)
-            }}
-          >
-            <Plus className="size-4" />
-            Nuovo account
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              disabled={syncingNextcloud || saving}
+              onClick={() => void syncAllNextcloud()}
+            >
+              <RefreshCw className={cn("size-4", syncingNextcloud && "animate-spin")} />
+              {syncingNextcloud ? "Sincronizzazione…" : "Sincronizza Nextcloud"}
+            </Button>
+            <Button
+              className="bg-[#0176d3] text-white shadow-[0_14px_30px_rgb(1_118_211/24%)] hover:bg-[#095ca8]"
+              onClick={() => {
+                setNewForm(EMPTY_FORM)
+                setNewOpen(true)
+              }}
+            >
+              <Plus className="size-4" />
+              Nuovo account
+            </Button>
+          </div>
         </div>
       </section>
       <AccountProfileCard profile={currentProfile} />
@@ -710,11 +788,11 @@ export function AccountManagementClient({
                       <DropdownMenuItem onClick={() => toggleActive(user)}>
                         {user.attivo ? "Disattiva" : "Attiva"}
                       </DropdownMenuItem>
-                      {user.nextcloud_status !== "active" ? (
-                        <DropdownMenuItem onClick={() => retryNextcloud(user)}>
-                          Riprova provisioning Nextcloud
-                        </DropdownMenuItem>
-                      ) : null}
+                      <DropdownMenuItem onClick={() => retryNextcloud(user)}>
+                        {user.nextcloud_status === "active"
+                          ? "Verifica provisioning Nextcloud"
+                          : "Riprova provisioning Nextcloud"}
+                      </DropdownMenuItem>
                       {user.welcome_email_status !== "sent" ? (
                         <DropdownMenuItem onClick={() => retryWelcomeEmail(user)}>
                           Reinvia password iniziale

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { requireApiAction } from "@/lib/permissions/server"
-import { provisionNextcloudUser } from "@/lib/nextcloud/provisioning"
+import { reconcileNextcloudUser } from "@/lib/nextcloud/provisioning"
 
 // Rilancio manuale del provisioning Nextcloud per un utente (azione "Riprova"
 // dalla UI Account Management). Idempotente lato CRM: riusa lo stesso username.
@@ -16,7 +16,7 @@ export async function POST(
   const supabase = await createClient()
   const { data: utente, error } = await supabase
     .from("utenti")
-    .select("id, nome, email")
+    .select("id, nome, email, ruolo, ruolo_id")
     .eq("id", id)
     .single()
 
@@ -24,10 +24,21 @@ export async function POST(
     return NextResponse.json({ error: "Utente non trovato" }, { status: 404 })
   }
 
-  const result = await provisionNextcloudUser({
+  let ruolo = utente.ruolo
+  if (utente.ruolo_id) {
+    const { data: role } = await supabase
+      .from("ruoli")
+      .select("code")
+      .eq("id", utente.ruolo_id)
+      .maybeSingle()
+    ruolo = role?.code ?? ruolo
+  }
+
+  const result = await reconcileNextcloudUser({
     id: utente.id,
     email: utente.email,
     nome: utente.nome,
+    ruolo,
   })
 
   return NextResponse.json({

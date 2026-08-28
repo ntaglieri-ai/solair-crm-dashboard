@@ -6,7 +6,7 @@ import {
   accountUserErrorMessage,
   resolveRole,
 } from "@/lib/crm-settings/roles"
-import { provisionNextcloudUser, syncNextcloudUserGroup } from "@/lib/nextcloud/provisioning"
+import { provisionNextcloudUser } from "@/lib/nextcloud/provisioning"
 import { getNextcloudCredentialStatuses } from "@/lib/nextcloud/credentials"
 import { generateTempPassword, provisionAuthUser } from "@/lib/auth/user-provisioning"
 
@@ -133,20 +133,13 @@ export async function POST(request: Request) {
         id: data.id,
         email: data.email,
         nome: data.nome,
+        ruolo: data.ruolo,
       })
       if (provisioning.status !== "active") {
         console.error(
           `[nextcloud] provisioning ${provisioning.status} per utente ${data.id}:`,
           provisioning.error,
         )
-      } else {
-        const groupSync = await syncNextcloudUserGroup(provisioning.username, data.ruolo)
-        if (!groupSync.ok) {
-          console.error(
-            `[nextcloud] assegnazione gruppo iniziale fallita per utente ${data.id}:`,
-            groupSync.error,
-          )
-        }
       }
     } catch (err) {
       console.error(`[nextcloud] provisioning in background fallito per utente ${data.id}:`, err)

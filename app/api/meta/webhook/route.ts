@@ -53,6 +53,7 @@ type MetaLeadResponse = {
 type FieldMap = Record<string, string>
 
 const DEFAULT_GRAPH_API_VERSION = "v21.0"
+const META_SAMPLE_LEADGEN_IDS = new Set(["444444444444"])
 
 export async function GET(request: Request) {
   const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN
@@ -170,6 +171,13 @@ function extractLeadgenEvents(payload: unknown): MetaLeadgenEvent[] {
 
 async function processLeadgenEvent(event: MetaLeadgenEvent) {
   try {
+    if (META_SAMPLE_LEADGEN_IDS.has(event.leadgenId)) {
+      console.info("[meta/webhook] Test Meta ricevuto: lead sample non leggibile via Graph", {
+        leadgenId: event.leadgenId,
+      })
+      return
+    }
+
     const token = getPageAccessToken(event.pageId)
     const metaLead = await fetchMetaLead(event.leadgenId, token)
     const intakePayload = mapMetaLeadToIntakePayload(metaLead, event)
@@ -299,6 +307,8 @@ function mapMetaLeadToIntakePayload(
     citta,
     provincia,
     tipoProprieta,
+    socialLeadId: event.leadgenId,
+    sourcePlatform: "facebook",
     consensoTelefono: consensi.telefono,
     consensoWhatsapp: consensi.whatsapp,
     consensoEmail: consensi.email,

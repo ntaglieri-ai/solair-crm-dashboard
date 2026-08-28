@@ -68,7 +68,39 @@ function FilterSelect({
   )
 }
 
-export function InstallatoreFilters({
+export function countActiveInstallatoreFilters(filters: InstallatoreFilterState): number {
+  return (
+    (filters.proprietario !== "all" ? 1 : 0) +
+    (filters.tag !== "all" ? 1 : 0) +
+    (filters.stato !== "all" ? 1 : 0)
+  )
+}
+
+/** Sola barra di ricerca: resta sempre in vista sopra la lista. */
+export function InstallatoreSearchInput({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className="relative min-w-0 flex-1">
+      <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground sm:left-4 sm:size-5" />
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Cerca per nome o e-mail"
+        className="h-10 rounded-lg border-border bg-card pl-10 text-sm shadow-sm sm:h-12 sm:pl-12 sm:text-[15px]"
+        aria-label="Cerca installatori"
+      />
+    </div>
+  )
+}
+
+/** Griglia dei filtri (stato/proprietario/tag), pensata per vivere dentro il
+ * drawer "Filtri". */
+export function InstallatoreQuickFilterFields({
   filters,
   onChange,
   onReset,
@@ -86,61 +118,54 @@ export function InstallatoreFilters({
     value: InstallatoreFilterState[K],
   ) => onChange({ ...filters, [key]: value })
 
-  const hasActiveFilters =
-    filters.search !== "" ||
-    filters.proprietario !== "all" ||
-    filters.tag !== "all" ||
-    filters.stato !== "all"
+  const hasActiveFilters = countActiveInstallatoreFilters(filters) > 0
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <div className="relative min-w-0 flex-[1_1_100%] sm:flex-[1_1_220px]">
-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={filters.search}
-          onChange={(e) => set("search", e.target.value)}
-          placeholder="Cerca per nome o e-mail"
-          className="bg-card pl-9"
-          aria-label="Cerca installatori"
+    <div className="flex min-w-0 flex-col gap-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FilterSelect
+          ariaLabel="Filtra per Stato"
+          className="w-full bg-card"
+          value={filters.stato}
+          onValueChange={(v) => set("stato", v as InstallatoreFilterState["stato"])}
+          placeholder="Stato"
+          options={[
+            ["all", "Tutti gli stati"],
+            ["attivo", "Attivo"],
+            ["non_attivo", "Non attivo"],
+          ]}
+        />
+
+        <FilterSelect
+          ariaLabel="Filtra per Proprietario"
+          className="w-full bg-card"
+          value={filters.proprietario}
+          onValueChange={(v) => set("proprietario", v)}
+          placeholder="Proprietario"
+          options={[
+            ["all", "Tutti i proprietari"],
+            ...proprietari.map((p) => [p.id, p.nome] as [string, string]),
+          ]}
+        />
+
+        <FilterSelect
+          ariaLabel="Filtra per Tag"
+          className="w-full bg-card"
+          value={filters.tag}
+          onValueChange={(v) => set("tag", v)}
+          placeholder="Tag"
+          options={[["all", "Tutti i tag"], ...tags.map((t) => [t.id, t.name] as [string, string])]}
         />
       </div>
 
-      <FilterSelect
-        ariaLabel="Filtra per Stato"
-        value={filters.stato}
-        onValueChange={(v) => set("stato", v as InstallatoreFilterState["stato"])}
-        placeholder="Stato"
-        options={[
-          ["all", "Tutti gli stati"],
-          ["attivo", "Attivo"],
-          ["non_attivo", "Non attivo"],
-        ]}
-      />
-
-      <FilterSelect
-        ariaLabel="Filtra per Proprietario"
-        className="w-full bg-card sm:w-[190px]"
-        value={filters.proprietario}
-        onValueChange={(v) => set("proprietario", v)}
-        placeholder="Proprietario"
-        options={[
-          ["all", "Tutti i proprietari"],
-          ...proprietari.map((p) => [p.id, p.nome] as [string, string]),
-        ]}
-      />
-
-      <FilterSelect
-        ariaLabel="Filtra per Tag"
-        className="w-full bg-card sm:w-[170px]"
-        value={filters.tag}
-        onValueChange={(v) => set("tag", v)}
-        placeholder="Tag"
-        options={[["all", "Tutti i tag"], ...tags.map((t) => [t.id, t.name] as [string, string])]}
-      />
-
-      <Button variant="ghost" onClick={onReset} disabled={!hasActiveFilters} className="text-muted-foreground">
+      <Button
+        variant="ghost"
+        onClick={onReset}
+        disabled={!hasActiveFilters}
+        className="self-start text-muted-foreground"
+      >
         <X data-icon="inline-start" />
-        Reset filtri
+        Azzera filtri
       </Button>
     </div>
   )

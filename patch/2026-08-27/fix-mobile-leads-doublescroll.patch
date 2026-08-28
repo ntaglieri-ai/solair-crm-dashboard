@@ -1,0 +1,57 @@
+From 4e08f5f9e2285ae1c5b30cbb6dc8498d6184c97b Mon Sep 17 00:00:00 2001
+From: Claude <claude@mostagstudio.local>
+Date: Thu, 27 Aug 2026 16:11:05 +0000
+Subject: [PATCH] fix(mobile): blocca lo scroll della pagina su Lead, resta
+ solo la lista
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Glitch segnalato in preview: su iOS Safari la pagina esterna e la
+lista interna erano entrambe scrollabili, e un tocco poteva muovere
+quella sbagliata — risultato uno strappo visivo tra header/filtri e
+prima card della lista.
+
+Mentre la vista Lead è montata su mobile, blocchiamo overflow su
+html/body (con overscroll-behavior:none): l'header e i filtri restano
+fissi, l'unica area che scrolla è la lista lead. Il calcolo dinamico
+dell'altezza disponibile (availH, già esistente) continua a garantire
+che il footer di paginazione resti sempre in vista.
+---
+ app/(dashboard)/leads/leads-client.tsx | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+
+diff --git a/app/(dashboard)/leads/leads-client.tsx b/app/(dashboard)/leads/leads-client.tsx
+index 3ba9970..db05748 100644
+--- a/app/(dashboard)/leads/leads-client.tsx
++++ b/app/(dashboard)/leads/leads-client.tsx
+@@ -177,6 +177,26 @@ export function LeadsClient({
+       setRowsPerPage(20)
+     }
+   }, [isMobile, rowsPerPage])
++  // Blocca lo scroll della pagina (body/html) su mobile mentre questa vista è
++  // montata: il glitch visto in produzione era il classico "doppio scroll" di
++  // Safari iOS — pagina esterna e lista interna scrollabili insieme, il dito
++  // a volte muove quella sbagliata creando lo strappo tra header e lista.
++  // Con l'esterno bloccato resta scrollabile solo la lista lead.
++  useEffect(() => {
++    if (!isMobile) return
++    const html = document.documentElement
++    const prevHtmlOverflow = html.style.overflow
++    const prevBodyOverflow = document.body.style.overflow
++    const prevBodyOverscroll = document.body.style.overscrollBehavior
++    html.style.overflow = "hidden"
++    document.body.style.overflow = "hidden"
++    document.body.style.overscrollBehavior = "none"
++    return () => {
++      html.style.overflow = prevHtmlOverflow
++      document.body.style.overflow = prevBodyOverflow
++      document.body.style.overscrollBehavior = prevBodyOverscroll
++    }
++  }, [isMobile])
+   const [page, setPage] = useState(1)
+   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
+   const [convertTarget, setConvertTarget] = useState<Lead | null>(null)
+-- 
+2.43.0
+

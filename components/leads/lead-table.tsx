@@ -748,7 +748,7 @@ export function LeadTable({
         />
       </div>
 
-      <div className="hidden h-full lg:flex lg:max-h-full lg:flex-col">
+      <div className="hidden h-full overflow-hidden rounded-xl border border-border bg-card lg:flex lg:max-h-full lg:flex-col">
       {/* Area scrollabile: header sticky + body virtualizzato in un'unica table.
           Scrolla verticalmente; orizzontalmente è pilotata dalla barra dedicata. */}
       <div

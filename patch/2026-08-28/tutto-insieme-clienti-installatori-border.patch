@@ -1,0 +1,1297 @@
+diff --git a/app/(dashboard)/clienti/clienti-client.tsx b/app/(dashboard)/clienti/clienti-client.tsx
+index 3aeb048..98c2640 100644
+--- a/app/(dashboard)/clienti/clienti-client.tsx
++++ b/app/(dashboard)/clienti/clienti-client.tsx
+@@ -2,12 +2,13 @@
+ 
+ import { useEffect, useMemo, useRef, useState } from "react"
+ import { toast } from "sonner"
+-import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react"
++import { ChevronLeft, ChevronRight, Plus, SlidersHorizontal, X } from "lucide-react"
+ import { IconSettings } from "@tabler/icons-react"
+ import { useQueryClient } from "@tanstack/react-query"
+ import { usePermissions } from "@/lib/permissions/provider"
+ import { useColumnPreferences } from "@/lib/shared/use-column-preferences"
+ import { useClienteTags } from "@/lib/cliente-tag-store"
++import { useIsMobile } from "@/hooks/use-is-mobile"
+ import { Button } from "@/components/ui/button"
+ import {
+   Dialog,
+@@ -33,10 +34,11 @@ import {
+ } from "@/lib/mock-data"
+ import { chiaveCampoCliente } from "@/lib/permissions/field-map"
+ import {
+-  ClienteFilters,
++  ClienteSearchInput,
+   DEFAULT_CLIENTE_FILTERS,
+   type ClienteFilterState,
+ } from "@/components/clienti/cliente-filters"
++import { ClienteFiltersDrawer } from "@/components/clienti/cliente-filters-drawer"
+ import {
+   ClienteTable,
+   type SortDir,
+@@ -75,6 +77,7 @@ import {
+ 
+ const ROWS_ITEMS: Record<string, string> = {
+   "10": "10 righe",
++  "20": "20 righe",
+   "30": "30 righe",
+   "50": "50 righe",
+ }
+@@ -122,6 +125,57 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
+   const [sortDir, setSortDir] = useState<SortDir>("desc")
+   const [page, setPage] = useState(1)
+   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
++  const isMobile = useIsMobile()
++  const mobileDefaultApplied = useRef(false)
++  useEffect(() => {
++    if (isMobile && !mobileDefaultApplied.current && rowsPerPage === INITIAL_PAGE_SIZE) {
++      mobileDefaultApplied.current = true
++      setRowsPerPage(20)
++    }
++  }, [isMobile, rowsPerPage])
++  // Blocca lo scroll della pagina su mobile: stesso fix già applicato a Lead,
++  // resta scrollabile solo la lista clienti. Nessun effetto su desktop.
++  useEffect(() => {
++    if (!isMobile) return
++    const html = document.documentElement
++    const prevHtmlOverflow = html.style.overflow
++    const prevBodyOverflow = document.body.style.overflow
++    const prevBodyOverscroll = document.body.style.overscrollBehavior
++    html.style.overflow = "hidden"
++    document.body.style.overflow = "hidden"
++    document.body.style.overscrollBehavior = "none"
++    return () => {
++      html.style.overflow = prevHtmlOverflow
++      document.body.style.overflow = prevBodyOverflow
++      document.body.style.overscrollBehavior = prevBodyOverscroll
++    }
++  }, [isMobile])
++  // Altezza disponibile: calcolata solo su mobile, per non alterare in alcun
++  // modo il comportamento (pagina intera che scrolla) su desktop.
++  const rootRef = useRef<HTMLDivElement>(null)
++  const [availH, setAvailH] = useState<number | null>(null)
++  useEffect(() => {
++    if (!isMobile) {
++      setAvailH(null)
++      return
++    }
++    const el = rootRef.current
++    if (!el) return
++    const BOTTOM_GAP = 24
++    const measure = () => {
++      const top = el.getBoundingClientRect().top
++      const next = Math.max(360, window.innerHeight - top - BOTTOM_GAP)
++      setAvailH(next)
++    }
++    measure()
++    window.addEventListener("resize", measure)
++    const ro = new ResizeObserver(measure)
++    ro.observe(document.body)
++    return () => {
++      window.removeEventListener("resize", measure)
++      ro.disconnect()
++    }
++  }, [isMobile])
+ 
+   // --- UI state ---
+   const [newClienteOpen, setNewClienteOpen] = useState(false)
+@@ -455,7 +509,11 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
+   }
+ 
+   return (
+-    <div className="flex min-w-0 flex-col gap-5">
++    <div
++      ref={rootRef}
++      className="flex min-w-0 flex-col gap-5 lg:h-auto lg:overflow-visible"
++      style={availH ? { height: availH, overflow: "hidden" } : undefined}
++    >
+       {/* Header pagina */}
+       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+         <div className="min-w-0 flex flex-col gap-0.5">
+@@ -471,7 +529,7 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
+             )}
+           </p>
+         </div>
+-        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
++        <div className="grid w-full grid-cols-2 gap-2.5 lg:flex lg:w-auto lg:flex-wrap lg:justify-end lg:gap-2">
+           <ClienteSettingsSheet
+             open={settingsOpen}
+             onOpenChange={setSettingsOpen}
+@@ -489,11 +547,11 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
+             trigger={
+               <Button
+                 variant="outline"
+-                size="icon"
+                 aria-label="Impostazioni clienti"
+-                className="bg-card"
++                className="h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-10 lg:p-0"
+               >
+-                <IconSettings size={18} stroke={1.8} />
++                <IconSettings size={22} stroke={1.8} className="lg:size-[18px]" />
++                <span className="lg:hidden">Imposta</span>
+               </Button>
+             }
+           />
+@@ -515,16 +573,45 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
+             onBulkDelete={() => setBulkDeleteOpen(true)}
+           />
+ 
++          <ClienteFiltersDrawer
++            filters={filters}
++            onChange={handleFilterChange}
++            onReset={handleReset}
++            trigger={({ onClick, count }) => (
++              <Button
++                onClick={onClick}
++                className="relative h-14 w-full gap-2 bg-primary text-sm text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90 lg:h-10 lg:w-auto"
++              >
++                <SlidersHorizontal className="size-[22px] lg:size-4" />
++                Filtri
++                {count > 0 ? (
++                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-teal px-1 text-xs font-bold tabular-nums text-teal-foreground">
++                    {count}
++                  </span>
++                ) : null}
++              </Button>
++            )}
++          />
++
+           <Button
+-            className="min-w-0 bg-teal text-teal-foreground hover:bg-teal/90"
++            className="h-14 w-full gap-2 bg-teal text-sm text-teal-foreground hover:bg-teal/90 lg:h-10 lg:w-auto"
+             onClick={() => setNewClienteOpen(true)}
+           >
+-            <Plus data-icon="inline-start" />
+-            Nuovo cliente
++            <Plus className="size-[22px] lg:size-4" />
++            <span className="lg:hidden">Nuovo</span>
++            <span className="hidden lg:inline">Nuovo cliente</span>
+           </Button>
+         </div>
+       </div>
+ 
++      {/* Barra di ricerca — sempre su una riga; il resto dei filtri vive nel drawer "Filtri" */}
++      <div className="flex min-w-0 flex-row items-center gap-2 rounded-lg border border-border bg-card p-2 shadow-sm">
++        <ClienteSearchInput
++          value={filters.search}
++          onChange={(v) => handleFilterChange({ ...filters, search: v })}
++        />
++      </div>
++
+       {/* Banner filtro duplicati attivo */}
+       {onlyDuplicates ? (
+         <div className="flex items-center justify-between rounded-lg bg-secondary px-3 py-2">
+@@ -542,70 +629,68 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
+         </div>
+       ) : null}
+ 
+-      {/* Barra filtri */}
+-      <ClienteFilters
+-        filters={filters}
+-        onChange={handleFilterChange}
+-        onReset={handleReset}
+-      />
+-
+-      {/* Empty state */}
+-      {!isFetching && total === 0 && (
+-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card py-16 text-center">
+-          <p className="text-base font-medium text-foreground">
+-            Nessun cliente trovato
+-          </p>
+-          <p className="mt-1 text-sm text-muted-foreground">
+-            Prova a modificare i filtri o aggiungi il primo cliente.
+-          </p>
+-          <Button
+-            className="mt-4 bg-teal text-teal-foreground hover:bg-teal/90"
+-            onClick={() => setNewClienteOpen(true)}
+-          >
+-            <Plus data-icon="inline-start" />
+-            Nuovo cliente
+-          </Button>
+-        </div>
+-      )}
+-
+-      {/* Tabella */}
+-      {total > 0 && (
+-        <ClienteTable
+-          clienti={visibleRows}
+-          columns={columns}
+-          selected={selected}
+-          onToggle={toggle}
+-          onToggleAll={toggleAll}
+-          onDelete={(cliente) => setDeleteTarget(cliente)}
+-          onUpdate={(cliente, patch) =>
+-            updateCliente.mutate(
+-              { id: cliente.id, patch },
+-              { onError: () => toast.error("Aggiornamento non riuscito") },
+-            )
+-          }
+-          onRefresh={() => {
+-            void qc.invalidateQueries({ queryKey: clientiKeys.lists() })
+-          }}
+-          sortBy={sortBy}
+-          sortDir={sortDir}
+-          onSort={handleSort}
+-          density={density}
+-          columnWidths={columnWidths}
+-          onColumnWidthChange={(column, width) =>
+-            setColumnWidths((current) => ({ ...current, [column]: width }))
+-          }
+-          onColumnReorder={reorderColumns}
+-        />
+-      )}
++      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:overflow-visible [-webkit-overflow-scrolling:touch]">
++        {/* Empty state */}
++        {!isFetching && total === 0 && (
++          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card py-16 text-center">
++            <p className="text-base font-medium text-foreground">
++              Nessun cliente trovato
++            </p>
++            <p className="mt-1 text-sm text-muted-foreground">
++              Prova a modificare i filtri o aggiungi il primo cliente.
++            </p>
++            <Button
++              className="mt-4 bg-teal text-teal-foreground hover:bg-teal/90"
++              onClick={() => setNewClienteOpen(true)}
++            >
++              <Plus data-icon="inline-start" />
++              Nuovo cliente
++            </Button>
++          </div>
++        )}
++
++        {/* Tabella */}
++        {total > 0 && (
++          <ClienteTable
++            clienti={visibleRows}
++            columns={columns}
++            selected={selected}
++            onToggle={toggle}
++            onToggleAll={toggleAll}
++            onDelete={(cliente) => setDeleteTarget(cliente)}
++            onUpdate={(cliente, patch) =>
++              updateCliente.mutate(
++                { id: cliente.id, patch },
++                { onError: () => toast.error("Aggiornamento non riuscito") },
++              )
++            }
++            onRefresh={() => {
++              void qc.invalidateQueries({ queryKey: clientiKeys.lists() })
++            }}
++            sortBy={sortBy}
++            sortDir={sortDir}
++            onSort={handleSort}
++            density={density}
++            columnWidths={columnWidths}
++            onColumnWidthChange={(column, width) =>
++              setColumnWidths((current) => ({ ...current, [column]: width }))
++            }
++            onColumnReorder={reorderColumns}
++          />
++        )}
++      </div>
+ 
+-      {/* Footer paginazione */}
++      {/* Footer paginazione — sticky solo su mobile, in flusso normale da lg in su */}
+       {total > 0 && (
+-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+-          <div className="flex min-w-0 flex-wrap items-center gap-3">
+-            <span className="break-words text-sm text-muted-foreground">
++        <div className="sticky bottom-0 z-30 -mx-5 flex shrink-0 items-center justify-between gap-2 border-t border-border bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:static lg:mx-0 lg:flex-wrap lg:border-t-0 lg:bg-transparent lg:px-0 lg:py-0 lg:backdrop-blur-none">
++          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
++            <span className="hidden truncate text-sm text-muted-foreground lg:inline">
+               {rangeStart}–{rangeEnd} di {total.toLocaleString("it-IT")}
+               {selected.size > 0 ? ` · ${selected.size} selezionati` : ""}
+             </span>
++            <span className="truncate text-xs text-muted-foreground lg:hidden">
++              {rangeStart}-{rangeEnd}/{total.toLocaleString("it-IT")}
++            </span>
+             <Select
+               items={ROWS_ITEMS}
+               value={String(rowsPerPage)}
+@@ -615,7 +700,7 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
+                 setSelected(new Set())
+               }}
+             >
+-              <SelectTrigger className="h-8 w-[120px] bg-card">
++              <SelectTrigger className="h-8 w-[92px] shrink-0 bg-card text-xs lg:w-[120px] lg:text-sm">
+                 <SelectValue />
+               </SelectTrigger>
+               <SelectContent>
+@@ -630,7 +715,7 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
+             </Select>
+           </div>
+ 
+-          <div className="flex min-w-0 flex-wrap items-center gap-2">
++          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+             <Button
+               size="sm"
+               variant="outline"
+@@ -642,7 +727,7 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
+               }}
+             >
+               <ChevronLeft data-icon="inline-start" />
+-              Precedente
++              <span className="hidden lg:inline">Precedente</span>
+             </Button>
+             <span className="text-sm tabular-nums text-muted-foreground">
+               {page} / {totalPages}
+@@ -657,7 +742,7 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
+                 setSelected(new Set())
+               }}
+             >
+-              Successivo
++              <span className="hidden lg:inline">Successivo</span>
+               <ChevronRight data-icon="inline-end" />
+             </Button>
+           </div>
+diff --git a/app/(dashboard)/installatori/installatori-client.tsx b/app/(dashboard)/installatori/installatori-client.tsx
+index c7c078b..9b8e10f 100644
+--- a/app/(dashboard)/installatori/installatori-client.tsx
++++ b/app/(dashboard)/installatori/installatori-client.tsx
+@@ -1,10 +1,19 @@
+ "use client"
+ 
+-import { useEffect, useMemo, useState } from "react"
++import { useEffect, useMemo, useRef, useState } from "react"
+ import { toast } from "sonner"
+-import { CheckCircle2, ChevronLeft, ChevronRight, CircleSlash, Plus, Sparkles } from "lucide-react"
++import {
++  CheckCircle2,
++  ChevronLeft,
++  ChevronRight,
++  CircleSlash,
++  Plus,
++  SlidersHorizontal,
++  Sparkles,
++} from "lucide-react"
+ import { IconSettings } from "@tabler/icons-react"
+ import { useQueryClient } from "@tanstack/react-query"
++import { useIsMobile } from "@/hooks/use-is-mobile"
+ import { Button } from "@/components/ui/button"
+ import {
+   Dialog,
+@@ -25,10 +34,11 @@ import {
+ import { cn } from "@/lib/utils"
+ import type { InstallatoreRecord } from "@/lib/installatori/repository"
+ import {
+-  InstallatoreFilters,
++  InstallatoreSearchInput,
+   DEFAULT_INSTALLATORE_FILTERS,
+   type InstallatoreFilterState,
+ } from "@/components/installatori/installatore-filters"
++import { InstallatoreFiltersDrawer } from "@/components/installatori/installatore-filters-drawer"
+ import { InstallatoreTable } from "@/components/installatori/installatore-table"
+ import { InstallatoreActionsMenu } from "@/components/installatori/installatore-actions-menu"
+ import { BulkEmailDialog } from "@/components/shared/bulk-email-dialog"
+@@ -58,6 +68,7 @@ import {
+ 
+ const ROWS_ITEMS: Record<string, string> = {
+   "10": "10 righe",
++  "20": "20 righe",
+   "30": "30 righe",
+   "50": "50 righe",
+ }
+@@ -84,6 +95,57 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
+   const [sortDir, setSortDir] = useState<SortDir>("asc")
+   const [page, setPage] = useState(1)
+   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
++  const isMobile = useIsMobile()
++  const mobileDefaultApplied = useRef(false)
++  useEffect(() => {
++    if (isMobile && !mobileDefaultApplied.current && rowsPerPage === INITIAL_PAGE_SIZE) {
++      mobileDefaultApplied.current = true
++      setRowsPerPage(20)
++    }
++  }, [isMobile, rowsPerPage])
++  // Blocca lo scroll della pagina su mobile: stesso fix già applicato a
++  // Lead/Clienti, resta scrollabile solo la lista. Nessun effetto su desktop.
++  useEffect(() => {
++    if (!isMobile) return
++    const html = document.documentElement
++    const prevHtmlOverflow = html.style.overflow
++    const prevBodyOverflow = document.body.style.overflow
++    const prevBodyOverscroll = document.body.style.overscrollBehavior
++    html.style.overflow = "hidden"
++    document.body.style.overflow = "hidden"
++    document.body.style.overscrollBehavior = "none"
++    return () => {
++      html.style.overflow = prevHtmlOverflow
++      document.body.style.overflow = prevBodyOverflow
++      document.body.style.overscrollBehavior = prevBodyOverscroll
++    }
++  }, [isMobile])
++  // Altezza disponibile: calcolata solo su mobile, per non alterare in alcun
++  // modo il comportamento (pagina intera che scrolla) su desktop.
++  const rootRef = useRef<HTMLDivElement>(null)
++  const [availH, setAvailH] = useState<number | null>(null)
++  useEffect(() => {
++    if (!isMobile) {
++      setAvailH(null)
++      return
++    }
++    const el = rootRef.current
++    if (!el) return
++    const BOTTOM_GAP = 24
++    const measure = () => {
++      const top = el.getBoundingClientRect().top
++      const next = Math.max(360, window.innerHeight - top - BOTTOM_GAP)
++      setAvailH(next)
++    }
++    measure()
++    window.addEventListener("resize", measure)
++    const ro = new ResizeObserver(measure)
++    ro.observe(document.body)
++    return () => {
++      window.removeEventListener("resize", measure)
++      ro.disconnect()
++    }
++  }, [isMobile])
+ 
+   const [selected, setSelected] = useState<Set<string>>(new Set())
+   const [bulkEmailOpen, setBulkEmailOpen] = useState(false)
+@@ -217,7 +279,11 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
+   }
+ 
+   return (
+-    <div className="flex min-w-0 flex-col gap-5">
++    <div
++      ref={rootRef}
++      className="flex min-w-0 flex-col gap-5 lg:h-auto lg:overflow-visible"
++      style={availH ? { height: availH, overflow: "hidden" } : undefined}
++    >
+       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+         <div className="min-w-0 flex flex-col gap-0.5">
+           <h1 className="break-words text-2xl font-bold tracking-tight text-foreground">Installatori</h1>
+@@ -229,7 +295,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
+           </p>
+         </div>
+ 
+-        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
++        <div className="grid w-full grid-cols-2 gap-2.5 lg:flex lg:w-auto lg:flex-wrap lg:justify-end lg:gap-2">
+           <InstallatoreSettingsSheet
+             open={settingsOpen}
+             onOpenChange={setSettingsOpen}
+@@ -238,11 +304,11 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
+             trigger={
+               <Button
+                 variant="outline"
+-                size="icon"
+                 aria-label="Impostazioni installatori"
+-                className="bg-card"
++                className="h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-10 lg:p-0"
+               >
+-                <IconSettings size={18} stroke={1.8} />
++                <IconSettings size={22} stroke={1.8} className="lg:size-[18px]" />
++                <span className="lg:hidden">Imposta</span>
+               </Button>
+             }
+           />
+@@ -254,17 +320,49 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
+             onBulkDelete={() => setBulkDeleteOpen(true)}
+           />
+ 
++          <InstallatoreFiltersDrawer
++            filters={filters}
++            onChange={handleFilterChange}
++            onReset={handleReset}
++            trigger={({ onClick, count }) => (
++              <Button
++                onClick={onClick}
++                className="relative h-14 w-full gap-2 bg-primary text-sm text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90 lg:h-10 lg:w-auto"
++              >
++                <SlidersHorizontal className="size-[22px] lg:size-4" />
++                Filtri
++                {count > 0 ? (
++                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-teal px-1 text-xs font-bold tabular-nums text-teal-foreground">
++                    {count}
++                  </span>
++                ) : null}
++              </Button>
++            )}
++          />
++
+           <Button
+-            className="min-w-0 bg-teal text-teal-foreground hover:bg-teal/90"
++            className="h-14 w-full gap-2 bg-teal text-sm text-teal-foreground hover:bg-teal/90 lg:h-10 lg:w-auto"
+             onClick={() => setNewOpen(true)}
+           >
+-            <Plus data-icon="inline-start" />
+-            Nuovo installatore
++            <Plus className="size-[22px] lg:size-4" />
++            <span className="lg:hidden">Nuovo</span>
++            <span className="hidden lg:inline">Nuovo installatore</span>
+           </Button>
+         </div>
+       </div>
+ 
+-      <div className="grid gap-3 xl:grid-cols-3">
++      {/* Barra di ricerca — sempre su una riga; il resto dei filtri vive nel drawer "Filtri" */}
++      <div className="flex min-w-0 flex-row items-center gap-2 rounded-lg border border-border bg-card p-2 shadow-sm">
++        <InstallatoreSearchInput
++          value={filters.search}
++          onChange={(v) => handleFilterChange({ ...filters, search: v })}
++        />
++      </div>
++
++      {/* Statistiche: su mobile non servono (occupano spazio prezioso sopra
++          una lista che va già consultata scrollando), restano identiche da
++          lg in su. */}
++      <div className="hidden gap-3 xl:grid-cols-3 lg:grid">
+         <button
+           type="button"
+           onClick={() => {
+@@ -331,8 +429,6 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
+         </button>
+       </div>
+ 
+-      <InstallatoreFilters filters={filters} onChange={handleFilterChange} onReset={handleReset} />
+-
+       {!isFetching && total === 0 ? (
+         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card py-16 text-center">
+           <p className="text-base font-medium text-foreground">Nessun installatore trovato</p>
+@@ -349,24 +445,29 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
+         </div>
+       ) : (
+         <>
+-          <InstallatoreTable
+-            installatori={pageRows}
+-            selected={selected}
+-            onToggle={toggle}
+-            onToggleAll={toggleAll}
+-            onEdit={(i) => setEditTarget(i)}
+-            onDelete={(i) => setDeleteTarget(i)}
+-            sortBy={sortBy}
+-            sortDir={sortDir}
+-            onSort={handleSort}
+-          />
++          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:overflow-visible [-webkit-overflow-scrolling:touch]">
++            <InstallatoreTable
++              installatori={pageRows}
++              selected={selected}
++              onToggle={toggle}
++              onToggleAll={toggleAll}
++              onEdit={(i) => setEditTarget(i)}
++              onDelete={(i) => setDeleteTarget(i)}
++              sortBy={sortBy}
++              sortDir={sortDir}
++              onSort={handleSort}
++            />
++          </div>
+ 
+-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+-            <div className="flex min-w-0 flex-wrap items-center gap-3">
+-              <span className="break-words text-sm text-muted-foreground">
++          <div className="sticky bottom-0 z-30 -mx-5 flex shrink-0 items-center justify-between gap-2 border-t border-border bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:static lg:mx-0 lg:flex-wrap lg:border-t-0 lg:bg-transparent lg:px-0 lg:py-0 lg:backdrop-blur-none">
++            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
++              <span className="hidden truncate text-sm text-muted-foreground lg:inline">
+                 {rangeStart}–{rangeEnd} di {total.toLocaleString("it-IT")}
+                 {selected.size > 0 ? ` · ${selected.size} selezionati` : ""}
+               </span>
++              <span className="truncate text-xs text-muted-foreground lg:hidden">
++                {rangeStart}-{rangeEnd}/{total.toLocaleString("it-IT")}
++              </span>
+               <Select
+                 items={ROWS_ITEMS}
+                 value={String(rowsPerPage)}
+@@ -376,7 +477,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
+                   setSelected(new Set())
+                 }}
+               >
+-                <SelectTrigger className="h-8 w-[120px] bg-card">
++                <SelectTrigger className="h-8 w-[92px] shrink-0 bg-card text-xs lg:w-[120px] lg:text-sm">
+                   <SelectValue />
+                 </SelectTrigger>
+                 <SelectContent>
+@@ -391,7 +492,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
+               </Select>
+             </div>
+ 
+-            <div className="flex min-w-0 flex-wrap items-center gap-2">
++            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+               <Button
+                 size="sm"
+                 variant="outline"
+@@ -403,7 +504,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
+                 }}
+               >
+                 <ChevronLeft data-icon="inline-start" />
+-                Precedente
++                <span className="hidden lg:inline">Precedente</span>
+               </Button>
+               <span className="text-sm tabular-nums text-muted-foreground">
+                 {page} / {totalPages}
+@@ -418,7 +519,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
+                   setSelected(new Set())
+                 }}
+               >
+-                Successivo
++                <span className="hidden lg:inline">Successivo</span>
+                 <ChevronRight data-icon="inline-end" />
+               </Button>
+             </div>
+diff --git a/components/clienti/cliente-actions-menu.tsx b/components/clienti/cliente-actions-menu.tsx
+index 5c60cc4..5c78eb5 100644
+--- a/components/clienti/cliente-actions-menu.tsx
++++ b/components/clienti/cliente-actions-menu.tsx
+@@ -106,6 +106,7 @@ export function ClienteActionsMenu({
+   onBulkDedup,
+   onBulkEmail,
+   onBulkDelete,
++  triggerClassName,
+ }: {
+   selectedCount: number
+   filtered: ClienteRecord[]
+@@ -122,6 +123,8 @@ export function ClienteActionsMenu({
+   /** Apre il dialog di invio email di massa (gestito da clienti-client). */
+   onBulkEmail: () => void
+   onBulkDelete: () => void
++  /** Classi extra per il bottone trigger (es. per ingrandirlo su mobile). */
++  triggerClassName?: string
+ }) {
+   const [dialog, setDialog] = useState<Dialogs>("none")
+   const permissions = usePermissions()
+@@ -207,9 +210,10 @@ export function ClienteActionsMenu({
+               variant="outline"
+               size="icon"
+               aria-label="Azioni"
+-              className="relative bg-card"
++              className={cn("relative h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-10 lg:p-0", triggerClassName)}
+             >
+-              <IconDotsVertical size={18} stroke={1.8} />
++              <IconDotsVertical size={20} stroke={1.8} className="lg:size-[18px]" />
++              <span className="lg:hidden">Azioni</span>
+               {hasSelection ? (
+                 <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-navy px-1 text-[10px] font-bold leading-none text-navy-foreground tabular-nums">
+                   {selectedCount}
+diff --git a/components/clienti/cliente-filters-drawer.tsx b/components/clienti/cliente-filters-drawer.tsx
+new file mode 100644
+index 0000000..899ec37
+--- /dev/null
++++ b/components/clienti/cliente-filters-drawer.tsx
+@@ -0,0 +1,61 @@
++"use client"
++
++import { useState, type ReactNode } from "react"
++import { X } from "lucide-react"
++import { Button } from "@/components/ui/button"
++import {
++  Sheet,
++  SheetContent,
++  SheetHeader,
++  SheetTitle,
++} from "@/components/ui/sheet"
++import {
++  ClienteQuickFilterFields,
++  countActiveClienteFilters,
++  type ClienteFilterState,
++} from "@/components/clienti/cliente-filters"
++
++/** Drawer unico per i filtri Clienti: un solo pulsante in header, un solo
++ * pannello (a differenza dei vecchi dropdown impilati sopra la lista). */
++export function ClienteFiltersDrawer({
++  filters,
++  onChange,
++  onReset,
++  trigger,
++}: {
++  filters: ClienteFilterState
++  onChange: (next: ClienteFilterState) => void
++  onReset: () => void
++  trigger: (ctx: { onClick: () => void; count: number }) => ReactNode
++}) {
++  const [open, setOpen] = useState(false)
++  const count = countActiveClienteFilters(filters)
++
++  return (
++    <Sheet open={open} onOpenChange={setOpen}>
++      {trigger({ onClick: () => setOpen(true), count })}
++
++      <SheetContent
++        side="right"
++        showCloseButton={false}
++        className="w-[340px] gap-0 p-0 sm:max-w-[340px]"
++      >
++        <SheetHeader className="flex-row items-center justify-between border-b border-border p-4">
++          <SheetTitle>Filtra clienti per</SheetTitle>
++          <Button
++            variant="ghost"
++            size="icon-sm"
++            aria-label="Chiudi"
++            onClick={() => setOpen(false)}
++          >
++            <X />
++          </Button>
++        </SheetHeader>
++
++        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
++          <ClienteQuickFilterFields filters={filters} onChange={onChange} onReset={onReset} />
++        </div>
++      </SheetContent>
++    </Sheet>
++  )
++}
+diff --git a/components/clienti/cliente-filters.tsx b/components/clienti/cliente-filters.tsx
+index 8ec31ac..44ace59 100644
+--- a/components/clienti/cliente-filters.tsx
++++ b/components/clienti/cliente-filters.tsx
+@@ -87,7 +87,41 @@ function FilterSelect({
+   )
+ }
+ 
+-export function ClienteFilters({
++export function countActiveClienteFilters(filters: ClienteFilterState): number {
++  return (
++    (filters.stato !== "all" ? 1 : 0) +
++    (filters.sede !== "all" ? 1 : 0) +
++    (filters.proprietario !== "all" ? 1 : 0) +
++    (filters.installatore !== "all" ? 1 : 0) +
++    (filters.tag !== "all" ? 1 : 0)
++  )
++}
++
++/** Sola barra di ricerca: resta sempre in vista sopra la lista. */
++export function ClienteSearchInput({
++  value,
++  onChange,
++}: {
++  value: string
++  onChange: (v: string) => void
++}) {
++  return (
++    <div className="relative min-w-0 flex-1">
++      <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground sm:left-4 sm:size-5" />
++      <Input
++        value={value}
++        onChange={(e) => onChange(e.target.value)}
++        placeholder="Cerca nome, email o cellulare"
++        className="h-10 rounded-lg border-border bg-card pl-10 text-sm shadow-sm sm:h-12 sm:pl-12 sm:text-[15px]"
++        aria-label="Cerca clienti"
++      />
++    </div>
++  )
++}
++
++/** Griglia dei filtri (stato/sede/proprietario/installatore/tag), pensata per
++ * vivere dentro il drawer "Filtri". */
++export function ClienteQuickFilterFields({
+   filters,
+   onChange,
+   onReset,
+@@ -101,91 +135,78 @@ export function ClienteFilters({
+     value: ClienteFilterState[K],
+   ) => onChange({ ...filters, [key]: value })
+ 
+-  const hasActiveFilters =
+-    filters.search !== "" ||
+-    filters.stato !== "all" ||
+-    filters.sede !== "all" ||
+-    filters.proprietario !== "all" ||
+-    filters.installatore !== "all" ||
+-    filters.tag !== "all"
++  const hasActiveFilters = countActiveClienteFilters(filters) > 0
+ 
+   return (
+-    <div className="flex min-w-0 flex-wrap items-center gap-2">
+-      <div className="relative min-w-0 flex-[1_1_100%] sm:flex-[1_1_220px]">
+-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+-        <Input
+-          value={filters.search}
+-          onChange={(e) => set("search", e.target.value)}
+-          placeholder="Cerca nome, email o cellulare"
+-          className="bg-card pl-9"
+-          aria-label="Cerca clienti"
++    <div className="flex min-w-0 flex-col gap-4">
++      <div className="grid gap-4 sm:grid-cols-2">
++        <FilterSelect
++          ariaLabel="Filtra per Stato"
++          className="w-full bg-card"
++          value={filters.stato}
++          onValueChange={(v) => set("stato", v)}
++          placeholder="Stato"
++          options={[
++            ["all", "Tutti gli stati"],
++            ...STATO_CLIENTE_VALUES.map((s) => [s, s] as [string, string]),
++          ]}
+         />
+-      </div>
+-
+-      <FilterSelect
+-        ariaLabel="Filtra per Stato"
+-        className="w-full bg-card sm:w-[200px]"
+-        value={filters.stato}
+-        onValueChange={(v) => set("stato", v)}
+-        placeholder="Stato"
+-        options={[
+-          ["all", "Tutti gli stati"],
+-          ...STATO_CLIENTE_VALUES.map((s) => [s, s] as [string, string]),
+-        ]}
+-      />
+ 
+-      <FilterSelect
+-        ariaLabel="Filtra per Sede"
+-        value={filters.sede}
+-        onValueChange={(v) => set("sede", v)}
+-        placeholder="Sede"
+-        options={[
+-          ["all", "Tutte le sedi"],
+-          ...SEDE_LABELS.map((s) => [s, s] as [string, string]),
+-        ]}
+-      />
++        <FilterSelect
++          ariaLabel="Filtra per Sede"
++          className="w-full bg-card"
++          value={filters.sede}
++          onValueChange={(v) => set("sede", v)}
++          placeholder="Sede"
++          options={[
++            ["all", "Tutte le sedi"],
++            ...SEDE_LABELS.map((s) => [s, s] as [string, string]),
++          ]}
++        />
+ 
+-      <FilterSelect
+-        ariaLabel="Filtra per Clienti Proprietario"
+-        className="w-full bg-card sm:w-[190px]"
+-        value={filters.proprietario}
+-        onValueChange={(v) => set("proprietario", v)}
+-        placeholder="Proprietario"
+-        options={[
+-          ["all", "Tutti i proprietari"],
+-          ...mockCommerciali.map((c) => [c, c] as [string, string]),
+-        ]}
+-      />
++        <FilterSelect
++          ariaLabel="Filtra per Clienti Proprietario"
++          className="w-full bg-card"
++          value={filters.proprietario}
++          onValueChange={(v) => set("proprietario", v)}
++          placeholder="Proprietario"
++          options={[
++            ["all", "Tutti i proprietari"],
++            ...mockCommerciali.map((c) => [c, c] as [string, string]),
++          ]}
++        />
+ 
+-      <FilterSelect
+-        ariaLabel="Filtra per Installatore"
+-        className="w-full bg-card sm:w-[180px]"
+-        value={filters.installatore}
+-        onValueChange={(v) => set("installatore", v)}
+-        placeholder="Installatore"
+-        options={[
+-          ["all", "Tutti gli installatori"],
+-          ...mockInstallatori.map((i) => [i, i] as [string, string]),
+-        ]}
+-      />
++        <FilterSelect
++          ariaLabel="Filtra per Installatore"
++          className="w-full bg-card"
++          value={filters.installatore}
++          onValueChange={(v) => set("installatore", v)}
++          placeholder="Installatore"
++          options={[
++            ["all", "Tutti gli installatori"],
++            ...mockInstallatori.map((i) => [i, i] as [string, string]),
++          ]}
++        />
+ 
+-      <FilterSelect
+-        ariaLabel="Filtra per Tag"
+-        value={filters.tag}
+-        onValueChange={(v) => set("tag", v)}
+-        placeholder="Tag"
+-        disabled
+-        options={[["all", "Tag (presto)"]]}
+-      />
++        <FilterSelect
++          ariaLabel="Filtra per Tag"
++          className="w-full bg-card"
++          value={filters.tag}
++          onValueChange={(v) => set("tag", v)}
++          placeholder="Tag"
++          disabled
++          options={[["all", "Tag (presto)"]]}
++        />
++      </div>
+ 
+       <Button
+         variant="ghost"
+         onClick={onReset}
+         disabled={!hasActiveFilters}
+-        className="text-muted-foreground"
++        className="self-start text-muted-foreground"
+       >
+         <X data-icon="inline-start" />
+-        Reset filtri
++        Azzera filtri
+       </Button>
+     </div>
+   )
+diff --git a/components/clienti/cliente-table.tsx b/components/clienti/cliente-table.tsx
+index fd018c0..66dcff6 100644
+--- a/components/clienti/cliente-table.tsx
++++ b/components/clienti/cliente-table.tsx
+@@ -94,7 +94,7 @@ function ClienteMobileList({
+   }
+ 
+   return (
+-    <div className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
++    <div className="flex h-full flex-col gap-2 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
+       {clienti.map((cliente) => {
+         const owner =
+           owners.find((item) => item.id === cliente["Clienti Proprietario"])?.nome ??
+@@ -106,7 +106,7 @@ function ClienteMobileList({
+             key={cliente.id}
+             role="button"
+             tabIndex={0}
+-            className="flex min-h-[76px] cursor-pointer items-center gap-2.5 bg-card px-2.5 py-2.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
++            className="flex min-h-[82px] shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+             onClick={() => {
+               startNavigationFeedback()
+               router.push(`/clienti/${cliente.id}`)
+@@ -126,17 +126,17 @@ function ClienteMobileList({
+               />
+             </div>
+ 
+-            <ClienteAvatar nome={cliente["Nome Clienti"]} className="size-8 text-xs" />
++            <ClienteAvatar nome={cliente["Nome Clienti"]} className="size-9 text-sm" />
+ 
+             <div className="min-w-0 flex-1">
+               <div className="flex min-w-0 items-center gap-1.5">
+-                <h3 className="truncate text-sm font-bold text-foreground">
++                <h3 className="truncate text-base font-bold text-foreground">
+                   {cliente["Nome Clienti"]}
+                 </h3>
+                 <StatoClienteBadge stato={cliente.Stato} />
+               </div>
+ 
+-              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
++              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+                 <UserRound className="size-3.5 shrink-0" />
+                 <span className="truncate">{owner}</span>
+                 <span className="shrink-0 text-muted-foreground/50">·</span>
+@@ -147,7 +147,7 @@ function ClienteMobileList({
+               </div>
+ 
+               <div className="mt-1 flex min-w-0 items-center gap-1.5">
+-                <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
++                <span className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
+                   <MapPin className="size-3.5 shrink-0" />
+                   <span className="truncate">{cliente.Sede}</span>
+                 </span>
+diff --git a/components/installatori/installatore-actions-menu.tsx b/components/installatori/installatore-actions-menu.tsx
+index 2dd5ec2..46f849f 100644
+--- a/components/installatori/installatore-actions-menu.tsx
++++ b/components/installatori/installatore-actions-menu.tsx
+@@ -2,6 +2,7 @@
+ 
+ import { useState } from "react"
+ import { usePermissions } from "@/lib/permissions/provider"
++import { cn } from "@/lib/utils"
+ import { IconDotsVertical, IconArrowsExchange, IconTrash } from "@tabler/icons-react"
+ import { Button } from "@/components/ui/button"
+ import { Label } from "@/components/ui/label"
+@@ -39,12 +40,15 @@ export function InstallatoreActionsMenu({
+   onBulkTransfer,
+   onBulkEmail,
+   onBulkDelete,
++  triggerClassName,
+ }: {
+   selectedCount: number
+   onBulkTransfer: (owner: InstallatoreProprietario) => void
+   /** Apre il dialog di invio email di massa (gestito da installatori-client). */
+   onBulkEmail: () => void
+   onBulkDelete: () => void
++  /** Classi extra per il bottone trigger (es. per ingrandirlo su mobile). */
++  triggerClassName?: string
+ }) {
+   const hasSelection = selectedCount > 0
+   const [transferOpen, setTransferOpen] = useState(false)
+@@ -59,8 +63,14 @@ export function InstallatoreActionsMenu({
+       <DropdownMenu>
+         <DropdownMenuTrigger
+           render={
+-            <Button variant="outline" size="icon" aria-label="Azioni" className="relative bg-card">
+-              <IconDotsVertical size={18} stroke={1.8} />
++            <Button
++              variant="outline"
++              size="icon"
++              aria-label="Azioni"
++              className={cn("relative h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-10 lg:p-0", triggerClassName)}
++            >
++              <IconDotsVertical size={20} stroke={1.8} className="lg:size-[18px]" />
++              <span className="lg:hidden">Azioni</span>
+               {hasSelection ? (
+                 <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-navy px-1 text-[10px] font-bold leading-none text-navy-foreground tabular-nums">
+                   {selectedCount}
+diff --git a/components/installatori/installatore-filters-drawer.tsx b/components/installatori/installatore-filters-drawer.tsx
+new file mode 100644
+index 0000000..450427f
+--- /dev/null
++++ b/components/installatori/installatore-filters-drawer.tsx
+@@ -0,0 +1,59 @@
++"use client"
++
++import { useState, type ReactNode } from "react"
++import { X } from "lucide-react"
++import { Button } from "@/components/ui/button"
++import {
++  Sheet,
++  SheetContent,
++  SheetHeader,
++  SheetTitle,
++} from "@/components/ui/sheet"
++import {
++  InstallatoreQuickFilterFields,
++  countActiveInstallatoreFilters,
++  type InstallatoreFilterState,
++} from "@/components/installatori/installatore-filters"
++
++export function InstallatoreFiltersDrawer({
++  filters,
++  onChange,
++  onReset,
++  trigger,
++}: {
++  filters: InstallatoreFilterState
++  onChange: (next: InstallatoreFilterState) => void
++  onReset: () => void
++  trigger: (ctx: { onClick: () => void; count: number }) => ReactNode
++}) {
++  const [open, setOpen] = useState(false)
++  const count = countActiveInstallatoreFilters(filters)
++
++  return (
++    <Sheet open={open} onOpenChange={setOpen}>
++      {trigger({ onClick: () => setOpen(true), count })}
++
++      <SheetContent
++        side="right"
++        showCloseButton={false}
++        className="w-[340px] gap-0 p-0 sm:max-w-[340px]"
++      >
++        <SheetHeader className="flex-row items-center justify-between border-b border-border p-4">
++          <SheetTitle>Filtra installatori per</SheetTitle>
++          <Button
++            variant="ghost"
++            size="icon-sm"
++            aria-label="Chiudi"
++            onClick={() => setOpen(false)}
++          >
++            <X />
++          </Button>
++        </SheetHeader>
++
++        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
++          <InstallatoreQuickFilterFields filters={filters} onChange={onChange} onReset={onReset} />
++        </div>
++      </SheetContent>
++    </Sheet>
++  )
++}
+diff --git a/components/installatori/installatore-filters.tsx b/components/installatori/installatore-filters.tsx
+index 9dd4cb9..4a41157 100644
+--- a/components/installatori/installatore-filters.tsx
++++ b/components/installatori/installatore-filters.tsx
+@@ -68,7 +68,39 @@ function FilterSelect({
+   )
+ }
+ 
+-export function InstallatoreFilters({
++export function countActiveInstallatoreFilters(filters: InstallatoreFilterState): number {
++  return (
++    (filters.proprietario !== "all" ? 1 : 0) +
++    (filters.tag !== "all" ? 1 : 0) +
++    (filters.stato !== "all" ? 1 : 0)
++  )
++}
++
++/** Sola barra di ricerca: resta sempre in vista sopra la lista. */
++export function InstallatoreSearchInput({
++  value,
++  onChange,
++}: {
++  value: string
++  onChange: (v: string) => void
++}) {
++  return (
++    <div className="relative min-w-0 flex-1">
++      <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground sm:left-4 sm:size-5" />
++      <Input
++        value={value}
++        onChange={(e) => onChange(e.target.value)}
++        placeholder="Cerca per nome o e-mail"
++        className="h-10 rounded-lg border-border bg-card pl-10 text-sm shadow-sm sm:h-12 sm:pl-12 sm:text-[15px]"
++        aria-label="Cerca installatori"
++      />
++    </div>
++  )
++}
++
++/** Griglia dei filtri (stato/proprietario/tag), pensata per vivere dentro il
++ * drawer "Filtri". */
++export function InstallatoreQuickFilterFields({
+   filters,
+   onChange,
+   onReset,
+@@ -86,61 +118,54 @@ export function InstallatoreFilters({
+     value: InstallatoreFilterState[K],
+   ) => onChange({ ...filters, [key]: value })
+ 
+-  const hasActiveFilters =
+-    filters.search !== "" ||
+-    filters.proprietario !== "all" ||
+-    filters.tag !== "all" ||
+-    filters.stato !== "all"
++  const hasActiveFilters = countActiveInstallatoreFilters(filters) > 0
+ 
+   return (
+-    <div className="flex min-w-0 flex-wrap items-center gap-2">
+-      <div className="relative min-w-0 flex-[1_1_100%] sm:flex-[1_1_220px]">
+-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+-        <Input
+-          value={filters.search}
+-          onChange={(e) => set("search", e.target.value)}
+-          placeholder="Cerca per nome o e-mail"
+-          className="bg-card pl-9"
+-          aria-label="Cerca installatori"
++    <div className="flex min-w-0 flex-col gap-4">
++      <div className="grid gap-4 sm:grid-cols-2">
++        <FilterSelect
++          ariaLabel="Filtra per Stato"
++          className="w-full bg-card"
++          value={filters.stato}
++          onValueChange={(v) => set("stato", v as InstallatoreFilterState["stato"])}
++          placeholder="Stato"
++          options={[
++            ["all", "Tutti gli stati"],
++            ["attivo", "Attivo"],
++            ["non_attivo", "Non attivo"],
++          ]}
+         />
+-      </div>
+-
+-      <FilterSelect
+-        ariaLabel="Filtra per Stato"
+-        value={filters.stato}
+-        onValueChange={(v) => set("stato", v as InstallatoreFilterState["stato"])}
+-        placeholder="Stato"
+-        options={[
+-          ["all", "Tutti gli stati"],
+-          ["attivo", "Attivo"],
+-          ["non_attivo", "Non attivo"],
+-        ]}
+-      />
+ 
+-      <FilterSelect
+-        ariaLabel="Filtra per Proprietario"
+-        className="w-full bg-card sm:w-[190px]"
+-        value={filters.proprietario}
+-        onValueChange={(v) => set("proprietario", v)}
+-        placeholder="Proprietario"
+-        options={[
+-          ["all", "Tutti i proprietari"],
+-          ...proprietari.map((p) => [p.id, p.nome] as [string, string]),
+-        ]}
+-      />
++        <FilterSelect
++          ariaLabel="Filtra per Proprietario"
++          className="w-full bg-card"
++          value={filters.proprietario}
++          onValueChange={(v) => set("proprietario", v)}
++          placeholder="Proprietario"
++          options={[
++            ["all", "Tutti i proprietari"],
++            ...proprietari.map((p) => [p.id, p.nome] as [string, string]),
++          ]}
++        />
+ 
+-      <FilterSelect
+-        ariaLabel="Filtra per Tag"
+-        className="w-full bg-card sm:w-[170px]"
+-        value={filters.tag}
+-        onValueChange={(v) => set("tag", v)}
+-        placeholder="Tag"
+-        options={[["all", "Tutti i tag"], ...tags.map((t) => [t.id, t.name] as [string, string])]}
+-      />
++        <FilterSelect
++          ariaLabel="Filtra per Tag"
++          className="w-full bg-card"
++          value={filters.tag}
++          onValueChange={(v) => set("tag", v)}
++          placeholder="Tag"
++          options={[["all", "Tutti i tag"], ...tags.map((t) => [t.id, t.name] as [string, string])]}
++        />
++      </div>
+ 
+-      <Button variant="ghost" onClick={onReset} disabled={!hasActiveFilters} className="text-muted-foreground">
++      <Button
++        variant="ghost"
++        onClick={onReset}
++        disabled={!hasActiveFilters}
++        className="self-start text-muted-foreground"
++      >
+         <X data-icon="inline-start" />
+-        Reset filtri
++        Azzera filtri
+       </Button>
+     </div>
+   )
+diff --git a/components/installatori/installatore-table.tsx b/components/installatori/installatore-table.tsx
+index 65ba216..75267c4 100644
+--- a/components/installatori/installatore-table.tsx
++++ b/components/installatori/installatore-table.tsx
+@@ -86,13 +86,13 @@ function InstallatoreMobileList({
+   }
+ 
+   return (
+-    <div className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
++    <div className="flex h-full flex-col gap-2 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
+       {installatori.map((installatore) => (
+         <article
+           key={installatore.id}
+           role="button"
+           tabIndex={0}
+-          className="flex min-h-[72px] cursor-pointer items-center gap-2.5 bg-card px-2.5 py-2.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
++          className="flex min-h-[82px] shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+           onClick={() => {
+             startNavigationFeedback()
+             router.push(`/installatori/${installatore.id}`)
+@@ -112,11 +112,11 @@ function InstallatoreMobileList({
+             />
+           </div>
+ 
+-          <InstallatoreAvatar nome={installatore.nome} size={32} />
++          <InstallatoreAvatar nome={installatore.nome} size={36} />
+ 
+           <div className="min-w-0 flex-1">
+             <div className="flex min-w-0 items-center gap-1.5">
+-              <h3 className="truncate text-sm font-bold text-foreground">
++              <h3 className="truncate text-base font-bold text-foreground">
+                 {installatore.nome}
+               </h3>
+               <StatoPill tone={installatore.attivo ? "success" : "muted"}>
+@@ -124,7 +124,7 @@ function InstallatoreMobileList({
+               </StatoPill>
+             </div>
+ 
+-            <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
++            <div className="mt-1 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+               <UserRound className="size-3.5 shrink-0" />
+               <span className="truncate">
+                 {installatore.proprietario_nome ?? "Proprietario non assegnato"}
+diff --git a/components/leads/lead-table.tsx b/components/leads/lead-table.tsx
+index 32e4638..c0623e4 100644
+--- a/components/leads/lead-table.tsx
++++ b/components/leads/lead-table.tsx
+@@ -748,7 +748,7 @@ export function LeadTable({
+         />
+       </div>
+ 
+-      <div className="hidden h-full lg:flex lg:max-h-full lg:flex-col">
++      <div className="hidden h-full overflow-hidden rounded-xl border border-border bg-card lg:flex lg:max-h-full lg:flex-col">
+       {/* Area scrollabile: header sticky + body virtualizzato in un'unica table.
+           Scrolla verticalmente; orizzontalmente è pilotata dalla barra dedicata. */}
+       <div

@@ -1,0 +1,391 @@
+From 64030064cff6a60e41b0af73cc2828ccef4fca82 Mon Sep 17 00:00:00 2001
+From: Claude <claude@mostagstudio.local>
+Date: Thu, 27 Aug 2026 15:30:17 +0000
+Subject: [PATCH 1/2] fix: rimuove scrollbar orizzontale duplicata in
+ leads/clienti/installatori/scadenze/compiti
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Il contenitore principale scrollabile aveva overflow-auto (nativo su
+entrambi gli assi) invece di overflow-x-hidden, mentre esisteva già una
+barra orizzontale dedicata sincronizzata in basso (pensata per il
+mobile). Risultato: due scrollbar orizzontali sovrapposte.
+
+Ora l'overflow-x nativo del contenitore principale è disattivato: resta
+un'unica barra orizzontale, quella dedicata in basso, che pilota lo
+scroll via scrollLeft programmatico (compatibile con overflow-x:hidden).
+Interessa data-table-shell.tsx (clienti/installatori/scadenze/compiti)
+e lead-table.tsx (leads, implementazione standalone).
+---
+ components/leads/lead-table.tsx    | 2 +-
+ components/ui/data-table-shell.tsx | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/components/leads/lead-table.tsx b/components/leads/lead-table.tsx
+index c1300d7..b0fd8e2 100644
+--- a/components/leads/lead-table.tsx
++++ b/components/leads/lead-table.tsx
+@@ -778,7 +778,7 @@ export function LeadTable({
+           const delta = shiftedWheel ? e.deltaY : e.deltaX
+           el.scrollLeft += delta * 0.72
+         }}
+-        className="min-h-0 flex-1 overscroll-contain overflow-auto bg-card outline-none [scroll-behavior:auto] [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5 [&::-webkit-scrollbar]:w-2.5"
++        className="min-h-0 flex-1 overscroll-contain overflow-y-auto overflow-x-hidden bg-card outline-none [scroll-behavior:auto] [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:w-2.5"
+       >
+         {/* table semplice (no wrapper shadcn): un solo contenitore di scroll,
+             così l'header sticky e la barra orizzontale dedicata funzionano. */}
+diff --git a/components/ui/data-table-shell.tsx b/components/ui/data-table-shell.tsx
+index 994bf42..e745cab 100644
+--- a/components/ui/data-table-shell.tsx
++++ b/components/ui/data-table-shell.tsx
+@@ -10,7 +10,7 @@ import {
+ import { cn } from "@/lib/utils"
+ 
+ const SCROLLER_CLASS =
+-  "min-h-0 flex-1 overscroll-contain overflow-auto bg-card outline-none [scroll-behavior:auto] [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5 [&::-webkit-scrollbar]:w-2.5"
++  "min-h-0 flex-1 overscroll-contain overflow-y-auto overflow-x-hidden bg-card outline-none [scroll-behavior:auto] [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:w-2.5"
+ 
+ const H_SCROLL_CLASS =
+   "shrink-0 overscroll-contain overflow-x-auto overflow-y-hidden border-t border-border bg-card [scroll-behavior:auto] [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5"
+-- 
+2.43.0
+
+
+From 42dcbdc210fe3bf02a9228ff2976e4217e500a82 Mon Sep 17 00:00:00 2001
+From: Claude <claude@mostagstudio.local>
+Date: Thu, 27 Aug 2026 15:57:53 +0000
+Subject: [PATCH 2/2] feat(mobile): rende usabile la lista Lead su mobile
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Header e filtri consumavano quasi tutta l'altezza dello schermo prima
+di arrivare alla lista (bottoni Importa/Esporta a testo pieno che
+andavano a capo, ricerca+Filtri impilati in due righe piene,
+paginazione a due righe). Risultato: 1-2 card visibili, resto
+scroll perso.
+
+- Azioni header: su mobile un'unica riga scrollabile orizzontalmente,
+  Importa/Esporta diventano icon-only, 'Nuovo lead' si accorcia a
+  'Nuovo' (label completa resta da lg in su)
+- Barra ricerca + Filtri: mai più impilati sotto i 640px, sempre
+  affiancati su una riga
+- Lista card lead: ora scrolla davvero (era overflow-hidden, non
+  scrollabile), card singole con ombra/hover stile Salesforce invece
+  di righe piatte in un'unica lista
+- Paginazione: riga compatta su mobile (label nascoste, icone),
+  aggiunta opzione '20 righe' e default automatico a 20 su mobile
+  (hooks/use-is-mobile.ts, nuovo hook condiviso) finché l'utente non
+  sceglie altro
+
+Nessuna modifica alla logica dati/filtri, solo layout e default UI.
+---
+ app/(dashboard)/leads/leads-client.tsx | 92 +++++++++++++++-----------
+ components/leads/lead-filters.tsx      | 14 ++--
+ components/leads/lead-table.tsx        |  4 +-
+ hooks/use-is-mobile.ts                 | 25 +++++++
+ 4 files changed, 89 insertions(+), 46 deletions(-)
+ create mode 100644 hooks/use-is-mobile.ts
+
+diff --git a/app/(dashboard)/leads/leads-client.tsx b/app/(dashboard)/leads/leads-client.tsx
+index 41c5ca0..3ba9970 100644
+--- a/app/(dashboard)/leads/leads-client.tsx
++++ b/app/(dashboard)/leads/leads-client.tsx
+@@ -85,6 +85,7 @@ import {
+   type LeadViewPreferences,
+ } from "@/lib/leads/view-preferences"
+ import { leadsKeys } from "@/lib/leads/hooks"
++import { useIsMobile } from "@/hooks/use-is-mobile"
+ 
+ type StoredLeadPreferences = {
+   visibleCols: LeadColumnId[]
+@@ -94,6 +95,7 @@ type StoredLeadPreferences = {
+ 
+ const ROWS_ITEMS: Record<string, string> = {
+   "10": "10 righe",
++  "20": "20 righe",
+   "30": "30 righe",
+   "50": "50 righe",
+ }
+@@ -165,6 +167,16 @@ export function LeadsClient({
+   const [exportTruncato, setExportTruncato] = useState<ExportTruncatoInfo | null>(null)
+   const pendingExport = useRef<(() => void) | null>(null)
+   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
++  const isMobile = useIsMobile()
++  // Su mobile una pagina da 20 lead scrolla molto meno di una da 50: applichiamo
++  // il default più contenuto solo finché l'utente non ha scelto altro lui stesso.
++  const mobileDefaultApplied = useRef(false)
++  useEffect(() => {
++    if (isMobile && !mobileDefaultApplied.current && rowsPerPage === INITIAL_PAGE_SIZE) {
++      mobileDefaultApplied.current = true
++      setRowsPerPage(20)
++    }
++  }, [isMobile, rowsPerPage])
+   const [page, setPage] = useState(1)
+   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
+   const [convertTarget, setConvertTarget] = useState<Lead | null>(null)
+@@ -694,7 +706,7 @@ export function LeadsClient({
+             ) : null}
+           </p>
+         </div>
+-        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
++        <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch] lg:w-auto lg:flex-wrap lg:justify-end lg:overflow-visible lg:pb-0">
+           {/* Impostazioni lead (generali, vista colonne) */}
+           <LeadSettingsSheet
+             open={settingsOpen}
+@@ -715,7 +727,7 @@ export function LeadsClient({
+                 variant="outline"
+                 size="icon"
+                 aria-label="Impostazioni lead"
+-                className="bg-card"
++                className="shrink-0 bg-card"
+               >
+                 <IconSettings size={18} stroke={1.8} />
+               </Button>
+@@ -723,49 +735,52 @@ export function LeadsClient({
+           />
+ 
+           {/* Menu azioni (cambia in base alla selezione) */}
+-          <LeadActionsMenu
+-            selectedCount={selected.size}
+-            filtered={pageRows}
+-            selectedRows={selectedRows}
+-            tags={allTags}
+-            onOpenSettings={openSettings}
+-            onCheckDuplicates={handleCheckDuplicates}
+-            onImport={() => setImportOpen(true)}
+-            onExportFiltered={handleExportFiltered}
+-            onExportSelection={handleBulkExport}
+-            onBulkTransfer={handleBulkOwner}
+-            onBulkUpdate={handleBulkUpdate}
+-            onBulkConvert={handleBulkConvert}
+-            onBulkApprove={handleBulkApprove}
+-            onBulkDedup={handleBulkDedup}
+-            onBulkEmail={() => setBulkEmailOpen(true)}
+-            onBulkDelete={() => setBulkDeleteOpen(true)}
+-          />
++          <div className="shrink-0">
++            <LeadActionsMenu
++              selectedCount={selected.size}
++              filtered={pageRows}
++              selectedRows={selectedRows}
++              tags={allTags}
++              onOpenSettings={openSettings}
++              onCheckDuplicates={handleCheckDuplicates}
++              onImport={() => setImportOpen(true)}
++              onExportFiltered={handleExportFiltered}
++              onExportSelection={handleBulkExport}
++              onBulkTransfer={handleBulkOwner}
++              onBulkUpdate={handleBulkUpdate}
++              onBulkConvert={handleBulkConvert}
++              onBulkApprove={handleBulkApprove}
++              onBulkDedup={handleBulkDedup}
++              onBulkEmail={() => setBulkEmailOpen(true)}
++              onBulkDelete={() => setBulkDeleteOpen(true)}
++            />
++          </div>
+ 
+           <Button
+             variant="outline"
+-            className="bg-card"
++            className="shrink-0 bg-card"
+             onClick={() => setImportOpen(true)}
+           >
+             <Upload data-icon="inline-start" />
+-            Importa
++            <span className="hidden lg:inline">Importa</span>
+           </Button>
+ 
+           <Button
+             variant="outline"
+-            className="bg-card"
++            className="shrink-0 bg-card"
+             onClick={handleExportFiltered}
+           >
+             <Download data-icon="inline-start" />
+-            Esporta
++            <span className="hidden lg:inline">Esporta</span>
+           </Button>
+ 
+           <Button
+-            className="min-w-0 bg-teal text-teal-foreground hover:bg-teal/90"
++            className="min-w-0 shrink-0 bg-teal text-teal-foreground hover:bg-teal/90"
+             onClick={() => setNewLeadOpen(true)}
+           >
+             <Plus data-icon="inline-start" />
+-            Nuovo lead
++            <span className="lg:hidden">Nuovo</span>
++            <span className="hidden lg:inline">Nuovo lead</span>
+           </Button>
+         </div>
+       </div>
+@@ -821,8 +836,8 @@ export function LeadsClient({
+         </div>
+       ) : null}
+ 
+-      {/* Barra filtri + pannello filtri avanzati */}
+-      <div className="flex min-w-0 flex-col items-stretch gap-2 rounded-lg border border-border bg-card p-2 shadow-sm sm:flex-row sm:items-start">
++      {/* Barra filtri + pannello filtri avanzati — sempre su una riga, anche su mobile */}
++      <div className="flex min-w-0 flex-row items-center gap-2 rounded-lg border border-border bg-card p-2 shadow-sm">
+         <AdvancedFilters
+           applied={advanced}
+           onApply={handleAdvancedApply}
+@@ -896,13 +911,15 @@ export function LeadsClient({
+       </div>
+ 
+       {/* Footer paginazione — sempre visibile e in primo piano */}
+-      <div className="sticky bottom-0 z-30 -mx-5 flex shrink-0 flex-col gap-2 border-t border-border bg-background/95 px-5 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+-        <div className="flex min-w-0 flex-wrap items-center gap-3">
+-          <span className="break-words text-sm text-muted-foreground">
++      <div className="sticky bottom-0 z-30 -mx-5 flex shrink-0 items-center justify-between gap-2 border-t border-border bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-5 sm:py-3">
++        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
++          <span className="hidden truncate text-sm text-muted-foreground sm:inline">
+             {rangeStart}-{rangeEnd} di {total.toLocaleString("it-IT")}
+             {selected.size > 0 ? ` · ${selected.size} selezionati` : ""}
+           </span>
++          <span className="truncate text-xs text-muted-foreground sm:hidden">
++            {rangeStart}-{rangeEnd}/{total.toLocaleString("it-IT")}
++          </span>
+           <select
+             aria-label="Numero di righe per pagina"
+             value={String(rowsPerPage)}
+@@ -910,7 +927,7 @@ export function LeadsClient({
+               setRowsPerPage(Number(event.target.value))
+               setPage(1)
+             }}
+-            className="h-8 rounded-md border border-input bg-card px-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
++            className="h-8 shrink-0 rounded-md border border-input bg-card px-1.5 text-xs text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 sm:px-2 sm:text-sm"
+           >
+             {Object.entries(ROWS_ITEMS).map(([value, label]) => (
+               <option key={value} value={value}>
+@@ -920,16 +937,17 @@ export function LeadsClient({
+           </select>
+         </div>
+ 
+-        <div className="flex min-w-0 flex-wrap items-center gap-2">
++        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+           <Button
+             size="sm"
+             variant="outline"
+             className="bg-card"
+             disabled={page <= 1}
+             onClick={() => setPage((p) => Math.max(1, p - 1))}
++            aria-label="Pagina precedente"
+           >
+             <ChevronLeft data-icon="inline-start" />
+-            Precedente
++            <span className="hidden sm:inline">Precedente</span>
+           </Button>
+           <span className="text-sm tabular-nums text-muted-foreground">
+             {page} / {totalPages}
+@@ -940,12 +958,12 @@ export function LeadsClient({
+             className="bg-card"
+             disabled={page >= totalPages}
+             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
++            aria-label="Pagina successiva"
+           >
+-            Successivo
++            <span className="hidden sm:inline">Successivo</span>
+             <ChevronRight data-icon="inline-end" />
+           </Button>
+         </div>
+-        </div>
+       </div>
+ 
+       {/* Toolbar azioni bulk */}
+diff --git a/components/leads/lead-filters.tsx b/components/leads/lead-filters.tsx
+index fd4f9fc..23d8bcb 100644
+--- a/components/leads/lead-filters.tsx
++++ b/components/leads/lead-filters.tsx
+@@ -104,14 +104,14 @@ export function LeadFilters({
+   ].filter(Boolean) as Array<[keyof LeadFilterState, string]>
+ 
+   return (
+-    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+-      <div className="relative min-w-0 flex-[1_1_100%] sm:flex-[1_1_280px]">
+-        <Search className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
++    <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
++      <div className="relative min-w-0 flex-[1_1_140px]">
++        <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground sm:left-4 sm:size-5" />
+         <Input
+           value={filters.search}
+           onChange={(event) => set("search", event.target.value)}
+           placeholder="Cerca lead per nome, email o telefono"
+-          className="h-12 rounded-lg border-border bg-card pl-12 text-[15px] shadow-sm"
++          className="h-10 rounded-lg border-border bg-card pl-10 text-sm shadow-sm sm:h-12 sm:pl-12 sm:text-[15px]"
+           aria-label="Cerca lead"
+         />
+       </div>
+@@ -119,11 +119,11 @@ export function LeadFilters({
+       <Popover>
+         <PopoverTrigger
+           render={
+-            <Button variant="outline" size="lg" className="w-full bg-card sm:w-auto">
++            <Button variant="outline" size="lg" className="h-10 shrink-0 bg-card sm:h-11">
+               <SlidersHorizontal data-icon="inline-start" />
+-              Filtri
++              <span className="hidden sm:inline">Filtri</span>
+               {active.length > 0 ? (
+-                <span className="ml-1 rounded-md bg-primary px-2 py-0.5 text-xs text-primary-foreground">
++                <span className="ml-0.5 rounded-md bg-primary px-2 py-0.5 text-xs text-primary-foreground sm:ml-1">
+                   {active.length}
+                 </span>
+               ) : null}
+diff --git a/components/leads/lead-table.tsx b/components/leads/lead-table.tsx
+index b0fd8e2..0eb6073 100644
+--- a/components/leads/lead-table.tsx
++++ b/components/leads/lead-table.tsx
+@@ -105,7 +105,7 @@ function LeadMobileList({
+   }
+ 
+   return (
+-    <div className="flex h-full flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card [-webkit-overflow-scrolling:touch]">
++    <div className="flex h-full flex-col gap-2 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
+       {leads.map((lead) => {
+         const owner =
+           owners.find((item) => item.id === lead["Lead Proprietario"])?.nome ??
+@@ -120,7 +120,7 @@ function LeadMobileList({
+             key={lead.id}
+             role="button"
+             tabIndex={0}
+-            className="flex min-h-[76px] cursor-pointer items-center gap-2.5 bg-card px-2.5 py-2.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
++            className="flex min-h-[76px] shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+             onClick={() => {
+               startNavigationFeedback()
+               router.push(`/leads/${lead.id}`)
+diff --git a/hooks/use-is-mobile.ts b/hooks/use-is-mobile.ts
+new file mode 100644
+index 0000000..1eed16c
+--- /dev/null
++++ b/hooks/use-is-mobile.ts
+@@ -0,0 +1,25 @@
++"use client"
++
++import { useEffect, useState } from "react"
++
++/**
++ * Rileva se il viewport è sotto il breakpoint indicato (default: 1023px,
++ * coerente con il breakpoint `lg` usato per alternare tabella desktop /
++ * lista a card su leads, clienti, installatori, ecc.).
++ *
++ * SSR-safe: il primo render restituisce sempre `false` per evitare
++ * mismatch di idratazione; il valore reale arriva subito dopo il mount.
++ */
++export function useIsMobile(breakpoint = 1023): boolean {
++  const [isMobile, setIsMobile] = useState(false)
++
++  useEffect(() => {
++    const mq = window.matchMedia(`(max-width: ${breakpoint}px)`)
++    const update = () => setIsMobile(mq.matches)
++    update()
++    mq.addEventListener("change", update)
++    return () => mq.removeEventListener("change", update)
++  }, [breakpoint])
++
++  return isMobile
++}
+-- 
+2.43.0
+

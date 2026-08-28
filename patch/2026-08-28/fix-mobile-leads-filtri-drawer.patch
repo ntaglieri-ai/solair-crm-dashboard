@@ -1,0 +1,502 @@
+From b19bfa18a2853d8ce74eb495894a9c484a348f63 Mon Sep 17 00:00:00 2001
+From: Claude <claude@mostagstudio.local>
+Date: Fri, 28 Aug 2026 05:39:08 +0000
+Subject: [PATCH] =?UTF-8?q?feat(mobile):=20pulsante=20Filtri=20unico=20sti?=
+ =?UTF-8?q?le=20Salesforce=20+=20pi=C3=B9=20spazio=20ai=20contenuti=20(Lea?=
+ =?UTF-8?q?d)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Prima c'erano due punti di accesso separati ai filtri (l'icona funnel
+'Filtri avanzati' e il popover 'Filtri' con stato/sede/proprietario/...),
+sparsi nella barra sopra la lista. Consolidato in UN pulsante nell'header,
+colore primary (navy) con ombra, badge conteggio totale, che apre l'unico
+drawer 'Filtri avanzati' — ora con dentro anche la sezione 'Filtri
+principali' (stato/sede/proprietario/origine/tag/valutazione, si applicano
+subito) sopra ai filtri avanzati per campo (che restano ad Applica/Reset).
+
+La barra sopra la lista resta solo con la ricerca, a piena larghezza:
+guadagnata un'intera riga di altezza per la lista.
+
+lead-filters.tsx: split in LeadSearchInput (barra ricerca, riusata inline)
++ LeadQuickFilterFields (griglia filtri, ora dentro il drawer) +
+countActiveLeadFilters(); rimosso il vecchio Popover 'LeadFilters'.
+
+advanced-filters.tsx: nuovi prop opzionali quickFilters/onQuickFiltersChange/
+onQuickFiltersReset (renderizzano LeadQuickFilterFields dentro il drawer) e
+trigger (render prop per un trigger personalizzato, badge conteggio ora
+somma avanzati+principali); comportamento invariato quando questi prop non
+sono passati (retro-compatibile).
+
+Card lead mobile: caratteri più grandi (nome text-sm->text-base, riga
+proprietario/sede text-xs->text-sm, avatar size-8->size-9), card leggermente
+più alta di conseguenza. Nessun rischio di scroll laterale: i campi restano
+troncati con ellissi.
+---
+ app/(dashboard)/leads/leads-client.tsx |  44 ++++--
+ components/leads/advanced-filters.tsx  |  67 +++++++--
+ components/leads/lead-filters.tsx      | 195 +++++++++++++------------
+ components/leads/lead-table.tsx        |   8 +-
+ 4 files changed, 184 insertions(+), 130 deletions(-)
+
+diff --git a/app/(dashboard)/leads/leads-client.tsx b/app/(dashboard)/leads/leads-client.tsx
+index db05748..28a22c4 100644
+--- a/app/(dashboard)/leads/leads-client.tsx
++++ b/app/(dashboard)/leads/leads-client.tsx
+@@ -10,6 +10,7 @@ import {
+   Loader2,
+   Upload,
+   Download,
++  SlidersHorizontal,
+ } from "lucide-react"
+ import { IconSettings } from "@tabler/icons-react"
+ import { Button } from "@/components/ui/button"
+@@ -28,7 +29,7 @@ import {
+   type LeadColumnId,
+ } from "@/lib/mock-data"
+ import {
+-  LeadFilters,
++  LeadSearchInput,
+   DEFAULT_FILTERS,
+   type LeadFilterState,
+ } from "@/components/leads/lead-filters"
+@@ -794,6 +795,30 @@ export function LeadsClient({
+             <span className="hidden lg:inline">Esporta</span>
+           </Button>
+ 
++          <AdvancedFilters
++            applied={advanced}
++            onApply={handleAdvancedApply}
++            tags={allTags}
++            quickFilters={filters}
++            onQuickFiltersChange={handleFilterChange}
++            onQuickFiltersReset={handleReset}
++            trigger={({ onClick, count }) => (
++              <Button
++                variant="default"
++                onClick={onClick}
++                className="relative shrink-0 bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90"
++              >
++                <SlidersHorizontal data-icon="inline-start" />
++                <span className="hidden lg:inline">Filtri</span>
++                {count > 0 ? (
++                  <span className="ml-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-teal px-1 text-xs font-bold tabular-nums text-teal-foreground lg:ml-1">
++                    {count}
++                  </span>
++                ) : null}
++              </Button>
++            )}
++          />
++
+           <Button
+             className="min-w-0 shrink-0 bg-teal text-teal-foreground hover:bg-teal/90"
+             onClick={() => setNewLeadOpen(true)}
+@@ -856,21 +881,12 @@ export function LeadsClient({
+         </div>
+       ) : null}
+ 
+-      {/* Barra filtri + pannello filtri avanzati — sempre su una riga, anche su mobile */}
++      {/* Barra di ricerca — sempre su una riga, tutto il resto vive nel drawer "Filtri" */}
+       <div className="flex min-w-0 flex-row items-center gap-2 rounded-lg border border-border bg-card p-2 shadow-sm">
+-        <AdvancedFilters
+-          applied={advanced}
+-          onApply={handleAdvancedApply}
+-          tags={allTags}
++        <LeadSearchInput
++          value={filters.search}
++          onChange={(v) => handleFilterChange({ ...filters, search: v })}
+         />
+-        <div className="min-w-0 flex-1">
+-          <LeadFilters
+-            filters={filters}
+-            onChange={handleFilterChange}
+-            onReset={handleReset}
+-            tags={allTags}
+-          />
+-        </div>
+       </div>
+ 
+       {/* Stato errore */}
+diff --git a/components/leads/advanced-filters.tsx b/components/leads/advanced-filters.tsx
+index a0eef36..551cc74 100644
+--- a/components/leads/advanced-filters.tsx
++++ b/components/leads/advanced-filters.tsx
+@@ -1,6 +1,6 @@
+ "use client"
+ 
+-import { useEffect, useMemo, useState } from "react"
++import { useEffect, useMemo, useState, type ReactNode } from "react"
+ import {
+   ChevronRight,
+   Filter,
+@@ -32,6 +32,11 @@ import {
+   SEDE_LABELS,
+ } from "@/lib/mock-data"
+ import { useTags } from "@/lib/tag-store"
++import {
++  LeadQuickFilterFields,
++  countActiveLeadFilters,
++  type LeadFilterState,
++} from "@/components/leads/lead-filters"
+ 
+ // ----------------------------------------------------------------------------
+ // Tipi filtro — logica pura condivisa con il repository server-side
+@@ -206,10 +211,20 @@ export function AdvancedFilters({
+   applied,
+   onApply,
+   tags,
++  quickFilters,
++  onQuickFiltersChange,
++  onQuickFiltersReset,
++  trigger,
+ }: {
+   applied: AdvancedFilterState
+   onApply: (state: AdvancedFilterState) => void
+   tags: string[]
++  /** Filtri "principali" (stato/sede/proprietario/…): si applicano subito, vivono nello stesso drawer. */
++  quickFilters?: LeadFilterState
++  onQuickFiltersChange?: (next: LeadFilterState) => void
++  onQuickFiltersReset?: () => void
++  /** Trigger personalizzato (es. bottone header colorato). Se assente, resta l'icona compatta di default. */
++  trigger?: (ctx: { onClick: () => void; count: number }) => ReactNode
+ }) {
+   const { owners, installers } = useTags()
+   const [open, setOpen] = useState(false)
+@@ -243,6 +258,8 @@ export function AdvancedFilters({
+ 
+   const appliedCount = countActiveAdvanced(applied)
+   const draftCount = countActiveAdvanced(draft)
++  const quickCount = quickFilters ? countActiveLeadFilters(quickFilters) : 0
++  const totalAppliedCount = appliedCount + quickCount
+ 
+   const setQuick = (key: keyof AdvancedFilterState["quick"], value: boolean) =>
+     setDraft((d) => ({ ...d, quick: { ...d.quick, [key]: value } }))
+@@ -298,21 +315,24 @@ export function AdvancedFilters({
+ 
+   return (
+     <Sheet open={open} onOpenChange={setOpen}>
+-      <Button
+-        variant="outline"
+-        size="icon"
+-        className="relative bg-card"
+-        aria-label="Filtri avanzati"
+-        onClick={() => setOpen(true)}
+-      >
+-        <Filter />
+-        {appliedCount > 0 ? (
+-          <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-teal px-1 text-[10px] font-bold tabular-nums text-teal-foreground">
+-            {appliedCount}
+-          </span>
+-        ) : null}
+-      </Button>
+-
++      {trigger ? (
++        trigger({ onClick: () => setOpen(true), count: totalAppliedCount })
++      ) : (
++        <Button
++          variant="outline"
++          size="icon"
++          className="relative bg-card"
++          aria-label="Filtri avanzati"
++          onClick={() => setOpen(true)}
++        >
++          <Filter />
++          {totalAppliedCount > 0 ? (
++            <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-teal px-1 text-[10px] font-bold tabular-nums text-teal-foreground">
++              {totalAppliedCount}
++            </span>
++          ) : null}
++        </Button>
++      )}
+       <SheetContent
+         side="right"
+         showCloseButton={false}
+@@ -367,6 +387,21 @@ export function AdvancedFilters({
+             </div>
+           ) : null}
+ 
++          {/* Filtri principali (stato, sede, proprietario, origine, tag, valutazione) */}
++          {quickFilters && onQuickFiltersChange && onQuickFiltersReset ? (
++            <div className="border-b border-border p-3">
++              <p className="px-1 pb-2 text-sm font-semibold text-foreground">
++                Filtri principali
++              </p>
++              <LeadQuickFilterFields
++                filters={quickFilters}
++                onChange={onQuickFiltersChange}
++                onReset={onQuickFiltersReset}
++                tags={tags}
++              />
++            </div>
++          ) : null}
++
+           {/* Filtri rapidi (collassati di default) */}
+           <Accordion className="border-b border-border px-3">
+             <AccordionItem value="quick" className="border-b-0">
+diff --git a/components/leads/lead-filters.tsx b/components/leads/lead-filters.tsx
+index 23d8bcb..dc6a48a 100644
+--- a/components/leads/lead-filters.tsx
++++ b/components/leads/lead-filters.tsx
+@@ -1,6 +1,6 @@
+ "use client"
+ 
+-import { Filter, Search, SlidersHorizontal, X } from "lucide-react"
++import { Search, X } from "lucide-react"
+ import {
+   Select,
+   SelectContent,
+@@ -11,7 +11,6 @@ import {
+ } from "@/components/ui/select"
+ import { Input } from "@/components/ui/input"
+ import { Button } from "@/components/ui/button"
+-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+ import {
+   STATO_LEAD_ORDER,
+   ORIGINE_LEAD_VALUES,
+@@ -75,7 +74,43 @@ function FilterSelect({
+   )
+ }
+ 
+-export function LeadFilters({
++/** Numero di filtri rapidi attivi (stato/sede/proprietario/origine/tag/valutazione). */
++export function countActiveLeadFilters(filters: LeadFilterState): number {
++  return (
++    (filters.stato !== "all" ? 1 : 0) +
++    (filters.sede !== "all" ? 1 : 0) +
++    (filters.commerciale !== "all" ? 1 : 0) +
++    (filters.origine !== "all" ? 1 : 0) +
++    (filters.tag !== "all" ? 1 : 0) +
++    (filters.score !== "all" ? 1 : 0)
++  )
++}
++
++/** Sola barra di ricerca: resta sempre in vista sopra la lista. */
++export function LeadSearchInput({
++  value,
++  onChange,
++}: {
++  value: string
++  onChange: (v: string) => void
++}) {
++  return (
++    <div className="relative min-w-0 flex-1">
++      <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground sm:left-4 sm:size-5" />
++      <Input
++        value={value}
++        onChange={(event) => onChange(event.target.value)}
++        placeholder="Cerca lead per nome, email o telefono"
++        className="h-10 rounded-lg border-border bg-card pl-10 text-sm shadow-sm sm:h-12 sm:pl-12 sm:text-[15px]"
++        aria-label="Cerca lead"
++      />
++    </div>
++  )
++}
++
++/** Griglia dei filtri rapidi (stato/sede/proprietario/…), pensata per vivere
++ * dentro il drawer "Filtri" insieme ai filtri avanzati sui campi. */
++export function LeadQuickFilterFields({
+   filters,
+   onChange,
+   onReset,
+@@ -104,103 +139,71 @@ export function LeadFilters({
+   ].filter(Boolean) as Array<[keyof LeadFilterState, string]>
+ 
+   return (
+-    <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
+-      <div className="relative min-w-0 flex-[1_1_140px]">
+-        <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground sm:left-4 sm:size-5" />
+-        <Input
+-          value={filters.search}
+-          onChange={(event) => set("search", event.target.value)}
+-          placeholder="Cerca lead per nome, email o telefono"
+-          className="h-10 rounded-lg border-border bg-card pl-10 text-sm shadow-sm sm:h-12 sm:pl-12 sm:text-[15px]"
+-          aria-label="Cerca lead"
++    <div className="flex min-w-0 flex-col gap-4">
++      <div className="grid gap-4 sm:grid-cols-2">
++        <FilterSelect
++          label="Stato"
++          value={filters.stato}
++          onValueChange={(value) => set("stato", value)}
++          options={[["all", "Tutti gli stati"], ...STATO_LEAD_ORDER.map((value) => [value, value] as [string, string])]}
++        />
++        <FilterSelect
++          label="Sede"
++          value={filters.sede}
++          onValueChange={(value) => set("sede", value)}
++          options={[["all", "Tutte le sedi"], ...SEDE_LABELS.map((value) => [value, value] as [string, string])]}
++        />
++        <FilterSelect
++          label="Proprietario"
++          value={filters.commerciale}
++          onValueChange={(value) => set("commerciale", value)}
++          options={[["all", "Tutti i proprietari"], ...owners.map((owner) => [owner.id, owner.nome] as [string, string])]}
++        />
++        <FilterSelect
++          label="Origine"
++          value={filters.origine}
++          onValueChange={(value) => set("origine", value)}
++          options={[["all", "Tutte le origini"], ...ORIGINE_LEAD_VALUES.map((value) => [value, value] as [string, string])]}
++        />
++        <FilterSelect
++          label="Tag"
++          value={filters.tag}
++          onValueChange={(value) => set("tag", value)}
++          options={[["all", "Tutti i tag"], ...tags.map((value) => [value, value] as [string, string])]}
++        />
++        <FilterSelect
++          label="Valutazione"
++          value={filters.score}
++          onValueChange={(value) => set("score", value as ScoreFilter)}
++          options={[
++            ["all", "Tutte le valutazioni"],
++            ["caldo", "Caldo (>80)"],
++            ["medio", "Medio (50-80)"],
++            ["freddo", "Freddo (<50)"],
++          ]}
+         />
+       </div>
+ 
+-      <Popover>
+-        <PopoverTrigger
+-          render={
+-            <Button variant="outline" size="lg" className="h-10 shrink-0 bg-card sm:h-11">
+-              <SlidersHorizontal data-icon="inline-start" />
+-              <span className="hidden sm:inline">Filtri</span>
+-              {active.length > 0 ? (
+-                <span className="ml-0.5 rounded-md bg-primary px-2 py-0.5 text-xs text-primary-foreground sm:ml-1">
+-                  {active.length}
+-                </span>
+-              ) : null}
+-            </Button>
+-          }
+-        />
+-        <PopoverContent align="end" className="w-[min(92vw,620px)] gap-4 p-5">
+-          <div className="flex items-center gap-3">
+-            <span className="flex size-10 items-center justify-center rounded-lg bg-secondary text-primary">
+-              <Filter className="size-5" />
+-            </span>
+-            <div>
+-              <h3 className="text-base font-bold">Filtra i lead</h3>
+-              <p className="text-xs text-muted-foreground">Combina i criteri di ricerca</p>
+-            </div>
+-          </div>
+-          <div className="grid gap-4 sm:grid-cols-2">
+-            <FilterSelect
+-              label="Stato"
+-              value={filters.stato}
+-              onValueChange={(value) => set("stato", value)}
+-              options={[["all", "Tutti gli stati"], ...STATO_LEAD_ORDER.map((value) => [value, value] as [string, string])]}
+-            />
+-            <FilterSelect
+-              label="Sede"
+-              value={filters.sede}
+-              onValueChange={(value) => set("sede", value)}
+-              options={[["all", "Tutte le sedi"], ...SEDE_LABELS.map((value) => [value, value] as [string, string])]}
+-            />
+-            <FilterSelect
+-              label="Proprietario"
+-              value={filters.commerciale}
+-              onValueChange={(value) => set("commerciale", value)}
+-              options={[["all", "Tutti i proprietari"], ...owners.map((owner) => [owner.id, owner.nome] as [string, string])]}
+-            />
+-            <FilterSelect
+-              label="Origine"
+-              value={filters.origine}
+-              onValueChange={(value) => set("origine", value)}
+-              options={[["all", "Tutte le origini"], ...ORIGINE_LEAD_VALUES.map((value) => [value, value] as [string, string])]}
+-            />
+-            <FilterSelect
+-              label="Tag"
+-              value={filters.tag}
+-              onValueChange={(value) => set("tag", value)}
+-              options={[["all", "Tutti i tag"], ...tags.map((value) => [value, value] as [string, string])]}
+-            />
+-            <FilterSelect
+-              label="Valutazione"
+-              value={filters.score}
+-              onValueChange={(value) => set("score", value as ScoreFilter)}
+-              options={[
+-                ["all", "Tutte le valutazioni"],
+-                ["caldo", "Caldo (>80)"],
+-                ["medio", "Medio (50-80)"],
+-                ["freddo", "Freddo (<50)"],
+-              ]}
+-            />
+-          </div>
+-          <Button variant="ghost" onClick={onReset} disabled={active.length === 0}>
+-            <X data-icon="inline-start" />
+-            Azzera filtri
+-          </Button>
+-        </PopoverContent>
+-      </Popover>
++      {active.length > 0 ? (
++        <div className="flex flex-wrap gap-2">
++          {active.map(([key, label]) => (
++            <button
++              type="button"
++              key={key}
++              onClick={() => set(key, "all" as never)}
++              className="flex min-w-0 max-w-full items-center gap-2 rounded-lg border border-primary/15 bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground transition-colors hover:bg-secondary/70"
++            >
++              <span className="min-w-0 break-words">{label}</span>
++              <X className="size-3.5 shrink-0" />
++            </button>
++          ))}
++        </div>
++      ) : null}
+ 
+-      {active.map(([key, label]) => (
+-        <button
+-          type="button"
+-          key={key}
+-          onClick={() => set(key, "all" as never)}
+-          className="flex min-w-0 max-w-full items-center gap-2 rounded-lg border border-primary/15 bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground transition-colors hover:bg-secondary/70"
+-        >
+-          <span className="min-w-0 break-words">{label}</span>
+-          <X className="size-3.5 shrink-0" />
+-        </button>
+-      ))}
++      <Button variant="ghost" className="self-start" onClick={onReset} disabled={active.length === 0}>
++        <X data-icon="inline-start" />
++        Azzera filtri rapidi
++      </Button>
+     </div>
+   )
+ }
+diff --git a/components/leads/lead-table.tsx b/components/leads/lead-table.tsx
+index 0eb6073..32e4638 100644
+--- a/components/leads/lead-table.tsx
++++ b/components/leads/lead-table.tsx
+@@ -120,7 +120,7 @@ function LeadMobileList({
+             key={lead.id}
+             role="button"
+             tabIndex={0}
+-            className="flex min-h-[76px] shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
++            className="flex min-h-[82px] shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+             onClick={() => {
+               startNavigationFeedback()
+               router.push(`/leads/${lead.id}`)
+@@ -140,16 +140,16 @@ function LeadMobileList({
+               />
+             </div>
+ 
+-            <LeadAvatar nome={lead["Nome Lead"]} className="size-8 text-xs" />
++            <LeadAvatar nome={lead["Nome Lead"]} className="size-9 text-sm" />
+ 
+             <div className="min-w-0 flex-1">
+               <div className="flex min-w-0 items-center gap-1.5">
+-                <h3 className="truncate text-sm font-bold text-foreground">
++                <h3 className="truncate text-base font-bold text-foreground">
+                   {lead["Nome Lead"]}
+                 </h3>
+                 <StatoLeadBadge stato={lead["Stato Lead"]} />
+               </div>
+-              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
++              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+                 <UserRound className="size-3.5 shrink-0" />
+                 <span className="truncate">{owner}</span>
+                 {luogo ? (
+-- 
+2.43.0
+

@@ -1,0 +1,319 @@
+From 4e207d534cac7e6005957fe145f1ec05cb799fbd Mon Sep 17 00:00:00 2001
+From: Claude <claude@mostagstudio.local>
+Date: Fri, 28 Aug 2026 05:59:39 +0000
+Subject: [PATCH] =?UTF-8?q?feat(mobile):=20viste=20rapide=20nel=20drawer?=
+ =?UTF-8?q?=20+=20pulsanti=20header=20pi=C3=B9=20grandi=20e=20a=20piena=20?=
+ =?UTF-8?q?larghezza=20(Lead)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Le viste rapide (Tutti/Da contattare/Da richiamare/Non assegnati)
+occupavano un'intera riga sopra la lista: spostate nel drawer Filtri
+come sezione 'Viste rapide' in cima (advanced-filters.tsx, nuovo prop
+quickViews). Sopra la lista resta solo la barra di ricerca.
+
+Riga pulsanti header (Impostazioni, Menu azioni, Importa, Esporta,
+Filtri, Nuovo lead): da riga compatta a scroll orizzontale a griglia
+3 colonne a piena larghezza su mobile (icone e testo più grandi,
+h-14), che torna alla riga compatta originale da lg in su. Aggiunta
+un'etichetta 'Azioni' al menu (prima solo icona) per coerenza con gli
+altri, nuovo prop triggerClassName su LeadActionsMenu per dimensionarlo
+dall'esterno.
+
+Rimosso l'import inutilizzato di framer-motion (i chip animati sono
+confluiti, non animati, nel drawer).
+---
+ app/(dashboard)/leads/leads-client.tsx | 120 ++++++++++---------------
+ components/leads/advanced-filters.tsx  |  29 ++++++
+ components/leads/lead-actions-menu.tsx |   8 +-
+ 3 files changed, 83 insertions(+), 74 deletions(-)
+
+diff --git a/app/(dashboard)/leads/leads-client.tsx b/app/(dashboard)/leads/leads-client.tsx
+index 28a22c4..5f26a60 100644
+--- a/app/(dashboard)/leads/leads-client.tsx
++++ b/app/(dashboard)/leads/leads-client.tsx
+@@ -77,7 +77,6 @@ import {
+ } from "@/lib/leads/hooks"
+ import { useTags } from "@/lib/tag-store"
+ import { usePermissions } from "@/lib/permissions/provider"
+-import { motion } from "framer-motion"
+ import { useQueryClient } from "@tanstack/react-query"
+ import {
+   LEADS_VIEW_COOKIE,
+@@ -101,6 +100,14 @@ const ROWS_ITEMS: Record<string, string> = {
+   "50": "50 righe",
+ }
+ 
++/** Viste rapide del drawer Filtri (Tutti/Da contattare/…). */
++const QUICK_VIEWS: { label: string; stato: string; commerciale: string }[] = [
++  { label: "Tutti", stato: "all", commerciale: "all" },
++  { label: "Da contattare", stato: "Non contattato", commerciale: "all" },
++  { label: "Da richiamare", stato: "Tentato di contattare", commerciale: "all" },
++  { label: "Non assegnati", stato: "all", commerciale: "__unassigned__" },
++]
++
+ // Simula il download di un file CSV a partire dalle righe passate
+ function downloadLeadsCsv(rows: LeadListItem[], filename: string) {
+   const cols = LEAD_COLUMNS.map((c) => c.id)
+@@ -727,7 +734,7 @@ export function LeadsClient({
+             ) : null}
+           </p>
+         </div>
+-        <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch] lg:w-auto lg:flex-wrap lg:justify-end lg:overflow-visible lg:pb-0">
++        <div className="grid w-full grid-cols-3 gap-2.5 lg:flex lg:w-auto lg:flex-wrap lg:justify-end lg:gap-2">
+           {/* Impostazioni lead (generali, vista colonne) */}
+           <LeadSettingsSheet
+             open={settingsOpen}
+@@ -746,53 +753,51 @@ export function LeadsClient({
+             trigger={
+               <Button
+                 variant="outline"
+-                size="icon"
+                 aria-label="Impostazioni lead"
+-                className="shrink-0 bg-card"
++                className="h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-10 lg:p-0"
+               >
+-                <IconSettings size={18} stroke={1.8} />
++                <IconSettings size={22} stroke={1.8} className="lg:size-[18px]" />
++                <span className="lg:hidden">Imposta</span>
+               </Button>
+             }
+           />
+ 
+           {/* Menu azioni (cambia in base alla selezione) */}
+-          <div className="shrink-0">
+-            <LeadActionsMenu
+-              selectedCount={selected.size}
+-              filtered={pageRows}
+-              selectedRows={selectedRows}
+-              tags={allTags}
+-              onOpenSettings={openSettings}
+-              onCheckDuplicates={handleCheckDuplicates}
+-              onImport={() => setImportOpen(true)}
+-              onExportFiltered={handleExportFiltered}
+-              onExportSelection={handleBulkExport}
+-              onBulkTransfer={handleBulkOwner}
+-              onBulkUpdate={handleBulkUpdate}
+-              onBulkConvert={handleBulkConvert}
+-              onBulkApprove={handleBulkApprove}
+-              onBulkDedup={handleBulkDedup}
+-              onBulkEmail={() => setBulkEmailOpen(true)}
+-              onBulkDelete={() => setBulkDeleteOpen(true)}
+-            />
+-          </div>
++          <LeadActionsMenu
++            selectedCount={selected.size}
++            filtered={pageRows}
++            selectedRows={selectedRows}
++            tags={allTags}
++            onOpenSettings={openSettings}
++            onCheckDuplicates={handleCheckDuplicates}
++            onImport={() => setImportOpen(true)}
++            onExportFiltered={handleExportFiltered}
++            onExportSelection={handleBulkExport}
++            onBulkTransfer={handleBulkOwner}
++            onBulkUpdate={handleBulkUpdate}
++            onBulkConvert={handleBulkConvert}
++            onBulkApprove={handleBulkApprove}
++            onBulkDedup={handleBulkDedup}
++            onBulkEmail={() => setBulkEmailOpen(true)}
++            onBulkDelete={() => setBulkDeleteOpen(true)}
++          />
+ 
+           <Button
+             variant="outline"
+-            className="shrink-0 bg-card"
++            className="h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-auto"
+             onClick={() => setImportOpen(true)}
+           >
+-            <Upload data-icon="inline-start" />
+-            <span className="hidden lg:inline">Importa</span>
++            <Upload className="size-[22px] lg:size-4" />
++            Importa
+           </Button>
+ 
+           <Button
+             variant="outline"
+-            className="shrink-0 bg-card"
++            className="h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-auto"
+             onClick={handleExportFiltered}
+           >
+-            <Download data-icon="inline-start" />
+-            <span className="hidden lg:inline">Esporta</span>
++            <Download className="size-[22px] lg:size-4" />
++            Esporta
+           </Button>
+ 
+           <AdvancedFilters
+@@ -802,16 +807,21 @@ export function LeadsClient({
+             quickFilters={filters}
+             onQuickFiltersChange={handleFilterChange}
+             onQuickFiltersReset={handleReset}
++            quickViews={QUICK_VIEWS.map((view) => ({
++              label: view.label,
++              active: filters.stato === view.stato && filters.commerciale === view.commerciale,
++              onSelect: () =>
++                handleFilterChange({ ...DEFAULT_FILTERS, stato: view.stato, commerciale: view.commerciale }),
++            }))}
+             trigger={({ onClick, count }) => (
+               <Button
+-                variant="default"
+                 onClick={onClick}
+-                className="relative shrink-0 bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90"
++                className="relative h-14 w-full gap-2 bg-primary text-sm text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90 lg:h-10 lg:w-auto"
+               >
+-                <SlidersHorizontal data-icon="inline-start" />
+-                <span className="hidden lg:inline">Filtri</span>
++                <SlidersHorizontal className="size-[22px] lg:size-4" />
++                Filtri
+                 {count > 0 ? (
+-                  <span className="ml-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-teal px-1 text-xs font-bold tabular-nums text-teal-foreground lg:ml-1">
++                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-teal px-1 text-xs font-bold tabular-nums text-teal-foreground">
+                     {count}
+                   </span>
+                 ) : null}
+@@ -820,50 +830,16 @@ export function LeadsClient({
+           />
+ 
+           <Button
+-            className="min-w-0 shrink-0 bg-teal text-teal-foreground hover:bg-teal/90"
++            className="h-14 w-full gap-2 bg-teal text-sm text-teal-foreground hover:bg-teal/90 lg:h-10 lg:w-auto"
+             onClick={() => setNewLeadOpen(true)}
+           >
+-            <Plus data-icon="inline-start" />
++            <Plus className="size-[22px] lg:size-4" />
+             <span className="lg:hidden">Nuovo</span>
+             <span className="hidden lg:inline">Nuovo lead</span>
+           </Button>
+         </div>
+       </div>
+ 
+-      <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+-        {[
+-          { label: "Tutti", stato: "all", commerciale: "all" },
+-          { label: "Da contattare", stato: "Non contattato", commerciale: "all" },
+-          { label: "Da richiamare", stato: "Tentato di contattare", commerciale: "all" },
+-          { label: "Non assegnati", stato: "all", commerciale: "__unassigned__" },
+-        ].map((view) => {
+-          const active =
+-            filters.stato === view.stato && filters.commerciale === view.commerciale
+-          return (
+-            <motion.button
+-              type="button"
+-              key={view.label}
+-              whileHover={{ y: -1 }}
+-              whileTap={{ scale: 0.98 }}
+-              onClick={() =>
+-                handleFilterChange({
+-                  ...DEFAULT_FILTERS,
+-                  stato: view.stato,
+-                  commerciale: view.commerciale,
+-                })
+-              }
+-              className={
+-                active
+-                  ? "h-10 shrink-0 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground shadow-sm"
+-                  : "h-10 shrink-0 rounded-lg border border-border bg-card px-4 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+-              }
+-            >
+-              {view.label}
+-            </motion.button>
+-          )
+-        })}
+-      </div>
+-
+       {/* Indicatore filtro duplicati attivo */}
+       {onlyDuplicates ? (
+         <div className="flex items-center justify-between rounded-lg bg-secondary px-3 py-2">
+diff --git a/components/leads/advanced-filters.tsx b/components/leads/advanced-filters.tsx
+index 551cc74..871a758 100644
+--- a/components/leads/advanced-filters.tsx
++++ b/components/leads/advanced-filters.tsx
+@@ -214,6 +214,7 @@ export function AdvancedFilters({
+   quickFilters,
+   onQuickFiltersChange,
+   onQuickFiltersReset,
++  quickViews,
+   trigger,
+ }: {
+   applied: AdvancedFilterState
+@@ -223,6 +224,8 @@ export function AdvancedFilters({
+   quickFilters?: LeadFilterState
+   onQuickFiltersChange?: (next: LeadFilterState) => void
+   onQuickFiltersReset?: () => void
++  /** Viste rapide (es. Tutti/Da contattare/…): pillole in cima al drawer. */
++  quickViews?: { label: string; active: boolean; onSelect: () => void }[]
+   /** Trigger personalizzato (es. bottone header colorato). Se assente, resta l'icona compatta di default. */
+   trigger?: (ctx: { onClick: () => void; count: number }) => ReactNode
+ }) {
+@@ -351,6 +354,32 @@ export function AdvancedFilters({
+         </SheetHeader>
+ 
+         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
++          {/* Viste rapide */}
++          {quickViews && quickViews.length > 0 ? (
++            <div className="border-b border-border p-3">
++              <p className="px-1 pb-2 text-sm font-semibold text-foreground">
++                Viste rapide
++              </p>
++              <div className="flex flex-wrap gap-2">
++                {quickViews.map((view) => (
++                  <button
++                    type="button"
++                    key={view.label}
++                    onClick={view.onSelect}
++                    className={cn(
++                      "h-10 shrink-0 rounded-lg px-4 text-sm font-bold transition-colors",
++                      view.active
++                        ? "bg-primary text-primary-foreground shadow-sm"
++                        : "border border-border bg-card text-muted-foreground hover:text-foreground",
++                    )}
++                  >
++                    {view.label}
++                  </button>
++                ))}
++              </div>
++            </div>
++          ) : null}
++
+           {/* Ricerca campo */}
+           <div className="border-b border-border p-3">
+             <div className="relative">
+diff --git a/components/leads/lead-actions-menu.tsx b/components/leads/lead-actions-menu.tsx
+index afcf27c..8465d5e 100644
+--- a/components/leads/lead-actions-menu.tsx
++++ b/components/leads/lead-actions-menu.tsx
+@@ -97,6 +97,7 @@ export function LeadActionsMenu({
+   onBulkDedup,
+   onBulkEmail,
+   onBulkDelete,
++  triggerClassName,
+ }: {
+   selectedCount: number
+   filtered: Lead[]
+@@ -115,6 +116,8 @@ export function LeadActionsMenu({
+   /** Apre il dialog di invio email di massa (gestito da leads-client). */
+   onBulkEmail: () => void
+   onBulkDelete: () => void
++  /** Classi extra per il bottone trigger (es. per ingrandirlo su mobile). */
++  triggerClassName?: string
+ }) {
+   const { owners } = useTags()
+   const permissions = usePermissions()
+@@ -267,9 +270,10 @@ export function LeadActionsMenu({
+               variant="outline"
+               size="icon"
+               aria-label="Azioni"
+-              className="relative bg-card"
++              className={cn("relative h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-10 lg:p-0", triggerClassName)}
+             >
+-              <IconDotsVertical size={18} stroke={1.8} />
++              <IconDotsVertical size={20} stroke={1.8} className="lg:size-[18px]" />
++              <span className="lg:hidden">Azioni</span>
+               {hasSelection ? (
+                 <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-navy px-1 text-[10px] font-bold leading-none text-navy-foreground tabular-nums">
+                   {selectedCount}
+-- 
+2.43.0
+

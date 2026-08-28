@@ -106,6 +106,7 @@ export function ClienteActionsMenu({
   onBulkDedup,
   onBulkEmail,
   onBulkDelete,
+  triggerClassName,
 }: {
   selectedCount: number
   filtered: ClienteRecord[]
@@ -122,6 +123,8 @@ export function ClienteActionsMenu({
   /** Apre il dialog di invio email di massa (gestito da clienti-client). */
   onBulkEmail: () => void
   onBulkDelete: () => void
+  /** Classi extra per il bottone trigger (es. per ingrandirlo su mobile). */
+  triggerClassName?: string
 }) {
   const [dialog, setDialog] = useState<Dialogs>("none")
   const permissions = usePermissions()
@@ -207,9 +210,10 @@ export function ClienteActionsMenu({
               variant="outline"
               size="icon"
               aria-label="Azioni"
-              className="relative bg-card"
+              className={cn("relative h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-10 lg:p-0", triggerClassName)}
             >
-              <IconDotsVertical size={18} stroke={1.8} />
+              <IconDotsVertical size={20} stroke={1.8} className="lg:size-[18px]" />
+              <span className="lg:hidden">Azioni</span>
               {hasSelection ? (
                 <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-navy px-1 text-[10px] font-bold leading-none text-navy-foreground tabular-nums">
                   {selectedCount}

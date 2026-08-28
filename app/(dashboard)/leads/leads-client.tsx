@@ -10,6 +10,7 @@ import {
   Loader2,
   Upload,
   Download,
+  SlidersHorizontal,
 } from "lucide-react"
 import { IconSettings } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
@@ -28,7 +29,7 @@ import {
   type LeadColumnId,
 } from "@/lib/mock-data"
 import {
-  LeadFilters,
+  LeadSearchInput,
   DEFAULT_FILTERS,
   type LeadFilterState,
 } from "@/components/leads/lead-filters"
@@ -794,6 +795,30 @@ export function LeadsClient({
             <span className="hidden lg:inline">Esporta</span>
           </Button>
 
+          <AdvancedFilters
+            applied={advanced}
+            onApply={handleAdvancedApply}
+            tags={allTags}
+            quickFilters={filters}
+            onQuickFiltersChange={handleFilterChange}
+            onQuickFiltersReset={handleReset}
+            trigger={({ onClick, count }) => (
+              <Button
+                variant="default"
+                onClick={onClick}
+                className="relative shrink-0 bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90"
+              >
+                <SlidersHorizontal data-icon="inline-start" />
+                <span className="hidden lg:inline">Filtri</span>
+                {count > 0 ? (
+                  <span className="ml-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-teal px-1 text-xs font-bold tabular-nums text-teal-foreground lg:ml-1">
+                    {count}
+                  </span>
+                ) : null}
+              </Button>
+            )}
+          />
+
           <Button
             className="min-w-0 shrink-0 bg-teal text-teal-foreground hover:bg-teal/90"
             onClick={() => setNewLeadOpen(true)}
@@ -856,21 +881,12 @@ export function LeadsClient({
         </div>
       ) : null}
 
-      {/* Barra filtri + pannello filtri avanzati — sempre su una riga, anche su mobile */}
+      {/* Barra di ricerca — sempre su una riga, tutto il resto vive nel drawer "Filtri" */}
       <div className="flex min-w-0 flex-row items-center gap-2 rounded-lg border border-border bg-card p-2 shadow-sm">
-        <AdvancedFilters
-          applied={advanced}
-          onApply={handleAdvancedApply}
-          tags={allTags}
+        <LeadSearchInput
+          value={filters.search}
+          onChange={(v) => handleFilterChange({ ...filters, search: v })}
         />
-        <div className="min-w-0 flex-1">
-          <LeadFilters
-            filters={filters}
-            onChange={handleFilterChange}
-            onReset={handleReset}
-            tags={allTags}
-          />
-        </div>
       </div>
 
       {/* Stato errore */}

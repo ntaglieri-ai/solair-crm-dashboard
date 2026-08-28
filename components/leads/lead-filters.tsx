@@ -1,6 +1,6 @@
 "use client"
 
-import { Filter, Search, SlidersHorizontal, X } from "lucide-react"
+import { Search, X } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   STATO_LEAD_ORDER,
   ORIGINE_LEAD_VALUES,
@@ -75,7 +74,43 @@ function FilterSelect({
   )
 }
 
-export function LeadFilters({
+/** Numero di filtri rapidi attivi (stato/sede/proprietario/origine/tag/valutazione). */
+export function countActiveLeadFilters(filters: LeadFilterState): number {
+  return (
+    (filters.stato !== "all" ? 1 : 0) +
+    (filters.sede !== "all" ? 1 : 0) +
+    (filters.commerciale !== "all" ? 1 : 0) +
+    (filters.origine !== "all" ? 1 : 0) +
+    (filters.tag !== "all" ? 1 : 0) +
+    (filters.score !== "all" ? 1 : 0)
+  )
+}
+
+/** Sola barra di ricerca: resta sempre in vista sopra la lista. */
+export function LeadSearchInput({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className="relative min-w-0 flex-1">
+      <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground sm:left-4 sm:size-5" />
+      <Input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Cerca lead per nome, email o telefono"
+        className="h-10 rounded-lg border-border bg-card pl-10 text-sm shadow-sm sm:h-12 sm:pl-12 sm:text-[15px]"
+        aria-label="Cerca lead"
+      />
+    </div>
+  )
+}
+
+/** Griglia dei filtri rapidi (stato/sede/proprietario/…), pensata per vivere
+ * dentro il drawer "Filtri" insieme ai filtri avanzati sui campi. */
+export function LeadQuickFilterFields({
   filters,
   onChange,
   onReset,
@@ -104,103 +139,71 @@ export function LeadFilters({
   ].filter(Boolean) as Array<[keyof LeadFilterState, string]>
 
   return (
-    <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
-      <div className="relative min-w-0 flex-[1_1_140px]">
-        <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground sm:left-4 sm:size-5" />
-        <Input
-          value={filters.search}
-          onChange={(event) => set("search", event.target.value)}
-          placeholder="Cerca lead per nome, email o telefono"
-          className="h-10 rounded-lg border-border bg-card pl-10 text-sm shadow-sm sm:h-12 sm:pl-12 sm:text-[15px]"
-          aria-label="Cerca lead"
+    <div className="flex min-w-0 flex-col gap-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FilterSelect
+          label="Stato"
+          value={filters.stato}
+          onValueChange={(value) => set("stato", value)}
+          options={[["all", "Tutti gli stati"], ...STATO_LEAD_ORDER.map((value) => [value, value] as [string, string])]}
+        />
+        <FilterSelect
+          label="Sede"
+          value={filters.sede}
+          onValueChange={(value) => set("sede", value)}
+          options={[["all", "Tutte le sedi"], ...SEDE_LABELS.map((value) => [value, value] as [string, string])]}
+        />
+        <FilterSelect
+          label="Proprietario"
+          value={filters.commerciale}
+          onValueChange={(value) => set("commerciale", value)}
+          options={[["all", "Tutti i proprietari"], ...owners.map((owner) => [owner.id, owner.nome] as [string, string])]}
+        />
+        <FilterSelect
+          label="Origine"
+          value={filters.origine}
+          onValueChange={(value) => set("origine", value)}
+          options={[["all", "Tutte le origini"], ...ORIGINE_LEAD_VALUES.map((value) => [value, value] as [string, string])]}
+        />
+        <FilterSelect
+          label="Tag"
+          value={filters.tag}
+          onValueChange={(value) => set("tag", value)}
+          options={[["all", "Tutti i tag"], ...tags.map((value) => [value, value] as [string, string])]}
+        />
+        <FilterSelect
+          label="Valutazione"
+          value={filters.score}
+          onValueChange={(value) => set("score", value as ScoreFilter)}
+          options={[
+            ["all", "Tutte le valutazioni"],
+            ["caldo", "Caldo (>80)"],
+            ["medio", "Medio (50-80)"],
+            ["freddo", "Freddo (<50)"],
+          ]}
         />
       </div>
 
-      <Popover>
-        <PopoverTrigger
-          render={
-            <Button variant="outline" size="lg" className="h-10 shrink-0 bg-card sm:h-11">
-              <SlidersHorizontal data-icon="inline-start" />
-              <span className="hidden sm:inline">Filtri</span>
-              {active.length > 0 ? (
-                <span className="ml-0.5 rounded-md bg-primary px-2 py-0.5 text-xs text-primary-foreground sm:ml-1">
-                  {active.length}
-                </span>
-              ) : null}
-            </Button>
-          }
-        />
-        <PopoverContent align="end" className="w-[min(92vw,620px)] gap-4 p-5">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-lg bg-secondary text-primary">
-              <Filter className="size-5" />
-            </span>
-            <div>
-              <h3 className="text-base font-bold">Filtra i lead</h3>
-              <p className="text-xs text-muted-foreground">Combina i criteri di ricerca</p>
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FilterSelect
-              label="Stato"
-              value={filters.stato}
-              onValueChange={(value) => set("stato", value)}
-              options={[["all", "Tutti gli stati"], ...STATO_LEAD_ORDER.map((value) => [value, value] as [string, string])]}
-            />
-            <FilterSelect
-              label="Sede"
-              value={filters.sede}
-              onValueChange={(value) => set("sede", value)}
-              options={[["all", "Tutte le sedi"], ...SEDE_LABELS.map((value) => [value, value] as [string, string])]}
-            />
-            <FilterSelect
-              label="Proprietario"
-              value={filters.commerciale}
-              onValueChange={(value) => set("commerciale", value)}
-              options={[["all", "Tutti i proprietari"], ...owners.map((owner) => [owner.id, owner.nome] as [string, string])]}
-            />
-            <FilterSelect
-              label="Origine"
-              value={filters.origine}
-              onValueChange={(value) => set("origine", value)}
-              options={[["all", "Tutte le origini"], ...ORIGINE_LEAD_VALUES.map((value) => [value, value] as [string, string])]}
-            />
-            <FilterSelect
-              label="Tag"
-              value={filters.tag}
-              onValueChange={(value) => set("tag", value)}
-              options={[["all", "Tutti i tag"], ...tags.map((value) => [value, value] as [string, string])]}
-            />
-            <FilterSelect
-              label="Valutazione"
-              value={filters.score}
-              onValueChange={(value) => set("score", value as ScoreFilter)}
-              options={[
-                ["all", "Tutte le valutazioni"],
-                ["caldo", "Caldo (>80)"],
-                ["medio", "Medio (50-80)"],
-                ["freddo", "Freddo (<50)"],
-              ]}
-            />
-          </div>
-          <Button variant="ghost" onClick={onReset} disabled={active.length === 0}>
-            <X data-icon="inline-start" />
-            Azzera filtri
-          </Button>
-        </PopoverContent>
-      </Popover>
+      {active.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {active.map(([key, label]) => (
+            <button
+              type="button"
+              key={key}
+              onClick={() => set(key, "all" as never)}
+              className="flex min-w-0 max-w-full items-center gap-2 rounded-lg border border-primary/15 bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground transition-colors hover:bg-secondary/70"
+            >
+              <span className="min-w-0 break-words">{label}</span>
+              <X className="size-3.5 shrink-0" />
+            </button>
+          ))}
+        </div>
+      ) : null}
 
-      {active.map(([key, label]) => (
-        <button
-          type="button"
-          key={key}
-          onClick={() => set(key, "all" as never)}
-          className="flex min-w-0 max-w-full items-center gap-2 rounded-lg border border-primary/15 bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground transition-colors hover:bg-secondary/70"
-        >
-          <span className="min-w-0 break-words">{label}</span>
-          <X className="size-3.5 shrink-0" />
-        </button>
-      ))}
+      <Button variant="ghost" className="self-start" onClick={onReset} disabled={active.length === 0}>
+        <X data-icon="inline-start" />
+        Azzera filtri rapidi
+      </Button>
     </div>
   )
 }

@@ -120,7 +120,7 @@ function LeadMobileList({
             key={lead.id}
             role="button"
             tabIndex={0}
-            className="flex min-h-[76px] shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="flex min-h-[82px] shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             onClick={() => {
               startNavigationFeedback()
               router.push(`/leads/${lead.id}`)
@@ -140,16 +140,16 @@ function LeadMobileList({
               />
             </div>
 
-            <LeadAvatar nome={lead["Nome Lead"]} className="size-8 text-xs" />
+            <LeadAvatar nome={lead["Nome Lead"]} className="size-9 text-sm" />
 
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-1.5">
-                <h3 className="truncate text-sm font-bold text-foreground">
+                <h3 className="truncate text-base font-bold text-foreground">
                   {lead["Nome Lead"]}
                 </h3>
                 <StatoLeadBadge stato={lead["Stato Lead"]} />
               </div>
-              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
                 <UserRound className="size-3.5 shrink-0" />
                 <span className="truncate">{owner}</span>
                 {luogo ? (

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import {
   ChevronRight,
   Filter,
@@ -32,6 +32,11 @@ import {
   SEDE_LABELS,
 } from "@/lib/mock-data"
 import { useTags } from "@/lib/tag-store"
+import {
+  LeadQuickFilterFields,
+  countActiveLeadFilters,
+  type LeadFilterState,
+} from "@/components/leads/lead-filters"
 
 // ----------------------------------------------------------------------------
 // Tipi filtro — logica pura condivisa con il repository server-side
@@ -206,10 +211,20 @@ export function AdvancedFilters({
   applied,
   onApply,
   tags,
+  quickFilters,
+  onQuickFiltersChange,
+  onQuickFiltersReset,
+  trigger,
 }: {
   applied: AdvancedFilterState
   onApply: (state: AdvancedFilterState) => void
   tags: string[]
+  /** Filtri "principali" (stato/sede/proprietario/…): si applicano subito, vivono nello stesso drawer. */
+  quickFilters?: LeadFilterState
+  onQuickFiltersChange?: (next: LeadFilterState) => void
+  onQuickFiltersReset?: () => void
+  /** Trigger personalizzato (es. bottone header colorato). Se assente, resta l'icona compatta di default. */
+  trigger?: (ctx: { onClick: () => void; count: number }) => ReactNode
 }) {
   const { owners, installers } = useTags()
   const [open, setOpen] = useState(false)
@@ -243,6 +258,8 @@ export function AdvancedFilters({
 
   const appliedCount = countActiveAdvanced(applied)
   const draftCount = countActiveAdvanced(draft)
+  const quickCount = quickFilters ? countActiveLeadFilters(quickFilters) : 0
+  const totalAppliedCount = appliedCount + quickCount
 
   const setQuick = (key: keyof AdvancedFilterState["quick"], value: boolean) =>
     setDraft((d) => ({ ...d, quick: { ...d.quick, [key]: value } }))
@@ -298,21 +315,24 @@ export function AdvancedFilters({
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <Button
-        variant="outline"
-        size="icon"
-        className="relative bg-card"
-        aria-label="Filtri avanzati"
-        onClick={() => setOpen(true)}
-      >
-        <Filter />
-        {appliedCount > 0 ? (
-          <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-teal px-1 text-[10px] font-bold tabular-nums text-teal-foreground">
-            {appliedCount}
-          </span>
-        ) : null}
-      </Button>
-
+      {trigger ? (
+        trigger({ onClick: () => setOpen(true), count: totalAppliedCount })
+      ) : (
+        <Button
+          variant="outline"
+          size="icon"
+          className="relative bg-card"
+          aria-label="Filtri avanzati"
+          onClick={() => setOpen(true)}
+        >
+          <Filter />
+          {totalAppliedCount > 0 ? (
+            <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-teal px-1 text-[10px] font-bold tabular-nums text-teal-foreground">
+              {totalAppliedCount}
+            </span>
+          ) : null}
+        </Button>
+      )}
       <SheetContent
         side="right"
         showCloseButton={false}
@@ -364,6 +384,21 @@ export function AdvancedFilters({
                   </button>
                 </span>
               ))}
+            </div>
+          ) : null}
+
+          {/* Filtri principali (stato, sede, proprietario, origine, tag, valutazione) */}
+          {quickFilters && onQuickFiltersChange && onQuickFiltersReset ? (
+            <div className="border-b border-border p-3">
+              <p className="px-1 pb-2 text-sm font-semibold text-foreground">
+                Filtri principali
+              </p>
+              <LeadQuickFilterFields
+                filters={quickFilters}
+                onChange={onQuickFiltersChange}
+                onReset={onQuickFiltersReset}
+                tags={tags}
+              />
             </div>
           ) : null}
 

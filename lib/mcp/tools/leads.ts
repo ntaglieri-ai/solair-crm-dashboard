@@ -4,6 +4,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 
 import { DEFAULT_LIST_PARAMS, type LeadListParams } from "@/lib/leads/api-types"
+import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
 import {
   bulkUpdateRecords,
   computeStats,
@@ -110,6 +111,36 @@ function versoLead(campi: Record<string, unknown>): Partial<Lead> {
   return patch as Partial<Lead>
 }
 
+const campiLeadLiberi = new Map<string, keyof Lead>()
+for (const field of LEAD_RECORD_FIELDS) {
+  campiLeadLiberi.set(field.appField, field.appField)
+  campiLeadLiberi.set(field.column, field.appField)
+}
+
+function versoLeadDaCampiLiberi(campi?: Record<string, unknown>): Partial<Lead> {
+  if (!campi) return {}
+  const patch: Record<string, unknown> = {}
+  const sconosciuti: string[] = []
+
+  for (const [chiave, valore] of Object.entries(campi)) {
+    if (valore === undefined) continue
+    const destinazione = campiLeadLiberi.get(chiave)
+    if (!destinazione) {
+      sconosciuti.push(chiave)
+      continue
+    }
+    patch[destinazione] = valore
+  }
+
+  if (sconosciuti.length > 0) {
+    throw new Error(
+      `Campi lead non riconosciuti: ${sconosciuti.join(", ")}. ` +
+        "Usa leads_campi_disponibili per i nomi CRM o le colonne database esatte.",
+    )
+  }
+  return patch as Partial<Lead>
+}
+
 export function registraToolLeads(server: McpServer): void {
   registraTool(server, {
     nome: "leads_search",
@@ -156,6 +187,24 @@ export function registraToolLeads(server: McpServer): void {
       const esito = await queryLeads(params)
       return { dati: esito, righe: esito.rows.length }
     },
+  })
+
+  registraTool(server, {
+    nome: "leads_campi_disponibili",
+    titolo: "Campi modificabili lead",
+    descrizione:
+      "Elenca tutti i campi del lead che Claude puo' passare a leads_update dentro l'oggetto campi. " +
+      "Sono accettati sia il nome CRM sia la colonna database.",
+    schema: {},
+    annotazioni: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    esegui: async () => ({
+      dati: LEAD_RECORD_FIELDS.map((field) => ({
+        nome_crm: field.appField,
+        colonna_database: field.column,
+        tipo: field.type,
+      })),
+      righe: LEAD_RECORD_FIELDS.length,
+    }),
   })
 
   registraTool(server, {
@@ -226,11 +275,22 @@ export function registraToolLeads(server: McpServer): void {
     nome: "leads_update",
     titolo: "Aggiorna lead",
     descrizione:
-      "Aggiorna i campi indicati di un lead esistente. I campi non passati restano invariati.",
-    schema: { id: z.string().uuid().describe("id del lead da aggiornare."), ...campiLead },
+      "Aggiorna i campi indicati di un lead esistente. I campi non passati restano invariati. " +
+      "Per modificare qualunque campo reale del lead, passa l'oggetto campi con i nomi di leads_campi_disponibili.",
+    schema: {
+      id: z.string().uuid().describe("id del lead da aggiornare."),
+      campi: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe("Coppie nome campo -> valore. Accetta nomi CRM e colonne database da leads_campi_disponibili."),
+      ...campiLead,
+    },
     annotazioni: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    esegui: async ({ id, ...campi }) => {
-      const patch = versoLead(campi)
+    esegui: async ({ id, campi, ...campiRapidi }) => {
+      const patch = {
+        ...versoLead(campiRapidi),
+        ...versoLeadDaCampiLiberi(campi),
+      }
       if (Object.keys(patch).length === 0) throw new Error("Nessun campo da aggiornare")
       const aggiornato = await updateLeadRecord(id, patch)
       if (!aggiornato) throw new Error(`Aggiornamento non riuscito: nessun lead con id ${id}`)

@@ -46,10 +46,47 @@ const GRUPPO_COMUNICAZIONI = "Comunicazioni automatiche"
 /** Campi realmente scrivibili: nella UI ma anche nella mappa del repository. */
 const SCRIVIBILI = new Set(CLIENTI_RECORD_FIELDS.map((campo) => campo.appField))
 
+const campiClienteLiberi = new Map<string, string>()
+for (const field of CLIENTI_RECORD_FIELDS) {
+  campiClienteLiberi.set(field.appField, field.appField)
+  campiClienteLiberi.set(field.column, field.appField)
+}
+
 function campiDelGruppo(gruppo: string): string[] {
   return CLIENTE_COLUMNS.filter((colonna) => colonna.group === gruppo)
     .map((colonna) => colonna.id as string)
     .filter((id) => SCRIVIBILI.has(id))
+}
+
+function versoClienteDaCampiLiberi(campi: Record<string, unknown>, ammessi?: Set<string>): Partial<ClienteRecord> {
+  const patch: Record<string, unknown> = {}
+  const sconosciuti: string[] = []
+  const fuoriSezione: string[] = []
+
+  for (const [chiave, valore] of Object.entries(campi)) {
+    if (valore === undefined) continue
+    const destinazione = campiClienteLiberi.get(chiave)
+    if (!destinazione) {
+      sconosciuti.push(chiave)
+      continue
+    }
+    if (ammessi && !ammessi.has(destinazione)) {
+      fuoriSezione.push(chiave)
+      continue
+    }
+    patch[destinazione] = valore
+  }
+
+  if (sconosciuti.length > 0) {
+    throw new Error(
+      `Campi cliente non riconosciuti: ${sconosciuti.join(", ")}. ` +
+        "Usa clienti_campi_disponibili per i nomi CRM o le colonne database esatte.",
+    )
+  }
+  if (fuoriSezione.length > 0) {
+    throw new Error(`Campi non validi per questa sezione: ${fuoriSezione.join(", ")}`)
+  }
+  return patch as Partial<ClienteRecord>
 }
 
 /**
@@ -60,18 +97,11 @@ function campiDelGruppo(gruppo: string): string[] {
  */
 async function aggiornaSezione(gruppo: string, clienteId: string, campi: Record<string, unknown>) {
   const ammessi = new Set(campiDelGruppo(gruppo))
-  const passati = Object.keys(campi)
+  const patch = versoClienteDaCampiLiberi(campi, ammessi)
+  const passati = Object.keys(patch)
   if (passati.length === 0) throw new Error("Nessun campo da aggiornare")
 
-  const fuoriSezione = passati.filter((chiave) => !ammessi.has(chiave))
-  if (fuoriSezione.length > 0) {
-    throw new Error(
-      `Campi non validi per la sezione "${gruppo}": ${fuoriSezione.join(", ")}. ` +
-        "Usa clienti_campi_disponibili per l'elenco esatto dei nomi ammessi.",
-    )
-  }
-
-  const aggiornato = await updateClienteRecord(clienteId, campi as Partial<ClienteRecord>)
+  const aggiornato = await updateClienteRecord(clienteId, patch)
   if (!aggiornato) throw new Error(`Aggiornamento non riuscito: nessun cliente con id ${clienteId}`)
   return { dati: { id: clienteId, sezione: gruppo, aggiornati: passati }, righe: 1 }
 }
@@ -139,8 +169,8 @@ export function registraToolClienti(server: McpServer): void {
     nome: "clienti_campi_disponibili",
     titolo: "Campi della scheda cliente",
     descrizione:
-      "Elenca i nomi dei campi scrivibili del cliente, raggruppati per sezione. Da consultare prima " +
-      "di clienti_update o dei tool di sezione: i nomi vanno passati esattamente come compaiono qui.",
+      "Elenca i campi scrivibili del cliente, raggruppati per sezione. Da consultare prima " +
+      "di clienti_update o dei tool di sezione: sono accettati sia il nome CRM sia la colonna database.",
     schema: {
       sezione: z
         .string()
@@ -156,7 +186,8 @@ export function registraToolClienti(server: McpServer): void {
         if (!SCRIVIBILI.has(id)) continue
         if (sezione && colonna.group !== sezione) continue
         const elenco = gruppi.get(colonna.group) ?? []
-        elenco.push(id)
+        const field = CLIENTI_RECORD_FIELDS.find((item) => item.appField === id)
+        elenco.push(field ? `${id} (${field.column}, ${field.type})` : id)
         gruppi.set(colonna.group, elenco)
       }
       const dati = Object.fromEntries(gruppi)
@@ -223,16 +254,10 @@ export function registraToolClienti(server: McpServer): void {
     },
     annotazioni: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     esegui: async ({ id, campi }) => {
-      const passati = Object.keys(campi)
+      const patch = versoClienteDaCampiLiberi(campi)
+      const passati = Object.keys(patch)
       if (passati.length === 0) throw new Error("Nessun campo da aggiornare")
-      const sconosciuti = passati.filter((chiave) => !SCRIVIBILI.has(chiave))
-      if (sconosciuti.length > 0) {
-        throw new Error(
-          `Campi non riconosciuti: ${sconosciuti.join(", ")}. ` +
-            "Usa clienti_campi_disponibili per i nomi esatti.",
-        )
-      }
-      const aggiornato = await updateClienteRecord(id, campi as Partial<ClienteRecord>)
+      const aggiornato = await updateClienteRecord(id, patch)
       if (!aggiornato) throw new Error(`Aggiornamento non riuscito: nessun cliente con id ${id}`)
       return { dati: { id, aggiornati: passati }, righe: 1 }
     },

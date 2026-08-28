@@ -9,7 +9,8 @@ import {
   listCollegamenti,
 } from "@/lib/allegati/repository"
 import type { AllegatoRecordTipo } from "@/lib/allegati/paths"
-import { clientMcpObbligatorio } from "@/lib/mcp/context"
+import { clientMcpObbligatorio, identitaMcpDalContesto } from "@/lib/mcp/context"
+import { assertTabellaScrivibile } from "@/lib/mcp/denylist"
 import { registraTool } from "@/lib/mcp/registra-tool"
 import { utenteCorrenteId } from "@/lib/mcp/utente-corrente"
 
@@ -30,8 +31,63 @@ import { utenteCorrenteId } from "@/lib/mcp/utente-corrente"
 const RECORD_TIPI = ["lead", "cliente", "compito", "installatore"] as const
 
 const MODULI_TAG = ["lead", "cliente", "compito", "installatore"] as const
+const NOME_DB = /^[a-z][a-z0-9_]*$/
+
+function richiediVitoMcp(): void {
+  const identita = identitaMcpDalContesto()
+  const vitoAuthUserId = process.env.VITO_USER_ID
+  if (!identita || !vitoAuthUserId || identita.authUserId !== vitoAuthUserId) {
+    throw new Error("Tool riservato a Vito via connettore Claude/MCP.")
+  }
+}
+
+function assertNomeDb(tipo: string, nome: string): void {
+  if (!NOME_DB.test(nome)) {
+    throw new Error(`${tipo} non valido: "${nome}". Usa solo nomi database semplici in snake_case.`)
+  }
+}
 
 export function registraToolTrasversali(server: McpServer): void {
+  registraTool(server, {
+    nome: "crm_record_update",
+    titolo: "Aggiorna record CRM",
+    descrizione:
+      "Tool generale riservato a Vito: aggiorna qualunque campo di una tabella operativa consentita " +
+      "dal perimetro MCP. Usa i nomi reali delle colonne database. Non permette ruoli, permessi, " +
+      "account, audit o impostazioni CRM.",
+    schema: {
+      tabella: z.string().trim().regex(NOME_DB).describe("Nome tabella database, es. leads, clienti, compiti."),
+      chiave: z.string().trim().regex(NOME_DB).optional().describe("Colonna chiave per individuare il record. Default id."),
+      valore_chiave: z.union([z.string(), z.number(), z.boolean()]).describe("Valore della chiave."),
+      campi: z
+        .record(z.string().regex(NOME_DB), z.unknown())
+        .describe("Coppie colonna database -> valore da salvare."),
+    },
+    annotazioni: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    esegui: async ({ tabella, chiave, valore_chiave, campi }) => {
+      richiediVitoMcp()
+      assertNomeDb("Tabella", tabella)
+      const colonnaChiave = chiave ?? "id"
+      assertNomeDb("Colonna chiave", colonnaChiave)
+      assertTabellaScrivibile(tabella)
+
+      const patch = Object.fromEntries(Object.entries(campi).filter(([, valore]) => valore !== undefined))
+      if (Object.keys(patch).length === 0) throw new Error("Nessun campo da aggiornare")
+
+      const supabase = clientMcpObbligatorio()
+      const { data, error } = await supabase
+        .from(tabella)
+        .update(patch)
+        .eq(colonnaChiave, valore_chiave)
+        .select("*")
+      if (error) throw new Error(`Aggiornamento ${tabella} non riuscito: ${error.message}`)
+      return {
+        dati: { tabella, chiave: colonnaChiave, valore_chiave, aggiornati: Object.keys(patch), righe: data ?? [] },
+        righe: data?.length ?? 0,
+      }
+    },
+  })
+
   registraTool(server, {
     nome: "crm_timeline_list",
     titolo: "Timeline di un record",

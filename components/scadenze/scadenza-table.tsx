@@ -75,7 +75,7 @@ function ScadenzaMobileList({
   }
 
   return (
-    <div className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+    <div className="flex h-full flex-col gap-2 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
       {scadenze.map((scadenza) => {
         const scaduta = isScaduta(scadenza)
 
@@ -84,7 +84,7 @@ function ScadenzaMobileList({
             key={scadenza.id}
             role="button"
             tabIndex={0}
-            className="flex min-h-[72px] cursor-pointer items-center gap-2.5 bg-card px-2.5 py-2.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="flex min-h-[82px] shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             onClick={() => {
               startNavigationFeedback()
               router.push(`/scadenze/${scadenza.id}`)
@@ -104,17 +104,17 @@ function ScadenzaMobileList({
               />
             </div>
 
-            <ScadenzaAvatar nome={scadenza.proprietario_nome ?? scadenza.nome} size={32} />
+            <ScadenzaAvatar nome={scadenza.proprietario_nome ?? scadenza.nome} size={36} />
 
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-1.5">
-                <h3 className="truncate text-sm font-bold text-foreground">
+                <h3 className="truncate text-base font-bold text-foreground">
                   {scadenza.nome}
                 </h3>
                 {scaduta ? <ScadutaBadge /> : null}
               </div>
 
-              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
                 <CalendarClock className={cn("size-3.5 shrink-0", scaduta && "text-destructive")} />
                 <span className={cn("truncate", scaduta && "font-medium text-destructive")}>
                   {formatDateTime(scadenza.data_scadenza)}

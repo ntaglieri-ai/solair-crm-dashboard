@@ -1,0 +1,1374 @@
+diff --git a/app/(dashboard)/compiti/compiti-client.tsx b/app/(dashboard)/compiti/compiti-client.tsx
+index 69369b3..da31eab 100644
+--- a/app/(dashboard)/compiti/compiti-client.tsx
++++ b/app/(dashboard)/compiti/compiti-client.tsx
+@@ -1,6 +1,6 @@
+ "use client"
+ 
+-import { useEffect, useMemo, useState } from "react"
++import { useEffect, useMemo, useRef, useState } from "react"
+ import { toast } from "sonner"
+ import {
+   AlertTriangle,
+@@ -9,6 +9,7 @@ import {
+   ChevronLeft,
+   ChevronRight,
+   Plus,
++  SlidersHorizontal,
+   Sparkles,
+ } from "lucide-react"
+ import {
+@@ -17,6 +18,7 @@ import {
+   IconLayoutKanban,
+ } from "@tabler/icons-react"
+ import { useQueryClient } from "@tanstack/react-query"
++import { useIsMobile } from "@/hooks/use-is-mobile"
+ import { Button } from "@/components/ui/button"
+ import {
+   Dialog,
+@@ -42,10 +44,11 @@ import {
+   KANBAN_OPEN_PAGE_SIZE,
+ } from "@/lib/compiti/api-types"
+ import {
+-  CompitoFilters,
++  CompitoSearchInput,
+   DEFAULT_COMPITO_FILTERS,
+   type CompitoFilterState,
+ } from "@/components/compiti/compito-filters"
++import { CompitoFiltersDrawer } from "@/components/compiti/compito-filters-drawer"
+ import {
+   CompitoTable,
+   type CompitoSortKey,
+@@ -77,6 +80,7 @@ import {
+ 
+ const ROWS_ITEMS: Record<string, string> = {
+   "10": "10 righe",
++  "20": "20 righe",
+   "30": "30 righe",
+   "50": "50 righe",
+ }
+@@ -119,9 +123,65 @@ export function CompitiClient({
+   const [sortDir, setSortDir] = useState<SortDir>("asc")
+   const [page, setPage] = useState(1)
+   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
++  const isMobile = useIsMobile()
++  const mobileDefaultApplied = useRef(false)
++  useEffect(() => {
++    if (isMobile && !mobileDefaultApplied.current && rowsPerPage === INITIAL_PAGE_SIZE) {
++      mobileDefaultApplied.current = true
++      setRowsPerPage(20)
++    }
++  }, [isMobile, rowsPerPage])
++  // Blocca lo scroll della pagina su mobile: stesso fix già applicato a
++  // Lead/Clienti/Installatori, resta scrollabile solo la lista. Nessun
++  // effetto su desktop.
++  useEffect(() => {
++    if (!isMobile) return
++    const html = document.documentElement
++    const prevHtmlOverflow = html.style.overflow
++    const prevBodyOverflow = document.body.style.overflow
++    const prevBodyOverscroll = document.body.style.overscrollBehavior
++    html.style.overflow = "hidden"
++    document.body.style.overflow = "hidden"
++    document.body.style.overscrollBehavior = "none"
++    return () => {
++      html.style.overflow = prevHtmlOverflow
++      document.body.style.overflow = prevBodyOverflow
++      document.body.style.overscrollBehavior = prevBodyOverscroll
++    }
++  }, [isMobile])
++  // Altezza disponibile: calcolata solo su mobile, per non alterare in alcun
++  // modo il comportamento (pagina intera che scrolla) su desktop.
++  const rootRef = useRef<HTMLDivElement>(null)
++  const [availH, setAvailH] = useState<number | null>(null)
++  useEffect(() => {
++    if (!isMobile) {
++      setAvailH(null)
++      return
++    }
++    const el = rootRef.current
++    if (!el) return
++    const BOTTOM_GAP = 24
++    const measure = () => {
++      const top = el.getBoundingClientRect().top
++      const next = Math.max(360, window.innerHeight - top - BOTTOM_GAP)
++      setAvailH(next)
++    }
++    measure()
++    window.addEventListener("resize", measure)
++    const ro = new ResizeObserver(measure)
++    ro.observe(document.body)
++    return () => {
++      window.removeEventListener("resize", measure)
++      ro.disconnect()
++    }
++  }, [isMobile])
+ 
+   // --- UI state ---
+   const [view, setView] = useState<ViewMode>("kanban")
++  // Su mobile la vista kanban (colonne affiancate, scroll orizzontale) non è
++  // usabile: forziamo sempre la lista, senza toccare la preferenza salvata
++  // dall'utente per il desktop.
++  const effectiveView: ViewMode = isMobile ? "lista" : view
+   const [selected, setSelected] = useState<Set<string>>(new Set())
+   const [newOpen, setNewOpen] = useState(false)
+   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+@@ -183,10 +243,10 @@ export function CompitiClient({
+   // per mezzo secondo. Il gancio lo applica solo se la chiave coincide, quindi
+   // appena l'utente filtra o cerca si torna alla fetch normale.
+   const { data: kanbanOpenData } = useCompitiQuery(kanbanOpenParams, initialKanbanOpen, {
+-    enabled: view === "kanban",
++    enabled: effectiveView === "kanban",
+   })
+   const { data: kanbanDoneData } = useCompitiQuery(kanbanDoneParams, initialKanbanDone, {
+-    enabled: view === "kanban",
++    enabled: effectiveView === "kanban",
+   })
+   const kanbanRows = useMemo(
+     () => [...(kanbanOpenData?.rows ?? []), ...(kanbanDoneData?.rows ?? [])],
+@@ -394,7 +454,11 @@ export function CompitiClient({
+   }
+ 
+   return (
+-    <div className="flex min-w-0 flex-col gap-5">
++    <div
++      ref={rootRef}
++      className="flex min-w-0 flex-col gap-5 lg:h-auto lg:overflow-visible"
++      style={availH ? { height: availH, overflow: "hidden" } : undefined}
++    >
+       {/* Header pagina */}
+       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+         <div className="min-w-0 flex flex-col gap-0.5">
+@@ -411,9 +475,10 @@ export function CompitiClient({
+           </p>
+         </div>
+ 
+-        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+-          {/* Toggle Lista / Kanban */}
+-          <div className="flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
++        <div className="grid w-full grid-cols-2 gap-2.5 lg:flex lg:w-auto lg:flex-wrap lg:justify-end lg:gap-2">
++          {/* Toggle Lista / Kanban: su mobile la vista è sempre lista, il
++              toggle non serve — resta identico da lg in su. */}
++          <div className="col-span-2 hidden items-center gap-0.5 rounded-lg border border-border bg-card p-0.5 lg:flex">
+             <button
+               type="button"
+               aria-label="Vista Lista"
+@@ -452,11 +517,11 @@ export function CompitiClient({
+             trigger={
+               <Button
+                 variant="outline"
+-                size="icon"
+                 aria-label="Impostazioni compiti"
+-                className="bg-card"
++                className="h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-10 lg:p-0"
+               >
+-                <IconSettings size={18} stroke={1.8} />
++                <IconSettings size={22} stroke={1.8} className="lg:size-[18px]" />
++                <span className="lg:hidden">Imposta</span>
+               </Button>
+             }
+           />
+@@ -469,17 +534,41 @@ export function CompitiClient({
+             onBulkDelete={() => setBulkDeleteOpen(true)}
+           />
+ 
++          <CompitoFiltersDrawer
++            filters={filters}
++            onChange={handleFilterChange}
++            onReset={handleReset}
++            trigger={({ onClick, count }) => (
++              <Button
++                onClick={onClick}
++                className="relative h-14 w-full gap-2 bg-primary text-sm text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90 lg:h-10 lg:w-auto"
++              >
++                <SlidersHorizontal className="size-[22px] lg:size-4" />
++                Filtri
++                {count > 0 ? (
++                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-teal px-1 text-xs font-bold tabular-nums text-teal-foreground">
++                    {count}
++                  </span>
++                ) : null}
++              </Button>
++            )}
++          />
++
+           <Button
+-            className="min-w-0 bg-teal text-teal-foreground hover:bg-teal/90"
++            className="h-14 w-full gap-2 bg-teal text-sm text-teal-foreground hover:bg-teal/90 lg:h-10 lg:w-auto"
+             onClick={() => setNewOpen(true)}
+           >
+-            <Plus data-icon="inline-start" />
+-            Crea Compito
++            <Plus className="size-[22px] lg:size-4" />
++            <span className="lg:hidden">Nuovo</span>
++            <span className="hidden lg:inline">Crea Compito</span>
+           </Button>
+         </div>
+       </div>
+ 
+-      <div className="grid gap-3 xl:grid-cols-4">
++      {/* Statistiche: su mobile non servono (occupano spazio prezioso sopra
++          una lista che va già consultata scrollando), restano identiche da
++          lg in su. */}
++      <div className="hidden gap-3 lg:grid xl:grid-cols-4">
+         <button
+           type="button"
+           onClick={() => {
+@@ -571,12 +660,13 @@ export function CompitiClient({
+         </button>
+       </div>
+ 
+-      {/* Barra filtri */}
+-      <CompitoFilters
+-        filters={filters}
+-        onChange={handleFilterChange}
+-        onReset={handleReset}
+-      />
++      {/* Barra di ricerca — sempre su una riga; il resto dei filtri vive nel drawer "Filtri" */}
++      <div className="flex min-w-0 flex-row items-center gap-2 rounded-lg border border-border bg-card p-2 shadow-sm">
++        <CompitoSearchInput
++          value={filters.search}
++          onChange={(v) => handleFilterChange({ ...filters, search: v })}
++        />
++      </div>
+ 
+       {/* Empty state */}
+       {!isFetching && total === 0 && (
+@@ -598,30 +688,35 @@ export function CompitiClient({
+       )}
+ 
+       {/* Vista */}
+-      {total > 0 && view === "lista" ? (
++      {total > 0 && effectiveView === "lista" ? (
+         <>
+-          <CompitoTable
+-            compiti={pageRows}
+-            selected={selected}
+-            onToggle={toggle}
+-            onToggleAll={toggleAll}
+-            onComplete={(c) => {
+-              completaCompito(c.id)
+-              toast.success("Compito completato", { description: c.Oggetto })
+-            }}
+-            onDelete={(c) => setDeleteTarget(c)}
+-            sortBy={sortBy}
+-            sortDir={sortDir}
+-            onSort={handleSort}
+-          />
++          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:overflow-visible [-webkit-overflow-scrolling:touch]">
++            <CompitoTable
++              compiti={pageRows}
++              selected={selected}
++              onToggle={toggle}
++              onToggleAll={toggleAll}
++              onComplete={(c) => {
++                completaCompito(c.id)
++                toast.success("Compito completato", { description: c.Oggetto })
++              }}
++              onDelete={(c) => setDeleteTarget(c)}
++              sortBy={sortBy}
++              sortDir={sortDir}
++              onSort={handleSort}
++            />
++          </div>
+ 
+-          {/* Footer paginazione */}
+-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+-            <div className="flex min-w-0 flex-wrap items-center gap-3">
+-              <span className="break-words text-sm text-muted-foreground">
++          {/* Footer paginazione — sticky solo su mobile, in flusso normale da lg in su */}
++          <div className="sticky bottom-0 z-30 -mx-5 flex shrink-0 items-center justify-between gap-2 border-t border-border bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:static lg:mx-0 lg:flex-wrap lg:border-t-0 lg:bg-transparent lg:px-0 lg:py-0 lg:backdrop-blur-none">
++            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
++              <span className="hidden truncate text-sm text-muted-foreground lg:inline">
+                 {rangeStart}–{rangeEnd} di {total.toLocaleString("it-IT")}
+                 {selected.size > 0 ? ` · ${selected.size} selezionati` : ""}
+               </span>
++              <span className="truncate text-xs text-muted-foreground lg:hidden">
++                {rangeStart}-{rangeEnd}/{total.toLocaleString("it-IT")}
++              </span>
+               <Select
+                 items={ROWS_ITEMS}
+                 value={String(rowsPerPage)}
+@@ -631,7 +726,7 @@ export function CompitiClient({
+                   setSelected(new Set())
+                 }}
+               >
+-                <SelectTrigger className="h-8 w-[120px] bg-card">
++                <SelectTrigger className="h-8 w-[92px] shrink-0 bg-card text-xs lg:w-[120px] lg:text-sm">
+                   <SelectValue />
+                 </SelectTrigger>
+                 <SelectContent>
+@@ -646,7 +741,7 @@ export function CompitiClient({
+               </Select>
+             </div>
+ 
+-            <div className="flex min-w-0 flex-wrap items-center gap-2">
++            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+               <Button
+                 size="sm"
+                 variant="outline"
+@@ -658,7 +753,7 @@ export function CompitiClient({
+                 }}
+               >
+                 <ChevronLeft data-icon="inline-start" />
+-                Precedente
++                <span className="hidden lg:inline">Precedente</span>
+               </Button>
+               <span className="text-sm tabular-nums text-muted-foreground">
+                 {page} / {totalPages}
+@@ -673,13 +768,13 @@ export function CompitiClient({
+                   setSelected(new Set())
+                 }}
+               >
+-                Successivo
++                <span className="hidden lg:inline">Successivo</span>
+                 <ChevronRight data-icon="inline-end" />
+               </Button>
+             </div>
+           </div>
+         </>
+-      ) : total > 0 && view === "kanban" ? (
++      ) : total > 0 && effectiveView === "kanban" ? (
+         <>
+           {kanbanOpenTruncated && (
+             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+diff --git a/app/(dashboard)/scadenze/scadenze-client.tsx b/app/(dashboard)/scadenze/scadenze-client.tsx
+index 8b6a4f7..b99eefb 100644
+--- a/app/(dashboard)/scadenze/scadenze-client.tsx
++++ b/app/(dashboard)/scadenze/scadenze-client.tsx
+@@ -1,6 +1,6 @@
+ "use client"
+ 
+-import { useEffect, useMemo, useState } from "react"
++import { useEffect, useMemo, useRef, useState } from "react"
+ import { toast } from "sonner"
+ import {
+   AlertTriangle,
+@@ -8,10 +8,12 @@ import {
+   ChevronLeft,
+   ChevronRight,
+   Plus,
++  SlidersHorizontal,
+   Sparkles,
+ } from "lucide-react"
+ import { IconSettings } from "@tabler/icons-react"
+ import { useQueryClient } from "@tanstack/react-query"
++import { useIsMobile } from "@/hooks/use-is-mobile"
+ import { Button } from "@/components/ui/button"
+ import {
+   Dialog,
+@@ -32,10 +34,11 @@ import {
+ import { cn } from "@/lib/utils"
+ import type { ScadenzaRecord } from "@/lib/scadenze/repository"
+ import {
+-  ScadenzaFilters,
++  ScadenzaSearchInput,
+   DEFAULT_SCADENZA_FILTERS,
+   type ScadenzaFilterState,
+ } from "@/components/scadenze/scadenza-filters"
++import { ScadenzaFiltersDrawer } from "@/components/scadenze/scadenza-filters-drawer"
+ import { ScadenzaTable } from "@/components/scadenze/scadenza-table"
+ import { ScadenzaActionsMenu } from "@/components/scadenze/scadenza-actions-menu"
+ import { ScadenzaFormDialog } from "@/components/scadenze/scadenza-form-dialog"
+@@ -62,6 +65,7 @@ import {
+ 
+ const ROWS_ITEMS: Record<string, string> = {
+   "10": "10 righe",
++  "20": "20 righe",
+   "30": "30 righe",
+   "50": "50 righe",
+ }
+@@ -94,6 +98,58 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps)
+   const [sortDir, setSortDir] = useState<SortDir>("asc")
+   const [page, setPage] = useState(1)
+   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
++  const isMobile = useIsMobile()
++  const mobileDefaultApplied = useRef(false)
++  useEffect(() => {
++    if (isMobile && !mobileDefaultApplied.current && rowsPerPage === INITIAL_PAGE_SIZE) {
++      mobileDefaultApplied.current = true
++      setRowsPerPage(20)
++    }
++  }, [isMobile, rowsPerPage])
++  // Blocca lo scroll della pagina su mobile: stesso fix già applicato a
++  // Lead/Clienti/Installatori/Compiti, resta scrollabile solo la lista.
++  // Nessun effetto su desktop.
++  useEffect(() => {
++    if (!isMobile) return
++    const html = document.documentElement
++    const prevHtmlOverflow = html.style.overflow
++    const prevBodyOverflow = document.body.style.overflow
++    const prevBodyOverscroll = document.body.style.overscrollBehavior
++    html.style.overflow = "hidden"
++    document.body.style.overflow = "hidden"
++    document.body.style.overscrollBehavior = "none"
++    return () => {
++      html.style.overflow = prevHtmlOverflow
++      document.body.style.overflow = prevBodyOverflow
++      document.body.style.overscrollBehavior = prevBodyOverscroll
++    }
++  }, [isMobile])
++  // Altezza disponibile: calcolata solo su mobile, per non alterare in alcun
++  // modo il comportamento (pagina intera che scrolla) su desktop.
++  const rootRef = useRef<HTMLDivElement>(null)
++  const [availH, setAvailH] = useState<number | null>(null)
++  useEffect(() => {
++    if (!isMobile) {
++      setAvailH(null)
++      return
++    }
++    const el = rootRef.current
++    if (!el) return
++    const BOTTOM_GAP = 24
++    const measure = () => {
++      const top = el.getBoundingClientRect().top
++      const next = Math.max(360, window.innerHeight - top - BOTTOM_GAP)
++      setAvailH(next)
++    }
++    measure()
++    window.addEventListener("resize", measure)
++    const ro = new ResizeObserver(measure)
++    ro.observe(document.body)
++    return () => {
++      window.removeEventListener("resize", measure)
++      ro.disconnect()
++    }
++  }, [isMobile])
+ 
+   const [selected, setSelected] = useState<Set<string>>(new Set())
+   const [newOpen, setNewOpen] = useState(false)
+@@ -233,7 +289,11 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps)
+   }
+ 
+   return (
+-    <div className="flex min-w-0 flex-col gap-5">
++    <div
++      ref={rootRef}
++      className="flex min-w-0 flex-col gap-5 lg:h-auto lg:overflow-visible"
++      style={availH ? { height: availH, overflow: "hidden" } : undefined}
++    >
+       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+         <div className="min-w-0 flex flex-col gap-0.5">
+           <h1 className="break-words text-2xl font-bold tracking-tight text-foreground">Scadenze</h1>
+@@ -245,7 +305,7 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps)
+           </p>
+         </div>
+ 
+-        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
++        <div className="grid w-full grid-cols-2 gap-2.5 lg:flex lg:w-auto lg:flex-wrap lg:justify-end lg:gap-2">
+           <ScadenzaSettingsSheet
+             open={settingsOpen}
+             onOpenChange={setSettingsOpen}
+@@ -254,11 +314,11 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps)
+             trigger={
+               <Button
+                 variant="outline"
+-                size="icon"
+                 aria-label="Impostazioni scadenze"
+-                className="bg-card"
++                className="h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-10 lg:p-0"
+               >
+-                <IconSettings size={18} stroke={1.8} />
++                <IconSettings size={22} stroke={1.8} className="lg:size-[18px]" />
++                <span className="lg:hidden">Imposta</span>
+               </Button>
+             }
+           />
+@@ -269,17 +329,47 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps)
+             onBulkDelete={() => setBulkDeleteOpen(true)}
+           />
+ 
++          <ScadenzaFiltersDrawer
++            filters={filters}
++            onChange={handleFilterChange}
++            onReset={handleReset}
++            trigger={({ onClick, count }) => (
++              <Button
++                onClick={onClick}
++                className="relative h-14 w-full gap-2 bg-primary text-sm text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90 lg:h-10 lg:w-auto"
++              >
++                <SlidersHorizontal className="size-[22px] lg:size-4" />
++                Filtri
++                {count > 0 ? (
++                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-teal px-1 text-xs font-bold tabular-nums text-teal-foreground">
++                    {count}
++                  </span>
++                ) : null}
++              </Button>
++            )}
++          />
++
+           <Button
+-            className="min-w-0 bg-teal text-teal-foreground hover:bg-teal/90"
++            className="h-14 w-full gap-2 bg-teal text-sm text-teal-foreground hover:bg-teal/90 lg:h-10 lg:w-auto"
+             onClick={() => setNewOpen(true)}
+           >
+-            <Plus data-icon="inline-start" />
+-            Nuova scadenza
++            <Plus className="size-[22px] lg:size-4" />
++            <span className="lg:hidden">Nuova</span>
++            <span className="hidden lg:inline">Nuova scadenza</span>
+           </Button>
+         </div>
+       </div>
+ 
+-      <div className="grid gap-3 xl:grid-cols-3">
++      {/* Barra di ricerca — sempre su una riga; il resto dei filtri vive nel drawer "Filtri" */}
++      <div className="flex min-w-0 flex-row items-center gap-2 rounded-lg border border-border bg-card p-2 shadow-sm">
++        <ScadenzaSearchInput
++          value={filters.search}
++          onChange={(v) => handleFilterChange({ ...filters, search: v })}
++        />
++      </div>
++
++      {/* Statistiche: su mobile non servono, restano identiche da lg in su. */}
++      <div className="hidden gap-3 lg:grid xl:grid-cols-3">
+         <button
+           type="button"
+           onClick={() => {
+@@ -346,8 +436,6 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps)
+         </button>
+       </div>
+ 
+-      <ScadenzaFilters filters={filters} onChange={handleFilterChange} onReset={handleReset} />
+-
+       {!isFetching && total === 0 ? (
+         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card py-16 text-center">
+           <p className="text-base font-medium text-foreground">Nessuna scadenza trovata</p>
+@@ -364,24 +452,29 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps)
+         </div>
+       ) : (
+         <>
+-          <ScadenzaTable
+-            scadenze={pageRows}
+-            selected={selected}
+-            onToggle={toggle}
+-            onToggleAll={toggleAll}
+-            onEdit={(s) => setEditTarget(s)}
+-            onDelete={(s) => setDeleteTarget(s)}
+-            sortBy={sortBy}
+-            sortDir={sortDir}
+-            onSort={handleSort}
+-          />
++          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:overflow-visible [-webkit-overflow-scrolling:touch]">
++            <ScadenzaTable
++              scadenze={pageRows}
++              selected={selected}
++              onToggle={toggle}
++              onToggleAll={toggleAll}
++              onEdit={(s) => setEditTarget(s)}
++              onDelete={(s) => setDeleteTarget(s)}
++              sortBy={sortBy}
++              sortDir={sortDir}
++              onSort={handleSort}
++            />
++          </div>
+ 
+-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+-            <div className="flex min-w-0 flex-wrap items-center gap-3">
+-              <span className="break-words text-sm text-muted-foreground">
++          <div className="sticky bottom-0 z-30 -mx-5 flex shrink-0 items-center justify-between gap-2 border-t border-border bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:static lg:mx-0 lg:flex-wrap lg:border-t-0 lg:bg-transparent lg:px-0 lg:py-0 lg:backdrop-blur-none">
++            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
++              <span className="hidden truncate text-sm text-muted-foreground lg:inline">
+                 {rangeStart}–{rangeEnd} di {total.toLocaleString("it-IT")}
+                 {selected.size > 0 ? ` · ${selected.size} selezionate` : ""}
+               </span>
++              <span className="truncate text-xs text-muted-foreground lg:hidden">
++                {rangeStart}-{rangeEnd}/{total.toLocaleString("it-IT")}
++              </span>
+               <Select
+                 items={ROWS_ITEMS}
+                 value={String(rowsPerPage)}
+@@ -391,7 +484,7 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps)
+                   setSelected(new Set())
+                 }}
+               >
+-                <SelectTrigger className="h-8 w-[120px] bg-card">
++                <SelectTrigger className="h-8 w-[92px] shrink-0 bg-card text-xs lg:w-[120px] lg:text-sm">
+                   <SelectValue />
+                 </SelectTrigger>
+                 <SelectContent>
+@@ -406,7 +499,7 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps)
+               </Select>
+             </div>
+ 
+-            <div className="flex min-w-0 flex-wrap items-center gap-2">
++            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+               <Button
+                 size="sm"
+                 variant="outline"
+@@ -418,7 +511,7 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps)
+                 }}
+               >
+                 <ChevronLeft data-icon="inline-start" />
+-                Precedente
++                <span className="hidden lg:inline">Precedente</span>
+               </Button>
+               <span className="text-sm tabular-nums text-muted-foreground">
+                 {page} / {totalPages}
+@@ -433,7 +526,7 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps)
+                   setSelected(new Set())
+                 }}
+               >
+-                Successivo
++                <span className="hidden lg:inline">Successivo</span>
+                 <ChevronRight data-icon="inline-end" />
+               </Button>
+             </div>
+diff --git a/components/compiti/compito-actions-menu.tsx b/components/compiti/compito-actions-menu.tsx
+index 56fe8e5..aa8a491 100644
+--- a/components/compiti/compito-actions-menu.tsx
++++ b/components/compiti/compito-actions-menu.tsx
+@@ -2,6 +2,7 @@
+ 
+ import { useState } from "react"
+ import { usePermissions } from "@/lib/permissions/provider"
++import { cn } from "@/lib/utils"
+ import {
+   IconDotsVertical,
+   IconArrowsExchange,
+@@ -51,12 +52,15 @@ export function CompitoActionsMenu({
+   onBulkStato,
+   onBulkComplete,
+   onBulkDelete,
++  triggerClassName,
+ }: {
+   selectedCount: number
+   onBulkTransfer: (owner: CompitoProprietario) => void
+   onBulkStato: (stato: StatoCompito) => void
+   onBulkComplete: () => void
+   onBulkDelete: () => void
++  /** Classi extra per il bottone trigger (es. per ingrandirlo su mobile). */
++  triggerClassName?: string
+ }) {
+   const hasSelection = selectedCount > 0
+   const [transferOpen, setTransferOpen] = useState(false)
+@@ -76,9 +80,10 @@ export function CompitoActionsMenu({
+               variant="outline"
+               size="icon"
+               aria-label="Azioni"
+-              className="relative bg-card"
++              className={cn("relative h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-10 lg:p-0", triggerClassName)}
+             >
+-              <IconDotsVertical size={18} stroke={1.8} />
++              <IconDotsVertical size={20} stroke={1.8} className="lg:size-[18px]" />
++              <span className="lg:hidden">Azioni</span>
+               {hasSelection ? (
+                 <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-navy px-1 text-[10px] font-bold leading-none text-navy-foreground tabular-nums">
+                   {selectedCount}
+diff --git a/components/compiti/compito-filters-drawer.tsx b/components/compiti/compito-filters-drawer.tsx
+new file mode 100644
+index 0000000..bc65a8f
+--- /dev/null
++++ b/components/compiti/compito-filters-drawer.tsx
+@@ -0,0 +1,59 @@
++"use client"
++
++import { useState, type ReactNode } from "react"
++import { X } from "lucide-react"
++import { Button } from "@/components/ui/button"
++import {
++  Sheet,
++  SheetContent,
++  SheetHeader,
++  SheetTitle,
++} from "@/components/ui/sheet"
++import {
++  CompitoQuickFilterFields,
++  countActiveCompitoFilters,
++  type CompitoFilterState,
++} from "@/components/compiti/compito-filters"
++
++export function CompitoFiltersDrawer({
++  filters,
++  onChange,
++  onReset,
++  trigger,
++}: {
++  filters: CompitoFilterState
++  onChange: (next: CompitoFilterState) => void
++  onReset: () => void
++  trigger: (ctx: { onClick: () => void; count: number }) => ReactNode
++}) {
++  const [open, setOpen] = useState(false)
++  const count = countActiveCompitoFilters(filters)
++
++  return (
++    <Sheet open={open} onOpenChange={setOpen}>
++      {trigger({ onClick: () => setOpen(true), count })}
++
++      <SheetContent
++        side="right"
++        showCloseButton={false}
++        className="w-[340px] gap-0 p-0 sm:max-w-[340px]"
++      >
++        <SheetHeader className="flex-row items-center justify-between border-b border-border p-4">
++          <SheetTitle>Filtra compiti per</SheetTitle>
++          <Button
++            variant="ghost"
++            size="icon-sm"
++            aria-label="Chiudi"
++            onClick={() => setOpen(false)}
++          >
++            <X />
++          </Button>
++        </SheetHeader>
++
++        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
++          <CompitoQuickFilterFields filters={filters} onChange={onChange} onReset={onReset} />
++        </div>
++      </SheetContent>
++    </Sheet>
++  )
++}
+diff --git a/components/compiti/compito-filters.tsx b/components/compiti/compito-filters.tsx
+index ec0cc62..2f55f7b 100644
+--- a/components/compiti/compito-filters.tsx
++++ b/components/compiti/compito-filters.tsx
+@@ -11,16 +11,7 @@ import {
+ } from "@/components/ui/select"
+ import { Input } from "@/components/ui/input"
+ import { Button } from "@/components/ui/button"
+-import {
+-  DropdownMenu,
+-  DropdownMenuCheckboxItem,
+-  DropdownMenuContent,
+-  DropdownMenuGroup,
+-  DropdownMenuLabel,
+-  DropdownMenuSeparator,
+-  DropdownMenuTrigger,
+-} from "@/components/ui/dropdown-menu"
+-import { IconFilter } from "@tabler/icons-react"
++import { cn } from "@/lib/utils"
+ import {
+   STATO_COMPITO_ORDER,
+   PRIORITA_COMPITO_ORDER,
+@@ -99,7 +90,43 @@ function FilterSelect({
+   )
+ }
+ 
+-export function CompitoFilters({
++export function countActiveCompitoFilters(filters: CompitoFilterState): number {
++  return (
++    (filters.stati.length > 0 ? 1 : 0) +
++    (filters.priorita !== "all" ? 1 : 0) +
++    (filters.proprietario !== "all" ? 1 : 0) +
++    (filters.sede !== "all" ? 1 : 0) +
++    (filters.scadenzaDa !== "" ? 1 : 0) +
++    (filters.scadenzaA !== "" ? 1 : 0) +
++    (filters.overdue ? 1 : 0)
++  )
++}
++
++/** Sola barra di ricerca: resta sempre in vista sopra la lista. */
++export function CompitoSearchInput({
++  value,
++  onChange,
++}: {
++  value: string
++  onChange: (v: string) => void
++}) {
++  return (
++    <div className="relative min-w-0 flex-1">
++      <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground sm:left-4 sm:size-5" />
++      <Input
++        value={value}
++        onChange={(e) => onChange(e.target.value)}
++        placeholder="Cerca per oggetto"
++        className="h-10 rounded-lg border-border bg-card pl-10 text-sm shadow-sm sm:h-12 sm:pl-12 sm:text-[15px]"
++        aria-label="Cerca compiti"
++      />
++    </div>
++  )
++}
++
++/** Griglia dei filtri (stato/priorità/proprietario/sede/date), pensata per
++ * vivere dentro il drawer "Filtri". */
++export function CompitoQuickFilterFields({
+   filters,
+   onChange,
+   onReset,
+@@ -123,123 +150,98 @@ export function CompitoFilters({
+     set("stati", next)
+   }
+ 
+-  const hasActiveFilters =
+-    filters.search !== "" ||
+-    filters.stati.length > 0 ||
+-    filters.priorita !== "all" ||
+-    filters.proprietario !== "all" ||
+-    filters.sede !== "all" ||
+-    filters.scadenzaDa !== "" ||
+-    filters.scadenzaA !== "" ||
+-    filters.overdue
++  const hasActiveFilters = countActiveCompitoFilters(filters) > 0
+ 
+   return (
+-    <div className="flex min-w-0 flex-wrap items-center gap-2">
+-      <div className="relative min-w-0 flex-[1_1_100%] sm:flex-[1_1_220px]">
+-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+-        <Input
+-          value={filters.search}
+-          onChange={(e) => set("search", e.target.value)}
+-          placeholder="Cerca per oggetto"
+-          className="bg-card pl-9"
+-          aria-label="Cerca compiti"
+-        />
++    <div className="flex min-w-0 flex-col gap-4">
++      <div>
++        <p className="mb-2 text-sm font-semibold text-foreground">Stato</p>
++        <div className="flex flex-wrap gap-2">
++          {STATO_COMPITO_ORDER.map((s) => (
++            <button
++              type="button"
++              key={s}
++              onClick={() => toggleStato(s)}
++              className={cn(
++                "h-9 shrink-0 rounded-lg px-3 text-sm font-semibold transition-colors",
++                filters.stati.includes(s)
++                  ? "bg-primary text-primary-foreground shadow-sm"
++                  : "border border-border bg-card text-muted-foreground hover:text-foreground",
++              )}
++            >
++              {s}
++            </button>
++          ))}
++        </div>
+       </div>
+ 
+-      {/* Stato (multi) */}
+-      <DropdownMenu>
+-        <DropdownMenuTrigger
+-          render={
+-            <Button variant="outline" className="w-full bg-card sm:w-auto">
+-              <IconFilter size={16} stroke={1.8} data-icon="inline-start" />
+-              Stato
+-              {filters.stati.length > 0 ? (
+-                <span className="ml-1 inline-flex size-5 items-center justify-center rounded-full bg-navy text-[11px] font-semibold text-navy-foreground">
+-                  {filters.stati.length}
+-                </span>
+-              ) : null}
+-            </Button>
+-          }
++      <div className="grid gap-4 sm:grid-cols-2">
++        <FilterSelect
++          ariaLabel="Filtra per Priorità"
++          className="w-full bg-card"
++          value={filters.priorita}
++          onValueChange={(v) => set("priorita", v)}
++          placeholder="Priorità"
++          options={[
++            ["all", "Tutte le priorità"],
++            ...PRIORITA_COMPITO_ORDER.map((p) => [p, p] as [string, string]),
++          ]}
+         />
+-        <DropdownMenuContent align="start" className="w-56">
+-          <DropdownMenuGroup>
+-            <DropdownMenuLabel>Filtra per stato</DropdownMenuLabel>
+-            <DropdownMenuSeparator />
+-            {STATO_COMPITO_ORDER.map((s) => (
+-              <DropdownMenuCheckboxItem
+-                key={s}
+-                checked={filters.stati.includes(s)}
+-                onCheckedChange={() => toggleStato(s)}
+-                onSelect={(e) => e.preventDefault()}
+-              >
+-                {s}
+-              </DropdownMenuCheckboxItem>
+-            ))}
+-          </DropdownMenuGroup>
+-        </DropdownMenuContent>
+-      </DropdownMenu>
+-
+-      <FilterSelect
+-        ariaLabel="Filtra per Priorità"
+-        className="w-full bg-card sm:w-[150px]"
+-        value={filters.priorita}
+-        onValueChange={(v) => set("priorita", v)}
+-        placeholder="Priorità"
+-        options={[
+-          ["all", "Tutte le priorità"],
+-          ...PRIORITA_COMPITO_ORDER.map((p) => [p, p] as [string, string]),
+-        ]}
+-      />
+ 
+-      <FilterSelect
+-        ariaLabel="Filtra per Proprietario"
+-        className="w-full bg-card sm:w-[190px]"
+-        value={filters.proprietario}
+-        onValueChange={(v) => set("proprietario", v)}
+-        placeholder="Proprietario"
+-        options={[
+-          ["all", "Tutti i proprietari"],
+-          ...proprietari.map((p) => [p.nome, p.nome] as [string, string]),
+-        ]}
+-      />
+-
+-      <FilterSelect
+-        ariaLabel="Filtra per Sede"
+-        value={filters.sede}
+-        onValueChange={(v) => set("sede", v)}
+-        placeholder="Sede"
+-        options={[
+-          ["all", "Tutte le sedi"],
+-          ...SEDE_LABELS.map((s) => [s, s] as [string, string]),
+-        ]}
+-      />
+-
+-      <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 sm:w-auto sm:grid-cols-[150px_auto_150px]">
+-        <Input
+-          type="date"
+-          value={filters.scadenzaDa}
+-          onChange={(e) => set("scadenzaDa", e.target.value)}
++        <FilterSelect
++          ariaLabel="Filtra per Proprietario"
+           className="w-full bg-card"
+-          aria-label="Scadenza da"
++          value={filters.proprietario}
++          onValueChange={(v) => set("proprietario", v)}
++          placeholder="Proprietario"
++          options={[
++            ["all", "Tutti i proprietari"],
++            ...proprietari.map((p) => [p.nome, p.nome] as [string, string]),
++          ]}
+         />
+-        <span className="text-sm text-muted-foreground">→</span>
+-        <Input
+-          type="date"
+-          value={filters.scadenzaA}
+-          onChange={(e) => set("scadenzaA", e.target.value)}
++
++        <FilterSelect
++          ariaLabel="Filtra per Sede"
+           className="w-full bg-card"
+-          aria-label="Scadenza a"
++          value={filters.sede}
++          onValueChange={(v) => set("sede", v)}
++          placeholder="Sede"
++          options={[
++            ["all", "Tutte le sedi"],
++            ...SEDE_LABELS.map((s) => [s, s] as [string, string]),
++          ]}
+         />
+       </div>
+ 
++      <div>
++        <p className="mb-2 text-sm font-semibold text-foreground">Scadenza</p>
++        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
++          <Input
++            type="date"
++            value={filters.scadenzaDa}
++            onChange={(e) => set("scadenzaDa", e.target.value)}
++            className="w-full bg-card"
++            aria-label="Scadenza da"
++          />
++          <span className="text-sm text-muted-foreground">→</span>
++          <Input
++            type="date"
++            value={filters.scadenzaA}
++            onChange={(e) => set("scadenzaA", e.target.value)}
++            className="w-full bg-card"
++            aria-label="Scadenza a"
++          />
++        </div>
++      </div>
++
+       <Button
+         variant="ghost"
+         onClick={onReset}
+         disabled={!hasActiveFilters}
+-        className="text-muted-foreground"
++        className="self-start text-muted-foreground"
+       >
+         <X data-icon="inline-start" />
+-        Reset filtri
++        Azzera filtri
+       </Button>
+     </div>
+   )
+diff --git a/components/compiti/compito-table.tsx b/components/compiti/compito-table.tsx
+index 458f463..1a9dfdc 100644
+--- a/components/compiti/compito-table.tsx
++++ b/components/compiti/compito-table.tsx
+@@ -81,7 +81,7 @@ function CompitoMobileList({
+   }
+ 
+   return (
+-    <div className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
++    <div className="flex h-full flex-col gap-2 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
+       {compiti.map((compito) => {
+         const scaduto = isCompitoScaduto(compito)
+         const completato = compito.Stato === "Completato"
+@@ -91,7 +91,7 @@ function CompitoMobileList({
+             key={compito.id}
+             role="button"
+             tabIndex={0}
+-            className="flex min-h-[76px] cursor-pointer items-center gap-2.5 bg-card px-2.5 py-2.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
++            className="flex min-h-[82px] shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+             onClick={() => {
+               startNavigationFeedback()
+               router.push(`/compiti/${compito.id}`)
+@@ -111,13 +111,13 @@ function CompitoMobileList({
+               />
+             </div>
+ 
+-            <CompitoAvatar nome={compito["Proprietario del compito"]} size={32} />
++            <CompitoAvatar nome={compito["Proprietario del compito"]} size={36} />
+ 
+             <div className="min-w-0 flex-1">
+               <div className="flex min-w-0 items-center gap-1.5">
+                 <h3
+                   className={cn(
+-                    "truncate text-sm font-bold text-foreground",
++                    "truncate text-base font-bold text-foreground",
+                     completato && "text-muted-foreground line-through",
+                   )}
+                 >
+@@ -126,7 +126,7 @@ function CompitoMobileList({
+                 <PrioritaBadge priorita={compito.Priorità} />
+               </div>
+ 
+-              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
++              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+                 <CalendarClock className={cn("size-3.5 shrink-0", scaduto && "text-destructive")} />
+                 <span className={cn("truncate", scaduto && "font-medium text-destructive")}>
+                   {compito["Data di scadenza"]}
+diff --git a/components/scadenze/scadenza-actions-menu.tsx b/components/scadenze/scadenza-actions-menu.tsx
+index 95ade94..0894863 100644
+--- a/components/scadenze/scadenza-actions-menu.tsx
++++ b/components/scadenze/scadenza-actions-menu.tsx
+@@ -2,6 +2,7 @@
+ 
+ import { useState } from "react"
+ import { usePermissions } from "@/lib/permissions/provider"
++import { cn } from "@/lib/utils"
+ import { IconDotsVertical, IconArrowsExchange, IconTrash } from "@tabler/icons-react"
+ import { Button } from "@/components/ui/button"
+ import { Label } from "@/components/ui/label"
+@@ -37,10 +38,13 @@ export function ScadenzaActionsMenu({
+   selectedCount,
+   onBulkTransfer,
+   onBulkDelete,
++  triggerClassName,
+ }: {
+   selectedCount: number
+   onBulkTransfer: (owner: ScadenzaProprietario) => void
+   onBulkDelete: () => void
++  /** Classi extra per il bottone trigger (es. per ingrandirlo su mobile). */
++  triggerClassName?: string
+ }) {
+   const hasSelection = selectedCount > 0
+   const [transferOpen, setTransferOpen] = useState(false)
+@@ -55,8 +59,14 @@ export function ScadenzaActionsMenu({
+       <DropdownMenu>
+         <DropdownMenuTrigger
+           render={
+-            <Button variant="outline" size="icon" aria-label="Azioni" className="relative bg-card">
+-              <IconDotsVertical size={18} stroke={1.8} />
++            <Button
++              variant="outline"
++              size="icon"
++              aria-label="Azioni"
++              className={cn("relative h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-10 lg:p-0", triggerClassName)}
++            >
++              <IconDotsVertical size={20} stroke={1.8} className="lg:size-[18px]" />
++              <span className="lg:hidden">Azioni</span>
+               {hasSelection ? (
+                 <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-navy px-1 text-[10px] font-bold leading-none text-navy-foreground tabular-nums">
+                   {selectedCount}
+diff --git a/components/scadenze/scadenza-filters-drawer.tsx b/components/scadenze/scadenza-filters-drawer.tsx
+new file mode 100644
+index 0000000..1e9e5c6
+--- /dev/null
++++ b/components/scadenze/scadenza-filters-drawer.tsx
+@@ -0,0 +1,59 @@
++"use client"
++
++import { useState, type ReactNode } from "react"
++import { X } from "lucide-react"
++import { Button } from "@/components/ui/button"
++import {
++  Sheet,
++  SheetContent,
++  SheetHeader,
++  SheetTitle,
++} from "@/components/ui/sheet"
++import {
++  ScadenzaQuickFilterFields,
++  countActiveScadenzaFilters,
++  type ScadenzaFilterState,
++} from "@/components/scadenze/scadenza-filters"
++
++export function ScadenzaFiltersDrawer({
++  filters,
++  onChange,
++  onReset,
++  trigger,
++}: {
++  filters: ScadenzaFilterState
++  onChange: (next: ScadenzaFilterState) => void
++  onReset: () => void
++  trigger: (ctx: { onClick: () => void; count: number }) => ReactNode
++}) {
++  const [open, setOpen] = useState(false)
++  const count = countActiveScadenzaFilters(filters)
++
++  return (
++    <Sheet open={open} onOpenChange={setOpen}>
++      {trigger({ onClick: () => setOpen(true), count })}
++
++      <SheetContent
++        side="right"
++        showCloseButton={false}
++        className="w-[340px] gap-0 p-0 sm:max-w-[340px]"
++      >
++        <SheetHeader className="flex-row items-center justify-between border-b border-border p-4">
++          <SheetTitle>Filtra scadenze per</SheetTitle>
++          <Button
++            variant="ghost"
++            size="icon-sm"
++            aria-label="Chiudi"
++            onClick={() => setOpen(false)}
++          >
++            <X />
++          </Button>
++        </SheetHeader>
++
++        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
++          <ScadenzaQuickFilterFields filters={filters} onChange={onChange} onReset={onReset} />
++        </div>
++      </SheetContent>
++    </Sheet>
++  )
++}
+diff --git a/components/scadenze/scadenza-filters.tsx b/components/scadenze/scadenza-filters.tsx
+index 101d837..7454078 100644
+--- a/components/scadenze/scadenza-filters.tsx
++++ b/components/scadenze/scadenza-filters.tsx
+@@ -72,7 +72,41 @@ function FilterSelect({
+   )
+ }
+ 
+-export function ScadenzaFilters({
++export function countActiveScadenzaFilters(filters: ScadenzaFilterState): number {
++  return (
++    (filters.proprietario !== "all" ? 1 : 0) +
++    (filters.tag !== "all" ? 1 : 0) +
++    (filters.scadenzaDa !== "" ? 1 : 0) +
++    (filters.scadenzaA !== "" ? 1 : 0) +
++    (filters.collegamento !== "all" ? 1 : 0)
++  )
++}
++
++/** Sola barra di ricerca: resta sempre in vista sopra la lista. */
++export function ScadenzaSearchInput({
++  value,
++  onChange,
++}: {
++  value: string
++  onChange: (v: string) => void
++}) {
++  return (
++    <div className="relative min-w-0 flex-1">
++      <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground sm:left-4 sm:size-5" />
++      <Input
++        value={value}
++        onChange={(e) => onChange(e.target.value)}
++        placeholder="Cerca per nome scadenza"
++        className="h-10 rounded-lg border-border bg-card pl-10 text-sm shadow-sm sm:h-12 sm:pl-12 sm:text-[15px]"
++        aria-label="Cerca scadenze"
++      />
++    </div>
++  )
++}
++
++/** Griglia dei filtri (proprietario/tag/collegamento/date), pensata per
++ * vivere dentro il drawer "Filtri". */
++export function ScadenzaQuickFilterFields({
+   filters,
+   onChange,
+   onReset,
+@@ -88,82 +122,75 @@ export function ScadenzaFilters({
+   const set = <K extends keyof ScadenzaFilterState>(key: K, value: ScadenzaFilterState[K]) =>
+     onChange({ ...filters, [key]: value })
+ 
+-  const hasActiveFilters =
+-    filters.search !== "" ||
+-    filters.proprietario !== "all" ||
+-    filters.tag !== "all" ||
+-    filters.scadenzaDa !== "" ||
+-    filters.scadenzaA !== "" ||
+-    filters.collegamento !== "all"
++  const hasActiveFilters = countActiveScadenzaFilters(filters) > 0
+ 
+   return (
+-    <div className="flex min-w-0 flex-wrap items-center gap-2">
+-      <div className="relative min-w-0 flex-[1_1_100%] sm:flex-[1_1_220px]">
+-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+-        <Input
+-          value={filters.search}
+-          onChange={(e) => set("search", e.target.value)}
+-          placeholder="Cerca per nome scadenza"
+-          className="bg-card pl-9"
+-          aria-label="Cerca scadenze"
++    <div className="flex min-w-0 flex-col gap-4">
++      <div className="grid gap-4 sm:grid-cols-2">
++        <FilterSelect
++          ariaLabel="Filtra per Proprietario"
++          className="w-full bg-card"
++          value={filters.proprietario}
++          onValueChange={(v) => set("proprietario", v)}
++          placeholder="Proprietario"
++          options={[
++            ["all", "Tutti i proprietari"],
++            ...proprietari.map((p) => [p.id, p.nome] as [string, string]),
++          ]}
+         />
+-      </div>
+ 
+-      <FilterSelect
+-        ariaLabel="Filtra per Proprietario"
+-        className="w-full bg-card sm:w-[190px]"
+-        value={filters.proprietario}
+-        onValueChange={(v) => set("proprietario", v)}
+-        placeholder="Proprietario"
+-        options={[
+-          ["all", "Tutti i proprietari"],
+-          ...proprietari.map((p) => [p.id, p.nome] as [string, string]),
+-        ]}
+-      />
+-
+-      <FilterSelect
+-        ariaLabel="Filtra per Tag"
+-        className="w-full bg-card sm:w-[170px]"
+-        value={filters.tag}
+-        onValueChange={(v) => set("tag", v)}
+-        placeholder="Tag"
+-        options={[["all", "Tutti i tag"], ...tags.map((t) => [t, t] as [string, string])]}
+-      />
+-
+-      <FilterSelect
+-        ariaLabel="Filtra per Collegamento"
+-        className="w-full bg-card sm:w-[170px]"
+-        value={filters.collegamento}
+-        onValueChange={(v) => set("collegamento", v as ScadenzeListParams["collegamento"])}
+-        placeholder="Collegamento"
+-        options={[
+-          ["all", "Tutti"],
+-          ["si", "Con collegamento"],
+-          ["no", "Senza collegamento"],
+-        ]}
+-      />
+-
+-      <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 sm:w-auto sm:grid-cols-[150px_auto_150px]">
+-        <Input
+-          type="date"
+-          value={filters.scadenzaDa}
+-          onChange={(e) => set("scadenzaDa", e.target.value)}
++        <FilterSelect
++          ariaLabel="Filtra per Tag"
+           className="w-full bg-card"
+-          aria-label="Data scadenza da"
++          value={filters.tag}
++          onValueChange={(v) => set("tag", v)}
++          placeholder="Tag"
++          options={[["all", "Tutti i tag"], ...tags.map((t) => [t, t] as [string, string])]}
+         />
+-        <span className="text-sm text-muted-foreground">→</span>
+-        <Input
+-          type="date"
+-          value={filters.scadenzaA}
+-          onChange={(e) => set("scadenzaA", e.target.value)}
++
++        <FilterSelect
++          ariaLabel="Filtra per Collegamento"
+           className="w-full bg-card"
+-          aria-label="Data scadenza a"
++          value={filters.collegamento}
++          onValueChange={(v) => set("collegamento", v as ScadenzeListParams["collegamento"])}
++          placeholder="Collegamento"
++          options={[
++            ["all", "Tutti"],
++            ["si", "Con collegamento"],
++            ["no", "Senza collegamento"],
++          ]}
+         />
+       </div>
+ 
+-      <Button variant="ghost" onClick={onReset} disabled={!hasActiveFilters} className="text-muted-foreground">
++      <div>
++        <p className="mb-2 text-sm font-semibold text-foreground">Scadenza</p>
++        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
++          <Input
++            type="date"
++            value={filters.scadenzaDa}
++            onChange={(e) => set("scadenzaDa", e.target.value)}
++            className="w-full bg-card"
++            aria-label="Data scadenza da"
++          />
++          <span className="text-sm text-muted-foreground">→</span>
++          <Input
++            type="date"
++            value={filters.scadenzaA}
++            onChange={(e) => set("scadenzaA", e.target.value)}
++            className="w-full bg-card"
++            aria-label="Data scadenza a"
++          />
++        </div>
++      </div>
++
++      <Button
++        variant="ghost"
++        onClick={onReset}
++        disabled={!hasActiveFilters}
++        className="self-start text-muted-foreground"
++      >
+         <X data-icon="inline-start" />
+-        Reset filtri
++        Azzera filtri
+       </Button>
+     </div>
+   )
+diff --git a/components/scadenze/scadenza-table.tsx b/components/scadenze/scadenza-table.tsx
+index c76ca66..5d2efce 100644
+--- a/components/scadenze/scadenza-table.tsx
++++ b/components/scadenze/scadenza-table.tsx
+@@ -75,7 +75,7 @@ function ScadenzaMobileList({
+   }
+ 
+   return (
+-    <div className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
++    <div className="flex h-full flex-col gap-2 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
+       {scadenze.map((scadenza) => {
+         const scaduta = isScaduta(scadenza)
+ 
+@@ -84,7 +84,7 @@ function ScadenzaMobileList({
+             key={scadenza.id}
+             role="button"
+             tabIndex={0}
+-            className="flex min-h-[72px] cursor-pointer items-center gap-2.5 bg-card px-2.5 py-2.5 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
++            className="flex min-h-[82px] shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+             onClick={() => {
+               startNavigationFeedback()
+               router.push(`/scadenze/${scadenza.id}`)
+@@ -104,17 +104,17 @@ function ScadenzaMobileList({
+               />
+             </div>
+ 
+-            <ScadenzaAvatar nome={scadenza.proprietario_nome ?? scadenza.nome} size={32} />
++            <ScadenzaAvatar nome={scadenza.proprietario_nome ?? scadenza.nome} size={36} />
+ 
+             <div className="min-w-0 flex-1">
+               <div className="flex min-w-0 items-center gap-1.5">
+-                <h3 className="truncate text-sm font-bold text-foreground">
++                <h3 className="truncate text-base font-bold text-foreground">
+                   {scadenza.nome}
+                 </h3>
+                 {scaduta ? <ScadutaBadge /> : null}
+               </div>
+ 
+-              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
++              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+                 <CalendarClock className={cn("size-3.5 shrink-0", scaduta && "text-destructive")} />
+                 <span className={cn("truncate", scaduta && "font-medium text-destructive")}>
+                   {formatDateTime(scadenza.data_scadenza)}

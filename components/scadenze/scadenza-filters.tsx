@@ -72,7 +72,41 @@ function FilterSelect({
   )
 }
 
-export function ScadenzaFilters({
+export function countActiveScadenzaFilters(filters: ScadenzaFilterState): number {
+  return (
+    (filters.proprietario !== "all" ? 1 : 0) +
+    (filters.tag !== "all" ? 1 : 0) +
+    (filters.scadenzaDa !== "" ? 1 : 0) +
+    (filters.scadenzaA !== "" ? 1 : 0) +
+    (filters.collegamento !== "all" ? 1 : 0)
+  )
+}
+
+/** Sola barra di ricerca: resta sempre in vista sopra la lista. */
+export function ScadenzaSearchInput({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className="relative min-w-0 flex-1">
+      <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground sm:left-4 sm:size-5" />
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Cerca per nome scadenza"
+        className="h-10 rounded-lg border-border bg-card pl-10 text-sm shadow-sm sm:h-12 sm:pl-12 sm:text-[15px]"
+        aria-label="Cerca scadenze"
+      />
+    </div>
+  )
+}
+
+/** Griglia dei filtri (proprietario/tag/collegamento/date), pensata per
+ * vivere dentro il drawer "Filtri". */
+export function ScadenzaQuickFilterFields({
   filters,
   onChange,
   onReset,
@@ -88,82 +122,75 @@ export function ScadenzaFilters({
   const set = <K extends keyof ScadenzaFilterState>(key: K, value: ScadenzaFilterState[K]) =>
     onChange({ ...filters, [key]: value })
 
-  const hasActiveFilters =
-    filters.search !== "" ||
-    filters.proprietario !== "all" ||
-    filters.tag !== "all" ||
-    filters.scadenzaDa !== "" ||
-    filters.scadenzaA !== "" ||
-    filters.collegamento !== "all"
+  const hasActiveFilters = countActiveScadenzaFilters(filters) > 0
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <div className="relative min-w-0 flex-[1_1_100%] sm:flex-[1_1_220px]">
-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={filters.search}
-          onChange={(e) => set("search", e.target.value)}
-          placeholder="Cerca per nome scadenza"
-          className="bg-card pl-9"
-          aria-label="Cerca scadenze"
+    <div className="flex min-w-0 flex-col gap-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FilterSelect
+          ariaLabel="Filtra per Proprietario"
+          className="w-full bg-card"
+          value={filters.proprietario}
+          onValueChange={(v) => set("proprietario", v)}
+          placeholder="Proprietario"
+          options={[
+            ["all", "Tutti i proprietari"],
+            ...proprietari.map((p) => [p.id, p.nome] as [string, string]),
+          ]}
+        />
+
+        <FilterSelect
+          ariaLabel="Filtra per Tag"
+          className="w-full bg-card"
+          value={filters.tag}
+          onValueChange={(v) => set("tag", v)}
+          placeholder="Tag"
+          options={[["all", "Tutti i tag"], ...tags.map((t) => [t, t] as [string, string])]}
+        />
+
+        <FilterSelect
+          ariaLabel="Filtra per Collegamento"
+          className="w-full bg-card"
+          value={filters.collegamento}
+          onValueChange={(v) => set("collegamento", v as ScadenzeListParams["collegamento"])}
+          placeholder="Collegamento"
+          options={[
+            ["all", "Tutti"],
+            ["si", "Con collegamento"],
+            ["no", "Senza collegamento"],
+          ]}
         />
       </div>
 
-      <FilterSelect
-        ariaLabel="Filtra per Proprietario"
-        className="w-full bg-card sm:w-[190px]"
-        value={filters.proprietario}
-        onValueChange={(v) => set("proprietario", v)}
-        placeholder="Proprietario"
-        options={[
-          ["all", "Tutti i proprietari"],
-          ...proprietari.map((p) => [p.id, p.nome] as [string, string]),
-        ]}
-      />
-
-      <FilterSelect
-        ariaLabel="Filtra per Tag"
-        className="w-full bg-card sm:w-[170px]"
-        value={filters.tag}
-        onValueChange={(v) => set("tag", v)}
-        placeholder="Tag"
-        options={[["all", "Tutti i tag"], ...tags.map((t) => [t, t] as [string, string])]}
-      />
-
-      <FilterSelect
-        ariaLabel="Filtra per Collegamento"
-        className="w-full bg-card sm:w-[170px]"
-        value={filters.collegamento}
-        onValueChange={(v) => set("collegamento", v as ScadenzeListParams["collegamento"])}
-        placeholder="Collegamento"
-        options={[
-          ["all", "Tutti"],
-          ["si", "Con collegamento"],
-          ["no", "Senza collegamento"],
-        ]}
-      />
-
-      <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 sm:w-auto sm:grid-cols-[150px_auto_150px]">
-        <Input
-          type="date"
-          value={filters.scadenzaDa}
-          onChange={(e) => set("scadenzaDa", e.target.value)}
-          className="w-full bg-card"
-          aria-label="Data scadenza da"
-        />
-        <span className="text-sm text-muted-foreground">→</span>
-        <Input
-          type="date"
-          value={filters.scadenzaA}
-          onChange={(e) => set("scadenzaA", e.target.value)}
-          className="w-full bg-card"
-          aria-label="Data scadenza a"
-        />
+      <div>
+        <p className="mb-2 text-sm font-semibold text-foreground">Scadenza</p>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
+          <Input
+            type="date"
+            value={filters.scadenzaDa}
+            onChange={(e) => set("scadenzaDa", e.target.value)}
+            className="w-full bg-card"
+            aria-label="Data scadenza da"
+          />
+          <span className="text-sm text-muted-foreground">→</span>
+          <Input
+            type="date"
+            value={filters.scadenzaA}
+            onChange={(e) => set("scadenzaA", e.target.value)}
+            className="w-full bg-card"
+            aria-label="Data scadenza a"
+          />
+        </div>
       </div>
 
-      <Button variant="ghost" onClick={onReset} disabled={!hasActiveFilters} className="text-muted-foreground">
+      <Button
+        variant="ghost"
+        onClick={onReset}
+        disabled={!hasActiveFilters}
+        className="self-start text-muted-foreground"
+      >
         <X data-icon="inline-start" />
-        Reset filtri
+        Azzera filtri
       </Button>
     </div>
   )

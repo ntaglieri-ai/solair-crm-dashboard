@@ -11,16 +11,7 @@ import {
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { IconFilter } from "@tabler/icons-react"
+import { cn } from "@/lib/utils"
 import {
   STATO_COMPITO_ORDER,
   PRIORITA_COMPITO_ORDER,
@@ -99,7 +90,43 @@ function FilterSelect({
   )
 }
 
-export function CompitoFilters({
+export function countActiveCompitoFilters(filters: CompitoFilterState): number {
+  return (
+    (filters.stati.length > 0 ? 1 : 0) +
+    (filters.priorita !== "all" ? 1 : 0) +
+    (filters.proprietario !== "all" ? 1 : 0) +
+    (filters.sede !== "all" ? 1 : 0) +
+    (filters.scadenzaDa !== "" ? 1 : 0) +
+    (filters.scadenzaA !== "" ? 1 : 0) +
+    (filters.overdue ? 1 : 0)
+  )
+}
+
+/** Sola barra di ricerca: resta sempre in vista sopra la lista. */
+export function CompitoSearchInput({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className="relative min-w-0 flex-1">
+      <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground sm:left-4 sm:size-5" />
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Cerca per oggetto"
+        className="h-10 rounded-lg border-border bg-card pl-10 text-sm shadow-sm sm:h-12 sm:pl-12 sm:text-[15px]"
+        aria-label="Cerca compiti"
+      />
+    </div>
+  )
+}
+
+/** Griglia dei filtri (stato/priorità/proprietario/sede/date), pensata per
+ * vivere dentro il drawer "Filtri". */
+export function CompitoQuickFilterFields({
   filters,
   onChange,
   onReset,
@@ -123,123 +150,98 @@ export function CompitoFilters({
     set("stati", next)
   }
 
-  const hasActiveFilters =
-    filters.search !== "" ||
-    filters.stati.length > 0 ||
-    filters.priorita !== "all" ||
-    filters.proprietario !== "all" ||
-    filters.sede !== "all" ||
-    filters.scadenzaDa !== "" ||
-    filters.scadenzaA !== "" ||
-    filters.overdue
+  const hasActiveFilters = countActiveCompitoFilters(filters) > 0
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <div className="relative min-w-0 flex-[1_1_100%] sm:flex-[1_1_220px]">
-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={filters.search}
-          onChange={(e) => set("search", e.target.value)}
-          placeholder="Cerca per oggetto"
-          className="bg-card pl-9"
-          aria-label="Cerca compiti"
+    <div className="flex min-w-0 flex-col gap-4">
+      <div>
+        <p className="mb-2 text-sm font-semibold text-foreground">Stato</p>
+        <div className="flex flex-wrap gap-2">
+          {STATO_COMPITO_ORDER.map((s) => (
+            <button
+              type="button"
+              key={s}
+              onClick={() => toggleStato(s)}
+              className={cn(
+                "h-9 shrink-0 rounded-lg px-3 text-sm font-semibold transition-colors",
+                filters.stati.includes(s)
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "border border-border bg-card text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FilterSelect
+          ariaLabel="Filtra per Priorità"
+          className="w-full bg-card"
+          value={filters.priorita}
+          onValueChange={(v) => set("priorita", v)}
+          placeholder="Priorità"
+          options={[
+            ["all", "Tutte le priorità"],
+            ...PRIORITA_COMPITO_ORDER.map((p) => [p, p] as [string, string]),
+          ]}
+        />
+
+        <FilterSelect
+          ariaLabel="Filtra per Proprietario"
+          className="w-full bg-card"
+          value={filters.proprietario}
+          onValueChange={(v) => set("proprietario", v)}
+          placeholder="Proprietario"
+          options={[
+            ["all", "Tutti i proprietari"],
+            ...proprietari.map((p) => [p.nome, p.nome] as [string, string]),
+          ]}
+        />
+
+        <FilterSelect
+          ariaLabel="Filtra per Sede"
+          className="w-full bg-card"
+          value={filters.sede}
+          onValueChange={(v) => set("sede", v)}
+          placeholder="Sede"
+          options={[
+            ["all", "Tutte le sedi"],
+            ...SEDE_LABELS.map((s) => [s, s] as [string, string]),
+          ]}
         />
       </div>
 
-      {/* Stato (multi) */}
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button variant="outline" className="w-full bg-card sm:w-auto">
-              <IconFilter size={16} stroke={1.8} data-icon="inline-start" />
-              Stato
-              {filters.stati.length > 0 ? (
-                <span className="ml-1 inline-flex size-5 items-center justify-center rounded-full bg-navy text-[11px] font-semibold text-navy-foreground">
-                  {filters.stati.length}
-                </span>
-              ) : null}
-            </Button>
-          }
-        />
-        <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>Filtra per stato</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {STATO_COMPITO_ORDER.map((s) => (
-              <DropdownMenuCheckboxItem
-                key={s}
-                checked={filters.stati.includes(s)}
-                onCheckedChange={() => toggleStato(s)}
-                onSelect={(e) => e.preventDefault()}
-              >
-                {s}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <FilterSelect
-        ariaLabel="Filtra per Priorità"
-        className="w-full bg-card sm:w-[150px]"
-        value={filters.priorita}
-        onValueChange={(v) => set("priorita", v)}
-        placeholder="Priorità"
-        options={[
-          ["all", "Tutte le priorità"],
-          ...PRIORITA_COMPITO_ORDER.map((p) => [p, p] as [string, string]),
-        ]}
-      />
-
-      <FilterSelect
-        ariaLabel="Filtra per Proprietario"
-        className="w-full bg-card sm:w-[190px]"
-        value={filters.proprietario}
-        onValueChange={(v) => set("proprietario", v)}
-        placeholder="Proprietario"
-        options={[
-          ["all", "Tutti i proprietari"],
-          ...proprietari.map((p) => [p.nome, p.nome] as [string, string]),
-        ]}
-      />
-
-      <FilterSelect
-        ariaLabel="Filtra per Sede"
-        value={filters.sede}
-        onValueChange={(v) => set("sede", v)}
-        placeholder="Sede"
-        options={[
-          ["all", "Tutte le sedi"],
-          ...SEDE_LABELS.map((s) => [s, s] as [string, string]),
-        ]}
-      />
-
-      <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5 sm:w-auto sm:grid-cols-[150px_auto_150px]">
-        <Input
-          type="date"
-          value={filters.scadenzaDa}
-          onChange={(e) => set("scadenzaDa", e.target.value)}
-          className="w-full bg-card"
-          aria-label="Scadenza da"
-        />
-        <span className="text-sm text-muted-foreground">→</span>
-        <Input
-          type="date"
-          value={filters.scadenzaA}
-          onChange={(e) => set("scadenzaA", e.target.value)}
-          className="w-full bg-card"
-          aria-label="Scadenza a"
-        />
+      <div>
+        <p className="mb-2 text-sm font-semibold text-foreground">Scadenza</p>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
+          <Input
+            type="date"
+            value={filters.scadenzaDa}
+            onChange={(e) => set("scadenzaDa", e.target.value)}
+            className="w-full bg-card"
+            aria-label="Scadenza da"
+          />
+          <span className="text-sm text-muted-foreground">→</span>
+          <Input
+            type="date"
+            value={filters.scadenzaA}
+            onChange={(e) => set("scadenzaA", e.target.value)}
+            className="w-full bg-card"
+            aria-label="Scadenza a"
+          />
+        </div>
       </div>
 
       <Button
         variant="ghost"
         onClick={onReset}
         disabled={!hasActiveFilters}
-        className="text-muted-foreground"
+        className="self-start text-muted-foreground"
       >
         <X data-icon="inline-start" />
-        Reset filtri
+        Azzera filtri
       </Button>
     </div>
   )

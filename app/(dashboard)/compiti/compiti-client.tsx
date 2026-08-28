@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import {
   AlertTriangle,
@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
+  SlidersHorizontal,
   Sparkles,
 } from "lucide-react"
 import {
@@ -17,6 +18,7 @@ import {
   IconLayoutKanban,
 } from "@tabler/icons-react"
 import { useQueryClient } from "@tanstack/react-query"
+import { useIsMobile } from "@/hooks/use-is-mobile"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -42,10 +44,11 @@ import {
   KANBAN_OPEN_PAGE_SIZE,
 } from "@/lib/compiti/api-types"
 import {
-  CompitoFilters,
+  CompitoSearchInput,
   DEFAULT_COMPITO_FILTERS,
   type CompitoFilterState,
 } from "@/components/compiti/compito-filters"
+import { CompitoFiltersDrawer } from "@/components/compiti/compito-filters-drawer"
 import {
   CompitoTable,
   type CompitoSortKey,
@@ -77,6 +80,7 @@ import {
 
 const ROWS_ITEMS: Record<string, string> = {
   "10": "10 righe",
+  "20": "20 righe",
   "30": "30 righe",
   "50": "50 righe",
 }
@@ -119,9 +123,65 @@ export function CompitiClient({
   const [sortDir, setSortDir] = useState<SortDir>("asc")
   const [page, setPage] = useState(1)
   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
+  const isMobile = useIsMobile()
+  const mobileDefaultApplied = useRef(false)
+  useEffect(() => {
+    if (isMobile && !mobileDefaultApplied.current && rowsPerPage === INITIAL_PAGE_SIZE) {
+      mobileDefaultApplied.current = true
+      setRowsPerPage(20)
+    }
+  }, [isMobile, rowsPerPage])
+  // Blocca lo scroll della pagina su mobile: stesso fix già applicato a
+  // Lead/Clienti/Installatori, resta scrollabile solo la lista. Nessun
+  // effetto su desktop.
+  useEffect(() => {
+    if (!isMobile) return
+    const html = document.documentElement
+    const prevHtmlOverflow = html.style.overflow
+    const prevBodyOverflow = document.body.style.overflow
+    const prevBodyOverscroll = document.body.style.overscrollBehavior
+    html.style.overflow = "hidden"
+    document.body.style.overflow = "hidden"
+    document.body.style.overscrollBehavior = "none"
+    return () => {
+      html.style.overflow = prevHtmlOverflow
+      document.body.style.overflow = prevBodyOverflow
+      document.body.style.overscrollBehavior = prevBodyOverscroll
+    }
+  }, [isMobile])
+  // Altezza disponibile: calcolata solo su mobile, per non alterare in alcun
+  // modo il comportamento (pagina intera che scrolla) su desktop.
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [availH, setAvailH] = useState<number | null>(null)
+  useEffect(() => {
+    if (!isMobile) {
+      setAvailH(null)
+      return
+    }
+    const el = rootRef.current
+    if (!el) return
+    const BOTTOM_GAP = 24
+    const measure = () => {
+      const top = el.getBoundingClientRect().top
+      const next = Math.max(360, window.innerHeight - top - BOTTOM_GAP)
+      setAvailH(next)
+    }
+    measure()
+    window.addEventListener("resize", measure)
+    const ro = new ResizeObserver(measure)
+    ro.observe(document.body)
+    return () => {
+      window.removeEventListener("resize", measure)
+      ro.disconnect()
+    }
+  }, [isMobile])
 
   // --- UI state ---
   const [view, setView] = useState<ViewMode>("kanban")
+  // Su mobile la vista kanban (colonne affiancate, scroll orizzontale) non è
+  // usabile: forziamo sempre la lista, senza toccare la preferenza salvata
+  // dall'utente per il desktop.
+  const effectiveView: ViewMode = isMobile ? "lista" : view
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [newOpen, setNewOpen] = useState(false)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
@@ -183,10 +243,10 @@ export function CompitiClient({
   // per mezzo secondo. Il gancio lo applica solo se la chiave coincide, quindi
   // appena l'utente filtra o cerca si torna alla fetch normale.
   const { data: kanbanOpenData } = useCompitiQuery(kanbanOpenParams, initialKanbanOpen, {
-    enabled: view === "kanban",
+    enabled: effectiveView === "kanban",
   })
   const { data: kanbanDoneData } = useCompitiQuery(kanbanDoneParams, initialKanbanDone, {
-    enabled: view === "kanban",
+    enabled: effectiveView === "kanban",
   })
   const kanbanRows = useMemo(
     () => [...(kanbanOpenData?.rows ?? []), ...(kanbanDoneData?.rows ?? [])],
@@ -394,7 +454,11 @@ export function CompitiClient({
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-5">
+    <div
+      ref={rootRef}
+      className="flex min-w-0 flex-col gap-5 lg:h-auto lg:overflow-visible"
+      style={availH ? { height: availH, overflow: "hidden" } : undefined}
+    >
       {/* Header pagina */}
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 flex flex-col gap-0.5">
@@ -411,9 +475,10 @@ export function CompitiClient({
           </p>
         </div>
 
-        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-          {/* Toggle Lista / Kanban */}
-          <div className="flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
+        <div className="grid w-full grid-cols-2 gap-2.5 lg:flex lg:w-auto lg:flex-wrap lg:justify-end lg:gap-2">
+          {/* Toggle Lista / Kanban: su mobile la vista è sempre lista, il
+              toggle non serve — resta identico da lg in su. */}
+          <div className="col-span-2 hidden items-center gap-0.5 rounded-lg border border-border bg-card p-0.5 lg:flex">
             <button
               type="button"
               aria-label="Vista Lista"
@@ -452,11 +517,11 @@ export function CompitiClient({
             trigger={
               <Button
                 variant="outline"
-                size="icon"
                 aria-label="Impostazioni compiti"
-                className="bg-card"
+                className="h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-10 lg:p-0"
               >
-                <IconSettings size={18} stroke={1.8} />
+                <IconSettings size={22} stroke={1.8} className="lg:size-[18px]" />
+                <span className="lg:hidden">Imposta</span>
               </Button>
             }
           />
@@ -469,17 +534,41 @@ export function CompitiClient({
             onBulkDelete={() => setBulkDeleteOpen(true)}
           />
 
+          <CompitoFiltersDrawer
+            filters={filters}
+            onChange={handleFilterChange}
+            onReset={handleReset}
+            trigger={({ onClick, count }) => (
+              <Button
+                onClick={onClick}
+                className="relative h-14 w-full gap-2 bg-primary text-sm text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90 lg:h-10 lg:w-auto"
+              >
+                <SlidersHorizontal className="size-[22px] lg:size-4" />
+                Filtri
+                {count > 0 ? (
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-teal px-1 text-xs font-bold tabular-nums text-teal-foreground">
+                    {count}
+                  </span>
+                ) : null}
+              </Button>
+            )}
+          />
+
           <Button
-            className="min-w-0 bg-teal text-teal-foreground hover:bg-teal/90"
+            className="h-14 w-full gap-2 bg-teal text-sm text-teal-foreground hover:bg-teal/90 lg:h-10 lg:w-auto"
             onClick={() => setNewOpen(true)}
           >
-            <Plus data-icon="inline-start" />
-            Crea Compito
+            <Plus className="size-[22px] lg:size-4" />
+            <span className="lg:hidden">Nuovo</span>
+            <span className="hidden lg:inline">Crea Compito</span>
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-4">
+      {/* Statistiche: su mobile non servono (occupano spazio prezioso sopra
+          una lista che va già consultata scrollando), restano identiche da
+          lg in su. */}
+      <div className="hidden gap-3 lg:grid xl:grid-cols-4">
         <button
           type="button"
           onClick={() => {
@@ -571,12 +660,13 @@ export function CompitiClient({
         </button>
       </div>
 
-      {/* Barra filtri */}
-      <CompitoFilters
-        filters={filters}
-        onChange={handleFilterChange}
-        onReset={handleReset}
-      />
+      {/* Barra di ricerca — sempre su una riga; il resto dei filtri vive nel drawer "Filtri" */}
+      <div className="flex min-w-0 flex-row items-center gap-2 rounded-lg border border-border bg-card p-2 shadow-sm">
+        <CompitoSearchInput
+          value={filters.search}
+          onChange={(v) => handleFilterChange({ ...filters, search: v })}
+        />
+      </div>
 
       {/* Empty state */}
       {!isFetching && total === 0 && (
@@ -598,29 +688,34 @@ export function CompitiClient({
       )}
 
       {/* Vista */}
-      {total > 0 && view === "lista" ? (
+      {total > 0 && effectiveView === "lista" ? (
         <>
-          <CompitoTable
-            compiti={pageRows}
-            selected={selected}
-            onToggle={toggle}
-            onToggleAll={toggleAll}
-            onComplete={(c) => {
-              completaCompito(c.id)
-              toast.success("Compito completato", { description: c.Oggetto })
-            }}
-            onDelete={(c) => setDeleteTarget(c)}
-            sortBy={sortBy}
-            sortDir={sortDir}
-            onSort={handleSort}
-          />
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:overflow-visible [-webkit-overflow-scrolling:touch]">
+            <CompitoTable
+              compiti={pageRows}
+              selected={selected}
+              onToggle={toggle}
+              onToggleAll={toggleAll}
+              onComplete={(c) => {
+                completaCompito(c.id)
+                toast.success("Compito completato", { description: c.Oggetto })
+              }}
+              onDelete={(c) => setDeleteTarget(c)}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSort={handleSort}
+            />
+          </div>
 
-          {/* Footer paginazione */}
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-3">
-              <span className="break-words text-sm text-muted-foreground">
+          {/* Footer paginazione — sticky solo su mobile, in flusso normale da lg in su */}
+          <div className="sticky bottom-0 z-30 -mx-5 flex shrink-0 items-center justify-between gap-2 border-t border-border bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:static lg:mx-0 lg:flex-wrap lg:border-t-0 lg:bg-transparent lg:px-0 lg:py-0 lg:backdrop-blur-none">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <span className="hidden truncate text-sm text-muted-foreground lg:inline">
                 {rangeStart}–{rangeEnd} di {total.toLocaleString("it-IT")}
                 {selected.size > 0 ? ` · ${selected.size} selezionati` : ""}
+              </span>
+              <span className="truncate text-xs text-muted-foreground lg:hidden">
+                {rangeStart}-{rangeEnd}/{total.toLocaleString("it-IT")}
               </span>
               <Select
                 items={ROWS_ITEMS}
@@ -631,7 +726,7 @@ export function CompitiClient({
                   setSelected(new Set())
                 }}
               >
-                <SelectTrigger className="h-8 w-[120px] bg-card">
+                <SelectTrigger className="h-8 w-[92px] shrink-0 bg-card text-xs lg:w-[120px] lg:text-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -646,7 +741,7 @@ export function CompitiClient({
               </Select>
             </div>
 
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
               <Button
                 size="sm"
                 variant="outline"
@@ -658,7 +753,7 @@ export function CompitiClient({
                 }}
               >
                 <ChevronLeft data-icon="inline-start" />
-                Precedente
+                <span className="hidden lg:inline">Precedente</span>
               </Button>
               <span className="text-sm tabular-nums text-muted-foreground">
                 {page} / {totalPages}
@@ -673,13 +768,13 @@ export function CompitiClient({
                   setSelected(new Set())
                 }}
               >
-                Successivo
+                <span className="hidden lg:inline">Successivo</span>
                 <ChevronRight data-icon="inline-end" />
               </Button>
             </div>
           </div>
         </>
-      ) : total > 0 && view === "kanban" ? (
+      ) : total > 0 && effectiveView === "kanban" ? (
         <>
           {kanbanOpenTruncated && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">

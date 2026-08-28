@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import {
   AlertTriangle,
@@ -8,10 +8,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
+  SlidersHorizontal,
   Sparkles,
 } from "lucide-react"
 import { IconSettings } from "@tabler/icons-react"
 import { useQueryClient } from "@tanstack/react-query"
+import { useIsMobile } from "@/hooks/use-is-mobile"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -32,10 +34,11 @@ import {
 import { cn } from "@/lib/utils"
 import type { ScadenzaRecord } from "@/lib/scadenze/repository"
 import {
-  ScadenzaFilters,
+  ScadenzaSearchInput,
   DEFAULT_SCADENZA_FILTERS,
   type ScadenzaFilterState,
 } from "@/components/scadenze/scadenza-filters"
+import { ScadenzaFiltersDrawer } from "@/components/scadenze/scadenza-filters-drawer"
 import { ScadenzaTable } from "@/components/scadenze/scadenza-table"
 import { ScadenzaActionsMenu } from "@/components/scadenze/scadenza-actions-menu"
 import { ScadenzaFormDialog } from "@/components/scadenze/scadenza-form-dialog"
@@ -62,6 +65,7 @@ import {
 
 const ROWS_ITEMS: Record<string, string> = {
   "10": "10 righe",
+  "20": "20 righe",
   "30": "30 righe",
   "50": "50 righe",
 }
@@ -94,6 +98,58 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
   const [sortDir, setSortDir] = useState<SortDir>("asc")
   const [page, setPage] = useState(1)
   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
+  const isMobile = useIsMobile()
+  const mobileDefaultApplied = useRef(false)
+  useEffect(() => {
+    if (isMobile && !mobileDefaultApplied.current && rowsPerPage === INITIAL_PAGE_SIZE) {
+      mobileDefaultApplied.current = true
+      setRowsPerPage(20)
+    }
+  }, [isMobile, rowsPerPage])
+  // Blocca lo scroll della pagina su mobile: stesso fix già applicato a
+  // Lead/Clienti/Installatori/Compiti, resta scrollabile solo la lista.
+  // Nessun effetto su desktop.
+  useEffect(() => {
+    if (!isMobile) return
+    const html = document.documentElement
+    const prevHtmlOverflow = html.style.overflow
+    const prevBodyOverflow = document.body.style.overflow
+    const prevBodyOverscroll = document.body.style.overscrollBehavior
+    html.style.overflow = "hidden"
+    document.body.style.overflow = "hidden"
+    document.body.style.overscrollBehavior = "none"
+    return () => {
+      html.style.overflow = prevHtmlOverflow
+      document.body.style.overflow = prevBodyOverflow
+      document.body.style.overscrollBehavior = prevBodyOverscroll
+    }
+  }, [isMobile])
+  // Altezza disponibile: calcolata solo su mobile, per non alterare in alcun
+  // modo il comportamento (pagina intera che scrolla) su desktop.
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [availH, setAvailH] = useState<number | null>(null)
+  useEffect(() => {
+    if (!isMobile) {
+      setAvailH(null)
+      return
+    }
+    const el = rootRef.current
+    if (!el) return
+    const BOTTOM_GAP = 24
+    const measure = () => {
+      const top = el.getBoundingClientRect().top
+      const next = Math.max(360, window.innerHeight - top - BOTTOM_GAP)
+      setAvailH(next)
+    }
+    measure()
+    window.addEventListener("resize", measure)
+    const ro = new ResizeObserver(measure)
+    ro.observe(document.body)
+    return () => {
+      window.removeEventListener("resize", measure)
+      ro.disconnect()
+    }
+  }, [isMobile])
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [newOpen, setNewOpen] = useState(false)
@@ -233,7 +289,11 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-5">
+    <div
+      ref={rootRef}
+      className="flex min-w-0 flex-col gap-5 lg:h-auto lg:overflow-visible"
+      style={availH ? { height: availH, overflow: "hidden" } : undefined}
+    >
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 flex flex-col gap-0.5">
           <h1 className="break-words text-2xl font-bold tracking-tight text-foreground">Scadenze</h1>
@@ -245,7 +305,7 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
           </p>
         </div>
 
-        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+        <div className="grid w-full grid-cols-2 gap-2.5 lg:flex lg:w-auto lg:flex-wrap lg:justify-end lg:gap-2">
           <ScadenzaSettingsSheet
             open={settingsOpen}
             onOpenChange={setSettingsOpen}
@@ -254,11 +314,11 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
             trigger={
               <Button
                 variant="outline"
-                size="icon"
                 aria-label="Impostazioni scadenze"
-                className="bg-card"
+                className="h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-10 lg:p-0"
               >
-                <IconSettings size={18} stroke={1.8} />
+                <IconSettings size={22} stroke={1.8} className="lg:size-[18px]" />
+                <span className="lg:hidden">Imposta</span>
               </Button>
             }
           />
@@ -269,17 +329,47 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
             onBulkDelete={() => setBulkDeleteOpen(true)}
           />
 
+          <ScadenzaFiltersDrawer
+            filters={filters}
+            onChange={handleFilterChange}
+            onReset={handleReset}
+            trigger={({ onClick, count }) => (
+              <Button
+                onClick={onClick}
+                className="relative h-14 w-full gap-2 bg-primary text-sm text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90 lg:h-10 lg:w-auto"
+              >
+                <SlidersHorizontal className="size-[22px] lg:size-4" />
+                Filtri
+                {count > 0 ? (
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-teal px-1 text-xs font-bold tabular-nums text-teal-foreground">
+                    {count}
+                  </span>
+                ) : null}
+              </Button>
+            )}
+          />
+
           <Button
-            className="min-w-0 bg-teal text-teal-foreground hover:bg-teal/90"
+            className="h-14 w-full gap-2 bg-teal text-sm text-teal-foreground hover:bg-teal/90 lg:h-10 lg:w-auto"
             onClick={() => setNewOpen(true)}
           >
-            <Plus data-icon="inline-start" />
-            Nuova scadenza
+            <Plus className="size-[22px] lg:size-4" />
+            <span className="lg:hidden">Nuova</span>
+            <span className="hidden lg:inline">Nuova scadenza</span>
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-3">
+      {/* Barra di ricerca — sempre su una riga; il resto dei filtri vive nel drawer "Filtri" */}
+      <div className="flex min-w-0 flex-row items-center gap-2 rounded-lg border border-border bg-card p-2 shadow-sm">
+        <ScadenzaSearchInput
+          value={filters.search}
+          onChange={(v) => handleFilterChange({ ...filters, search: v })}
+        />
+      </div>
+
+      {/* Statistiche: su mobile non servono, restano identiche da lg in su. */}
+      <div className="hidden gap-3 lg:grid xl:grid-cols-3">
         <button
           type="button"
           onClick={() => {
@@ -346,8 +436,6 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
         </button>
       </div>
 
-      <ScadenzaFilters filters={filters} onChange={handleFilterChange} onReset={handleReset} />
-
       {!isFetching && total === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card py-16 text-center">
           <p className="text-base font-medium text-foreground">Nessuna scadenza trovata</p>
@@ -364,23 +452,28 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
         </div>
       ) : (
         <>
-          <ScadenzaTable
-            scadenze={pageRows}
-            selected={selected}
-            onToggle={toggle}
-            onToggleAll={toggleAll}
-            onEdit={(s) => setEditTarget(s)}
-            onDelete={(s) => setDeleteTarget(s)}
-            sortBy={sortBy}
-            sortDir={sortDir}
-            onSort={handleSort}
-          />
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:overflow-visible [-webkit-overflow-scrolling:touch]">
+            <ScadenzaTable
+              scadenze={pageRows}
+              selected={selected}
+              onToggle={toggle}
+              onToggleAll={toggleAll}
+              onEdit={(s) => setEditTarget(s)}
+              onDelete={(s) => setDeleteTarget(s)}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSort={handleSort}
+            />
+          </div>
 
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-3">
-              <span className="break-words text-sm text-muted-foreground">
+          <div className="sticky bottom-0 z-30 -mx-5 flex shrink-0 items-center justify-between gap-2 border-t border-border bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:static lg:mx-0 lg:flex-wrap lg:border-t-0 lg:bg-transparent lg:px-0 lg:py-0 lg:backdrop-blur-none">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <span className="hidden truncate text-sm text-muted-foreground lg:inline">
                 {rangeStart}–{rangeEnd} di {total.toLocaleString("it-IT")}
                 {selected.size > 0 ? ` · ${selected.size} selezionate` : ""}
+              </span>
+              <span className="truncate text-xs text-muted-foreground lg:hidden">
+                {rangeStart}-{rangeEnd}/{total.toLocaleString("it-IT")}
               </span>
               <Select
                 items={ROWS_ITEMS}
@@ -391,7 +484,7 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
                   setSelected(new Set())
                 }}
               >
-                <SelectTrigger className="h-8 w-[120px] bg-card">
+                <SelectTrigger className="h-8 w-[92px] shrink-0 bg-card text-xs lg:w-[120px] lg:text-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -406,7 +499,7 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
               </Select>
             </div>
 
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
               <Button
                 size="sm"
                 variant="outline"
@@ -418,7 +511,7 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
                 }}
               >
                 <ChevronLeft data-icon="inline-start" />
-                Precedente
+                <span className="hidden lg:inline">Precedente</span>
               </Button>
               <span className="text-sm tabular-nums text-muted-foreground">
                 {page} / {totalPages}
@@ -433,7 +526,7 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
                   setSelected(new Set())
                 }}
               >
-                Successivo
+                <span className="hidden lg:inline">Successivo</span>
                 <ChevronRight data-icon="inline-end" />
               </Button>
             </div>

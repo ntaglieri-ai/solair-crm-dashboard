@@ -29,17 +29,17 @@ import { cn } from "@/lib/utils"
 export const LIGHTNING = {
   /** <thead> sticky. `stuck` aggiunge l'ombra quando il corpo scorre. */
   header:
-    "sticky top-0 z-20 bg-muted/90 backdrop-blur-sm transition-shadow duration-150",
-  headerStuck: "shadow-[0_2px_6px_-2px_rgb(15_23_42/0.18)]",
+    "sticky top-0 z-20 bg-card/95 backdrop-blur-md transition-shadow duration-150",
+  headerStuck: "shadow-[0_12px_22px_-18px_rgb(15_23_42/0.42)]",
 
   /** <th>. La linea forte sotto l'header e' l'unico bordo marcato. */
   headCell:
-    "h-8 border-b-2 border-b-border border-r border-r-border/50 bg-muted/90 text-muted-foreground last:border-r-0",
+    "h-10 border-b-2 border-b-navy/25 border-r border-r-border/60 bg-secondary/55 text-muted-foreground last:border-r-0",
 
   /** Etichetta dentro il <th>. */
   headLabel:
-    "text-[11px] font-semibold uppercase tracking-[0.055em] transition-colors hover:text-foreground",
-  headLabelActive: "text-navy",
+    "text-xs font-bold uppercase tracking-[0.055em] transition-colors hover:text-foreground",
+  headLabelActive: "text-navy drop-shadow-sm",
   headLabelIdle: "text-muted-foreground",
 
   /**
@@ -48,10 +48,10 @@ export const LIGHTNING = {
    * solo `group-hover` di Tailwind non basterebbe senza un gruppo
    * nominato sulla riga.
    */
-  row: "group/row cursor-pointer border-b border-border/50 transition-colors hover:bg-secondary/45 data-[state=selected]:bg-secondary",
+  row: "group/row cursor-pointer border-b border-border/55 transition-colors hover:bg-teal/10 data-[state=selected]:bg-info/10",
 
   /** <td> generica. */
-  cell: "border-r border-border/40 last:border-r-0",
+  cell: "border-r border-border/45 last:border-r-0",
 
   /**
    * Fondo delle celle bloccate ai bordi.
@@ -63,7 +63,7 @@ export const LIGHTNING = {
    * fondi di `row`, agganciati al gruppo della riga.
    */
   cellSticky:
-    "bg-card group-hover/row:bg-secondary/45 group-data-[state=selected]/row:bg-secondary",
+    "bg-card group-hover/row:bg-teal/10 group-data-[state=selected]/row:bg-info/10",
 
   /**
    * Prima cella (sticky a sinistra): porta anche la barra di accento che
@@ -71,7 +71,7 @@ export const LIGHTNING = {
    * sposta di un pixel il contenuto quando compare.
    */
   cellLeader:
-    "sticky left-0 z-10 transition-shadow group-hover/row:shadow-[inset_3px_0_0_0_var(--navy)]",
+    "sticky left-0 z-10 transition-shadow group-hover/row:shadow-[inset_4px_0_0_0_var(--teal)] group-data-[state=selected]/row:shadow-[inset_4px_0_0_0_var(--info)]",
 
   /** Cella delle azioni (sticky a destra). */
   cellActions: "sticky right-0 z-10 text-right",
@@ -85,9 +85,9 @@ export type Density = "comoda" | "normale" | "densa"
  * "normale" e' la densita' di default e quella che cambia di piu'.
  */
 export const LIGHTNING_DENSITY: Record<Density, string> = {
-  comoda: "py-3 text-[13px]",
-  normale: "py-1.5 text-[13px]",
-  densa: "py-0.5 text-[12px]",
+  comoda: "py-3.5 text-[14px]",
+  normale: "py-2 text-sm",
+  densa: "py-1 text-[13px]",
 }
 
 /**
@@ -99,9 +99,9 @@ export const LIGHTNING_ROW_HEIGHT: Record<Density, number> = {
   // padding + il contenuto piu' alto della cella (l'avatar a 36px in
   // "comoda", le icone di contatto rapido a 24px nelle altre due) + 1px
   // di bordo.
-  comoda: 61,
-  normale: 38,
-  densa: 29,
+  comoda: 66,
+  normale: 44,
+  densa: 34,
 }
 
 export type Tone =
@@ -152,7 +152,7 @@ export function StatoPill({
   return (
     <span
       className={cn(
-        "inline-flex h-[19px] max-w-full items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-[11px] font-semibold",
+        "inline-flex h-[22px] max-w-full items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-bold shadow-sm ring-1 ring-inset ring-current/10",
         TONE_PILL[tone],
         className,
       )}

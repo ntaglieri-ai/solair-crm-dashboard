@@ -87,7 +87,7 @@ function ClienteMobileList({
 
   if (clienti.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
+      <div className="rounded-2xl border border-dashed border-border bg-card px-4 py-12 text-center text-base font-medium text-muted-foreground shadow-sm">
         Nessun cliente corrisponde ai filtri selezionati.
       </div>
     )
@@ -106,7 +106,7 @@ function ClienteMobileList({
             key={cliente.id}
             role="button"
             tabIndex={0}
-            className="flex min-h-[82px] shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="flex min-h-[94px] shrink-0 cursor-pointer items-center gap-3 rounded-2xl border border-border/70 bg-card px-3.5 py-3.5 shadow-[0_14px_34px_-28px_rgb(15_23_42/0.6)] transition-all hover:-translate-y-0.5 hover:border-teal/40 hover:shadow-[0_18px_42px_-30px_rgb(15_23_42/0.65)] active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             onClick={() => {
               startNavigationFeedback()
               router.push(`/clienti/${cliente.id}`)
@@ -126,17 +126,17 @@ function ClienteMobileList({
               />
             </div>
 
-            <ClienteAvatar nome={cliente["Nome Clienti"]} className="size-9 text-sm" />
+            <ClienteAvatar nome={cliente["Nome Clienti"]} className="size-11 text-base shadow-md" />
 
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-1.5">
-                <h3 className="truncate text-base font-bold text-foreground">
+                <h3 className="truncate text-lg font-black leading-tight text-foreground">
                   {cliente["Nome Clienti"]}
                 </h3>
                 <StatoClienteBadge stato={cliente.Stato} />
               </div>
 
-              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+              <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-sm font-medium text-muted-foreground">
                 <UserRound className="size-3.5 shrink-0" />
                 <span className="truncate">{owner}</span>
                 <span className="shrink-0 text-muted-foreground/50">·</span>

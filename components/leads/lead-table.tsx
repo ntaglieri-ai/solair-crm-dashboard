@@ -98,7 +98,7 @@ function LeadMobileList({
 
   if (leads.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
+      <div className="rounded-2xl border border-dashed border-border bg-card px-4 py-12 text-center text-base font-medium text-muted-foreground shadow-sm">
         Nessun lead corrisponde ai filtri selezionati.
       </div>
     )
@@ -120,7 +120,7 @@ function LeadMobileList({
             key={lead.id}
             role="button"
             tabIndex={0}
-            className="flex min-h-[82px] shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="flex min-h-[94px] shrink-0 cursor-pointer items-center gap-3 rounded-2xl border border-border/70 bg-card px-3.5 py-3.5 shadow-[0_14px_34px_-28px_rgb(15_23_42/0.6)] transition-all hover:-translate-y-0.5 hover:border-teal/40 hover:shadow-[0_18px_42px_-30px_rgb(15_23_42/0.65)] active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             onClick={() => {
               startNavigationFeedback()
               router.push(`/leads/${lead.id}`)
@@ -140,16 +140,16 @@ function LeadMobileList({
               />
             </div>
 
-            <LeadAvatar nome={lead["Nome Lead"]} className="size-9 text-sm" />
+            <LeadAvatar nome={lead["Nome Lead"]} className="size-11 text-base shadow-md" />
 
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-1.5">
-                <h3 className="truncate text-base font-bold text-foreground">
+                <h3 className="truncate text-lg font-black leading-tight text-foreground">
                   {lead["Nome Lead"]}
                 </h3>
                 <StatoLeadBadge stato={lead["Stato Lead"]} />
               </div>
-              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+              <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-sm font-medium text-muted-foreground">
                 <UserRound className="size-3.5 shrink-0" />
                 <span className="truncate">{owner}</span>
                 {luogo ? (
@@ -379,6 +379,7 @@ export function LeadTable({
   // vecchie facevano saltare la scrollbar durante lo scorrimento.
   const estimateSize = LIGHTNING_ROW_HEIGHT[density]
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
     count: visualRows.length,
     getScrollElement: () => scrollRef.current,
@@ -668,16 +669,16 @@ export function LeadTable({
       ref={rowVirtualizer.measureElement}
       className="hover:bg-transparent"
     >
-      <TableCell colSpan={colSpan} className="bg-secondary/30 p-0">
-        <div className="grid grid-cols-1 gap-4 px-6 py-4 animate-in fade-in slide-in-from-top-1 duration-200 md:grid-cols-3">
-          <div className="flex flex-col gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <TableCell colSpan={colSpan} className="bg-secondary/35 p-0">
+        <div className="grid grid-cols-1 gap-4 px-6 py-5 animate-in fade-in slide-in-from-top-1 duration-200 md:grid-cols-3">
+          <div className="flex flex-col gap-2 rounded-xl border border-info/15 bg-card/80 p-4 shadow-sm">
+            <span className="text-xs font-bold uppercase tracking-wide text-info">
               Contatti
             </span>
             <a
               href={`mailto:${lead["E-mail"]}`}
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-2 text-sm text-info hover:underline"
+              className="inline-flex items-center gap-2 text-base font-semibold text-info hover:underline"
             >
               <IconMail size={15} stroke={1.8} />
               {lead["E-mail"]}
@@ -685,18 +686,18 @@ export function LeadTable({
             <a
               href={`tel:${lead.Telefono}`}
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-2 text-sm text-info hover:underline"
+              className="inline-flex items-center gap-2 text-base font-semibold text-info hover:underline"
             >
               <IconPhone size={15} stroke={1.8} />
               {lead.Telefono}
             </a>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <div className="flex flex-col gap-2 rounded-xl border border-warning/20 bg-card/80 p-4 shadow-sm">
+            <span className="text-xs font-bold uppercase tracking-wide text-warning">
               Campagna
             </span>
-            <span className="inline-flex items-start gap-2 text-sm text-foreground">
+            <span className="inline-flex items-start gap-2 text-base font-semibold text-foreground">
               <IconSpeakerphone
                 size={15}
                 stroke={1.8}
@@ -712,11 +713,11 @@ export function LeadTable({
             ) : null}
           </div>
 
-          <div className="flex flex-col gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <div className="flex flex-col gap-2 rounded-xl border border-teal/20 bg-card/80 p-4 shadow-sm">
+            <span className="text-xs font-bold uppercase tracking-wide text-teal">
               Note
             </span>
-            <p className="text-sm text-foreground">
+            <p className="text-sm leading-relaxed text-foreground">
               {lead.Descrizione && lead.Descrizione !== ""
                 ? lead.Descrizione
                 : "Nessuna nota."}
@@ -724,7 +725,7 @@ export function LeadTable({
             <Link
               href={`/leads/${lead.id}`}
               onClick={(e) => e.stopPropagation()}
-              className="mt-1 inline-flex w-fit items-center gap-1 text-sm font-medium text-navy hover:underline"
+              className="mt-1 inline-flex w-fit items-center gap-1 text-sm font-bold text-navy hover:underline"
             >
               Apri scheda completa
               <IconChevronRight size={14} stroke={2} />
@@ -748,7 +749,7 @@ export function LeadTable({
         />
       </div>
 
-      <div className="hidden h-full overflow-hidden rounded-xl border border-border bg-card lg:flex lg:max-h-full lg:flex-col">
+      <div className="hidden h-full overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_18px_45px_-34px_rgb(15_23_42/0.6)] lg:flex lg:max-h-full lg:flex-col">
       {/* Area scrollabile: header sticky + body virtualizzato in un'unica table.
           Scrolla verticalmente; orizzontalmente è pilotata dalla barra dedicata. */}
       <div

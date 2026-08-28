@@ -69,10 +69,11 @@ const LIST_COLUMNS = [
   "codice_postale", "residente_in_sicilia", "wallbox_richiesto",
   "consenso_contatto_telefono", "consenso_contatto_whatsapp", "consenso_contatto_email",
   "data_click", "data_ora", "ora_ultima_attivita", "created_at",
+  "updated_at",
 ].join(",")
 
 // Whitelist sicura: id colonna UI -> colonna DB ordinabile. Qualsiasi valore
-// non presente qui ricade su "ora_ultima_attivita" (fallback sicuro, nessun crash).
+// non presente qui ricade su "updated_at" (ultimo movimento interno del record).
 const SORT_COLUMN: Record<string, string> = {
   "Nome Lead": "nome_lead",
   Nome: "nome",
@@ -95,9 +96,9 @@ const SORT_COLUMN: Record<string, string> = {
 }
 
 // Risolve la colonna DB di ordinamento e la direzione, con fallback su
-// ora_ultima_attivita desc quando la colonna non è ordinabile lato DB.
+// updated_at desc quando la colonna non è ordinabile lato DB.
 function resolveSort(sortBy?: string | null, sortDir?: "asc" | "desc") {
-  const column = (sortBy && SORT_COLUMN[sortBy]) || "ora_ultima_attivita"
+  const column = (sortBy && SORT_COLUMN[sortBy]) || "updated_at"
   const ascending = sortDir === "asc"
   return { column, ascending }
 }
@@ -181,6 +182,7 @@ export async function candidateIdsByIndex(_filters: {
   sede?: string
   commerciale?: string
 }): Promise<Set<string> | null> {
+  void _filters
   return null
 }
 
@@ -207,9 +209,11 @@ export async function getAllLeads(filters?: {
     .select(LIST_COLUMNS)
     .order(column, { ascending, nullsFirst: false })
 
-  // Tiebreaker deterministico: garantisce paginazione stabile a parità di valore.
+  // Tiebreaker deterministici: garantiscono paginazione stabile a parità di valore.
+  if (column !== "updated_at")
+    query = query.order("updated_at", { ascending: false, nullsFirst: false })
   if (column !== "created_at")
-    query = query.order("created_at", { ascending: false })
+    query = query.order("created_at", { ascending: false, nullsFirst: false })
 
   if (filters?.stato && filters.stato !== "all")
     query = query.eq("stato_lead", filters.stato)

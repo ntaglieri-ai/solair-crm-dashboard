@@ -31,6 +31,8 @@ export interface LeadIntakePayload {
   campaignName?: string
   socialLeadId?: string
   sourceCreatedAt?: string | number
+  dataClick?: string | number
+  data_click?: string | number
   kwp?: number | string
   kwh?: number | string
   potenzaKw?: number | string
@@ -207,13 +209,23 @@ function buildMakeMetaNote(fields: IntakeFieldMap, existingNote?: string) {
   const formId = pickField(fields, ["form_id"])
   const adId = pickField(fields, ["ad_id"])
   const adgroupId = pickField(fields, ["adgroup_id"])
+  const campaignName = pickField(fields, [
+    "campaign_name",
+    "campaignName",
+    "campaign",
+    "campagna",
+    "nome_campagna",
+  ])
   const createdAt = pickField(fields, ["created_time", "created_at"])
+  const dataClick = pickField(fields, ["data_click", "data click", "click_time", "clicked_at"])
   const metadata = [
     leadgenId ? `Leadgen ID: ${leadgenId}` : null,
+    campaignName ? `Campagna: ${campaignName}` : null,
     pageId ? `Page ID: ${pageId}` : null,
     formId ? `Form ID: ${formId}` : null,
     adId ? `Ad ID: ${adId}` : null,
     adgroupId ? `Adgroup ID: ${adgroupId}` : null,
+    dataClick ? `Data Click: ${dataClick}` : null,
     createdAt ? `Creato Meta: ${createdAt}` : null,
   ].filter(Boolean)
 
@@ -239,9 +251,30 @@ function buildMakeMetaNote(fields: IntakeFieldMap, existingNote?: string) {
     "campaign",
     "campagna",
     "nome_campagna",
+    "data_click",
+    "data click",
+    "click_time",
+    "clicked_at",
+    "lead_click_time",
+    "lead_clicked_at",
+    "created_time",
+    "created_at",
+    "created",
+    "date_created",
+    "date created",
+    "lead_created_time",
+    "lead_created_at",
+    "data_creazione",
+    "data creazione",
+    "data_creato",
+    "creato_il",
     "leadgen_id",
     "lead_id",
     "social_lead_id",
+    "page_id",
+    "form_id",
+    "ad_id",
+    "adgroup_id",
   ])
   const answers = Object.entries(fields)
     .filter(([key]) => !answerKeys.has(key))
@@ -297,6 +330,33 @@ export function normalizeLeadIntakePayload(input: unknown): Partial<LeadIntakePa
   const email = direct.email ?? pickField(fields, ["email", "e_mail", "indirizzo_email"])
   const note = buildMakeMetaNote(fields, direct.note)
   const origine = normalizeOrigine(direct.origine ?? fields.origine, fields)
+  const sourceCreatedAt =
+    direct.sourceCreatedAt ??
+    pickField(fields, [
+      "created_time",
+      "created_at",
+      "created",
+      "date_created",
+      "date created",
+      "lead_created_time",
+      "lead_created_at",
+      "data_creazione",
+      "data creazione",
+      "data_creato",
+      "creato_il",
+    ])
+  const dataClick =
+    direct.dataClick ??
+    direct.data_click ??
+    pickField(fields, [
+      "data_click",
+      "data click",
+      "click_time",
+      "clicked_at",
+      "lead_click_time",
+      "lead_clicked_at",
+    ]) ??
+    (origine === "meta_ads" ? sourceCreatedAt : undefined)
 
   return {
     ...direct,
@@ -337,21 +397,8 @@ export function normalizeLeadIntakePayload(input: unknown): Partial<LeadIntakePa
     socialLeadId:
       direct.socialLeadId ??
       pickField(fields, ["leadgen_id", "lead_id", "social_lead_id"]),
-    sourceCreatedAt:
-      direct.sourceCreatedAt ??
-      pickField(fields, [
-        "created_time",
-        "created_at",
-        "created",
-        "date_created",
-        "date created",
-        "lead_created_time",
-        "lead_created_at",
-        "data_creazione",
-        "data creazione",
-        "data_creato",
-        "creato_il",
-      ]),
+    sourceCreatedAt,
+    dataClick,
     kwp:
       direct.kwp ??
       direct.potenzaKw ??
@@ -678,6 +725,12 @@ export function leadSourceCreatedAtIso(payload: LeadIntakePayload) {
   return parseLeadSourceCreatedAt(payload.sourceCreatedAt)?.toISOString() ?? null
 }
 
+export function leadDataClickIso(payload: LeadIntakePayload) {
+  const rawClick = payload.dataClick ?? payload.data_click
+  const fallbackMetaClick = payload.origine === "meta_ads" ? payload.sourceCreatedAt : undefined
+  return parseLeadSourceCreatedAt(rawClick ?? fallbackMetaClick)?.toISOString() ?? null
+}
+
 function sameTimestamp(left: unknown, right: string) {
   const leftTime = typeof left === "string" ? Date.parse(left) : NaN
   const rightTime = Date.parse(right)
@@ -767,6 +820,29 @@ function buildDescription(payload: LeadIntakePayload) {
   return parts.length ? parts.join("\n") : null
 }
 
+function duplicateEntryDescription(
+  payload: LeadIntakePayload,
+  description: string | null,
+  timestamp: string,
+) {
+  const source = ORIGINE_LABELS[payload.origine]
+
+  if (payload.origine !== "meta_ads") {
+    return `[${timestamp}] Nuovo contatto da ${source}${description ? `:\n${description}` : ""}`
+  }
+
+  const dataClick = leadDataClickIso(payload)
+  const details = [
+    payload.campaignName ? `campagna ${payload.campaignName}` : null,
+    dataClick ? `data click ${dataClick}` : null,
+    payload.socialLeadId ? `leadgen ${payload.socialLeadId}` : null,
+  ].filter(Boolean)
+
+  return `[${timestamp}] Nuovo contatto da ${source}${
+    details.length ? ` (${details.join(", ")})` : ""
+  }.`
+}
+
 function intakeSource(payload: LeadIntakePayload): {
   source: LeadUpdateSource
   detail: string
@@ -798,6 +874,7 @@ function intakeSource(payload: LeadIntakePayload): {
 
 function intakeReceivedDetails(payload: LeadIntakePayload) {
   const sourceCreatedAt = leadSourceCreatedAtIso(payload)
+  const dataClick = leadDataClickIso(payload)
   return [
     `Dati ricevuti: nome ${payload.nome}`,
     payload.telefono ? `Telefono: ${payload.telefono}` : null,
@@ -805,7 +882,17 @@ function intakeReceivedDetails(payload: LeadIntakePayload) {
     payload.provincia ? `Provincia: ${payload.provincia}` : null,
     payload.citta ? `Citta': ${payload.citta}` : null,
     payload.campaignName ? `Campagna: ${payload.campaignName}` : null,
-    sourceCreatedAt ? `Creato su Meta: ${sourceCreatedAt}` : null,
+    dataClick ? `Data Click: ${dataClick}` : null,
+    sourceCreatedAt && sourceCreatedAt !== dataClick ? `Creato su Meta: ${sourceCreatedAt}` : null,
+  ]
+}
+
+function dataClickChangeDetails(existingDataClick: string | null, nextDataClick: string | null) {
+  if (!nextDataClick || sameTimestamp(existingDataClick, nextDataClick)) return []
+
+  return [
+    existingDataClick ? `Data Click precedente: ${existingDataClick}` : null,
+    `Nuovo Data Click: ${nextDataClick}`,
   ]
 }
 
@@ -838,6 +925,7 @@ function intakeCreatedFields(params: {
     params.payload.codicePostale ? "Codice postale" : null,
     params.socialLeadId ? "Social Lead ID" : null,
     params.payload.campaignName ? "campaign name" : null,
+    leadDataClickIso(params.payload) ? "Data Click" : null,
     "Origine Lead",
     params.kwp !== null ? "kWp" : null,
     params.kwh !== null ? "kWh accumulo" : null,
@@ -874,6 +962,7 @@ type ExistingLead = {
   codice_postale: string | null
   social_lead_id: string | null
   campaign_name: string | null
+  data_click: string | null
   descrizione: string | null
   lead_proprietario_id: string | null
   valutazione: number | null
@@ -901,6 +990,7 @@ const EXISTING_LEAD_SELECT = [
   "codice_postale",
   "social_lead_id",
   "campaign_name",
+  "data_click",
   "descrizione",
   "lead_proprietario_id",
   "valutazione",
@@ -1108,15 +1198,14 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
   const nameParts = leadNameParts(payload)
   const socialLeadId = normalizeText(payload.socialLeadId)
   const sourceCreatedAt = leadSourceCreatedAtIso(payload)
+  const dataClick = leadDataClickIso(payload)
 
   const existing = await findExistingLead(telefonoNorm, emailNorm, socialLeadId)
 
   if (existing) {
     const nextScore = Math.max(existing.valutazione ?? 0, calculatedScore)
     const timestamp = now.toLocaleString("it-IT", { timeZone: ROME_TIME_ZONE })
-    const notaIngresso = `[${timestamp}] Nuovo contatto da ${ORIGINE_LABELS[payload.origine]}${
-      description ? `:\n${description}` : ""
-    }`
+    const notaIngresso = duplicateEntryDescription(payload, description, timestamp)
     const descrizioneAggiornata = existing.descrizione
       ? `${existing.descrizione}\n${notaIngresso}`
       : notaIngresso
@@ -1141,9 +1230,9 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
     assignTextField(updateRow, existing, changedFields, "codice_postale", "Codice postale", payload.codicePostale)
     assignTextField(updateRow, existing, changedFields, "social_lead_id", "Social Lead ID", socialLeadId)
     assignTextField(updateRow, existing, changedFields, "campaign_name", "campaign name", payload.campaignName)
-    if (sourceCreatedAt && !sameTimestamp(existing.created_at, sourceCreatedAt)) {
-      updateRow.created_at = sourceCreatedAt
-      addChangedField(changedFields, "Ora creazione")
+    if (dataClick && !sameTimestamp(existing.data_click, dataClick)) {
+      updateRow.data_click = dataClick
+      addChangedField(changedFields, "Data Click")
     }
     assignNumberField(updateRow, existing, changedFields, "kwp", "kWp", kwp)
     assignNumberField(updateRow, existing, changedFields, "kwh", "kWh accumulo", kwh)
@@ -1204,7 +1293,10 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
         sourceDetail: sourceInfo.detail,
         reason: configuratorLead ? "preventivo_aggiornato" : "duplicato_aggiornato",
         changedFields: intakeChangedFields({ changedFields }),
-        details: intakeReceivedDetails(payload),
+        details: [
+          ...intakeReceivedDetails(payload),
+          ...dataClickChangeDetails(existing.data_click, dataClick),
+        ],
         note: "Esito: lead gia' presente nel CRM, nessun duplicato creato.",
       }),
       logPrefix: "[lead-intake] attivita aggiornamento",
@@ -1257,6 +1349,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       origine_lead: ORIGINE_LABELS[payload.origine],
       valutazione: calculatedScore,
       campaign_name: payload.campaignName || null,
+      data_click: dataClick,
       kwp,
       kwh,
       modello_pannello: payload.modelloPannello || null,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  leadDataClickIso,
   leadSourceCreatedAtIso,
   leadPhoneMatchKeys,
   normalizeLeadIntakePayload,
@@ -59,7 +60,22 @@ describe("normalizeLeadIntakePayload", () => {
       campaignName: "Lead FV Lazio",
       socialLeadId: "meta-lead-42",
       sourceCreatedAt: "3 agosto 2026 14:09",
+      dataClick: "3 agosto 2026 14:09",
     })
+  })
+
+  it("legge Data Click dai payload esterni e lo normalizza", () => {
+    const payload = normalizeLeadIntakePayload({
+      origine: "make",
+      nome: "Mario Rossi",
+      telefono: "3331234567",
+      data_click: "4 agosto 2026 23:35",
+    })
+
+    expect(payload.dataClick).toBe("4 agosto 2026 23:35")
+    expect(leadDataClickIso(payload as Parameters<typeof leadDataClickIso>[0])).toBe(
+      "2026-08-04T21:35:00.000Z",
+    )
   })
 
   it("accetta i sinonimi di origine usati negli scenari", () => {
@@ -97,5 +113,16 @@ describe("normalizeLeadIntakePayload", () => {
         telefono: "3331234567",
       }),
     ).toBeNull()
+  })
+
+  it("usa la data sorgente Meta come Data Click quando il campo dedicato manca", () => {
+    expect(
+      leadDataClickIso({
+        origine: "meta_ads",
+        nome: "Mario Rossi",
+        telefono: "3331234567",
+        sourceCreatedAt: "4 agosto 2026 23:35",
+      }),
+    ).toBe("2026-08-04T21:35:00.000Z")
   })
 })

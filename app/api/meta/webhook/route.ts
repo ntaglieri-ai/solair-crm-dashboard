@@ -45,15 +45,44 @@ type MetaLeadResponse = {
   id?: string
   created_time?: string
   ad_id?: string
+  ad_name?: string
+  adset_id?: string
+  adset_name?: string
+  campaign_id?: string
+  campaign_name?: string
   form_id?: string
   field_data?: MetaLeadField[]
   custom_disclaimer_responses?: MetaCustomDisclaimerResponse[]
+}
+
+type MetaAdDetailsResponse = {
+  id?: string
+  name?: string
+  campaign?: {
+    id?: string
+    name?: string
+  }
 }
 
 type FieldMap = Record<string, string>
 
 const DEFAULT_GRAPH_API_VERSION = "v21.0"
 const META_SAMPLE_LEADGEN_IDS = new Set(["444444444444"])
+const META_LEAD_FIELDS_MINIMAL =
+  "created_time,id,ad_id,form_id,field_data,custom_disclaimer_responses"
+const META_LEAD_FIELDS_ENRICHED = [
+  "created_time",
+  "id",
+  "ad_id",
+  "ad_name",
+  "adset_id",
+  "adset_name",
+  "campaign_id",
+  "campaign_name",
+  "form_id",
+  "field_data",
+  "custom_disclaimer_responses",
+].join(",")
 
 export async function GET(request: Request) {
   const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN
@@ -180,7 +209,11 @@ async function processLeadgenEvent(event: MetaLeadgenEvent) {
 
     const token = getPageAccessToken(event.pageId)
     const metaLead = await fetchMetaLead(event.leadgenId, token)
-    const intakePayload = mapMetaLeadToIntakePayload(metaLead, event)
+    const adDetails =
+      metaLead.campaign_name && metaLead.ad_name
+        ? null
+        : await fetchMetaAdDetailsIfNeeded(metaLead.ad_id ?? event.adId, token)
+    const intakePayload = mapMetaLeadToIntakePayload(metaLead, event, adDetails)
 
     if (!intakePayload.nome || !intakePayload.telefono) {
       console.error("[meta/webhook] Lead Meta senza nome o telefono", {
@@ -211,13 +244,27 @@ async function processLeadgenEvent(event: MetaLeadgenEvent) {
 }
 
 async function fetchMetaLead(leadgenId: string, accessToken: string): Promise<MetaLeadResponse> {
+  try {
+    return await fetchMetaLeadWithFields(leadgenId, accessToken, META_LEAD_FIELDS_ENRICHED)
+  } catch (error) {
+    if (!isMetaFieldSelectionError(error)) throw error
+    console.info("[meta/webhook] Campi Meta Ads arricchiti non disponibili, uso payload base", {
+      leadgenId,
+      error: error instanceof Error ? error.message : "errore sconosciuto",
+    })
+    return fetchMetaLeadWithFields(leadgenId, accessToken, META_LEAD_FIELDS_MINIMAL)
+  }
+}
+
+async function fetchMetaLeadWithFields(
+  leadgenId: string,
+  accessToken: string,
+  fields: string,
+): Promise<MetaLeadResponse> {
   const graphVersion =
     process.env.META_GRAPH_API_VERSION?.trim() || DEFAULT_GRAPH_API_VERSION
   const url = new URL(`https://graph.facebook.com/${graphVersion}/${leadgenId}`)
-  url.searchParams.set(
-    "fields",
-    "created_time,id,ad_id,form_id,field_data,custom_disclaimer_responses",
-  )
+  url.searchParams.set("fields", fields)
   url.searchParams.set("access_token", accessToken)
 
   const response = await fetch(url, { cache: "no-store" })
@@ -233,6 +280,53 @@ async function fetchMetaLead(leadgenId: string, accessToken: string): Promise<Me
 
   if (!isRecord(body)) throw new Error(`Risposta Meta non valida per ${leadgenId}`)
   return body as MetaLeadResponse
+}
+
+async function fetchMetaAdDetailsIfNeeded(
+  adId: string | null | undefined,
+  accessToken: string,
+): Promise<MetaAdDetailsResponse | null> {
+  const normalizedAdId = stringifyId(adId)
+  if (!normalizedAdId) return null
+
+  try {
+    return await fetchMetaAdDetails(normalizedAdId, accessToken)
+  } catch (error) {
+    console.info("[meta/webhook] Dettagli campagna Meta non disponibili", {
+      adId: normalizedAdId,
+      error: error instanceof Error ? error.message : "errore sconosciuto",
+    })
+    return null
+  }
+}
+
+async function fetchMetaAdDetails(
+  adId: string,
+  accessToken: string,
+): Promise<MetaAdDetailsResponse | null> {
+  const graphVersion =
+    process.env.META_GRAPH_API_VERSION?.trim() || DEFAULT_GRAPH_API_VERSION
+  const url = new URL(`https://graph.facebook.com/${graphVersion}/${adId}`)
+  url.searchParams.set("fields", "name,campaign{id,name}")
+  url.searchParams.set("access_token", accessToken)
+
+  const response = await fetch(url, { cache: "no-store" })
+  const body = (await response.json().catch(() => null)) as unknown
+
+  if (!response.ok) {
+    const detail =
+      isRecord(body) && isRecord(body.error) && typeof body.error.message === "string"
+        ? body.error.message
+        : `HTTP ${response.status}`
+    throw new Error(`Meta Graph API ad ${adId}: ${detail}`)
+  }
+
+  return isRecord(body) ? (body as MetaAdDetailsResponse) : null
+}
+
+function isMetaFieldSelectionError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /nonexisting field|unknown field|field .* does not exist|tried accessing nonexisting|param fields/i.test(message)
 }
 
 function getPageAccessToken(pageId: string | null) {
@@ -271,11 +365,15 @@ function readPageTokenMap(): Record<string, string> {
 function mapMetaLeadToIntakePayload(
   metaLead: MetaLeadResponse,
   event: MetaLeadgenEvent,
+  adDetails: MetaAdDetailsResponse | null,
 ): LeadIntakePayload {
   const fields = flattenFieldData(metaLead.field_data)
   const rawFields = flattenFieldData(metaLead.field_data, false)
   const disclaimerFields = flattenDisclaimerResponses(metaLead.custom_disclaimer_responses)
   const consensi = resolveContactConsents(fields, disclaimerFields)
+  const dataClick = metaLead.created_time ?? event.createdTime ?? undefined
+  const campaignName = metaLead.campaign_name ?? adDetails?.campaign?.name
+  const adName = metaLead.ad_name ?? adDetails?.name
 
   const nome =
     pick(fields, ["full_name", "nome", "nome_e_cognome", "name"]) ||
@@ -312,8 +410,10 @@ function mapMetaLeadToIntakePayload(
     consensoTelefono: consensi.telefono,
     consensoWhatsapp: consensi.whatsapp,
     consensoEmail: consensi.email,
-    sourceCreatedAt: metaLead.created_time ?? event.createdTime ?? undefined,
-    note: buildNote(metaLead, event, rawFields),
+    sourceCreatedAt: dataClick,
+    dataClick,
+    campaignName,
+    note: buildNote(metaLead, event, rawFields, { campaignName, adName, dataClick }),
   }
 }
 
@@ -418,25 +518,72 @@ function buildNote(
   metaLead: MetaLeadResponse,
   event: MetaLeadgenEvent,
   rawFields: FieldMap,
+  enrichment: {
+    campaignName?: string
+    adName?: string
+    dataClick?: string | number
+  },
 ) {
-  const metadata = [
-    `Leadgen ID: ${event.leadgenId}`,
-    event.pageId ? `Page ID: ${event.pageId}` : null,
-    metaLead.form_id || event.formId ? `Form ID: ${metaLead.form_id ?? event.formId}` : null,
-    metaLead.ad_id || event.adId ? `Ad ID: ${metaLead.ad_id ?? event.adId}` : null,
-    event.adgroupId ? `Adgroup ID: ${event.adgroupId}` : null,
-    metaLead.created_time || event.createdTime
-      ? `Creato Meta: ${metaLead.created_time ?? event.createdTime}`
+  const references = [
+    `leadgen ${event.leadgenId}`,
+    event.pageId ? `page ${event.pageId}` : null,
+    metaLead.form_id || event.formId ? `form ${metaLead.form_id ?? event.formId}` : null,
+    metaLead.ad_id || event.adId ? `ad ${metaLead.ad_id ?? event.adId}` : null,
+    metaLead.adset_id || event.adgroupId
+      ? `adset ${metaLead.adset_id ?? event.adgroupId}`
       : null,
+    metaLead.campaign_id ? `campaign ${metaLead.campaign_id}` : null,
   ].filter(Boolean)
 
   const answers = Object.entries(rawFields)
-    .map(([name, value]) => `${name}: ${value}`)
-    .join("; ")
+    .filter(([name]) => !isContactAnswerName(name))
+    .map(([name, value]) => `- ${humanizeMetaFieldName(name)}: ${value}`)
+    .join("\n")
 
-  return [metadata.join("\n"), answers ? `Risposte form: ${answers}` : null]
+  return [
+    "Lead ricevuto da Facebook Lead Ads.",
+    enrichment.campaignName ? `Campagna: ${enrichment.campaignName}` : null,
+    enrichment.adName ? `Annuncio: ${enrichment.adName}` : null,
+    enrichment.dataClick ? `Data click: ${enrichment.dataClick}` : null,
+    references.length ? `Riferimenti Meta: ${references.join(", ")}` : null,
+    answers ? `Risposte qualificanti:\n${answers}` : null,
+  ]
     .filter(Boolean)
     .join("\n\n")
+}
+
+function isContactAnswerName(name: string) {
+  const normalized = normalizeFieldName(name)
+  return [
+    "full_name",
+    "nome",
+    "nome_e_cognome",
+    "name",
+    "first_name",
+    "last_name",
+    "phone_number",
+    "phone",
+    "telefono",
+    "mobile_phone",
+    "cellulare",
+    "numero_di_telefono",
+    "email",
+    "e_mail",
+    "indirizzo_email",
+    "city",
+    "citta",
+    "comune",
+    "state",
+    "province",
+    "provincia",
+  ].includes(normalized)
+}
+
+function humanizeMetaFieldName(name: string) {
+  return name
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 function pick(fields: FieldMap, names: string[]) {

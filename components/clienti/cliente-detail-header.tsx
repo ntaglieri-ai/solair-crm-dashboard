@@ -57,22 +57,24 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
   const nome = cliente["Nome Clienti"]
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card p-5 shadow-[0_18px_45px_-32px_rgb(15_23_42/0.55)]">
+      <div className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,var(--navy),var(--teal),var(--info),var(--warning))]" />
+      <div className="flex flex-col gap-5 pt-1">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <Link href="/clienti" className="hover:text-foreground">
+      <nav className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+        <Link href="/clienti" className="transition-colors hover:text-navy">
           Clienti
         </Link>
         <ChevronRight className="size-4" />
-        <span className="font-medium text-foreground">{nome}</span>
+        <span className="font-semibold text-foreground">{nome}</span>
       </nav>
 
       {/* Titolo + azioni */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-4">
-          <ClienteAvatar nome={nome} className="size-12 text-base" />
-          <div className="flex flex-col gap-2">
-            <h1 className="text-[22px] font-bold leading-tight tracking-tight text-foreground">
+          <ClienteAvatar nome={nome} className="size-14 text-lg shadow-lg ring-4 ring-secondary" />
+          <div className="flex min-w-0 flex-col gap-2.5">
+            <h1 className="text-2xl font-black leading-tight text-foreground sm:text-3xl">
               {nome}
             </h1>
             <div className="flex flex-wrap items-center gap-2">
@@ -82,15 +84,19 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 no-print">
+        <div className="flex flex-wrap items-center gap-2 no-print">
           <Button
-            className="bg-teal text-teal-foreground hover:bg-teal/90"
+            className="h-10 bg-teal px-4 text-sm font-bold text-teal-foreground shadow-sm hover:bg-teal/90"
             onClick={() => setShowContract(true)}
           >
             <FileText data-icon="inline-start" />
             Genera contratto
           </Button>
-          <Button variant="outline" className="bg-card" onClick={() => setEditOpen(true)}>
+          <Button
+            variant="outline"
+            className="h-10 bg-card px-4 text-sm font-semibold shadow-sm"
+            onClick={() => setEditOpen(true)}
+          >
             <Pencil data-icon="inline-start" />
             Modifica
           </Button>
@@ -162,29 +168,27 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
       </div>
 
       {/* Riga info rapida */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-foreground">
+        <span className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-navy/10 px-2.5 font-semibold text-navy">
           <Building2 className="size-3.5" />
           {val(cliente.Sede)}
         </span>
-        <span className="text-border">|</span>
-        <span className="inline-flex items-center gap-1.5">
+        <span className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-info/10 px-2.5 font-semibold text-info">
           <UserCircle className="size-3.5" />
           {val(cliente["Clienti Proprietario"])}
         </span>
-        <span className="text-border">|</span>
-        <span className="inline-flex items-center gap-1.5">
+        <span className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-warning/15 px-2.5 font-semibold text-warning">
           <Wrench className="size-3.5" />
           {val(cliente.Installatore)}
         </span>
-        <span className="text-border">|</span>
-        <span className="inline-flex items-center gap-1.5">
+        <span className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-teal/10 px-2.5 font-semibold text-teal">
           <CalendarDays className="size-3.5" />
           {val(cliente["Ora creazione"])}
         </span>
-        <span className="ml-auto text-muted-foreground/70">
+        <span className="ml-auto inline-flex min-h-8 items-center rounded-lg bg-muted px-2.5 text-sm font-semibold text-muted-foreground">
           Ultimo aggiornamento: {val(cliente["Ora modifica"])}
         </span>
+      </div>
       </div>
 
       {/* Dialog elimina */}

@@ -219,7 +219,7 @@ export function LeadsClient({
   const [preferencesLoaded, setPreferencesLoaded] = useState(
     initialPreferences != null,
   )
-  const [sortBy, setSortBy] = useState<LeadColumnId | null>("Ora ultima attività")
+  const [sortBy, setSortBy] = useState<LeadColumnId | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [density, setDensity] = useState<Density>(
     initialPreferences?.density ?? "normale",

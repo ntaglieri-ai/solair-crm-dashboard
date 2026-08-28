@@ -77,7 +77,6 @@ import {
 } from "@/lib/leads/hooks"
 import { useTags } from "@/lib/tag-store"
 import { usePermissions } from "@/lib/permissions/provider"
-import { motion } from "framer-motion"
 import { useQueryClient } from "@tanstack/react-query"
 import {
   LEADS_VIEW_COOKIE,
@@ -100,6 +99,14 @@ const ROWS_ITEMS: Record<string, string> = {
   "30": "30 righe",
   "50": "50 righe",
 }
+
+/** Viste rapide del drawer Filtri (Tutti/Da contattare/…). */
+const QUICK_VIEWS: { label: string; stato: string; commerciale: string }[] = [
+  { label: "Tutti", stato: "all", commerciale: "all" },
+  { label: "Da contattare", stato: "Non contattato", commerciale: "all" },
+  { label: "Da richiamare", stato: "Tentato di contattare", commerciale: "all" },
+  { label: "Non assegnati", stato: "all", commerciale: "__unassigned__" },
+]
 
 // Simula il download di un file CSV a partire dalle righe passate
 function downloadLeadsCsv(rows: LeadListItem[], filename: string) {
@@ -727,7 +734,7 @@ export function LeadsClient({
             ) : null}
           </p>
         </div>
-        <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch] lg:w-auto lg:flex-wrap lg:justify-end lg:overflow-visible lg:pb-0">
+        <div className="grid w-full grid-cols-3 gap-2.5 lg:flex lg:w-auto lg:flex-wrap lg:justify-end lg:gap-2">
           {/* Impostazioni lead (generali, vista colonne) */}
           <LeadSettingsSheet
             open={settingsOpen}
@@ -746,53 +753,51 @@ export function LeadsClient({
             trigger={
               <Button
                 variant="outline"
-                size="icon"
                 aria-label="Impostazioni lead"
-                className="shrink-0 bg-card"
+                className="h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-10 lg:p-0"
               >
-                <IconSettings size={18} stroke={1.8} />
+                <IconSettings size={22} stroke={1.8} className="lg:size-[18px]" />
+                <span className="lg:hidden">Imposta</span>
               </Button>
             }
           />
 
           {/* Menu azioni (cambia in base alla selezione) */}
-          <div className="shrink-0">
-            <LeadActionsMenu
-              selectedCount={selected.size}
-              filtered={pageRows}
-              selectedRows={selectedRows}
-              tags={allTags}
-              onOpenSettings={openSettings}
-              onCheckDuplicates={handleCheckDuplicates}
-              onImport={() => setImportOpen(true)}
-              onExportFiltered={handleExportFiltered}
-              onExportSelection={handleBulkExport}
-              onBulkTransfer={handleBulkOwner}
-              onBulkUpdate={handleBulkUpdate}
-              onBulkConvert={handleBulkConvert}
-              onBulkApprove={handleBulkApprove}
-              onBulkDedup={handleBulkDedup}
-              onBulkEmail={() => setBulkEmailOpen(true)}
-              onBulkDelete={() => setBulkDeleteOpen(true)}
-            />
-          </div>
+          <LeadActionsMenu
+            selectedCount={selected.size}
+            filtered={pageRows}
+            selectedRows={selectedRows}
+            tags={allTags}
+            onOpenSettings={openSettings}
+            onCheckDuplicates={handleCheckDuplicates}
+            onImport={() => setImportOpen(true)}
+            onExportFiltered={handleExportFiltered}
+            onExportSelection={handleBulkExport}
+            onBulkTransfer={handleBulkOwner}
+            onBulkUpdate={handleBulkUpdate}
+            onBulkConvert={handleBulkConvert}
+            onBulkApprove={handleBulkApprove}
+            onBulkDedup={handleBulkDedup}
+            onBulkEmail={() => setBulkEmailOpen(true)}
+            onBulkDelete={() => setBulkDeleteOpen(true)}
+          />
 
           <Button
             variant="outline"
-            className="shrink-0 bg-card"
+            className="h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-auto"
             onClick={() => setImportOpen(true)}
           >
-            <Upload data-icon="inline-start" />
-            <span className="hidden lg:inline">Importa</span>
+            <Upload className="size-[22px] lg:size-4" />
+            Importa
           </Button>
 
           <Button
             variant="outline"
-            className="shrink-0 bg-card"
+            className="h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-auto"
             onClick={handleExportFiltered}
           >
-            <Download data-icon="inline-start" />
-            <span className="hidden lg:inline">Esporta</span>
+            <Download className="size-[22px] lg:size-4" />
+            Esporta
           </Button>
 
           <AdvancedFilters
@@ -802,16 +807,21 @@ export function LeadsClient({
             quickFilters={filters}
             onQuickFiltersChange={handleFilterChange}
             onQuickFiltersReset={handleReset}
+            quickViews={QUICK_VIEWS.map((view) => ({
+              label: view.label,
+              active: filters.stato === view.stato && filters.commerciale === view.commerciale,
+              onSelect: () =>
+                handleFilterChange({ ...DEFAULT_FILTERS, stato: view.stato, commerciale: view.commerciale }),
+            }))}
             trigger={({ onClick, count }) => (
               <Button
-                variant="default"
                 onClick={onClick}
-                className="relative shrink-0 bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90"
+                className="relative h-14 w-full gap-2 bg-primary text-sm text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90 lg:h-10 lg:w-auto"
               >
-                <SlidersHorizontal data-icon="inline-start" />
-                <span className="hidden lg:inline">Filtri</span>
+                <SlidersHorizontal className="size-[22px] lg:size-4" />
+                Filtri
                 {count > 0 ? (
-                  <span className="ml-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-teal px-1 text-xs font-bold tabular-nums text-teal-foreground lg:ml-1">
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-teal px-1 text-xs font-bold tabular-nums text-teal-foreground">
                     {count}
                   </span>
                 ) : null}
@@ -820,48 +830,14 @@ export function LeadsClient({
           />
 
           <Button
-            className="min-w-0 shrink-0 bg-teal text-teal-foreground hover:bg-teal/90"
+            className="h-14 w-full gap-2 bg-teal text-sm text-teal-foreground hover:bg-teal/90 lg:h-10 lg:w-auto"
             onClick={() => setNewLeadOpen(true)}
           >
-            <Plus data-icon="inline-start" />
+            <Plus className="size-[22px] lg:size-4" />
             <span className="lg:hidden">Nuovo</span>
             <span className="hidden lg:inline">Nuovo lead</span>
           </Button>
         </div>
-      </div>
-
-      <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
-        {[
-          { label: "Tutti", stato: "all", commerciale: "all" },
-          { label: "Da contattare", stato: "Non contattato", commerciale: "all" },
-          { label: "Da richiamare", stato: "Tentato di contattare", commerciale: "all" },
-          { label: "Non assegnati", stato: "all", commerciale: "__unassigned__" },
-        ].map((view) => {
-          const active =
-            filters.stato === view.stato && filters.commerciale === view.commerciale
-          return (
-            <motion.button
-              type="button"
-              key={view.label}
-              whileHover={{ y: -1 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() =>
-                handleFilterChange({
-                  ...DEFAULT_FILTERS,
-                  stato: view.stato,
-                  commerciale: view.commerciale,
-                })
-              }
-              className={
-                active
-                  ? "h-10 shrink-0 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground shadow-sm"
-                  : "h-10 shrink-0 rounded-lg border border-border bg-card px-4 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
-              }
-            >
-              {view.label}
-            </motion.button>
-          )
-        })}
       </div>
 
       {/* Indicatore filtro duplicati attivo */}

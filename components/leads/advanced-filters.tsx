@@ -214,6 +214,7 @@ export function AdvancedFilters({
   quickFilters,
   onQuickFiltersChange,
   onQuickFiltersReset,
+  quickViews,
   trigger,
 }: {
   applied: AdvancedFilterState
@@ -223,6 +224,8 @@ export function AdvancedFilters({
   quickFilters?: LeadFilterState
   onQuickFiltersChange?: (next: LeadFilterState) => void
   onQuickFiltersReset?: () => void
+  /** Viste rapide (es. Tutti/Da contattare/…): pillole in cima al drawer. */
+  quickViews?: { label: string; active: boolean; onSelect: () => void }[]
   /** Trigger personalizzato (es. bottone header colorato). Se assente, resta l'icona compatta di default. */
   trigger?: (ctx: { onClick: () => void; count: number }) => ReactNode
 }) {
@@ -351,6 +354,32 @@ export function AdvancedFilters({
         </SheetHeader>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {/* Viste rapide */}
+          {quickViews && quickViews.length > 0 ? (
+            <div className="border-b border-border p-3">
+              <p className="px-1 pb-2 text-sm font-semibold text-foreground">
+                Viste rapide
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {quickViews.map((view) => (
+                  <button
+                    type="button"
+                    key={view.label}
+                    onClick={view.onSelect}
+                    className={cn(
+                      "h-10 shrink-0 rounded-lg px-4 text-sm font-bold transition-colors",
+                      view.active
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "border border-border bg-card text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {view.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {/* Ricerca campo */}
           <div className="border-b border-border p-3">
             <div className="relative">

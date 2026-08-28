@@ -923,7 +923,7 @@ export function LeadsClient({
       </div>
 
       {/* Footer paginazione — sempre visibile e in primo piano */}
-      <div className="sticky bottom-0 z-30 -mx-5 flex shrink-0 items-center justify-between gap-2 border-t border-border bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-5 sm:py-3">
+      <div className="sticky bottom-0 z-30 -mx-5 flex shrink-0 items-center justify-between gap-2 border-t border-border bg-background/95 px-3 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-5 sm:py-3">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <span className="hidden truncate text-sm text-muted-foreground sm:inline">
             {rangeStart}-{rangeEnd} di {total.toLocaleString("it-IT")}
@@ -939,7 +939,7 @@ export function LeadsClient({
               setRowsPerPage(Number(event.target.value))
               setPage(1)
             }}
-            className="h-8 shrink-0 rounded-md border border-input bg-card px-1.5 text-xs text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 sm:px-2 sm:text-sm"
+            className="h-7 shrink-0 rounded-md border border-input bg-card px-1.5 text-xs text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 sm:h-8 sm:px-2 sm:text-sm"
           >
             {Object.entries(ROWS_ITEMS).map(([value, label]) => (
               <option key={value} value={value}>
@@ -953,7 +953,7 @@ export function LeadsClient({
           <Button
             size="sm"
             variant="outline"
-            className="bg-card"
+            className="h-6 bg-card sm:h-7"
             disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             aria-label="Pagina precedente"
@@ -961,13 +961,13 @@ export function LeadsClient({
             <ChevronLeft data-icon="inline-start" />
             <span className="hidden sm:inline">Precedente</span>
           </Button>
-          <span className="text-sm tabular-nums text-muted-foreground">
+          <span className="text-xs tabular-nums text-muted-foreground sm:text-sm">
             {page} / {totalPages}
           </span>
           <Button
             size="sm"
             variant="outline"
-            className="bg-card"
+            className="h-6 bg-card sm:h-7"
             disabled={page >= totalPages}
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             aria-label="Pagina successiva"

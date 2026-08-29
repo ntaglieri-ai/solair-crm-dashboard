@@ -294,11 +294,8 @@ export function LeadTable({
   const scrollRef = externalScrollRef ?? internalScrollRef
   const [scrollerWidth, setScrollerWidth] = useState(0)
   const allSelected = leads.length > 0 && leads.every((l) => selected.has(l.id))
-  const colSpan = columns.length + 3
+  const colSpan = columns.length + 2 + (actionsColumnOpen ? 1 : 0)
   const cellPad = LIGHTNING_DENSITY[density]
-  const actionsColumnWidth = actionsColumnOpen
-    ? LEAD_ACTIONS_COLUMN_WIDTH
-    : LEAD_ACTIONS_TOGGLE_WIDTH
   const naturalWidths = useMemo(() => {
     const widths = {} as Record<LeadColumnId, number>
     for (const column of columns) {
@@ -347,9 +344,9 @@ export function LeadTable({
     () =>
       36 +
       44 +
-      actionsColumnWidth +
+      (actionsColumnOpen ? LEAD_ACTIONS_COLUMN_WIDTH : 0) +
       columns.reduce((total, column) => total + resolvedWidths[column.id], 0),
-    [actionsColumnWidth, columns, resolvedWidths],
+    [actionsColumnOpen, columns, resolvedWidths],
   )
   const lastDataColumn = columns[columns.length - 1]?.id
   const lastColumnFill = Math.max(0, scrollerWidth - baseTableWidth)
@@ -650,16 +647,16 @@ export function LeadTable({
             )
           })}
 
-          <TableCell
-            onClick={(e) => e.stopPropagation()}
-            className={cn(LIGHTNING.cellActions, cellPad, !actionsColumnOpen && "px-1")}
-            style={{
-              width: actionsColumnWidth,
-              minWidth: actionsColumnWidth,
-              maxWidth: actionsColumnWidth,
-            }}
-          >
-            {actionsColumnOpen ? (
+          {actionsColumnOpen ? (
+            <TableCell
+              onClick={(e) => e.stopPropagation()}
+              className={cn(LIGHTNING.cellActions, cellPad)}
+              style={{
+                width: LEAD_ACTIONS_COLUMN_WIDTH,
+                minWidth: LEAD_ACTIONS_COLUMN_WIDTH,
+                maxWidth: LEAD_ACTIONS_COLUMN_WIDTH,
+              }}
+            >
               <RowInlineActions>
                 <Button
                   variant="ghost"
@@ -705,10 +702,8 @@ export function LeadTable({
                   </DropdownMenuContent>
                 </DropdownMenu>
               </RowInlineActions>
-            ) : (
-              <span aria-hidden="true" className="block h-6" />
-            )}
-          </TableCell>
+            </TableCell>
+          ) : null}
         </TableRow>
       </LeadRowContextMenu>
     )
@@ -846,7 +841,9 @@ export function LeadTable({
           {columns.map((column) => (
             <col key={column.id} style={{ width: displayWidths[column.id] }} />
           ))}
-          <col style={{ width: actionsColumnWidth }} />
+          {actionsColumnOpen ? (
+            <col style={{ width: LEAD_ACTIONS_COLUMN_WIDTH }} />
+          ) : null}
         </colgroup>
         <TableHeader className={cn(LIGHTNING.header, stuck && LIGHTNING.headerStuck)}>
           <TableRow className="hover:bg-transparent">
@@ -899,7 +896,7 @@ export function LeadTable({
                     draggingColumn === col.id && "opacity-45",
                     dragOverColumn === col.id && "bg-teal/10",
                     numeric ? "text-right" : isLeft ? "text-left" : "text-center",
-                    isLastDataColumn && "pr-7",
+                    isLastDataColumn && (actionsColumnOpen ? "pr-7" : "pr-12"),
                   )}
                   style={{
                     width: displayWidths[col.id],
@@ -951,36 +948,50 @@ export function LeadTable({
                     }}
                     className="absolute inset-y-0 right-0 z-10 w-2 cursor-col-resize touch-none before:absolute before:inset-y-2 before:left-1/2 before:w-px before:bg-teal/0 before:transition-colors hover:before:bg-teal"
                   />
+                  {isLastDataColumn && !actionsColumnOpen ? (
+                    <button
+                      type="button"
+	                      aria-label="Mostra colonna azioni"
+	                      title="Mostra colonna azioni"
+	                      draggable={false}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setActionsColumnOpen(true)
+                      }}
+                      className="absolute inset-y-0 right-0 z-20 flex items-center justify-center border-l border-l-border/80 bg-secondary/95 text-muted-foreground shadow-[-12px_0_18px_-16px_rgb(15_23_42/0.55)] transition-colors hover:text-foreground"
+                      style={{ width: LEAD_ACTIONS_TOGGLE_WIDTH }}
+                    >
+                      <SlidersHorizontal className="size-4" />
+                    </button>
+                  ) : null}
                 </TableHead>
               )
             })}
-            <TableHead
-              className={cn(
-                LIGHTNING.headCell,
-                LIGHTNING.headLabel,
-                LIGHTNING.headActions,
-                "p-0",
-              )}
-              style={{
-                width: actionsColumnWidth,
-                minWidth: actionsColumnWidth,
-                maxWidth: actionsColumnWidth,
-              }}
-            >
-              <button
-                type="button"
-                aria-label={
-                  actionsColumnOpen ? "Nascondi colonna azioni" : "Mostra colonna azioni"
-                }
-                title={
-                  actionsColumnOpen ? "Nascondi colonna azioni" : "Mostra colonna azioni"
-                }
-                onClick={() => setActionsColumnOpen((open) => !open)}
-                className="flex h-10 w-full items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+            {actionsColumnOpen ? (
+              <TableHead
+                className={cn(
+                  LIGHTNING.headCell,
+                  LIGHTNING.headLabel,
+                  LIGHTNING.headActions,
+                  "p-0",
+                )}
+                style={{
+                  width: LEAD_ACTIONS_COLUMN_WIDTH,
+                  minWidth: LEAD_ACTIONS_COLUMN_WIDTH,
+                  maxWidth: LEAD_ACTIONS_COLUMN_WIDTH,
+                }}
               >
-                <SlidersHorizontal className="size-4" />
-              </button>
-            </TableHead>
+                <button
+                  type="button"
+                  aria-label="Nascondi colonna azioni"
+                  title="Nascondi colonna azioni"
+                  onClick={() => setActionsColumnOpen(false)}
+                  className="flex h-10 w-full items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <SlidersHorizontal className="size-4" />
+                </button>
+              </TableHead>
+            ) : null}
           </TableRow>
         </TableHeader>
         <TableBody>

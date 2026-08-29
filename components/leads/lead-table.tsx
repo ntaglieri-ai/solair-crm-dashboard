@@ -85,7 +85,7 @@ const DATE_TIME_COLUMNS = new Set<LeadColumnId>([
 ])
 const DATE_TIME_COLUMN_WIDTH = 178
 const LEAD_ACTIONS_COLUMN_WIDTH = 92
-const LEAD_ACTIONS_TOGGLE_WIDTH = 56
+const LEAD_ACTIONS_TOGGLE_WIDTH = 44
 
 function minimumColumnWidth(column: LeadColumnId) {
   return DATE_TIME_COLUMNS.has(column) ? DATE_TIME_COLUMN_WIDTH : 72
@@ -294,8 +294,11 @@ export function LeadTable({
   const scrollRef = externalScrollRef ?? internalScrollRef
   const [scrollerWidth, setScrollerWidth] = useState(0)
   const allSelected = leads.length > 0 && leads.every((l) => selected.has(l.id))
-  const colSpan = columns.length + 2 + (actionsColumnOpen ? 1 : 0)
+  const colSpan = columns.length + 3
   const cellPad = LIGHTNING_DENSITY[density]
+  const actionsColumnWidth = actionsColumnOpen
+    ? LEAD_ACTIONS_COLUMN_WIDTH
+    : LEAD_ACTIONS_TOGGLE_WIDTH
   const naturalWidths = useMemo(() => {
     const widths = {} as Record<LeadColumnId, number>
     for (const column of columns) {
@@ -344,9 +347,9 @@ export function LeadTable({
     () =>
       36 +
       44 +
-      (actionsColumnOpen ? LEAD_ACTIONS_COLUMN_WIDTH : 0) +
+      actionsColumnWidth +
       columns.reduce((total, column) => total + resolvedWidths[column.id], 0),
-    [actionsColumnOpen, columns, resolvedWidths],
+    [actionsColumnWidth, columns, resolvedWidths],
   )
   const lastDataColumn = columns[columns.length - 1]?.id
   const lastColumnFill = Math.max(0, scrollerWidth - baseTableWidth)
@@ -647,16 +650,16 @@ export function LeadTable({
             )
           })}
 
-          {actionsColumnOpen ? (
-            <TableCell
-              onClick={(e) => e.stopPropagation()}
-              className={cn(LIGHTNING.cellActions, cellPad)}
-              style={{
-                width: LEAD_ACTIONS_COLUMN_WIDTH,
-                minWidth: LEAD_ACTIONS_COLUMN_WIDTH,
-                maxWidth: LEAD_ACTIONS_COLUMN_WIDTH,
-              }}
-            >
+          <TableCell
+            onClick={(e) => e.stopPropagation()}
+            className={cn(LIGHTNING.cellActions, cellPad, !actionsColumnOpen && "px-1")}
+            style={{
+              width: actionsColumnWidth,
+              minWidth: actionsColumnWidth,
+              maxWidth: actionsColumnWidth,
+            }}
+          >
+            {actionsColumnOpen ? (
               <RowInlineActions>
                 <Button
                   variant="ghost"
@@ -702,8 +705,10 @@ export function LeadTable({
                   </DropdownMenuContent>
                 </DropdownMenu>
               </RowInlineActions>
-            </TableCell>
-          ) : null}
+            ) : (
+              <span aria-hidden="true" className="block h-6" />
+            )}
+          </TableCell>
         </TableRow>
       </LeadRowContextMenu>
     )
@@ -796,26 +801,7 @@ export function LeadTable({
         />
       </div>
 
-      <div className="relative hidden h-full overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_18px_45px_-34px_rgb(15_23_42/0.6)] lg:flex lg:max-h-full lg:flex-col">
-      {!actionsColumnOpen ? (
-        <button
-          type="button"
-          aria-label="Mostra colonna azioni"
-          title="Mostra colonna azioni"
-          onClick={() => setActionsColumnOpen(true)}
-          className={cn(
-            LIGHTNING.headCell,
-            "absolute right-0 top-0 z-50 flex items-center justify-center border-l border-l-border/80 bg-secondary/95 text-muted-foreground shadow-[-16px_0_24px_-18px_rgb(15_23_42/0.58)] backdrop-blur-md transition-colors hover:text-foreground",
-          )}
-          style={{
-            width: LEAD_ACTIONS_TOGGLE_WIDTH,
-            minWidth: LEAD_ACTIONS_TOGGLE_WIDTH,
-            maxWidth: LEAD_ACTIONS_TOGGLE_WIDTH,
-          }}
-        >
-          <SlidersHorizontal className="size-4" />
-        </button>
-      ) : null}
+      <div className="hidden h-full overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_18px_45px_-34px_rgb(15_23_42/0.6)] lg:flex lg:max-h-full lg:flex-col">
       {/* Area scrollabile: header sticky + body virtualizzato in un'unica table.
           Scrolla verticalmente; orizzontalmente è pilotata dalla barra dedicata. */}
       <div
@@ -846,9 +832,6 @@ export function LeadTable({
           el.scrollLeft += delta * 0.72
         }}
         className="min-h-0 flex-1 overscroll-contain overflow-y-auto overflow-x-hidden bg-card outline-none [scroll-behavior:auto] [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:w-2.5"
-        style={{
-          marginRight: actionsColumnOpen ? 0 : LEAD_ACTIONS_TOGGLE_WIDTH,
-        }}
       >
         {/* table semplice (no wrapper shadcn): un solo contenitore di scroll,
             così l'header sticky e la barra orizzontale dedicata funzionano. */}
@@ -863,9 +846,7 @@ export function LeadTable({
           {columns.map((column) => (
             <col key={column.id} style={{ width: displayWidths[column.id] }} />
           ))}
-          {actionsColumnOpen ? (
-            <col style={{ width: LEAD_ACTIONS_COLUMN_WIDTH }} />
-          ) : null}
+          <col style={{ width: actionsColumnWidth }} />
         </colgroup>
         <TableHeader className={cn(LIGHTNING.header, stuck && LIGHTNING.headerStuck)}>
           <TableRow className="hover:bg-transparent">
@@ -973,31 +954,33 @@ export function LeadTable({
                 </TableHead>
               )
             })}
-            {actionsColumnOpen ? (
-              <TableHead
-                className={cn(
-                  LIGHTNING.headCell,
-                  LIGHTNING.headLabel,
-                  LIGHTNING.headActions,
-                  "p-0",
-                )}
-                style={{
-                  width: LEAD_ACTIONS_COLUMN_WIDTH,
-                  minWidth: LEAD_ACTIONS_COLUMN_WIDTH,
-                  maxWidth: LEAD_ACTIONS_COLUMN_WIDTH,
-                }}
+            <TableHead
+              className={cn(
+                LIGHTNING.headCell,
+                LIGHTNING.headLabel,
+                LIGHTNING.headActions,
+                "p-0",
+              )}
+              style={{
+                width: actionsColumnWidth,
+                minWidth: actionsColumnWidth,
+                maxWidth: actionsColumnWidth,
+              }}
+            >
+              <button
+                type="button"
+                aria-label={
+                  actionsColumnOpen ? "Nascondi colonna azioni" : "Mostra colonna azioni"
+                }
+                title={
+                  actionsColumnOpen ? "Nascondi colonna azioni" : "Mostra colonna azioni"
+                }
+                onClick={() => setActionsColumnOpen((open) => !open)}
+                className="flex h-10 w-full items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
               >
-                <button
-                  type="button"
-                  aria-label="Nascondi colonna azioni"
-                  title="Nascondi colonna azioni"
-                  onClick={() => setActionsColumnOpen(false)}
-                  className="flex h-10 w-full items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <SlidersHorizontal className="size-4" />
-                </button>
-              </TableHead>
-            ) : null}
+                <SlidersHorizontal className="size-4" />
+              </button>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -1059,9 +1042,6 @@ export function LeadTable({
           }}
           aria-hidden
           className="shrink-0 overscroll-contain overflow-x-auto overflow-y-hidden border-t border-border bg-card [scroll-behavior:auto] [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5"
-          style={{
-            marginRight: actionsColumnOpen ? 0 : LEAD_ACTIONS_TOGGLE_WIDTH,
-          }}
         >
           <div style={{ width: contentWidth }} className="h-px" />
         </div>

@@ -292,6 +292,7 @@ export function LeadTable({
   const [actionsColumnOpen, setActionsColumnOpen] = useState(false)
   const internalScrollRef = useRef<HTMLDivElement>(null)
   const scrollRef = externalScrollRef ?? internalScrollRef
+  const [scrollerWidth, setScrollerWidth] = useState(0)
   const allSelected = leads.length > 0 && leads.every((l) => selected.has(l.id))
   const colSpan = columns.length + 2 + (actionsColumnOpen ? 1 : 0)
   const cellPad = LIGHTNING_DENSITY[density]
@@ -339,7 +340,7 @@ export function LeadTable({
     }
     return widths
   }, [columnWidths, columns, naturalWidths])
-  const tableWidth = useMemo(
+  const baseTableWidth = useMemo(
     () =>
       36 +
       44 +
@@ -347,6 +348,16 @@ export function LeadTable({
       columns.reduce((total, column) => total + resolvedWidths[column.id], 0),
     [actionsColumnOpen, columns, resolvedWidths],
   )
+  const lastDataColumn = columns[columns.length - 1]?.id
+  const lastColumnFill = Math.max(0, scrollerWidth - baseTableWidth)
+  const displayWidths = useMemo(() => {
+    if (!lastDataColumn || lastColumnFill <= 0) return resolvedWidths
+    return {
+      ...resolvedWidths,
+      [lastDataColumn]: resolvedWidths[lastDataColumn] + lastColumnFill,
+    }
+  }, [lastColumnFill, lastDataColumn, resolvedWidths])
+  const tableWidth = baseTableWidth + lastColumnFill
 
   const startResize = (
     event: React.PointerEvent<HTMLButtonElement>,
@@ -516,6 +527,7 @@ export function LeadTable({
     const el = scrollRef.current
     if (!el) return
     const measure = () => {
+      setScrollerWidth(el.clientWidth)
       setContentWidth(el.scrollWidth)
       setHasXOverflow(el.scrollWidth - el.clientWidth > 1)
     }
@@ -525,7 +537,7 @@ export function LeadTable({
     if (el.firstElementChild) ro.observe(el.firstElementChild)
     return () => ro.disconnect()
     // Ricalcola quando cambiano colonne visibili, righe, densità o espansioni.
-  }, [scrollRef, columns, leads, density, expanded])
+  }, [scrollRef, columns, leads, density, expanded, tableWidth])
 
   // Sync scrollLeft tra contenitore e barra (no loop: scrive solo se differente).
   const syncBarFromContainer = useCallback((el: HTMLDivElement) => {
@@ -618,9 +630,9 @@ export function LeadTable({
                   isLastDataColumn && "pr-6",
                 )}
                 style={{
-                  width: resolvedWidths[col.id],
-                  minWidth: resolvedWidths[col.id],
-                  maxWidth: resolvedWidths[col.id],
+                  width: displayWidths[col.id],
+                  minWidth: displayWidths[col.id],
+                  maxWidth: displayWidths[col.id],
                 }}
               >
                 <div
@@ -835,7 +847,7 @@ export function LeadTable({
         }}
         className="min-h-0 flex-1 overscroll-contain overflow-y-auto overflow-x-hidden bg-card outline-none [scroll-behavior:auto] [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:w-2.5"
         style={{
-          paddingRight: actionsColumnOpen ? 0 : LEAD_ACTIONS_TOGGLE_WIDTH,
+          marginRight: actionsColumnOpen ? 0 : LEAD_ACTIONS_TOGGLE_WIDTH,
         }}
       >
         {/* table semplice (no wrapper shadcn): un solo contenitore di scroll,
@@ -849,7 +861,7 @@ export function LeadTable({
           <col style={{ width: 36 }} />
           <col style={{ width: 44 }} />
           {columns.map((column) => (
-            <col key={column.id} style={{ width: resolvedWidths[column.id] }} />
+            <col key={column.id} style={{ width: displayWidths[column.id] }} />
           ))}
           {actionsColumnOpen ? (
             <col style={{ width: LEAD_ACTIONS_COLUMN_WIDTH }} />
@@ -909,9 +921,9 @@ export function LeadTable({
                     isLastDataColumn && "pr-7",
                   )}
                   style={{
-                    width: resolvedWidths[col.id],
-                    minWidth: resolvedWidths[col.id],
-                    maxWidth: resolvedWidths[col.id],
+                    width: displayWidths[col.id],
+                    minWidth: displayWidths[col.id],
+                    maxWidth: displayWidths[col.id],
                   }}
                 >
                   <div className="flex min-w-0 items-center">
@@ -1047,6 +1059,9 @@ export function LeadTable({
           }}
           aria-hidden
           className="shrink-0 overscroll-contain overflow-x-auto overflow-y-hidden border-t border-border bg-card [scroll-behavior:auto] [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5"
+          style={{
+            marginRight: actionsColumnOpen ? 0 : LEAD_ACTIONS_TOGGLE_WIDTH,
+          }}
         >
           <div style={{ width: contentWidth }} className="h-px" />
         </div>

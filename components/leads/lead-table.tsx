@@ -19,6 +19,7 @@ import {
   Trash2,
   GripVertical,
   MapPin,
+  SlidersHorizontal,
   UserRound,
 } from "lucide-react"
 import {
@@ -84,6 +85,7 @@ const DATE_TIME_COLUMNS = new Set<LeadColumnId>([
 ])
 const DATE_TIME_COLUMN_WIDTH = 178
 const LEAD_ACTIONS_COLUMN_WIDTH = 92
+const LEAD_ACTIONS_TOGGLE_WIDTH = 56
 
 function minimumColumnWidth(column: LeadColumnId) {
   return DATE_TIME_COLUMNS.has(column) ? DATE_TIME_COLUMN_WIDTH : 72
@@ -287,10 +289,11 @@ export function LeadTable({
   const [stuck, setStuck] = useState(false)
   const [draggingColumn, setDraggingColumn] = useState<LeadColumnId | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<LeadColumnId | null>(null)
+  const [actionsColumnOpen, setActionsColumnOpen] = useState(false)
   const internalScrollRef = useRef<HTMLDivElement>(null)
   const scrollRef = externalScrollRef ?? internalScrollRef
   const allSelected = leads.length > 0 && leads.every((l) => selected.has(l.id))
-  const colSpan = columns.length + 3
+  const colSpan = columns.length + 2 + (actionsColumnOpen ? 1 : 0)
   const cellPad = LIGHTNING_DENSITY[density]
   const naturalWidths = useMemo(() => {
     const widths = {} as Record<LeadColumnId, number>
@@ -340,9 +343,9 @@ export function LeadTable({
     () =>
       36 +
       44 +
-      LEAD_ACTIONS_COLUMN_WIDTH +
+      (actionsColumnOpen ? LEAD_ACTIONS_COLUMN_WIDTH : 0) +
       columns.reduce((total, column) => total + resolvedWidths[column.id], 0),
-    [columns, resolvedWidths],
+    [actionsColumnOpen, columns, resolvedWidths],
   )
 
   const startResize = (
@@ -632,61 +635,63 @@ export function LeadTable({
             )
           })}
 
-          <TableCell
-            onClick={(e) => e.stopPropagation()}
-            className={cn(LIGHTNING.cellActions, cellPad)}
-            style={{
-              width: LEAD_ACTIONS_COLUMN_WIDTH,
-              minWidth: LEAD_ACTIONS_COLUMN_WIDTH,
-              maxWidth: LEAD_ACTIONS_COLUMN_WIDTH,
-            }}
-          >
-            <RowInlineActions>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Converti ${lead["Nome Lead"]} a cliente`}
-                onClick={() => onConvert(lead)}
-              >
-                <UserCheck className="size-3.5" />
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button variant="ghost" size="icon-sm" aria-label="Azioni">
-                      <MoreHorizontal className="size-3.5" />
-                    </Button>
-                  }
-                />
-                <DropdownMenuContent align="end">
-                  <DropdownMenuGroup>
-                    <DropdownMenuItem
-                      onClick={() => router.push(`/leads/${lead.id}`)}
-                    >
-                      <ExternalLink data-icon="inline-start" />
-                      Apri
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onConvert(lead)}>
-                      <UserCheck data-icon="inline-start" />
-                      Converti a cliente
-                    </DropdownMenuItem>
-                    {canDelete ? (
-                      <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onClick={() => onDelete(lead)}
-                        >
-                          <Trash2 data-icon="inline-start" />
-                          Elimina
-                        </DropdownMenuItem>
-                      </>
-                    ) : null}
-                  </DropdownMenuGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </RowInlineActions>
-          </TableCell>
+          {actionsColumnOpen ? (
+            <TableCell
+              onClick={(e) => e.stopPropagation()}
+              className={cn(LIGHTNING.cellActions, cellPad)}
+              style={{
+                width: LEAD_ACTIONS_COLUMN_WIDTH,
+                minWidth: LEAD_ACTIONS_COLUMN_WIDTH,
+                maxWidth: LEAD_ACTIONS_COLUMN_WIDTH,
+              }}
+            >
+              <RowInlineActions>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Converti ${lead["Nome Lead"]} a cliente`}
+                  onClick={() => onConvert(lead)}
+                >
+                  <UserCheck className="size-3.5" />
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button variant="ghost" size="icon-sm" aria-label="Azioni">
+                        <MoreHorizontal className="size-3.5" />
+                      </Button>
+                    }
+                  />
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem
+                        onClick={() => router.push(`/leads/${lead.id}`)}
+                      >
+                        <ExternalLink data-icon="inline-start" />
+                        Apri
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onConvert(lead)}>
+                        <UserCheck data-icon="inline-start" />
+                        Converti a cliente
+                      </DropdownMenuItem>
+                      {canDelete ? (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() => onDelete(lead)}
+                          >
+                            <Trash2 data-icon="inline-start" />
+                            Elimina
+                          </DropdownMenuItem>
+                        </>
+                      ) : null}
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </RowInlineActions>
+            </TableCell>
+          ) : null}
         </TableRow>
       </LeadRowContextMenu>
     )
@@ -779,7 +784,26 @@ export function LeadTable({
         />
       </div>
 
-      <div className="hidden h-full overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_18px_45px_-34px_rgb(15_23_42/0.6)] lg:flex lg:max-h-full lg:flex-col">
+      <div className="relative hidden h-full overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_18px_45px_-34px_rgb(15_23_42/0.6)] lg:flex lg:max-h-full lg:flex-col">
+      {!actionsColumnOpen ? (
+        <button
+          type="button"
+          aria-label="Mostra colonna azioni"
+          title="Mostra colonna azioni"
+          onClick={() => setActionsColumnOpen(true)}
+          className={cn(
+            LIGHTNING.headCell,
+            "absolute right-0 top-0 z-50 flex items-center justify-center border-l border-l-border/80 bg-secondary/95 text-muted-foreground shadow-[-16px_0_24px_-18px_rgb(15_23_42/0.58)] backdrop-blur-md transition-colors hover:text-foreground",
+          )}
+          style={{
+            width: LEAD_ACTIONS_TOGGLE_WIDTH,
+            minWidth: LEAD_ACTIONS_TOGGLE_WIDTH,
+            maxWidth: LEAD_ACTIONS_TOGGLE_WIDTH,
+          }}
+        >
+          <SlidersHorizontal className="size-4" />
+        </button>
+      ) : null}
       {/* Area scrollabile: header sticky + body virtualizzato in un'unica table.
           Scrolla verticalmente; orizzontalmente è pilotata dalla barra dedicata. */}
       <div
@@ -810,6 +834,9 @@ export function LeadTable({
           el.scrollLeft += delta * 0.72
         }}
         className="min-h-0 flex-1 overscroll-contain overflow-y-auto overflow-x-hidden bg-card outline-none [scroll-behavior:auto] [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:w-2.5"
+        style={{
+          paddingRight: actionsColumnOpen ? 0 : LEAD_ACTIONS_TOGGLE_WIDTH,
+        }}
       >
         {/* table semplice (no wrapper shadcn): un solo contenitore di scroll,
             così l'header sticky e la barra orizzontale dedicata funzionano. */}
@@ -824,7 +851,9 @@ export function LeadTable({
           {columns.map((column) => (
             <col key={column.id} style={{ width: resolvedWidths[column.id] }} />
           ))}
-          <col style={{ width: LEAD_ACTIONS_COLUMN_WIDTH }} />
+          {actionsColumnOpen ? (
+            <col style={{ width: LEAD_ACTIONS_COLUMN_WIDTH }} />
+          ) : null}
         </colgroup>
         <TableHeader className={cn(LIGHTNING.header, stuck && LIGHTNING.headerStuck)}>
           <TableRow className="hover:bg-transparent">
@@ -932,16 +961,31 @@ export function LeadTable({
                 </TableHead>
               )
             })}
-            <TableHead
-              className={cn(LIGHTNING.headCell, LIGHTNING.headLabel, LIGHTNING.headActions)}
-              style={{
-                width: LEAD_ACTIONS_COLUMN_WIDTH,
-                minWidth: LEAD_ACTIONS_COLUMN_WIDTH,
-                maxWidth: LEAD_ACTIONS_COLUMN_WIDTH,
-              }}
-            >
-              Azioni
-            </TableHead>
+            {actionsColumnOpen ? (
+              <TableHead
+                className={cn(
+                  LIGHTNING.headCell,
+                  LIGHTNING.headLabel,
+                  LIGHTNING.headActions,
+                  "p-0",
+                )}
+                style={{
+                  width: LEAD_ACTIONS_COLUMN_WIDTH,
+                  minWidth: LEAD_ACTIONS_COLUMN_WIDTH,
+                  maxWidth: LEAD_ACTIONS_COLUMN_WIDTH,
+                }}
+              >
+                <button
+                  type="button"
+                  aria-label="Nascondi colonna azioni"
+                  title="Nascondi colonna azioni"
+                  onClick={() => setActionsColumnOpen(false)}
+                  className="flex h-10 w-full items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <SlidersHorizontal className="size-4" />
+                </button>
+              </TableHead>
+            ) : null}
           </TableRow>
         </TableHeader>
         <TableBody>

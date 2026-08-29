@@ -796,7 +796,26 @@ export function LeadTable({
         />
       </div>
 
-      <div className="hidden h-full overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_18px_45px_-34px_rgb(15_23_42/0.6)] lg:flex lg:max-h-full lg:flex-col">
+      <div className="relative hidden h-full overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_18px_45px_-34px_rgb(15_23_42/0.6)] lg:flex lg:max-h-full lg:flex-col">
+        {!actionsColumnOpen ? (
+          <button
+            type="button"
+            aria-label="Mostra colonna azioni"
+            title="Mostra colonna azioni"
+            onClick={() => setActionsColumnOpen(true)}
+            className={cn(
+              LIGHTNING.headCell,
+              "absolute right-0 top-0 z-50 flex items-center justify-center border-l border-l-border/80 bg-secondary/95 text-muted-foreground shadow-[-12px_0_18px_-16px_rgb(15_23_42/0.55)] backdrop-blur-md transition-colors hover:text-foreground",
+            )}
+            style={{
+              width: LEAD_ACTIONS_TOGGLE_WIDTH,
+              minWidth: LEAD_ACTIONS_TOGGLE_WIDTH,
+              maxWidth: LEAD_ACTIONS_TOGGLE_WIDTH,
+            }}
+          >
+            <SlidersHorizontal className="size-4" />
+          </button>
+        ) : null}
       {/* Area scrollabile: header sticky + body virtualizzato in un'unica table.
           Scrolla verticalmente; orizzontalmente è pilotata dalla barra dedicata. */}
       <div
@@ -948,22 +967,6 @@ export function LeadTable({
                     }}
                     className="absolute inset-y-0 right-0 z-10 w-2 cursor-col-resize touch-none before:absolute before:inset-y-2 before:left-1/2 before:w-px before:bg-teal/0 before:transition-colors hover:before:bg-teal"
                   />
-                  {isLastDataColumn && !actionsColumnOpen ? (
-                    <button
-                      type="button"
-	                      aria-label="Mostra colonna azioni"
-	                      title="Mostra colonna azioni"
-	                      draggable={false}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        setActionsColumnOpen(true)
-                      }}
-                      className="absolute inset-y-0 right-0 z-20 flex items-center justify-center border-l border-l-border/80 bg-secondary/95 text-muted-foreground shadow-[-12px_0_18px_-16px_rgb(15_23_42/0.55)] transition-colors hover:text-foreground"
-                      style={{ width: LEAD_ACTIONS_TOGGLE_WIDTH }}
-                    >
-                      <SlidersHorizontal className="size-4" />
-                    </button>
-                  ) : null}
                 </TableHead>
               )
             })}

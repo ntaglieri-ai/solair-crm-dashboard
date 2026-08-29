@@ -270,6 +270,7 @@ export function LeadCell({
     case "kWh":
       return <span className="tabular-nums text-foreground">{lead.kWh}</span>
 
+    case "Data Click":
     case "Ora creazione":
     case "Ora ultima attività":
     case "Data/Ora":

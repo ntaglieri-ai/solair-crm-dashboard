@@ -76,6 +76,19 @@ export type SortDir = "asc" | "desc"
 // tabelle condividessero lo stesso contratto di stile.
 export type { Density }
 
+const DATE_TIME_COLUMNS = new Set<LeadColumnId>([
+  "Data Click",
+  "Ora creazione",
+  "Ora ultima attività",
+  "Data/Ora",
+])
+const DATE_TIME_COLUMN_WIDTH = 178
+const LEAD_ACTIONS_COLUMN_WIDTH = 92
+
+function minimumColumnWidth(column: LeadColumnId) {
+  return DATE_TIME_COLUMNS.has(column) ? DATE_TIME_COLUMN_WIDTH : 72
+}
+
 function LeadMobileList({
   leads,
   selected,
@@ -290,8 +303,8 @@ export function LeadTable({
         widths[column.id] = 210
         continue
       }
-      if (column.id === "Ora creazione" || column.id === "Ora ultima attività" || column.id === "Data/Ora") {
-        widths[column.id] = 178
+      if (DATE_TIME_COLUMNS.has(column.id)) {
+        widths[column.id] = DATE_TIME_COLUMN_WIDTH
         continue
       }
       const contentLength = leads.reduce((maximum, lead) => {
@@ -314,7 +327,12 @@ export function LeadTable({
   const resolvedWidths = useMemo(() => {
     const widths = { ...naturalWidths }
     for (const column of columns) {
-      if (columnWidths[column.id]) widths[column.id] = columnWidths[column.id]!
+      if (columnWidths[column.id]) {
+        widths[column.id] = Math.max(
+          minimumColumnWidth(column.id),
+          columnWidths[column.id]!,
+        )
+      }
     }
     return widths
   }, [columnWidths, columns, naturalWidths])
@@ -322,7 +340,7 @@ export function LeadTable({
     () =>
       36 +
       44 +
-      56 +
+      LEAD_ACTIONS_COLUMN_WIDTH +
       columns.reduce((total, column) => total + resolvedWidths[column.id], 0),
     [columns, resolvedWidths],
   )
@@ -338,7 +356,13 @@ export function LeadTable({
     const onMove = (moveEvent: PointerEvent) => {
       onColumnWidthChange(
         column,
-        Math.min(480, Math.max(72, startWidth + moveEvent.clientX - startX)),
+        Math.min(
+          480,
+          Math.max(
+            minimumColumnWidth(column),
+            startWidth + moveEvent.clientX - startX,
+          ),
+        ),
       )
     }
     const onEnd = () => {
@@ -577,8 +601,9 @@ export function LeadTable({
             />
           </TableCell>
 
-          {columns.map((col) => {
+          {columns.map((col, columnIndex) => {
             const isLeft = leftAligned(col.id)
+            const isLastDataColumn = columnIndex === columns.length - 1
             return (
               <TableCell
                 key={col.id}
@@ -587,6 +612,7 @@ export function LeadTable({
                   "overflow-hidden whitespace-nowrap",
                   cellPad,
                   isLeft ? "text-left" : "text-center",
+                  isLastDataColumn && "pr-6",
                 )}
                 style={{
                   width: resolvedWidths[col.id],
@@ -609,7 +635,11 @@ export function LeadTable({
           <TableCell
             onClick={(e) => e.stopPropagation()}
             className={cn(LIGHTNING.cellActions, cellPad)}
-            style={{ width: 84, minWidth: 84, maxWidth: 84 }}
+            style={{
+              width: LEAD_ACTIONS_COLUMN_WIDTH,
+              minWidth: LEAD_ACTIONS_COLUMN_WIDTH,
+              maxWidth: LEAD_ACTIONS_COLUMN_WIDTH,
+            }}
           >
             <RowInlineActions>
               <Button
@@ -794,7 +824,7 @@ export function LeadTable({
           {columns.map((column) => (
             <col key={column.id} style={{ width: resolvedWidths[column.id] }} />
           ))}
-          <col style={{ width: 84 }} />
+          <col style={{ width: LEAD_ACTIONS_COLUMN_WIDTH }} />
         </colgroup>
         <TableHeader className={cn(LIGHTNING.header, stuck && LIGHTNING.headerStuck)}>
           <TableRow className="hover:bg-transparent">
@@ -808,10 +838,11 @@ export function LeadTable({
                 aria-label="Seleziona tutti"
               />
             </TableHead>
-            {columns.map((col) => {
+            {columns.map((col, columnIndex) => {
               const numeric = NUMERIC_COLUMNS.includes(col.id)
               const isLeft = col.id === "Nome Lead" || col.id === "E-mail"
               const active = sortBy === col.id
+              const isLastDataColumn = columnIndex === columns.length - 1
               return (
                 <TableHead
                   key={col.id}
@@ -846,6 +877,7 @@ export function LeadTable({
                     draggingColumn === col.id && "opacity-45",
                     dragOverColumn === col.id && "bg-teal/10",
                     numeric ? "text-right" : isLeft ? "text-left" : "text-center",
+                    isLastDataColumn && "pr-7",
                   )}
                   style={{
                     width: resolvedWidths[col.id],
@@ -902,7 +934,11 @@ export function LeadTable({
             })}
             <TableHead
               className={cn(LIGHTNING.headCell, LIGHTNING.headLabel, LIGHTNING.headActions)}
-              style={{ width: 84, minWidth: 84, maxWidth: 84 }}
+              style={{
+                width: LEAD_ACTIONS_COLUMN_WIDTH,
+                minWidth: LEAD_ACTIONS_COLUMN_WIDTH,
+                maxWidth: LEAD_ACTIONS_COLUMN_WIDTH,
+              }}
             >
               Azioni
             </TableHead>

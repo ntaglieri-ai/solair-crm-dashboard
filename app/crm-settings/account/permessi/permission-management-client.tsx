@@ -584,8 +584,8 @@ export function PermissionManagementClient({
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="sticky top-0 z-30 -mx-1 rounded-b-xl border-b border-border/70 bg-background/95 px-1 py-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <div className="flex flex-col gap-6 pt-28 md:pt-24">
+      <div className="fixed inset-x-4 top-[6.75rem] z-30 rounded-xl border border-border/70 bg-background/95 px-3 py-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:inset-x-5 md:top-16">
         <SectionHeader
           title="Permission Management"
           description="Configura i permessi per ogni ruolo. Controlla l'accesso a pagine, record, cartelle e funzionalità di riconfigurazione."

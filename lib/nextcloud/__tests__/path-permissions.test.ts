@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   canAccessNcPath,
   canBrowseNcTreePath,
+  ncPhysicalSharePath,
   type NcPathRule,
 } from "@/lib/nextcloud/path-permissions"
 
@@ -41,5 +42,10 @@ describe("nextcloud path permissions", () => {
   it("valuta allo stesso modo i path relativi e quelli sotto Solair", () => {
     expect(canAccessNcPath("Solair/Vendita-Digitale/LISTINI/prezzi.pdf", "AGENT", rules)).toBe(true)
     expect(canAccessNcPath("Solair/Vendita-Digitale/Cartella non censita/file.pdf", "AGENT", rules)).toBe(false)
+  })
+
+  it("converte i prefissi logici nei path fisici condivisi da Nextcloud", () => {
+    expect(ncPhysicalSharePath("Vendita-Digitale/LISTINI")).toBe("Solair/Vendita-Digitale/LISTINI")
+    expect(ncPhysicalSharePath("Solair/Vendita-Digitale/LISTINI")).toBe("Solair/Vendita-Digitale/LISTINI")
   })
 })

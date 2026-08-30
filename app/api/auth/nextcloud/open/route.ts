@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getNextcloudAppPassword } from "@/lib/nextcloud/credentials"
 import { nextcloudBaseUrl } from "@/lib/nextcloud/config"
-import { canAccessNcPath, loadNcPathRules, normalizeNcPath } from "@/lib/nextcloud/path-permissions"
+import {
+  canAccessNcPath,
+  loadNcPathRules,
+  normalizeNcPath,
+  roleRequiresExplicitNcPathRule,
+} from "@/lib/nextcloud/path-permissions"
 import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permissions"
 
 // "Apri Nextcloud": verifica che l'account tecnico sia provisionato e apre il
@@ -38,18 +43,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/documenti?nc_error=not_provisioned", request.url))
   }
 
+  const snapshot = await loadCurrentPermissionSnapshot()
+  const pathRules = await loadNcPathRules()
+
   // Redirect target: root files, una cartella specifica, oppure un singolo file
   // (deep link /f/{fileid}, che Nextcloud risolve nel viewer del file). In tutti
   // i casi il path richiesto deve essere consentito al ruolo dell'utente: per un
   // file passiamo il suo path completo, cosi' le regole prefix-based lo coprono.
   // La destinazione operativa predefinita e' la cartella condivisa Solair,
-  // non la root personale dell'account Nextcloud.
-  let redirectPath = "/apps/files/?dir=/Solair"
+  // non la root personale dell'account Nextcloud. AGENT fa eccezione: la radice
+  // Solair non deve essere condivisa, quindi apre la root Nextcloud con le sole
+  // cartelle puntuali condivise al suo gruppo.
+  let redirectPath = roleRequiresExplicitNcPathRule(snapshot.subject.ruoloCode)
+    ? "/apps/files/"
+    : "/apps/files/?dir=/Solair"
   const requested = normalizeNcPath(request.nextUrl.searchParams.get("path") ?? "")
   const fileId = request.nextUrl.searchParams.get("fileid")
   if (requested) {
-    const snapshot = await loadCurrentPermissionSnapshot()
-    const pathRules = await loadNcPathRules()
     if (canAccessNcPath(requested, snapshot.subject.ruoloCode, pathRules)) {
       // fileid e' sempre numerico su Nextcloud: valida per evitare open-redirect.
       redirectPath =

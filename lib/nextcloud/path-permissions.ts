@@ -57,6 +57,7 @@ const DIRECTOR_PLUS = ["DIRECTOR", "ADMIN", "SUPERADMIN"]
 const ADMIN_PLUS = ["ADMIN", "SUPERADMIN"]
 const ALL_ROLES = ["SUPERADMIN", "ADMIN", "DIRECTOR", "STANDARD", "AGENT"]
 const EXPLICIT_RULE_ROLES = new Set(["AGENT"])
+const TEAM_FOLDER_ROOT = "Solair"
 
 // Fallback identico all'array hardcoded storico, usato SOLO se la tabella DB
 // non e' ancora disponibile (migration non applicata / errore di lettura): cosi'
@@ -179,6 +180,14 @@ const NC_SHARE_PERMISSIONS: Record<Exclude<NcAccess, "hidden">, number> = {
 
 export type NcGroupShare = { folder: string; group: string; permissions: number }
 
+export function ncPhysicalSharePath(prefix: string): string {
+  const normalized = normalizeNcPath(prefix).replace(/\/+$/, "")
+  if (!normalized || normalized === TEAM_FOLDER_ROOT || normalized.startsWith(`${TEAM_FOLDER_ROOT}/`)) {
+    return normalized
+  }
+  return `${TEAM_FOLDER_ROOT}/${normalized}`
+}
+
 /**
  * Condivisioni Nextcloud necessarie perche' le regole della tabella valgano
  * anche come accesso fisico reale. Si condivide il percorso ESATTO della
@@ -196,7 +205,7 @@ export async function computeRequiredGroupShares(): Promise<NcGroupShare[]> {
   const byKey = new Map<string, NcGroupShare>()
 
   for (const rule of rules) {
-    const folder = normalizeNcPath(rule.prefix).replace(/\/+$/, "")
+    const folder = ncPhysicalSharePath(rule.prefix)
     if (!folder) continue
     for (const [roleCode, accesso] of rule.accessByRole) {
       const group = nextcloudGroupForRole(roleCode)
@@ -220,11 +229,11 @@ export function normalizeNcPath(path: string): string {
 
 function rulePath(path: string): string {
   const normalized = normalizeNcPath(path).replace(/\/+$/, "")
-  if (normalized === "Solair") return ""
-  return normalized.startsWith("Solair/") ? normalized.slice("Solair/".length) : normalized
+  if (normalized === TEAM_FOLDER_ROOT) return ""
+  return normalized.startsWith(`${TEAM_FOLDER_ROOT}/`) ? normalized.slice(`${TEAM_FOLDER_ROOT}/`.length) : normalized
 }
 
-function roleRequiresExplicitRule(roleCode: RoleCode): boolean {
+export function roleRequiresExplicitNcPathRule(roleCode: RoleCode): boolean {
   return EXPLICIT_RULE_ROLES.has((roleCode ?? "").toUpperCase())
 }
 
@@ -253,7 +262,7 @@ export function canAccessNcPath(path: string, roleCode: RoleCode, rules: NcPathR
       return ruleAllowsRole(rule, roleCode)
     }
   }
-  return !roleRequiresExplicitRule(roleCode)
+  return !roleRequiresExplicitNcPathRule(roleCode)
 }
 
 /**
@@ -264,7 +273,7 @@ export function canAccessNcPath(path: string, roleCode: RoleCode, rules: NcPathR
 export function canBrowseNcTreePath(path: string, roleCode: RoleCode, rules: NcPathRule[]): boolean {
   const normalized = rulePath(path)
   if (!normalized || canAccessNcPath(normalized, roleCode, rules)) return true
-  if (!roleRequiresExplicitRule(roleCode)) return true
+  if (!roleRequiresExplicitNcPathRule(roleCode)) return true
 
   for (const rule of rules) {
     const prefix = rulePath(rule.prefix)

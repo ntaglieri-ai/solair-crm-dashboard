@@ -1,10 +1,18 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { ChevronRight, FolderTree, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
@@ -37,6 +45,8 @@ type EditorRule = {
   priorita: number
   access: Record<string, NcAccess>
 }
+
+export const NEXTCLOUD_MANUAL_RULE_EVENT = "solair:nextcloud-manual-rule"
 
 const ACCESS_OPTIONS: { value: NcAccess; label: string }[] = [
   { value: "editable", label: "Pieno" },
@@ -79,6 +89,11 @@ function defaultBlankRuleAccess(roles: RoleColumn[]): Record<string, NcAccess> {
   return Object.fromEntries(roles.map((role) => [role.id, "hidden" as NcAccess]))
 }
 
+function nextPriorityFor(rules: EditorRule[]): number {
+  const max = rules.reduce((acc, r) => Math.max(acc, r.priorita), 0)
+  return Math.ceil((max + 10) / 10) * 10
+}
+
 function groupRules(rows: NcRuleRow[]): EditorRule[] {
   const byPrefix = new Map<string, EditorRule>()
   for (const row of rows) {
@@ -107,29 +122,36 @@ export function NextcloudPathsEditor({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<number | null>(null)
+  const [manualDialogOpen, setManualDialogOpen] = useState(false)
+  const [deleteCandidate, setDeleteCandidate] = useState<EditorRule | null>(null)
 
-  const nextPriorita = useMemo(() => {
-    const max = rules.reduce((acc, r) => Math.max(acc, r.priorita), 0)
-    return Math.ceil((max + 10) / 10) * 10
-  }, [rules])
+  const nextPriorita = useMemo(() => nextPriorityFor(rules), [rules])
 
   const coveredPaths = useMemo(
     () => new Set(rules.map((r) => normalizeEditorPath(r.pathPrefix)).filter(Boolean)),
     [rules],
   )
 
-  function addRule() {
+  const addManualRule = useCallback((showDialog = false) => {
     setSavedAt(null)
     setRules((prev) => [
       ...prev,
       {
         localId: nextLocalId(),
         pathPrefix: "",
-        priorita: nextPriorita,
+        priorita: nextPriorityFor(prev),
         access: defaultBlankRuleAccess(roles),
       },
     ])
-  }
+    if (showDialog) setManualDialogOpen(true)
+  }, [roles])
+
+  useEffect(() => {
+    if (!canManage) return
+    const handler = () => addManualRule(true)
+    window.addEventListener(NEXTCLOUD_MANUAL_RULE_EVENT, handler)
+    return () => window.removeEventListener(NEXTCLOUD_MANUAL_RULE_EVENT, handler)
+  }, [addManualRule, canManage])
 
   function updateRule(localId: string, patch: Partial<EditorRule>) {
     setSavedAt(null)
@@ -148,6 +170,7 @@ export function NextcloudPathsEditor({
   function removeRule(localId: string) {
     setSavedAt(null)
     setRules((prev) => prev.filter((r) => r.localId !== localId))
+    setDeleteCandidate(null)
   }
 
   async function save() {
@@ -235,12 +258,6 @@ export function NextcloudPathsEditor({
           <p className="text-xs font-semibold uppercase text-muted-foreground">
             Regole attive
           </p>
-          {canManage ? (
-            <Button variant="outline" size="sm" onClick={addRule} disabled={saving}>
-              <Plus className="size-3.5" />
-              Regola manuale
-            </Button>
-          ) : null}
         </div>
 
         {rules.length === 0 ? (
@@ -289,7 +306,7 @@ export function NextcloudPathsEditor({
                       variant="ghost"
                       disabled={!canManage}
                       aria-label="Elimina regola"
-                      onClick={() => removeRule(rule.localId)}
+                      onClick={() => setDeleteCandidate(rule)}
                       className="text-muted-foreground hover:text-destructive"
                     >
                       <Trash2 className="size-4" />
@@ -364,6 +381,50 @@ export function NextcloudPathsEditor({
           Solo SUPERADMIN e ADMIN possono modificare queste regole.
         </p>
       )}
+
+      <Dialog open={manualDialogOpen} onOpenChange={setManualDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Regola pronta per esser configurata</DialogTitle>
+            <DialogDescription>
+              Ho aggiunto una nuova regola vuota: compila il prefisso path, controlla i permessi dei ruoli e poi salva.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              className="bg-teal text-teal-foreground hover:bg-teal/90"
+              onClick={() => setManualDialogOpen(false)}
+            >
+              Ok
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteCandidate !== null} onOpenChange={(open) => !open && setDeleteCandidate(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Eliminare questa regola?</DialogTitle>
+            <DialogDescription>
+              La regola verra rimossa dalla bozza. La modifica diventa effettiva solo dopo il salvataggio.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs text-foreground">
+            {deleteCandidate?.pathPrefix || "Regola senza prefisso"}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteCandidate(null)}>
+              Annulla
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteCandidate && removeRule(deleteCandidate.localId)}
+            >
+              Elimina
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

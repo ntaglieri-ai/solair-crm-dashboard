@@ -229,6 +229,7 @@ export default async function PermissionManagementPage() {
       <PermissionManagementClient
         ruoli={mapped}
         currentProfile={currentAccountProfileFromSnapshot(currentPermissions)}
+        canManageNextcloudRules={canManageNc}
       />
       <NextcloudPathsEditor
         roles={roleColumns}

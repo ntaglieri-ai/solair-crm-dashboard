@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Check, Copy, Plus, ShieldCheck, Sparkles, Users } from "lucide-react"
+import { Check, Copy, FolderTree, Plus, ShieldCheck, Sparkles, Users } from "lucide-react"
 import {
   permessiHighlights,
   RUOLO_COLOR_CLASS,
@@ -19,6 +19,7 @@ import {
 import { SectionHeader } from "@/components/impostazioni/settings-ui"
 import { AccountProfileCard } from "@/components/crm-settings/account-profile-card"
 import type { CurrentAccountProfile } from "@/lib/crm-settings/current-account"
+import { NEXTCLOUD_MANUAL_RULE_EVENT } from "./nextcloud-paths-editor"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -359,9 +360,11 @@ function countEnabledActions(permessi: RuoloPermessi) {
 export function PermissionManagementClient({
   ruoli: initialRuoli,
   currentProfile,
+  canManageNextcloudRules = false,
 }: {
   ruoli: Ruolo[]
   currentProfile: CurrentAccountProfile | null
+  canManageNextcloudRules?: boolean
 }) {
   const [ruoli, setRuoli] = useState<Ruolo[]>(initialRuoli)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -418,6 +421,10 @@ export function PermissionManagementClient({
     setCopyFromRoleId("")
     setRolePermessi(templatePermessi("backoffice"))
     setRoleDialogOpen(true)
+  }
+
+  function createManualNextcloudRule() {
+    window.dispatchEvent(new Event(NEXTCLOUD_MANUAL_RULE_EVENT))
   }
 
   function openDuplicateRole() {
@@ -578,19 +585,29 @@ export function PermissionManagementClient({
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionHeader
-        title="Permission Management"
-        description="Configura i permessi per ogni ruolo. Controlla l'accesso a pagine, record, cartelle e funzionalità di riconfigurazione."
-        action={
-          <Button
-            className="bg-teal text-teal-foreground hover:bg-teal/90"
-            onClick={openNewRole}
-          >
-            <Plus className="size-4" />
-            Nuovo ruolo
-          </Button>
-        }
-      />
+      <div className="sticky top-0 z-30 -mx-1 rounded-b-xl border-b border-border/70 bg-background/95 px-1 py-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <SectionHeader
+          title="Permission Management"
+          description="Configura i permessi per ogni ruolo. Controlla l'accesso a pagine, record, cartelle e funzionalità di riconfigurazione."
+          action={
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {canManageNextcloudRules ? (
+                <Button variant="outline" onClick={createManualNextcloudRule}>
+                  <FolderTree className="size-4" />
+                  Regola manuale
+                </Button>
+              ) : null}
+              <Button
+                className="bg-teal text-teal-foreground hover:bg-teal/90"
+                onClick={openNewRole}
+              >
+                <Plus className="size-4" />
+                Nuovo ruolo
+              </Button>
+            </div>
+          }
+        />
+      </div>
       <AccountProfileCard profile={currentProfile} />
 
       {/* Card ruoli */}

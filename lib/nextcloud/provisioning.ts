@@ -345,11 +345,22 @@ export async function syncNextcloudUserGroup(
     }
 
     // L'appartenenza al gruppo da sola non da' accesso fisico ai file: le
-    // cartelle vanno condivise col gruppo. Best-effort, non fa fallire la
-    // sincronizzazione del ruolo (stessa convenzione delle altre chiamate
-    // Nextcloud non critiche di questo file).
+    // cartelle vanno condivise col gruppo. Prima si revocano le condivisioni
+    // CRM non piu' previste, cosi' un nuovo AGENT non eredita vecchie share
+    // troppo larghe rimaste su solair-agent (es. la radice Solair).
+    //
+    // Best-effort: non fa fallire la sincronizzazione del ruolo, perche'
+    // account e credenziale devono restare recuperabili dal pannello utenti.
     try {
       const shares = await computeRequiredGroupShares()
+      const revoca = await revokeStaleGroupShares(cfg, shares)
+      if (revoca.rimosse > 0) {
+        console.info(`[nextcloud] condivisioni non piu' previste revocate: ${revoca.rimosse}`)
+      }
+      for (const errore of revoca.errori) {
+        console.warn(`[nextcloud] revoca condivisione fallita: ${errore}`)
+      }
+
       for (const share of shares) {
         if (share.group !== desired) continue
         const result = await shareGroupFolderIfNeeded(cfg, share.group, share.folder, share.permissions)

@@ -172,7 +172,7 @@ export function NextcloudPathsEditor({
         <p className="text-sm leading-relaxed text-muted-foreground">
           Ogni regola vale per tutti i path che iniziano con il prefisso indicato
           (match case-sensitive). Vince la regola con priorità più bassa fra quelle
-          che matchano. I path senza alcuna regola sono visibili a tutti i ruoli.
+          che matchano. Per AGENT i path senza alcuna regola restano nascosti.
           «Nessuno» nasconde la cartella al ruolo; «Lettura» e «Pieno» la rendono
           visibile (l’enforcement dei documenti è attualmente binario: visibile/nascosta).
         </p>
@@ -215,7 +215,7 @@ export function NextcloudPathsEditor({
                   colSpan={roles.length + 3}
                   className="py-6 text-center text-sm text-muted-foreground"
                 >
-                  Nessuna regola. Tutti i path Nextcloud sono visibili a tutti i ruoli.
+                  Nessuna regola. AGENT non vede path non configurati; gli altri ruoli mantengono il default storico.
                 </td>
               </tr>
             ) : (

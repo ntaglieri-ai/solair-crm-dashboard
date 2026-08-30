@@ -56,6 +56,7 @@ type RuoloRow = { id: string; code: string | null; nome: string | null }
 const DIRECTOR_PLUS = ["DIRECTOR", "ADMIN", "SUPERADMIN"]
 const ADMIN_PLUS = ["ADMIN", "SUPERADMIN"]
 const ALL_ROLES = ["SUPERADMIN", "ADMIN", "DIRECTOR", "STANDARD", "AGENT"]
+const EXPLICIT_RULE_ROLES = new Set(["AGENT"])
 
 // Fallback identico all'array hardcoded storico, usato SOLO se la tabella DB
 // non e' ancora disponibile (migration non applicata / errore di lettura): cosi'
@@ -217,21 +218,61 @@ export function normalizeNcPath(path: string): string {
   return path.replace(/^\/+/, "").replace(/\/{2,}/g, "/")
 }
 
+function rulePath(path: string): string {
+  const normalized = normalizeNcPath(path).replace(/\/+$/, "")
+  if (normalized === "Solair") return ""
+  return normalized.startsWith("Solair/") ? normalized.slice("Solair/".length) : normalized
+}
+
+function roleRequiresExplicitRule(roleCode: RoleCode): boolean {
+  return EXPLICIT_RULE_ROLES.has((roleCode ?? "").toUpperCase())
+}
+
+function pathMatchesPrefix(path: string, prefix: string): boolean {
+  const normalized = rulePath(path)
+  const normalizedPrefix = rulePath(prefix)
+  return normalized === normalizedPrefix || normalized.startsWith(`${normalizedPrefix}/`)
+}
+
+function ruleAllowsRole(rule: NcPathRule, roleCode: RoleCode): boolean {
+  return rule.allowed.has((roleCode ?? "").toUpperCase())
+}
+
 /**
  * Il ruolo puo' accedere al path? Vince la prima regola (per priorita') che
- * matcha; se nessuna regola matcha il default e' "visibile a tutti" (i prefissi
- * ristretti sono enumerati esplicitamente). `rules` va caricato con
- * loadNcPathRules() dal chiamante (async) e riusato per l'intero listing.
+ * matcha. Se nessuna regola matcha, AGENT resta chiuso per default; gli altri
+ * ruoli mantengono il comportamento storico permissivo. `rules` va caricato
+ * con loadNcPathRules() dal chiamante (async) e riusato per l'intero listing.
  */
 export function canAccessNcPath(path: string, roleCode: RoleCode, rules: NcPathRule[]): boolean {
-  const normalized = normalizeNcPath(path)
-  const rc = (roleCode ?? "").toUpperCase()
+  const normalized = rulePath(path)
+  if (!normalized) return true
+
   for (const rule of rules) {
-    if (normalized.startsWith(rule.prefix)) {
-      return rule.allowed.has(rc)
+    if (pathMatchesPrefix(normalized, rule.prefix)) {
+      return ruleAllowsRole(rule, roleCode)
     }
   }
-  return true
+  return !roleRequiresExplicitRule(roleCode)
+}
+
+/**
+ * Il path e' navigabile nell'albero? Per i ruoli in allowlist esplicita (oggi
+ * AGENT) un parent senza accesso diretto puo' restare visibile solo se serve a
+ * raggiungere almeno un prefisso consentito, es. Vendita-Digitale -> LISTINI.
+ */
+export function canBrowseNcTreePath(path: string, roleCode: RoleCode, rules: NcPathRule[]): boolean {
+  const normalized = rulePath(path)
+  if (!normalized || canAccessNcPath(normalized, roleCode, rules)) return true
+  if (!roleRequiresExplicitRule(roleCode)) return true
+
+  for (const rule of rules) {
+    const prefix = rulePath(rule.prefix)
+    if (ruleAllowsRole(rule, roleCode) && prefix.startsWith(`${normalized}/`)) {
+      return true
+    }
+  }
+  return false
 }
 
 /** Filtra una lista di entry (con .path) tenendo solo quelle accessibili. */

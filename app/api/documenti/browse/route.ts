@@ -4,12 +4,13 @@ import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permission
 import { getNextcloudAppPassword, getNextcloudUsername } from "@/lib/nextcloud/credentials"
 import { nextcloudUsernameFromEmail } from "@/lib/nextcloud/config"
 import { listFolder } from "@/lib/nextcloud/webdav"
-import { canAccessNcPath, loadNcPathRules, normalizeNcPath } from "@/lib/nextcloud/path-permissions"
+import { canBrowseNcTreePath, loadNcPathRules, normalizeNcPath } from "@/lib/nextcloud/path-permissions"
 
 // Browser cartelle per il selettore "Aggiungi cartella preferita".
 // Elenca le sole sottocartelle (Depth:1) del percorso richiesto, SEMPRE
-// filtrate per ruolo: non si puo' navigare ne' listare un path che il ruolo
-// dell'utente non puo' vedere (regole path-based enforced server-side).
+// filtrate per ruolo: non si puo' navigare ne' listare un ramo che il ruolo
+// dell'utente non puo' vedere, salvo cartelle ponte verso prefissi consentiti
+// (regole path-based enforced server-side).
 export async function GET(request: Request) {
   const guard = await requireApiPage("documenti")
   if (guard.response) return guard.response
@@ -22,8 +23,10 @@ export async function GET(request: Request) {
 
   const path = normalizeNcPath(new URL(request.url).searchParams.get("path") ?? "")
   const pathRules = await loadNcPathRules()
-  // Non permettere di navigare dentro un path non consentito al ruolo.
-  if (path && !canAccessNcPath(path, ruoloCode, pathRules)) {
+  // Non permettere di navigare dentro un ramo non consentito al ruolo. I nodi
+  // ponte restano attraversabili solo se portano a un prefisso esplicitamente
+  // visibile, es. Vendita-Digitale -> LISTINI per AGENT.
+  if (path && !canBrowseNcTreePath(path, ruoloCode, pathRules)) {
     return NextResponse.json({ error: "Accesso al percorso non consentito" }, { status: 403 })
   }
 
@@ -36,7 +39,7 @@ export async function GET(request: Request) {
   try {
     const entries = await listFolder(username, appPassword, path)
     const folders = entries
-      .filter((e) => e.isDir && canAccessNcPath(e.path, ruoloCode, pathRules))
+      .filter((e) => e.isDir && canBrowseNcTreePath(e.path, ruoloCode, pathRules))
       .map((e) => ({ name: e.name, path: e.path, favorite: e.favorite }))
       .sort((a, b) => a.name.localeCompare(b.name))
     return NextResponse.json({ path, folders })

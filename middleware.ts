@@ -17,6 +17,28 @@ type CookieToSet = {
   options: CookieOptions
 }
 
+const NEXTCLOUD_LOGIN_PATH = "/nextcloud/login"
+
+function requestedPath(request: NextRequest) {
+  return `${request.nextUrl.pathname}${request.nextUrl.search}`
+}
+
+function loginPathForRequest(request: NextRequest) {
+  return request.nextUrl.pathname === "/api/auth/nextcloud/open" ||
+    request.nextUrl.pathname === "/oauth/consent"
+    ? NEXTCLOUD_LOGIN_PATH
+    : "/login"
+}
+
+function isNextcloudRedirect(value: string) {
+  if (!value.startsWith("/") || value.startsWith("//")) return false
+  const parsed = new URL(value, "https://solair.local")
+  return (
+    parsed.pathname === "/api/auth/nextcloud/open" ||
+    parsed.pathname === "/oauth/consent"
+  )
+}
+
 function clearAuthCookies(response: NextResponse, request: NextRequest) {
   clearCrmSessionCookies(response)
   for (const cookie of request.cookies.getAll()) {
@@ -35,12 +57,12 @@ function clearAuthCookies(response: NextResponse, request: NextRequest) {
 
 function redirectToExpiredLogin(request: NextRequest) {
   const url = request.nextUrl.clone()
-  const requestedPath = `${request.nextUrl.pathname}${request.nextUrl.search}`
-  url.pathname = "/login"
+  const returnPath = requestedPath(request)
+  url.pathname = loginPathForRequest(request)
   url.search = ""
   url.searchParams.set("sessione_scaduta", "1")
-  if (requestedPath !== "/") {
-    url.searchParams.set("redirect", requestedPath)
+  if (returnPath !== "/") {
+    url.searchParams.set("redirect", returnPath)
   }
   return clearAuthCookies(NextResponse.redirect(url), request)
 }
@@ -85,6 +107,7 @@ export async function middleware(request: NextRequest) {
   // gate di autenticazione.
   const publicRoutes = [
     "/login",
+    NEXTCLOUD_LOGIN_PATH,
     "/oauth/consent",
     // Autenticazione: chi la chiama non ha ancora una sessione, per definizione.
     // La rotta si difende da sola (throttle per IP, blocco IP, soglia tentativi).
@@ -152,18 +175,30 @@ export async function middleware(request: NextRequest) {
   // Se non autenticato e non su route pubblica → redirect a /login
   if (!isAuthenticated && !isPublicRoute) {
     const url = request.nextUrl.clone()
-    url.pathname = "/login"
+    url.pathname = loginPathForRequest(request)
+    url.search = ""
+    if (url.pathname === NEXTCLOUD_LOGIN_PATH) {
+      url.searchParams.set("redirect", requestedPath(request))
+    }
     return NextResponse.redirect(url)
   }
 
-  // Se autenticato e su /login → redirect a /dashboard
-  if (isAuthenticated && request.nextUrl.pathname === "/login") {
+  // Se autenticato e su una pagina di login, entra nella destinazione richiesta.
+  const isNextcloudLogin = request.nextUrl.pathname === NEXTCLOUD_LOGIN_PATH
+  if (
+    isAuthenticated &&
+    (request.nextUrl.pathname === "/login" || isNextcloudLogin)
+  ) {
     const url = request.nextUrl.clone()
     const requestedRedirect = request.nextUrl.searchParams.get("redirect")
-    if (requestedRedirect?.startsWith("/") && !requestedRedirect.startsWith("//")) {
+    if (
+      requestedRedirect?.startsWith("/") &&
+      !requestedRedirect.startsWith("//") &&
+      (!isNextcloudLogin || isNextcloudRedirect(requestedRedirect))
+    ) {
       return NextResponse.redirect(new URL(requestedRedirect, request.url))
     }
-    url.pathname = "/"
+    url.pathname = isNextcloudLogin ? "/api/auth/nextcloud/open" : "/"
     return NextResponse.redirect(url)
   }
 

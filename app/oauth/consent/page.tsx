@@ -18,7 +18,7 @@ export default async function OAuthConsentPage({
   const { data: claimsData } = await supabase.auth.getClaims()
   if (!claimsData?.claims?.sub) {
     const back = `/oauth/consent?authorization_id=${encodeURIComponent(authorizationId)}`
-    redirect(`/login?redirect=${encodeURIComponent(back)}`)
+    redirect(`/nextcloud/login?redirect=${encodeURIComponent(back)}`)
   }
 
   const { data: details, error } =

@@ -24,7 +24,12 @@ export async function GET(request: NextRequest) {
   const base = nextcloudBaseUrl()
 
   if (!user) {
-    return NextResponse.redirect(new URL("/login", request.url))
+    const loginUrl = new URL("/nextcloud/login", request.url)
+    loginUrl.searchParams.set(
+      "redirect",
+      `${request.nextUrl.pathname}${request.nextUrl.search}`,
+    )
+    return NextResponse.redirect(loginUrl)
   }
 
   const { data: utente } = await supabase

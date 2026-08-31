@@ -144,3 +144,23 @@ profilo browser separato per il recovery. Non viene disabilitato il login locale
 
 I test automatici coprono route, cookie, permessi e payload di configurazione;
 non sostituiscono questo collaudo con le sessioni reali di Nextcloud.
+
+### Recupero della sessione durante il consenso
+
+`/oauth/consent` mantiene l'URL configurato in Supabase, ma delega lo scambio a
+`/api/auth/nextcloud/authorize`: un Route Handler puo' salvare i cookie rinnovati,
+mentre una Server Component non puo'. Anche i redirect del middleware devono
+inoltrare i cookie aggiornati o cancellati da Supabase.
+
+Con sessione valida il consenso resta automatico. Se Supabase segnala sessione
+mancante o refresh token revocato, il CRM cancella solo i cookie locali e il
+passaggio pendente, senza chiamare signOut globale. Rimanda al login dedicato e
+poi riavvia `/open`, ricontrollando utente e permessi; una destinazione ancora
+firmata e valida viene conservata. Non si riutilizza l'authorization_id scaduto.
+Un errore temporaneo di rete non cancella la sessione.
+
+Verificare anche: token rinnovato durante un redirect, sessione revocata durante
+il consenso, login dedicato senza cookie CRM e richiesta pendente di Roberta
+con sessione corrente di Nando. I log `[nextcloud-consent]` riportano fase e
+codice errore, mai token, email o authorization_id. Non serve cambiare il provider
+per questa correzione.

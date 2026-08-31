@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { CONSENT_ERRORS, NEXTCLOUD_AUTHORIZE_PATH } from "@/lib/nextcloud/oauth-consent"
+
+export const dynamic = "force-dynamic"
 
 // Authorization UI first-party per Nextcloud. Accetta soltanto il client ID
 // configurato e approva automaticamente: l'utente ha gia' espresso l'intento
@@ -7,40 +9,22 @@ import { createClient } from "@/lib/supabase/server"
 export default async function OAuthConsentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ authorization_id?: string }>
+  searchParams: Promise<{ authorization_id?: string; error?: string }>
 }) {
-  const authorizationId = (await searchParams).authorization_id
+  const { authorization_id: authorizationId, error } = await searchParams
+  if (error) {
+    const message = Object.hasOwn(CONSENT_ERRORS, error)
+      ? CONSENT_ERRORS[error as keyof typeof CONSENT_ERRORS]
+      : CONSENT_ERRORS.request
+    return <OAuthError message={message} />
+  }
   if (!authorizationId) {
     return <OAuthError message="Richiesta OIDC priva di authorization_id." />
   }
 
-  const supabase = await createClient()
-  const { data: claimsData } = await supabase.auth.getClaims()
-  if (!claimsData?.claims?.sub) {
-    const back = `/oauth/consent?authorization_id=${encodeURIComponent(authorizationId)}`
-    redirect(`/nextcloud/login?redirect=${encodeURIComponent(back)}`)
-  }
-
-  const { data: details, error } =
-    await supabase.auth.oauth.getAuthorizationDetails(authorizationId)
-  if (error || !details) {
-    return <OAuthError message={error?.message ?? "Richiesta OIDC non valida o scaduta."} />
-  }
-
-  if ("redirect_url" in details) redirect(details.redirect_url)
-
-  const allowedClientId = process.env.SUPABASE_OAUTH_NEXTCLOUD_CLIENT_ID
-  if (!allowedClientId || details.client.id !== allowedClientId) {
-    return <OAuthError message="Client OIDC non autorizzato per il CRM." />
-  }
-
-  const { data: approved, error: approveError } =
-    await supabase.auth.oauth.approveAuthorization(authorizationId)
-  if (approveError || !approved?.redirect_url) {
-    return <OAuthError message={approveError?.message ?? "Autorizzazione OIDC non riuscita."} />
-  }
-
-  redirect(approved.redirect_url)
+  // Token refresh and consent must run where Set-Cookie can be persisted.
+  // Server Components cannot write refreshed/cleared authentication cookies.
+  redirect(`${NEXTCLOUD_AUTHORIZE_PATH}?authorization_id=${encodeURIComponent(authorizationId)}`)
 }
 
 function OAuthError({ message }: { message: string }) {

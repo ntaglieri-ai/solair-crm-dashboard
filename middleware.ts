@@ -25,6 +25,7 @@ function requestedPath(request: NextRequest) {
 
 function loginPathForRequest(request: NextRequest) {
   return request.nextUrl.pathname === "/api/auth/nextcloud/open" ||
+    request.nextUrl.pathname === "/api/auth/nextcloud/authorize" ||
     request.nextUrl.pathname === "/oauth/consent"
     ? NEXTCLOUD_LOGIN_PATH
     : "/login"
@@ -64,7 +65,7 @@ function redirectToExpiredLogin(request: NextRequest) {
   if (returnPath !== "/") {
     url.searchParams.set("redirect", returnPath)
   }
-  return clearAuthCookies(NextResponse.redirect(url), request)
+  return NextResponse.redirect(url)
 }
 
 export async function middleware(request: NextRequest) {
@@ -73,6 +74,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
   let supabaseResponse = NextResponse.next({ request })
+  // Supabase may rotate or delete cookies before we decide to redirect.
+  // Every redirect must carry those changes back to the browser.
+  const withAuthCookies = (response: NextResponse) => {
+    for (const cookie of supabaseResponse.cookies.getAll()) response.cookies.set(cookie)
+    response.headers.set("Cache-Control", "no-store")
+    return response
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -86,7 +94,7 @@ export async function middleware(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           )
-          supabaseResponse = NextResponse.next({ request })
+          supabaseResponse = withAuthCookies(NextResponse.next({ request }))
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           )
@@ -113,6 +121,7 @@ export async function middleware(request: NextRequest) {
     "/login",
     NEXTCLOUD_LOGIN_PATH,
     "/oauth/consent",
+    "/api/auth/nextcloud/authorize",
     // Autenticazione: chi la chiama non ha ancora una sessione, per definizione.
     // La rotta si difende da sola (throttle per IP, blocco IP, soglia tentativi).
     "/api/auth/login",
@@ -159,7 +168,7 @@ export async function middleware(request: NextRequest) {
     Boolean(request.cookies.get(CRM_LAST_ACTIVITY_COOKIE)?.value)
 
   if (isAuthenticated && !hasCrmSession && !isSessionTouchRoute) {
-    if (request.nextUrl.pathname === "/login") {
+    if (request.nextUrl.pathname === "/login" || request.nextUrl.pathname === NEXTCLOUD_LOGIN_PATH) {
       return clearAuthCookies(supabaseResponse, request)
     }
     // Le pagine di autorizzazione OAuth (Nextcloud e connettore MCP) sono
@@ -169,10 +178,11 @@ export async function middleware(request: NextRequest) {
     // concesso a un'applicazione esterna.
     const isPaginaAutorizzazione =
       request.nextUrl.pathname === "/oauth/consent" ||
+      request.nextUrl.pathname === "/api/auth/nextcloud/authorize" ||
       request.nextUrl.pathname.startsWith("/oauth/mcp") ||
       request.nextUrl.pathname === "/authorize"
     if (!isPublicRoute || isPaginaAutorizzazione) {
-      return redirectToExpiredLogin(request)
+      return clearAuthCookies(withAuthCookies(redirectToExpiredLogin(request)), request)
     }
   }
 
@@ -184,7 +194,7 @@ export async function middleware(request: NextRequest) {
     if (url.pathname === NEXTCLOUD_LOGIN_PATH) {
       url.searchParams.set("redirect", requestedPath(request))
     }
-    return NextResponse.redirect(url)
+    return withAuthCookies(NextResponse.redirect(url))
   }
 
   // Se autenticato e su una pagina di login, entra nella destinazione richiesta.
@@ -200,10 +210,10 @@ export async function middleware(request: NextRequest) {
       !requestedRedirect.startsWith("//") &&
       (!isNextcloudLogin || isNextcloudRedirect(requestedRedirect))
     ) {
-      return NextResponse.redirect(new URL(requestedRedirect, request.url))
+      return withAuthCookies(NextResponse.redirect(new URL(requestedRedirect, request.url)))
     }
     url.pathname = isNextcloudLogin ? "/api/auth/nextcloud/open" : "/"
-    return NextResponse.redirect(url)
+    return withAuthCookies(NextResponse.redirect(url))
   }
 
   const isCambiaPasswordRoute = request.nextUrl.pathname === "/cambia-password"
@@ -268,12 +278,12 @@ export async function middleware(request: NextRequest) {
     if (mustChangePassword && !isCambiaPasswordRoute) {
       const url = request.nextUrl.clone()
       url.pathname = "/cambia-password"
-      return setCacheCookie(NextResponse.redirect(url))
+      return setCacheCookie(withAuthCookies(NextResponse.redirect(url)))
     }
     if (!mustChangePassword && isCambiaPasswordRoute) {
       const url = request.nextUrl.clone()
       url.pathname = "/"
-      return setCacheCookie(NextResponse.redirect(url))
+      return setCacheCookie(withAuthCookies(NextResponse.redirect(url)))
     }
     setCacheCookie(supabaseResponse)
   }

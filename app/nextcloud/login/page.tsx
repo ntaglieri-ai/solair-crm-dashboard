@@ -3,7 +3,7 @@
 
 import Image from "next/image"
 import { Suspense, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import {
   AlertCircle,
   ArrowRight,
@@ -33,7 +33,6 @@ function safeRedirect(value: string | null) {
 }
 
 function NextcloudLoginForm() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const sessioneScaduta = searchParams.get("sessione_scaduta") === "1"
   const postLoginRedirect = safeRedirect(searchParams.get("redirect"))
@@ -69,7 +68,9 @@ function NextcloudLoginForm() {
       return
     }
 
-    router.push(postLoginRedirect)
+    // Load with the cookies just issued by the server, without reusing an
+    // earlier authorization response from the client router cache.
+    window.location.assign(postLoginRedirect)
   }
 
   async function handleForgot(e: React.FormEvent) {

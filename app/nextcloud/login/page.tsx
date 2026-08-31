@@ -19,8 +19,6 @@ import { Label } from "@/components/ui/label"
 
 const BRAND_LOGO = "/solair-brand-logo.png"
 const HERO_IMAGE = "/auth-solar.jpg"
-const NEXTCLOUD_RESET_SESSION_URL = "/api/auth/nextcloud/reset-session"
-const NEXTCLOUD_RESET_DELAY_MS = 1000
 
 function safeRedirect(value: string | null) {
   if (!value?.startsWith("/") || value.startsWith("//")) {
@@ -32,14 +30,6 @@ function safeRedirect(value: string | null) {
     parsed.pathname === "/oauth/consent"
     ? `${parsed.pathname}${parsed.search}`
     : "/api/auth/nextcloud/open"
-}
-
-function cleanNextcloudRedirect(value: string): string {
-  const parsed = new URL(value, window.location.href)
-  if (parsed.pathname === "/api/auth/nextcloud/open") {
-    parsed.searchParams.set("nc_clean", "1")
-  }
-  return `${parsed.pathname}${parsed.search}${parsed.hash}`
 }
 
 function NextcloudLoginForm() {
@@ -58,11 +48,6 @@ function NextcloudLoginForm() {
     e.preventDefault()
     setLoading(true)
     setError(null)
-    const resetWindow = window.open(
-      NEXTCLOUD_RESET_SESSION_URL,
-      "solair-nextcloud-session-reset",
-      "popup,width=460,height=620",
-    )
 
     let res: Response
     try {
@@ -72,30 +57,19 @@ function NextcloudLoginForm() {
         body: JSON.stringify({ email, password }),
       })
     } catch {
-      try {
-        resetWindow?.close()
-      } catch {}
       setError("Impossibile contattare il server. Controlla la connessione e riprova.")
       setLoading(false)
       return
     }
 
     if (!res.ok) {
-      try {
-        resetWindow?.close()
-      } catch {}
       const body = (await res.json().catch(() => null)) as { error?: string } | null
       setError(body?.error ?? "Email o password non corretti.")
       setLoading(false)
       return
     }
 
-    window.setTimeout(() => {
-      try {
-        resetWindow?.close()
-      } catch {}
-      router.push(cleanNextcloudRedirect(postLoginRedirect))
-    }, NEXTCLOUD_RESET_DELAY_MS)
+    router.push(postLoginRedirect)
   }
 
   async function handleForgot(e: React.FormEvent) {

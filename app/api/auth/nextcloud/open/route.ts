@@ -18,7 +18,7 @@ import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permission
 // accesso (regole path-based enforced anche qui, non solo in UI).
 export async function GET(request: NextRequest) {
   const shouldCleanNextcloudSession =
-    request.nextUrl.searchParams.get("nc_clean") !== "1"
+    request.nextUrl.searchParams.get("nc_reset") === "1"
   const supabase = await createClient()
   const {
     data: { user },

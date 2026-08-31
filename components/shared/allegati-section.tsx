@@ -15,6 +15,7 @@ import {
   IconExternalLink,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
+import { NextcloudOpenLink } from "@/components/nextcloud/nextcloud-open-link"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -297,7 +298,7 @@ export function AllegatiSection({
               className="text-navy"
               nativeButton={false}
               render={
-                <a href={openNextcloudUrl(folderPath)} target="_blank" rel="noopener noreferrer" />
+                <NextcloudOpenLink href={openNextcloudUrl(folderPath)} />
               }
             >
               <IconExternalLink size={15} stroke={1.8} data-icon="inline-start" />
@@ -390,14 +391,12 @@ export function AllegatiSection({
                 <div className="flex min-w-0 flex-1 flex-col">
                   {doc.isFolder ? (
                     // Le sottocartelle si aprono direttamente su Nextcloud.
-                    <a
+                    <NextcloudOpenLink
                       href={openNextcloudUrl(doc.path)}
-                      target="_blank"
-                      rel="noopener noreferrer"
                       className="truncate text-[13px] font-medium text-foreground hover:underline"
                     >
                       {doc.nome}
-                    </a>
+                    </NextcloudOpenLink>
                   ) : (
                     <span className="truncate text-[13px] font-medium text-foreground">
                       {doc.nome}

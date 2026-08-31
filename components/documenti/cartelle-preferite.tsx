@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { NextcloudOpenLink } from "@/components/nextcloud/nextcloud-open-link"
 import { type CartellaPreferita, openNextcloudUrl } from "@/lib/documenti-data"
 import { cn } from "@/lib/utils"
 
@@ -75,7 +76,7 @@ function CartellaCard({
           size="sm"
           nativeButton={false}
           className="gap-1.5 bg-card"
-          render={<a href={openNextcloudUrl(cartella.path)} target="_blank" rel="noopener noreferrer" />}
+          render={<NextcloudOpenLink href={openNextcloudUrl(cartella.path)} />}
         >
           Apri
           <ExternalLink className="size-3.5" aria-hidden="true" />

@@ -2,6 +2,7 @@
 
 import { Cloud, ExternalLink } from "lucide-react"
 
+import { NextcloudOpenLink } from "@/components/nextcloud/nextcloud-open-link"
 import { Button } from "@/components/ui/button"
 import { openNextcloudUrl } from "@/lib/documenti-data"
 
@@ -26,7 +27,7 @@ export function StorageCta() {
       <Button
         className="shrink-0 gap-1.5"
         nativeButton={false}
-        render={<a href={openNextcloudUrl()} target="_blank" rel="noopener noreferrer" />}
+        render={<NextcloudOpenLink href={openNextcloudUrl()} />}
       >
         Apri Nextcloud
         <ExternalLink className="size-4" aria-hidden="true" />

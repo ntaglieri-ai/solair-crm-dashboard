@@ -26,6 +26,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { NextcloudOpenLink } from "@/components/nextcloud/nextcloud-open-link"
 import {
   type DocumentoRecente,
   fileExtension,
@@ -78,15 +79,13 @@ export function DocumentiRecenti({ documenti }: { documenti: DocumentoRecente[] 
                   <TableCell className="pl-4">
                     <div className="flex items-center gap-2">
                       <Icon className={`size-4 shrink-0 ${className}`} aria-hidden="true" />
-                      <a
+                      <NextcloudOpenLink
                         href={fileHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
                         className="truncate font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
                         title={`Apri ${doc.name}`}
                       >
                         {doc.name}
-                      </a>
+                      </NextcloudOpenLink>
                     </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{formatSize(doc.size)}</TableCell>
@@ -104,11 +103,7 @@ export function DocumentiRecenti({ documenti }: { documenti: DocumentoRecente[] 
                               nativeButton={false}
                               aria-label={`Apri il file ${doc.name}`}
                               render={
-                                <a
-                                  href={fileHref}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                />
+                                <NextcloudOpenLink href={fileHref} />
                               }
                             >
                               <ExternalLink className="size-4" aria-hidden="true" />
@@ -126,11 +121,7 @@ export function DocumentiRecenti({ documenti }: { documenti: DocumentoRecente[] 
                               nativeButton={false}
                               aria-label={`Vai alla cartella di ${doc.name}`}
                               render={
-                                <a
-                                  href={folderHref}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                />
+                                <NextcloudOpenLink href={folderHref} />
                               }
                             >
                               <FolderOpen className="size-4" aria-hidden="true" />

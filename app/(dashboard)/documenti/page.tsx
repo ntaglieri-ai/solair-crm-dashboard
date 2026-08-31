@@ -1,5 +1,6 @@
 import { AlertCircle, ExternalLink } from "lucide-react"
 
+import { NextcloudOpenLink } from "@/components/nextcloud/nextcloud-open-link"
 import { Button } from "@/components/ui/button"
 import { CartellePreferite } from "@/components/documenti/cartelle-preferite"
 import { DocumentiRecenti } from "@/components/documenti/documenti-recenti"
@@ -39,7 +40,7 @@ export default async function DocumentiPage() {
         <Button
           className="gap-1.5"
           nativeButton={false}
-          render={<a href={openNextcloudUrl()} target="_blank" rel="noopener noreferrer" />}
+          render={<NextcloudOpenLink href={openNextcloudUrl()} />}
         >
           Apri Nextcloud
           <ExternalLink className="size-4" aria-hidden="true" />

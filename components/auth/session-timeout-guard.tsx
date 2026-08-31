@@ -29,7 +29,14 @@ export function SessionTimeoutGuard() {
       if (logoutStartedRef.current) return
       logoutStartedRef.current = true
       try {
-        await fetch("/api/auth/logout", { method: "POST", keepalive: true })
+        const res = await fetch("/api/auth/logout", { method: "POST", keepalive: true })
+        const body = (await res.json().catch(() => null)) as { nextcloudLogoutUrl?: string } | null
+        if (body?.nextcloudLogoutUrl) {
+          // Stesso motivo del logout manuale in sidebar.tsx: la sessione
+          // Nextcloud nativa e' su un cookie separato, il logout CRM non
+          // la tocca.
+          fetch(body.nextcloudLogoutUrl, { mode: "no-cors", credentials: "include", keepalive: true }).catch(() => {})
+        }
       } catch {
         /* il redirect resta comunque lato client */
       }

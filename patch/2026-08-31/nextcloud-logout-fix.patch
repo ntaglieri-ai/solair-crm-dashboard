@@ -1,0 +1,367 @@
+diff --git a/app/api/auth/logout/route.ts b/app/api/auth/logout/route.ts
+index 3420918..ea9bcf4 100644
+--- a/app/api/auth/logout/route.ts
++++ b/app/api/auth/logout/route.ts
+@@ -1,5 +1,6 @@
+ import { createClient } from "@/lib/supabase/server"
+ import { clearCrmSessionCookies } from "@/lib/auth/session-policy"
++import { nextcloudBaseUrl } from "@/lib/nextcloud/config"
+ import { NextResponse } from "next/server"
+ 
+ export async function POST() {
+@@ -12,7 +13,16 @@ export async function POST() {
+   // "follow"` — e faceva renderizzare /login per intero al server solo per
+   // buttarne via il risultato un istante dopo. Un render di pagina sprecato
+   // a ogni logout.
+-  const response = NextResponse.json({ ok: true })
++  //
++  // `nextcloudLogoutUrl` nella risposta: il logout CRM chiude solo la
++  // sessione Supabase. Nextcloud ha una sessione nativa SEPARATA (cookie
++  // sul suo stesso dominio), che l'SSO OIDC riusa silenziosamente se e'
++  // ancora valida — su un device condiviso, il prossimo utente che fa
++  // "Apri Nextcloud" si ritrova loggato come l'account precedente, non
++  // come se stesso. Solo il browser puo' far scadere quel cookie (e' sul
++  // dominio Nextcloud, non instradabile server-to-server da qui): il
++  // client deve fare una richiesta reale a quell'URL dopo il logout CRM.
++  const response = NextResponse.json({ ok: true, nextcloudLogoutUrl: `${nextcloudBaseUrl()}/logout` })
+   response.headers.set("Cache-Control", "no-store")
+   clearCrmSessionCookies(response)
+   return response
+diff --git a/components/auth/session-timeout-guard.tsx b/components/auth/session-timeout-guard.tsx
+index fc3696b..eb83aac 100644
+--- a/components/auth/session-timeout-guard.tsx
++++ b/components/auth/session-timeout-guard.tsx
+@@ -29,7 +29,14 @@ export function SessionTimeoutGuard() {
+       if (logoutStartedRef.current) return
+       logoutStartedRef.current = true
+       try {
+-        await fetch("/api/auth/logout", { method: "POST", keepalive: true })
++        const res = await fetch("/api/auth/logout", { method: "POST", keepalive: true })
++        const body = (await res.json().catch(() => null)) as { nextcloudLogoutUrl?: string } | null
++        if (body?.nextcloudLogoutUrl) {
++          // Stesso motivo del logout manuale in sidebar.tsx: la sessione
++          // Nextcloud nativa e' su un cookie separato, il logout CRM non
++          // la tocca.
++          fetch(body.nextcloudLogoutUrl, { mode: "no-cors", credentials: "include", keepalive: true }).catch(() => {})
++        }
+       } catch {
+         /* il redirect resta comunque lato client */
+       }
+diff --git a/components/dashboard/sidebar.tsx b/components/dashboard/sidebar.tsx
+index 5a773e1..7a1b2f3 100644
+--- a/components/dashboard/sidebar.tsx
++++ b/components/dashboard/sidebar.tsx
+@@ -2,11 +2,9 @@
+ 
+ import Link from "next/link"
+ import { usePathname, useRouter } from "next/navigation"
+-import { useEffect, useRef, useState } from "react"
+-import { User, Settings, LogOut, ChevronsUpDown, Menu } from "lucide-react"
++import { useEffect, useState } from "react"
++import { User, Settings, LogOut, ChevronsUpDown } from "lucide-react"
+ import { cn } from "@/lib/utils"
+-import { Button } from "@/components/ui/button"
+-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
+ import {
+   DropdownMenu,
+   DropdownMenuContent,
+@@ -45,13 +43,7 @@ function isActive(href: string, pathname: string) {
+   return pathname === href || pathname.startsWith(`${href}/`)
+ }
+ 
+-function NavLink({
+-  item,
+-  onNavigate,
+-}: {
+-  item: NavItem
+-  onNavigate?: () => void
+-}) {
++function NavLink({ item }: { item: NavItem }) {
+   const Icon = NAV_ICONS[item.icon]
+   const pathname = usePathname()
+   const router = useRouter()
+@@ -62,7 +54,6 @@ function NavLink({
+       href={item.href}
+       onMouseEnter={() => router.prefetch(item.href)}
+       onFocus={() => router.prefetch(item.href)}
+-      onClick={onNavigate}
+       aria-current={active ? "page" : undefined}
+       className={cn(
+         "relative flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-[15px] font-semibold transition-colors",
+@@ -78,22 +69,13 @@ function NavLink({
+   )
+ }
+ 
+-function NavLauncherButton({
+-  item,
+-  onOpen,
+-}: {
+-  item: NavItem
+-  onOpen?: () => void
+-}) {
++function NavLauncherButton({ item }: { item: NavItem }) {
+   const Icon = NAV_ICONS[item.icon]
+   const { openCrmSettings, open } = useCrmSettingsLauncher()
+   return (
+     <button
+       type="button"
+-      onClick={() => {
+-        onOpen?.()
+-        openCrmSettings()
+-      }}
++      onClick={openCrmSettings}
+       aria-current={open ? "true" : undefined}
+       className={cn(
+         "flex w-full items-center gap-3 rounded-lg border-l-2 px-3 py-2 text-sm font-medium transition-colors",
+@@ -108,14 +90,24 @@ function NavLauncherButton({
+   )
+ }
+ 
+-function ProfileMenu({ compact = false }: { compact?: boolean }) {
++function ProfileMenu() {
+   const router = useRouter()
+   const permissions = usePermissions()
+   const subject = permissions.snapshot.subject
+ 
+   async function handleLogout() {
+     try {
+-      await fetch("/api/auth/logout", { method: "POST" })
++      const res = await fetch("/api/auth/logout", { method: "POST" })
++      const body = (await res.json().catch(() => null)) as { nextcloudLogoutUrl?: string } | null
++      if (body?.nextcloudLogoutUrl) {
++        // Richiesta reale al dominio Nextcloud (non fetch interno): serve a
++        // far scadere il SUO cookie di sessione nativo, che il logout CRM
++        // sopra non tocca. "no-cors" perche' e' cross-origin e non ci
++        // interessa leggere la risposta — solo che il browser la processi
++        // e applichi lo scadere del cookie. Se fallisce (rete, Nextcloud
++        // giu'), non blocchiamo comunque il logout CRM.
++        fetch(body.nextcloudLogoutUrl, { mode: "no-cors", credentials: "include" }).catch(() => {})
++      }
+     } catch {
+       // ignora errori di rete: procediamo comunque al redirect
+     }
+@@ -128,7 +120,6 @@ function ProfileMenu({ compact = false }: { compact?: boolean }) {
+         className={cn(
+           "flex w-full items-center gap-3 border-t border-sidebar-border px-4 py-4 text-left outline-none transition-colors",
+           "hover:bg-muted focus-visible:bg-muted",
+-          compact && "py-3",
+         )}
+       >
+         <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-semibold text-navy-foreground">
+@@ -168,102 +159,22 @@ function ProfileMenu({ compact = false }: { compact?: boolean }) {
+   )
+ }
+ 
+-function NavSection({
+-  title,
+-  items,
+-  onNavigate,
+-}: {
+-  title: string
+-  items: NavItem[]
+-  onNavigate?: () => void
+-}) {
++function NavSection({ title, items }: { title: string; items: NavItem[] }) {
+   return (
+     <div className="flex flex-col gap-1">
+       <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+         {title}
+       </p>
+       {items.map((item) => (
+-        <NavLink key={item.label} item={item} onNavigate={onNavigate} />
++        <NavLink key={item.label} item={item} />
+       ))}
+     </div>
+   )
+ }
+ 
+-function SidebarContent({
+-  companyLogo,
+-  visiblePrincipale,
+-  visibleGestione,
+-  canOpenCrmSettings,
+-  mobile = false,
+-  onCrmSettingsOpen,
+-  onNavigate,
+-}: {
+-  companyLogo: string
+-  visiblePrincipale: NavItem[]
+-  visibleGestione: NavItem[]
+-  canOpenCrmSettings: boolean
+-  mobile?: boolean
+-  onCrmSettingsOpen?: () => void
+-  onNavigate?: () => void
+-}) {
+-  return (
+-    <>
+-      <div className={cn("border-b border-sidebar-border px-5 py-5", mobile && "py-4")}>
+-        <Link
+-          href="https://www.solairgroup.it"
+-          className="flex justify-center rounded-lg outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
+-          aria-label="Apri il sito Solair Group"
+-          target="_blank"
+-          rel="noopener noreferrer"
+-        >
+-          <div className="flex h-20 w-40 items-center justify-start overflow-hidden">
+-            {/* eslint-disable-next-line @next/next/no-img-element */}
+-            <img
+-              src={companyLogo}
+-              alt="Solair CRM"
+-              className="h-16 w-36 object-contain object-left"
+-            />
+-          </div>
+-        </Link>
+-        <p className="mt-3 text-[15px] font-bold capitalize leading-5 text-primary">
+-          {OGGI}
+-        </p>
+-      </div>
+-
+-      <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-5">
+-        {visiblePrincipale.length > 0 ? (
+-          <NavSection
+-            title="Principale"
+-            items={visiblePrincipale}
+-            onNavigate={onNavigate}
+-          />
+-        ) : null}
+-        {visibleGestione.length > 0 ? (
+-          <NavSection
+-            title="Gestione"
+-            items={visibleGestione}
+-            onNavigate={onNavigate}
+-          />
+-        ) : null}
+-
+-        {canOpenCrmSettings ? (
+-          <div className="mt-auto border-t border-sidebar-border pt-4">
+-            <NavLauncherButton item={NAV_ADMIN} onOpen={onCrmSettingsOpen} />
+-          </div>
+-        ) : null}
+-      </nav>
+-
+-      <ProfileMenu compact={mobile} />
+-    </>
+-  )
+-}
+-
+ export function Sidebar() {
+   const permissions = usePermissions()
+-  const pathname = usePathname()
+-  const previousPathname = useRef(pathname)
+   const [companyLogo, setCompanyLogo] = useState(DEFAULT_COMPANY_LOGO)
+-  const [mobileOpen, setMobileOpen] = useState(false)
+   const visiblePrincipale = NAV_PRINCIPALE.filter((item) => {
+     const page = pageKeyFromPath(item.href)
+     return page ? permissions.canPage(page) : true
+@@ -292,72 +203,49 @@ export function Sidebar() {
+     }
+   }, [permissions])
+ 
+-  useEffect(() => {
+-    if (previousPathname.current === pathname) return
+-    previousPathname.current = pathname
+-    const frame = window.requestAnimationFrame(() => setMobileOpen(false))
+-    return () => window.cancelAnimationFrame(frame)
+-  }, [pathname])
+-
+   return (
+-    <>
+-      <header className="fixed inset-x-0 top-0 z-50 flex h-20 items-center justify-between border-b border-border bg-card/98 px-4 shadow-[0_8px_26px_rgb(15_23_42/7%)] backdrop-blur supports-[backdrop-filter]:bg-card/92 lg:hidden">
+-        <div className="flex min-w-0 items-center gap-4">
+-          <Button
+-            type="button"
+-            variant="outline"
+-            size="icon"
+-            aria-label="Apri menu"
+-            aria-expanded={mobileOpen}
+-            aria-controls="mobile-main-menu"
+-            onClick={() => setMobileOpen(true)}
+-            className="size-14 touch-manipulation rounded-2xl border-border bg-background text-foreground shadow-sm active:scale-[0.98]"
+-          >
+-            <Menu className="size-7" />
+-          </Button>
+-          <div className="flex min-w-0 items-center gap-2">
+-            <span className="flex h-12 w-32 items-center justify-start overflow-hidden">
+-              {/* eslint-disable-next-line @next/next/no-img-element */}
+-              <img
+-                src={companyLogo}
+-                alt="Solair CRM"
+-                className="h-11 w-32 object-contain object-left"
+-              />
+-            </span>
++    <aside className="app-sidebar fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-sidebar-border bg-sidebar lg:flex">
++      {/* Logo */}
++      <div className="border-b border-sidebar-border px-5 py-5">
++        <Link
++          href="https://www.solairgroup.it"
++          className="flex justify-center rounded-lg outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
++          aria-label="Apri il sito Solair Group"
++          target="_blank"
++          rel="noopener noreferrer"
++        >
++          <div className="flex h-20 w-40 items-center justify-start overflow-hidden">
++            {/* eslint-disable-next-line @next/next/no-img-element */}
++            <img
++              src={companyLogo}
++              alt="Solair CRM"
++              className="h-16 w-36 object-contain object-left"
++            />
+           </div>
+-        </div>
+-        <span className="min-w-0 max-w-[44vw] truncate pl-3 text-right text-sm font-bold capitalize leading-tight text-muted-foreground">
++        </Link>
++        <p className="mt-3 text-[15px] font-bold capitalize leading-5 text-primary">
+           {OGGI}
+-        </span>
+-      </header>
++        </p>
++      </div>
+ 
+-      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+-        <SheetContent
+-          id="mobile-main-menu"
+-          side="left"
+-          className="w-[min(88vw,340px)] gap-0 bg-sidebar p-0 text-sidebar-foreground sm:max-w-[340px]"
+-        >
+-          <SheetTitle className="sr-only">Menu principale</SheetTitle>
+-          <SidebarContent
+-            companyLogo={companyLogo}
+-            visiblePrincipale={visiblePrincipale}
+-            visibleGestione={visibleGestione}
+-            canOpenCrmSettings={canOpenCrmSettings}
+-            mobile
+-            onNavigate={() => setMobileOpen(false)}
+-            onCrmSettingsOpen={() => setMobileOpen(false)}
+-          />
+-        </SheetContent>
+-      </Sheet>
++      {/* Nav */}
++      <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-5">
++        {visiblePrincipale.length > 0 ? (
++          <NavSection title="Principale" items={visiblePrincipale} />
++        ) : null}
++        {visibleGestione.length > 0 ? (
++          <NavSection title="Gestione" items={visibleGestione} />
++        ) : null}
++
++        {canOpenCrmSettings ? (
++          <div className="mt-auto border-t border-sidebar-border pt-4">
++            <NavLauncherButton item={NAV_ADMIN} />
++          </div>
++        ) : null}
++      </nav>
+ 
+-      <aside className="app-sidebar fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-sidebar-border bg-sidebar lg:flex">
+-        <SidebarContent
+-          companyLogo={companyLogo}
+-          visiblePrincipale={visiblePrincipale}
+-          visibleGestione={visibleGestione}
+-          canOpenCrmSettings={canOpenCrmSettings}
+-        />
+-      </aside>
+-    </>
++      {/* Footer utente */}
++      <ProfileMenu />
++    </aside>
+   )
+ }

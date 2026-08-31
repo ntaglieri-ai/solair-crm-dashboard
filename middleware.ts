@@ -46,6 +46,10 @@ function redirectToExpiredLogin(request: NextRequest) {
 }
 
 export async function middleware(request: NextRequest) {
+  // Exact HEAD-only readiness probe; GET still requires CRM authentication.
+  if (request.method === "HEAD" && request.nextUrl.pathname === "/api/auth/nextcloud/resume") {
+    return NextResponse.next()
+  }
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(

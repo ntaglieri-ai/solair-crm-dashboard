@@ -9,9 +9,20 @@ import { requirePage } from "@/lib/permissions/server"
 import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permissions"
 import { loadDocumentiData } from "@/lib/nextcloud/documenti"
 
-export default async function DocumentiPage() {
+const NEXTCLOUD_ERRORS: Record<string, string> = {
+  no_account: "Account CRM non trovato.",
+  not_provisioned: "Account Nextcloud non ancora pronto. Contatta un amministratore.",
+  path_denied: "Non hai accesso alla cartella richiesta.",
+  session_switch_unavailable: "Accesso Nextcloud sospeso: il cambio utente automatico non è ancora configurato oppure Nextcloud non è raggiungibile. Contatta un amministratore.",
+  session_switch_expired: "Il passaggio a Nextcloud è scaduto. Premi di nuovo Apri Nextcloud.",
+  session_switch_changed: "L’utente CRM è cambiato durante l’apertura. Premi di nuovo Apri Nextcloud con l’account corrente.",
+}
+
+export default async function DocumentiPage({ searchParams }: { searchParams: Promise<{ nc_error?: string }> }) {
   // Enforcement pagina server-side (redirect se il ruolo non ha accesso).
   await requirePage("documenti")
+  const errorCode = (await searchParams).nc_error
+  const nextcloudError = errorCode ? NEXTCLOUD_ERRORS[errorCode] : null
 
   const snapshot = await loadCurrentPermissionSnapshot()
   const { subject } = snapshot
@@ -46,10 +57,10 @@ export default async function DocumentiPage() {
         </Button>
       </div>
 
-      {!data.connected || data.message ? (
+      {nextcloudError || !data.connected || data.message ? (
         <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-sm text-amber-700">
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <span>{data.message}</span>
+          <span role="alert">{nextcloudError ?? data.message}</span>
         </div>
       ) : null}
 

@@ -1729,6 +1729,7 @@ export interface ClienteRecord {
   "COD. INVERTER"?: string
   "COD- MODULI"?: string
   "COD. STORAGE"?: string
+  "Codice inv. batt."?: string
   "DISPONIBILITA' MAGAZZINO"?: string
   Installatore?: string
   /** FK uuid verso installatori.id (clienti.installatore_id); Installatore resta il nome. */
@@ -1765,6 +1766,8 @@ export interface ClienteRecord {
   Accessori?: string
   "Litri Accumulo"?: number
   "N. Collettori"?: number
+  "Potenza sistema di accumulo"?: number
+  "TIPO DI TENSIONE"?: string
 
   // --- Pagamenti e finanziario ---
   "Modalità di Pagamento"?: string
@@ -1791,6 +1794,8 @@ export interface ClienteRecord {
   "Importo da Listino"?: number
   "Importo TICA"?: number
   "MOD. PAGAMENTO CT3.0"?: string
+  "Data Fatt/Pagamento"?: string
+  "Richiesta Saldo"?: string
 
   // --- Logistica e cantiere ---
   "Stratigrafia superficie di installazione"?: string
@@ -1799,10 +1804,12 @@ export interface ClienteRecord {
   "Merce ordinata e da ritirare"?: string
   "C/o cantiere del cliente"?: string
   "Altri materiali"?: string
+  "Importi extra"?: string
   "Data installazione ultimata"?: string
   "Data appuntamento allaccio"?: string
   "Intervento 1"?: string
   "Intervento 2"?: string
+  "Codice  ordine Sonepar"?: string
 
   // --- Documenti e pratiche ---
   Allegati?: string[]
@@ -1815,6 +1822,11 @@ export interface ClienteRecord {
   "Layout verificato"?: boolean
   Fattura1?: string
   Fattura2?: string
+  Foglio?: string
+  CER?: string
+  Sub?: string
+  Particella?: string
+  "Configurazione Cer"?: string
 
   // --- Iter burocratico ---
   "Inserimento pratica GSE"?: string
@@ -1842,6 +1854,14 @@ export interface ClienteRecord {
   "TIPO CTR"?: string
   "Stato Sollecito"?: string
   "Data interlocutorio"?: string
+
+  // --- Utenza elettrica ---
+  "NOME - INTESTATARIO UTENZA ELETTRICA"?: string
+  "E-mail Enel/Gaudi"?: string
+  "COGNOME - INTESTATARIO UTENZA ELETTRICA"?: string
+  "TITOLARITA' IMPIANTO"?: string
+  "DESIDERA INSTALLARE L'IMPIANTO SU"?: string
+  "TIPOLOGIA PROPRIETARIO"?: string
 
   // --- Comunicazioni automatiche (stato invio Make) ---
   "Messaggio di benvenuto"?: boolean
@@ -1887,6 +1907,7 @@ export type ClienteColumnGroup =
   | "Logistica e cantiere"
   | "Documenti e pratiche"
   | "Iter burocratico"
+  | "Utenza elettrica"
   | "Comunicazioni automatiche"
   | "Provvigioni"
 
@@ -1901,6 +1922,7 @@ export const CLIENTE_COLUMN_GROUPS: ClienteColumnGroup[] = [
   "Logistica e cantiere",
   "Documenti e pratiche",
   "Iter burocratico",
+  "Utenza elettrica",
   "Comunicazioni automatiche",
   "Provvigioni",
 ]
@@ -1952,7 +1974,7 @@ export const CLIENTE_COLUMNS: ClienteColumn[] = [
   // Tracking visite sito
   { id: "Visita più recente", label: "Visita più recente", group: "Tracking visite sito" },
   { id: "Prima pagina visitata", label: "Prima pagina visitata", group: "Tracking visite sito" },
-  { id: "Tempo medio impiegato minuti", label: "Tempo medio impiegato minuti", group: "Tracking visite sito" },
+  { id: "Tempo medio impiegato minuti", label: "Tempo medio impiegato (minuti)", group: "Tracking visite sito" },
   { id: "Numero di chat", label: "Numero di chat", group: "Tracking visite sito" },
   { id: "Relatore", label: "Relatore", group: "Tracking visite sito" },
   { id: "Punteggio visitatore", label: "Punteggio visitatore", group: "Tracking visite sito" },
@@ -1963,17 +1985,18 @@ export const CLIENTE_COLUMNS: ClienteColumn[] = [
   { id: "COD. INVERTER", label: "COD. INVERTER", group: "Configurazione impianto" },
   { id: "COD- MODULI", label: "COD- MODULI", group: "Configurazione impianto" },
   { id: "COD. STORAGE", label: "COD. STORAGE", group: "Configurazione impianto" },
+  { id: "Codice inv. batt.", label: "Codice inv. batt.", group: "Configurazione impianto" },
   { id: "DISPONIBILITA' MAGAZZINO", label: "DISPONIBILITA' MAGAZZINO", group: "Configurazione impianto" },
   { id: "Installatore", label: "Installatore", group: "Configurazione impianto" },
   { id: "Nr. Inverter", label: "Nr. Inverter", group: "Configurazione impianto" },
   { id: "Nr. Moduli", label: "Nr. Moduli", group: "Configurazione impianto" },
-  { id: "Potenza Moduli Wp", label: "Potenza Moduli Wp", group: "Configurazione impianto" },
+  { id: "Potenza Moduli Wp", label: "Potenza Moduli (Wp)", group: "Configurazione impianto" },
   { id: "Nr. Batterie", label: "Nr. Batterie", group: "Configurazione impianto" },
   { id: "Capacità Batterie", label: "Capacità Batterie", group: "Configurazione impianto" },
   { id: "Totale Storage", label: "Totale Storage", group: "Configurazione impianto" },
   { id: "Tot Potenza DC", label: "Tot Potenza DC", group: "Configurazione impianto" },
   { id: "Potenza Inverter", label: "Potenza Inverter", group: "Configurazione impianto" },
-  { id: "Tot Potenza AC KW", label: "Tot Potenza AC KW", group: "Configurazione impianto" },
+  { id: "Tot Potenza AC KW", label: "Tot Potenza AC (KW)", group: "Configurazione impianto" },
   { id: "Tipologia", label: "Tipologia", group: "Configurazione impianto" },
   { id: "Retrofit", label: "Retrofit", group: "Configurazione impianto" },
   { id: "EPS", label: "EPS", group: "Configurazione impianto" },
@@ -1989,6 +2012,8 @@ export const CLIENTE_COLUMNS: ClienteColumn[] = [
   { id: "Accessori", label: "Accessori", group: "Configurazione impianto" },
   { id: "Litri Accumulo", label: "Litri Accumulo", group: "Configurazione impianto" },
   { id: "N. Collettori", label: "N. Collettori", group: "Configurazione impianto" },
+  { id: "Potenza sistema di accumulo", label: "Potenza sistema di accumulo", group: "Configurazione impianto" },
+  { id: "TIPO DI TENSIONE", label: "TIPO DI TENSIONE", group: "Configurazione impianto" },
   // Pagamenti e finanziario
   { id: "Modalità di Pagamento", label: "Modalità di Pagamento", group: "Pagamenti e finanziario" },
   { id: "1° Tranche", label: "1° Tranche", group: "Pagamenti e finanziario" },
@@ -2014,6 +2039,8 @@ export const CLIENTE_COLUMNS: ClienteColumn[] = [
   { id: "Importo da Listino", label: "Importo da Listino", group: "Pagamenti e finanziario" },
   { id: "Importo TICA", label: "Importo TICA", group: "Pagamenti e finanziario" },
   { id: "MOD. PAGAMENTO CT3.0", label: "MOD. PAGAMENTO CT3.0", group: "Pagamenti e finanziario" },
+  { id: "Data Fatt/Pagamento", label: "Data Fatt/Pagamento", group: "Pagamenti e finanziario" },
+  { id: "Richiesta Saldo", label: "Richiesta Saldo", group: "Pagamenti e finanziario" },
   // Logistica e cantiere
   { id: "Stratigrafia superficie di installazione", label: "Stratigrafia superficie di installazione", group: "Logistica e cantiere" },
   { id: "C/o magazzino installatore", label: "C/o magazzino installatore", group: "Logistica e cantiere" },
@@ -2021,10 +2048,12 @@ export const CLIENTE_COLUMNS: ClienteColumn[] = [
   { id: "Merce ordinata e da ritirare", label: "Merce ordinata e da ritirare", group: "Logistica e cantiere" },
   { id: "C/o cantiere del cliente", label: "C/o cantiere del cliente", group: "Logistica e cantiere" },
   { id: "Altri materiali", label: "Altri materiali", group: "Logistica e cantiere" },
+  { id: "Importi extra", label: "Importi extra", group: "Logistica e cantiere" },
   { id: "Data installazione ultimata", label: "Data installazione ultimata", group: "Logistica e cantiere" },
   { id: "Data appuntamento allaccio", label: "Data appuntamento allaccio", group: "Logistica e cantiere" },
   { id: "Intervento 1", label: "Intervento 1", group: "Logistica e cantiere" },
   { id: "Intervento 2", label: "Intervento 2", group: "Logistica e cantiere" },
+  { id: "Codice  ordine Sonepar", label: "Codice ordine Sonepar", group: "Logistica e cantiere" },
   // Documenti e pratiche
   { id: "Allegati", label: "Allegati", group: "Documenti e pratiche" },
   { id: "Mappa catastale", label: "Mappa catastale", group: "Documenti e pratiche" },
@@ -2034,8 +2063,13 @@ export const CLIENTE_COLUMNS: ClienteColumn[] = [
   { id: "Scheda ENEA", label: "Scheda ENEA", group: "Documenti e pratiche" },
   { id: "Verifica documentale", label: "Verifica documentale", group: "Documenti e pratiche" },
   { id: "Layout verificato", label: "Layout verificato", group: "Documenti e pratiche" },
-  { id: "Fattura1", label: "Fattura1", group: "Documenti e pratiche" },
+  { id: "Fattura1", label: "Fattura 1", group: "Documenti e pratiche" },
   { id: "Fattura2", label: "Fattura2", group: "Documenti e pratiche" },
+  { id: "Foglio", label: "Foglio", group: "Documenti e pratiche" },
+  { id: "CER", label: "CER", group: "Documenti e pratiche" },
+  { id: "Sub", label: "Sub", group: "Documenti e pratiche" },
+  { id: "Particella", label: "Particella", group: "Documenti e pratiche" },
+  { id: "Configurazione Cer", label: "Configurazione Cer", group: "Documenti e pratiche" },
   // Iter burocratico
   { id: "Inserimento pratica GSE", label: "Inserimento pratica GSE", group: "Iter burocratico" },
   { id: "Inserimento pratica E-Distribuzione", label: "Inserimento pratica E-Distribuzione", group: "Iter burocratico" },
@@ -2055,6 +2089,13 @@ export const CLIENTE_COLUMNS: ClienteColumn[] = [
   { id: "TIPO CTR", label: "TIPO CTR", group: "Iter burocratico" },
   { id: "Stato Sollecito", label: "Stato Sollecito", group: "Iter burocratico" },
   { id: "Data interlocutorio", label: "Data interlocutorio", group: "Iter burocratico" },
+  // Utenza elettrica
+  { id: "NOME - INTESTATARIO UTENZA ELETTRICA", label: "NOME - INTESTATARIO UTENZA ELETTRICA", group: "Utenza elettrica" },
+  { id: "E-mail Enel/Gaudi", label: "E-mail Enel/Gaudi", group: "Utenza elettrica" },
+  { id: "COGNOME - INTESTATARIO UTENZA ELETTRICA", label: "COGNOME - INTESTATARIO UTENZA ELETTRICA", group: "Utenza elettrica" },
+  { id: "TITOLARITA' IMPIANTO", label: "TITOLARITA' IMPIANTO", group: "Utenza elettrica" },
+  { id: "DESIDERA INSTALLARE L'IMPIANTO SU", label: "DESIDERA INSTALLARE L'IMPIANTO SU", group: "Utenza elettrica" },
+  { id: "TIPOLOGIA PROPRIETARIO", label: "TIPOLOGIA PROPRIETARIO", group: "Utenza elettrica" },
   // Comunicazioni automatiche
   { id: "Messaggio di benvenuto", label: "Messaggio di benvenuto", group: "Comunicazioni automatiche" },
   { id: "Messaggio prog. preliminare", label: "Messaggio prog. preliminare", group: "Comunicazioni automatiche" },
@@ -2067,21 +2108,52 @@ export const CLIENTE_COLUMNS: ClienteColumn[] = [
   { id: "Assistenza", label: "Assistenza", group: "Comunicazioni automatiche" },
   // Provvigioni
   { id: "Codice rintracciabilità", label: "Codice rintracciabilità", group: "Provvigioni" },
-  { id: "Stato Provvigione", label: "Stato Provvigione", group: "Provvigioni" },
+  { id: "Stato Provvigione", label: "Stato Provvigione.", group: "Provvigioni" },
 ]
 
 // Ordine colonne di default in tabella (segue il prompt Step 4)
 export const DEFAULT_CLIENTE_COLUMNS: ClienteColumnId[] = [
   "Badge dell'attività",
   "Badge di nota",
-  "Tag",
   "Nome Clienti",
+  "Tag",
   "Clienti Proprietario",
-  "Sede",
+  "Importo Contrattuale",
+  "Importo da Listino",
   "Stato",
+  "Stato sopralluogo",
+  "Installatore",
+  "Città indirizzo postale",
+  "Data affidamento sopralluogo",
+  "Provincia indirizzo postale",
+  "Ora creazione",
+  "Tot Potenza DC",
+  "Stato Provvigione",
+  "Origine Lead",
+  "COD. INVERTER",
+  "Nr. Batterie",
+  "COD. STORAGE",
   "Cellulare",
-  "E-mail",
-  "Ora modifica",
+  "Ora ultima attività",
+  "Codice contratto PNRR",
+  "Inserimento pratica E-Distribuzione",
+  "Data conferma Iter E-distribuzione",
+  "COD- MODULI",
+  "Inserimento pratica GSE",
+  "Modificato da",
+  "Potenza Inverter",
+  "Data ammissibilità",
+  "Notifica pred. reg. esercizio",
+  "Tot Potenza AC KW",
+  "Stato Sollecito",
+  "Modalità di Pagamento",
+  "DISPONIBILITA' MAGAZZINO",
+  "IVA",
+  "Stato TICA",
+  "Via indirizzo postale",
+  "Data interlocutorio",
+  "Data installazione ultimata",
+  "Nr. Moduli",
 ]
 
 export const STATO_CLIENTE_VALUES: StatoCliente[] = [
@@ -3918,4 +3990,3 @@ export const mockAttributiRecord: Record<string, RecordField[]> = {
     { id: "f-i3", nome: "Zona operativa", tipo: "Testo", sezione: "Altro", attivo: true, sistema: false },
   ],
 }
-

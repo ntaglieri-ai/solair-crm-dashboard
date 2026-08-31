@@ -162,7 +162,10 @@ export const CLIENTI_ZOHO_FIELDS = [
   { zoho: "TITOLARITA' IMPIANTO", column: "titolarita_impianto", type: "text", appField: "TITOLARITA' IMPIANTO" },
   { zoho: "DESIDERA INSTALLARE L'IMPIANTO SU", column: "desidera_installare_impianto_su", type: "text", appField: "DESIDERA INSTALLARE L'IMPIANTO SU" },
   { zoho: "TIPOLOGIA PROPRIETARIO", column: "tipologia_proprietario", type: "text", appField: "TIPOLOGIA PROPRIETARIO" },
-  { zoho: "POTENZA SISTEMA DI ACCUMULO", column: "potenza_sistema_di_accumulo", type: "numeric", appField: "POTENZA SISTEMA DI ACCUMULO" },
+  { zoho: "Potenza sistema di accumulo", column: "potenza_sistema_di_accumulo", type: "numeric", appField: "Potenza sistema di accumulo" },
+  { zoho: "Data Fatt/Pagamento", column: "data_fatt_pagamento", type: "timestamp", appField: "Data Fatt/Pagamento" },
+  { zoho: "Richiesta Saldo", column: "richiesta_saldo", type: "text", appField: "Richiesta Saldo" },
+  { zoho: "Configurazione Cer", column: "configurazione_cer", type: "text", appField: "Configurazione Cer" },
 ]
 
 export const CLIENTI_ZOHO_COLUMNS = CLIENTI_ZOHO_FIELDS.map((field) => field.column)

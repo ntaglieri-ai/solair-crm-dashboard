@@ -11,6 +11,8 @@ import {
   MapPin,
   UserRound,
   Wrench,
+  Bell,
+  StickyNote,
 } from "lucide-react"
 import { IconArrowUp } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
@@ -24,13 +26,17 @@ import {
 import { DataTableShell } from "@/components/ui/data-table-shell"
 import {
   LIGHTNING,
-  LIGHTNING_DENSITY,
   RowInlineActions,
   type Density,
 } from "@/components/shared/lightning-table"
 import { ClienteRowContextMenu } from "./cliente-row-context-menu"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
 import {
   DropdownMenu,
@@ -55,13 +61,25 @@ export type SortDir = "asc" | "desc"
 // tabelle condividessero lo stesso contratto di stile.
 export type { Density }
 
+const CLIENTE_COMPACT_ICON_COLUMN_WIDTH = 56
+const CLIENTE_ACTIONS_COLUMN_WIDTH = 76
+const CLIENTE_TABLE_DENSITY: Record<Density, string> = {
+  comoda: "py-3.5 text-[15px]",
+  normale: "py-2.5 text-[15px]",
+  densa: "py-1.5 text-sm",
+}
+
 // Nome Clienti, E-mail e Tag sono allineati a sinistra; il resto è centrato.
 function isLeftAligned(id: ClienteColumnId) {
   return id === "Nome Clienti" || id === "E-mail" || id === "Tag"
 }
 
+function isCompactIconColumn(id: ClienteColumnId) {
+  return id === "Badge dell'attività" || id === "Badge di nota"
+}
+
 function columnWidth(id: ClienteColumnId) {
-  if (id === "Badge dell'attività" || id === "Badge di nota") return 124
+  if (isCompactIconColumn(id)) return CLIENTE_COMPACT_ICON_COLUMN_WIDTH
   if (id === "Tag") return 300
   if (id === "Nome Clienti") return 240
   if (id === "E-mail") return 250
@@ -69,6 +87,47 @@ function columnWidth(id: ClienteColumnId) {
   if (id === "Installatore") return 210
   if (id === "Ora modifica" || id === "Ora creazione") return 190
   return 170
+}
+
+function minimumColumnWidth(id: ClienteColumnId) {
+  return isCompactIconColumn(id) ? CLIENTE_COMPACT_ICON_COLUMN_WIDTH : 72
+}
+
+function ClienteHeaderLabel({ column }: { column: ClienteColumn }) {
+  if (column.id !== "Badge dell'attività" && column.id !== "Badge di nota") {
+    return <span className="truncate">{column.label}</span>
+  }
+
+  const Icon = column.id === "Badge dell'attività" ? Bell : StickyNote
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span className="inline-flex items-center justify-center">
+            <Icon className="size-4" aria-hidden="true" />
+            <span className="sr-only">{column.label}</span>
+          </span>
+        }
+      />
+      <TooltipContent>{column.label}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+function ActionsHeaderLabel() {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span className="inline-flex items-center justify-center">
+            <MoreHorizontal className="size-4" aria-hidden="true" />
+            <span className="sr-only">Azioni</span>
+          </span>
+        }
+      />
+      <TooltipContent>Azioni</TooltipContent>
+    </Tooltip>
+  )
 }
 
 function ClienteMobileList({
@@ -244,7 +303,7 @@ export function ClienteTable({
   const allSelected =
     clienti.length > 0 && clienti.every((c) => selected.has(c.id))
   const colSpan = columns.length + 2
-  const cellPad = LIGHTNING_DENSITY[density]
+  const cellPad = CLIENTE_TABLE_DENSITY[density]
   const resolvedWidths = useMemo(() => {
     const widths = {} as Record<ClienteColumnId, number>
     for (const column of columns) {
@@ -253,7 +312,9 @@ export function ClienteTable({
     return widths
   }, [columns, columnWidths])
   const tableWidth =
-    44 + columns.reduce((sum, col) => sum + resolvedWidths[col.id], 0) + 64
+    44 +
+    columns.reduce((sum, col) => sum + resolvedWidths[col.id], 0) +
+    CLIENTE_ACTIONS_COLUMN_WIDTH
 
   const startResize = (
     event: React.PointerEvent<HTMLButtonElement>,
@@ -266,7 +327,13 @@ export function ClienteTable({
     const onMove = (moveEvent: PointerEvent) => {
       onColumnWidthChange?.(
         column,
-        Math.min(480, Math.max(72, startWidth + moveEvent.clientX - startX)),
+        Math.min(
+          480,
+          Math.max(
+            minimumColumnWidth(column),
+            startWidth + moveEvent.clientX - startX,
+          ),
+        ),
       )
     }
     const onEnd = () => {
@@ -299,7 +366,7 @@ export function ClienteTable({
         {columns.map((column) => (
           <col key={column.id} style={{ width: resolvedWidths[column.id] }} />
         ))}
-        <col style={{ width: 84 }} />
+        <col style={{ width: CLIENTE_ACTIONS_COLUMN_WIDTH }} />
       </colgroup>
       <TableHeader className={cn(LIGHTNING.header, stuck && LIGHTNING.headerStuck)}>
           <TableRow className="hover:bg-transparent">
@@ -313,6 +380,7 @@ export function ClienteTable({
             </TableHead>
             {columns.map((col) => {
               const left = isLeftAligned(col.id)
+              const compact = isCompactIconColumn(col.id)
               const active = sortBy === col.id
               return (
                 <TableHead
@@ -348,6 +416,7 @@ export function ClienteTable({
                     draggingColumn === col.id && "opacity-45",
                     dragOverColumn === col.id && "bg-teal/10",
                     left ? "text-left" : "text-center",
+                    compact && "px-1",
                   )}
                   style={{
                     width: resolvedWidths[col.id],
@@ -355,9 +424,19 @@ export function ClienteTable({
                     maxWidth: resolvedWidths[col.id],
                   }}
                 >
-                  <div className="flex min-w-0 items-center">
+                  <div
+                    className={cn(
+                      "flex min-w-0 items-center",
+                      compact && "justify-center",
+                    )}
+                  >
                     <GripVertical
-                      className="mr-1 size-3.5 shrink-0 cursor-grab text-muted-foreground/45 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+                      className={cn(
+                        "size-3.5 shrink-0 cursor-grab text-muted-foreground/45 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing",
+                        compact
+                          ? "absolute left-0.5 top-1/2 -translate-y-1/2"
+                          : "mr-1",
+                      )}
                       aria-hidden="true"
                     />
                     <button
@@ -367,10 +446,14 @@ export function ClienteTable({
                         "inline-flex min-w-0 flex-1 items-center gap-1 overflow-hidden",
                         LIGHTNING.headLabel,
                         active ? LIGHTNING.headLabelActive : LIGHTNING.headLabelIdle,
-                        left ? "justify-start" : "justify-center",
+                        compact
+                          ? "justify-center gap-0.5"
+                          : left
+                            ? "justify-start"
+                            : "justify-center",
                       )}
                     >
-                      <span className="truncate">{col.label}</span>
+                      <ClienteHeaderLabel column={col} />
                       <IconArrowUp
                         size={14}
                         stroke={2}
@@ -400,9 +483,13 @@ export function ClienteTable({
             })}
             <TableHead
               className={cn(LIGHTNING.headCell, LIGHTNING.headLabel, LIGHTNING.headActions)}
-              style={{ width: 84, minWidth: 84, maxWidth: 84 }}
+              style={{
+                width: CLIENTE_ACTIONS_COLUMN_WIDTH,
+                minWidth: CLIENTE_ACTIONS_COLUMN_WIDTH,
+                maxWidth: CLIENTE_ACTIONS_COLUMN_WIDTH,
+              }}
             >
-              Azioni
+              <ActionsHeaderLabel />
             </TableHead>
           </TableRow>
       </TableHeader>
@@ -473,7 +560,11 @@ export function ClienteTable({
               <TableCell
                 onClick={(e) => e.stopPropagation()}
                 className={cn(LIGHTNING.cellActions, cellPad)}
-                style={{ width: 84, minWidth: 84, maxWidth: 84 }}
+                style={{
+                  width: CLIENTE_ACTIONS_COLUMN_WIDTH,
+                  minWidth: CLIENTE_ACTIONS_COLUMN_WIDTH,
+                  maxWidth: CLIENTE_ACTIONS_COLUMN_WIDTH,
+                }}
               >
                 <RowInlineActions>
                   <Button

@@ -9,7 +9,6 @@ import {
   MoreHorizontal,
   Trash2,
   Copy,
-  FileText,
   FileDown,
   Building2,
   UserCircle,
@@ -53,7 +52,6 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
   const deleteCliente = useDeleteCliente()
   const permissions = usePermissions()
   const [editOpen, setEditOpen] = useState(false)
-  const [showContract, setShowContract] = useState(false)
   const nome = cliente["Nome Clienti"]
 
   return (
@@ -85,13 +83,6 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 no-print">
-          <Button
-            className="h-10 bg-teal px-4 text-sm font-bold text-teal-foreground shadow-sm hover:bg-teal/90"
-            onClick={() => setShowContract(true)}
-          >
-            <FileText data-icon="inline-start" />
-            Genera contratto
-          </Button>
           <Button
             variant="outline"
             className="h-10 bg-card px-4 text-sm font-semibold shadow-sm"
@@ -224,34 +215,6 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
               }}
             >
               {deleting ? "Eliminazione..." : "Elimina"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog genera contratto */}
-      <Dialog open={showContract} onOpenChange={setShowContract}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Genera contratto</DialogTitle>
-            <DialogDescription>
-              Vuoi generare il contratto digitale per{" "}
-              <span className="font-semibold text-foreground">{nome}</span>? Il
-              documento sarà compilato con i dati della scheda cliente.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowContract(false)}>
-              Annulla
-            </Button>
-            <Button
-              className="bg-teal text-teal-foreground hover:bg-teal/90"
-              onClick={() => {
-                setShowContract(false)
-                toast.success("Contratto generato", { description: nome })
-              }}
-            >
-              Genera
             </Button>
           </DialogFooter>
         </DialogContent>

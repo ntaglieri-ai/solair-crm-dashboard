@@ -154,11 +154,9 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
   // modo il comportamento (pagina intera che scrolla) su desktop.
   const rootRef = useRef<HTMLDivElement>(null)
   const [availH, setAvailH] = useState<number | null>(null)
+  const mobileAvailH = isMobile ? availH : null
   useEffect(() => {
-    if (!isMobile) {
-      setAvailH(null)
-      return
-    }
+    if (!isMobile) return
     const el = rootRef.current
     if (!el) return
     const BOTTOM_GAP = 24
@@ -512,7 +510,7 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
     <div
       ref={rootRef}
       className="flex min-w-0 flex-col gap-5 lg:h-auto lg:overflow-visible"
-      style={availH ? { height: availH, overflow: "hidden" } : undefined}
+      style={mobileAvailH ? { height: mobileAvailH, overflow: "hidden" } : undefined}
     >
       {/* Header pagina */}
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">

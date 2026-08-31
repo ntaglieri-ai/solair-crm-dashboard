@@ -9,7 +9,6 @@ import { usePermissions } from "@/lib/permissions/provider"
 import { canAccessNoteInterne } from "@/lib/clienti/note-interne"
 import {
   IconChevronDown,
-  IconChevronRight,
   IconUser,
   IconBolt,
   IconReceipt2,
@@ -27,7 +26,6 @@ import {
   IconPlug,
   IconBattery,
   IconTool,
-  IconBuildingWarehouse,
   IconCalendarEvent,
   IconPlus,
   IconLock,

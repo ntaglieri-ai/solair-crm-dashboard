@@ -21,6 +21,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 // Colonne con allineamento a destra (valori numerici)
 export const NUMERIC_COLUMNS: LeadColumnId[] = ["Valutazione", "kWp", "kWh"]
@@ -55,9 +60,35 @@ function FriendlyDateTime({ value }: { value: unknown }) {
   )
 }
 
+function EmptySignalIcon({
+  icon: Icon,
+  label,
+}: {
+  icon: typeof Bell
+  label: string
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span
+            className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground/35"
+            aria-label={label}
+          >
+            <Icon className="size-4" aria-hidden="true" />
+          </span>
+        }
+      />
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 function NoteIcons({ lead }: { lead: Lead }) {
   const notes = lead.noteItems ?? []
-  if (notes.length === 0) return <span className="text-muted-foreground">—</span>
+  if (notes.length === 0) {
+    return <EmptySignalIcon icon={StickyNote} label="Nessuna nota" />
+  }
   return (
     <span className="flex max-w-full flex-wrap justify-center gap-1.5">
       {notes.map((note, index) => {
@@ -70,7 +101,7 @@ function NoteIcons({ lead }: { lead: Lead }) {
                   type="button"
                   aria-label={`Apri nota ${index + 1}`}
                   onClick={(event) => event.stopPropagation()}
-                  className="flex size-8 items-center justify-center rounded-md transition-transform hover:-translate-y-0.5"
+                  className="flex size-7 items-center justify-center rounded-md transition-transform hover:-translate-y-0.5"
                   style={{ background: color.bg, color: color.fg }}
                 >
                   <StickyNote className="size-4" />
@@ -103,7 +134,9 @@ function NoteIcons({ lead }: { lead: Lead }) {
 
 function TaskIcons({ lead }: { lead: Lead }) {
   const tasks = lead.taskItems ?? []
-  if (tasks.length === 0) return <span className="text-muted-foreground">—</span>
+  if (tasks.length === 0) {
+    return <EmptySignalIcon icon={Bell} label="Nessuna attività" />
+  }
   return (
     <span className="flex max-w-full flex-wrap justify-center gap-1.5">
       {tasks.map((task, index) => {
@@ -116,7 +149,7 @@ function TaskIcons({ lead }: { lead: Lead }) {
                   type="button"
                   aria-label={`Apri attività ${index + 1}`}
                   onClick={(event) => event.stopPropagation()}
-                  className="flex size-8 items-center justify-center rounded-md transition-transform hover:-translate-y-0.5"
+                  className="flex size-7 items-center justify-center rounded-md transition-transform hover:-translate-y-0.5"
                   style={{ background: color.bg, color: color.fg }}
                 >
                   <Bell className="size-4" />

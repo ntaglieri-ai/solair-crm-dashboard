@@ -9,10 +9,10 @@ import { useClienteTags, CLIENTE_TAG_PALETTE, type ClienteTag } from "@/lib/clie
 function tagStyle(color: string): React.CSSProperties {
   const resolved = color || "#64748B"
   return {
-    backgroundColor: `${resolved}20`,
-    borderColor: `${resolved}55`,
+    backgroundColor: `${resolved}30`,
+    borderColor: `${resolved}80`,
     color: resolved,
-    boxShadow: `inset 0 0 0 1px ${resolved}12`,
+    boxShadow: `inset 0 0 0 1px ${resolved}24`,
   }
 }
 
@@ -30,7 +30,7 @@ export function ClienteTagBadge({ tag, className }: { tag: ClienteTag; className
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-[11px] font-semibold",
+        "inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2.5 py-0.5 text-xs font-bold shadow-sm",
         className,
       )}
       style={tagStyle(tag.color)}
@@ -78,7 +78,7 @@ export function ClienteTagBadges({
         ),
       )}
       {extra > 0 ? (
-        <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+        <span className="rounded-md bg-navy/10 px-1.5 py-0.5 text-xs font-bold text-navy ring-1 ring-inset ring-navy/15">
           +{extra}
         </span>
       ) : null}

@@ -21,6 +21,8 @@ import {
   MapPin,
   SlidersHorizontal,
   UserRound,
+  Bell,
+  StickyNote,
 } from "lucide-react"
 import {
   IconChevronRight,
@@ -41,9 +43,12 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
   LIGHTNING,
-  LIGHTNING_DENSITY,
-  LIGHTNING_ROW_HEIGHT,
   RowInlineActions,
   type Density,
 } from "@/components/shared/lightning-table"
@@ -83,12 +88,51 @@ const DATE_TIME_COLUMNS = new Set<LeadColumnId>([
   "Ora ultima attività",
   "Data/Ora",
 ])
+const LEAD_TABLE_DENSITY: Record<Density, string> = {
+  comoda: "py-3.5 text-[15px]",
+  normale: "py-2.5 text-[15px]",
+  densa: "py-1.5 text-sm",
+}
+const LEAD_ROW_HEIGHT: Record<Density, number> = {
+  comoda: 68,
+  normale: 48,
+  densa: 38,
+}
 const DATE_TIME_COLUMN_WIDTH = 178
-const LEAD_ACTIONS_COLUMN_WIDTH = 92
+const LEAD_COMPACT_ICON_COLUMN_WIDTH = 56
+const LEAD_ACTIONS_COLUMN_WIDTH = 80
 const LEAD_ACTIONS_TOGGLE_WIDTH = 44
 
 function minimumColumnWidth(column: LeadColumnId) {
+  if (column === "Badge dell'attività" || column === "Badge di nota") {
+    return LEAD_COMPACT_ICON_COLUMN_WIDTH
+  }
   return DATE_TIME_COLUMNS.has(column) ? DATE_TIME_COLUMN_WIDTH : 72
+}
+
+function isCompactIconColumn(column: LeadColumnId) {
+  return column === "Badge dell'attività" || column === "Badge di nota"
+}
+
+function LeadHeaderLabel({ column }: { column: LeadColumn }) {
+  if (column.id !== "Badge dell'attività" && column.id !== "Badge di nota") {
+    return <span className="truncate">{column.label}</span>
+  }
+
+  const Icon = column.id === "Badge dell'attività" ? Bell : StickyNote
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span className="inline-flex items-center justify-center">
+            <Icon className="size-4" aria-hidden="true" />
+            <span className="sr-only">{column.label}</span>
+          </span>
+        }
+      />
+      <TooltipContent>{column.label}</TooltipContent>
+    </Tooltip>
+  )
 }
 
 function LeadMobileList({
@@ -295,12 +339,12 @@ export function LeadTable({
   const [scrollerWidth, setScrollerWidth] = useState(0)
   const allSelected = leads.length > 0 && leads.every((l) => selected.has(l.id))
   const colSpan = columns.length + 2 + (actionsColumnOpen ? 1 : 0)
-  const cellPad = LIGHTNING_DENSITY[density]
+  const cellPad = LEAD_TABLE_DENSITY[density]
   const naturalWidths = useMemo(() => {
     const widths = {} as Record<LeadColumnId, number>
     for (const column of columns) {
       if (column.id === "Badge dell'attività" || column.id === "Badge di nota") {
-        widths[column.id] = 176
+        widths[column.id] = LEAD_COMPACT_ICON_COLUMN_WIDTH
         continue
       }
       if (column.id === "Tag") {
@@ -413,9 +457,9 @@ export function LeadTable({
     return out
   }, [leads, expanded])
 
-  // Deve seguire LIGHTNING_DENSITY: con le righe piu' basse, le stime
+  // Deve seguire LEAD_TABLE_DENSITY: con le righe piu' basse, le stime
   // vecchie facevano saltare la scrollbar durante lo scorrimento.
-  const estimateSize = LIGHTNING_ROW_HEIGHT[density]
+  const estimateSize = LEAD_ROW_HEIGHT[density]
 
   // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
@@ -879,6 +923,7 @@ export function LeadTable({
             {columns.map((col, columnIndex) => {
               const numeric = NUMERIC_COLUMNS.includes(col.id)
               const isLeft = col.id === "Nome Lead" || col.id === "E-mail"
+              const compact = isCompactIconColumn(col.id)
               const active = sortBy === col.id
               const isLastDataColumn = columnIndex === columns.length - 1
               return (
@@ -915,6 +960,7 @@ export function LeadTable({
                     draggingColumn === col.id && "opacity-45",
                     dragOverColumn === col.id && "bg-teal/10",
                     numeric ? "text-right" : isLeft ? "text-left" : "text-center",
+                    compact && "px-1",
                     isLastDataColumn && (actionsColumnOpen ? "pr-7" : "pr-12"),
                   )}
                   style={{
@@ -923,9 +969,19 @@ export function LeadTable({
                     maxWidth: displayWidths[col.id],
                   }}
                 >
-                  <div className="flex min-w-0 items-center">
+                  <div
+                    className={cn(
+                      "flex min-w-0 items-center",
+                      compact && "justify-center",
+                    )}
+                  >
                     <GripVertical
-                      className="mr-1 size-3.5 shrink-0 cursor-grab text-muted-foreground/45 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+                      className={cn(
+                        "size-3.5 shrink-0 cursor-grab text-muted-foreground/45 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing",
+                        compact
+                          ? "absolute left-0.5 top-1/2 -translate-y-1/2"
+                          : "mr-1",
+                      )}
                       aria-hidden="true"
                     />
                     <button
@@ -935,14 +991,16 @@ export function LeadTable({
                         "inline-flex min-w-0 flex-1 items-center gap-1 overflow-hidden",
                         LIGHTNING.headLabel,
                         active ? LIGHTNING.headLabelActive : LIGHTNING.headLabelIdle,
-                        numeric
-                          ? "flex-row-reverse justify-start"
-                          : isLeft
-                            ? "justify-start"
-                            : "justify-center",
+                        compact
+                          ? "justify-center gap-0.5"
+                          : numeric
+                            ? "flex-row-reverse justify-start"
+                            : isLeft
+                              ? "justify-start"
+                              : "justify-center",
                       )}
                     >
-                      <span className="truncate">{col.label}</span>
+                      <LeadHeaderLabel column={col} />
                       <IconArrowUp
                         size={14}
                         stroke={2}

@@ -7,6 +7,43 @@ import { useClienteTags } from "@/lib/cliente-tag-store"
 import { ClienteTagBadges } from "./cliente-tag-controls"
 import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
 import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+
+function SignalIcon({
+  icon: Icon,
+  label,
+  active,
+  activeClassName,
+}: {
+  icon: typeof Bell
+  label: string
+  active: boolean
+  activeClassName: string
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span
+            className={
+              active
+                ? `inline-flex size-7 items-center justify-center rounded-md ${activeClassName}`
+                : "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground/35"
+            }
+            aria-label={label}
+          >
+            <Icon className="size-4" aria-hidden="true" />
+          </span>
+        }
+      />
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  )
+}
 
 export function ClienteCell({
   cliente,
@@ -37,17 +74,27 @@ export function ClienteCell({
       )
 
     case "Badge dell'attività":
-      return cliente["Badge dell'attività"] ? (
-        <Bell className="size-4 text-warning" aria-label="Attività in sospeso" />
-      ) : (
-        <span className="text-muted-foreground">—</span>
+      return (
+        <SignalIcon
+          icon={Bell}
+          active={Boolean(cliente["Badge dell'attività"])}
+          activeClassName="bg-warning/15 text-warning ring-1 ring-inset ring-warning/20"
+          label={
+            cliente["Badge dell'attività"]
+              ? "Attività in sospeso"
+              : "Nessuna attività"
+          }
+        />
       )
 
     case "Badge di nota":
-      return cliente["Badge di nota"] ? (
-        <StickyNote className="size-4 text-info" aria-label="Nota presente" />
-      ) : (
-        <span className="text-muted-foreground">—</span>
+      return (
+        <SignalIcon
+          icon={StickyNote}
+          active={Boolean(cliente["Badge di nota"])}
+          activeClassName="bg-info/15 text-info ring-1 ring-inset ring-info/20"
+          label={cliente["Badge di nota"] ? "Nota presente" : "Nessuna nota"}
+        />
       )
 
     case "Tag":

@@ -16,6 +16,8 @@ import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permission
 // Con ?path=... apre direttamente quella cartella, ma solo se il ruolo vi ha
 // accesso (regole path-based enforced anche qui, non solo in UI).
 export async function GET(request: NextRequest) {
+  const shouldCleanNextcloudSession =
+    request.nextUrl.searchParams.get("nc_clean") !== "1"
   const supabase = await createClient()
   const {
     data: { user },
@@ -30,6 +32,15 @@ export async function GET(request: NextRequest) {
       `${request.nextUrl.pathname}${request.nextUrl.search}`,
     )
     return NextResponse.redirect(loginUrl)
+  }
+
+  if (shouldCleanNextcloudSession) {
+    const bridgeUrl = new URL("/nextcloud/session-bridge", request.url)
+    const requested = request.nextUrl.searchParams.get("path")
+    const fileId = request.nextUrl.searchParams.get("fileid")
+    if (requested) bridgeUrl.searchParams.set("path", requested)
+    if (fileId && /^\d+$/.test(fileId)) bridgeUrl.searchParams.set("fileid", fileId)
+    return NextResponse.redirect(bridgeUrl)
   }
 
   const { data: utente } = await supabase

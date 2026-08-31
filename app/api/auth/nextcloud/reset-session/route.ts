@@ -1,10 +1,9 @@
-import { NextResponse } from "next/server"
-
-import { nextcloudBaseUrl } from "@/lib/nextcloud/config"
+import { NextRequest } from "next/server"
+import { switchRedirect } from "@/lib/nextcloud/session-switch"
 
 export const dynamic = "force-dynamic"
 
-export async function GET() {
-  const logoutUrl = new URL("/apps/user_oidc/sls", nextcloudBaseUrl())
-  return NextResponse.redirect(logoutUrl)
+export async function GET(request: NextRequest) {
+  // Compatibility URL: always go through the validated, signed handoff.
+  return switchRedirect(new URL("/api/auth/nextcloud/open", request.url))
 }

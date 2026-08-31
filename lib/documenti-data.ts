@@ -26,7 +26,7 @@ export interface DocumentiData {
 }
 
 /**
- * URL della route server che apre Nextcloud autenticato via app-password.
+ * URL della route server che riallinea la sessione browser Nextcloud via SSO.
  * Con `path` apre quella cartella; passando anche `fileId` (oc:fileid) apre
  * direttamente quel file nel viewer Nextcloud (deep link /f/{id}).
  */

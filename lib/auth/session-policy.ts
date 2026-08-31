@@ -3,6 +3,8 @@ import type { NextResponse } from "next/server"
 export const CRM_SESSION_COOKIE = "scrm_session"
 export const CRM_LAST_ACTIVITY_COOKIE = "scrm_last_activity"
 export const MUST_CHANGE_PASSWORD_COOKIE = "scrm_mcp"
+export const NEXTCLOUD_SWITCH_COOKIE = "scrm_nc_switch"
+export const NEXTCLOUD_SWITCH_COOKIE_PATH = "/api/auth/nextcloud"
 
 /**
  * Timeout di inattivita' risolto, in secondi.
@@ -79,6 +81,19 @@ export function setCrmSessionCookies(response: NextResponse, timeoutSeconds?: nu
 }
 
 export function clearCrmSessionCookies(response: NextResponse) {
+  // Cancel any pending browser handoff on logout or CRM session expiration.
+  response.cookies.set(NEXTCLOUD_SWITCH_COOKIE, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 0,
+    path: NEXTCLOUD_SWITCH_COOKIE_PATH,
+  })
+  // Remove the unsigned handoff cookie used by earlier deployments too.
+  response.cookies.set("scrm_nc_resume", "", {
+    httpOnly: true, secure: process.env.NODE_ENV === "production",
+    sameSite: "lax", maxAge: 0, path: "/",
+  })
   for (const name of [
     CRM_SESSION_COOKIE,
     CRM_LAST_ACTIVITY_COOKIE,

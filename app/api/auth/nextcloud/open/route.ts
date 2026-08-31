@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getNextcloudAppPassword } from "@/lib/nextcloud/credentials"
 import { nextcloudBaseUrl } from "@/lib/nextcloud/config"
+import { setNextcloudResumeCookie } from "@/lib/nextcloud/session-resume"
 import {
   canAccessNcPath,
   loadNcPathRules,
@@ -35,12 +36,15 @@ export async function GET(request: NextRequest) {
   }
 
   if (shouldCleanNextcloudSession) {
-    const bridgeUrl = new URL("/nextcloud/session-bridge", request.url)
     const requested = request.nextUrl.searchParams.get("path")
     const fileId = request.nextUrl.searchParams.get("fileid")
-    if (requested) bridgeUrl.searchParams.set("path", requested)
-    if (fileId && /^\d+$/.test(fileId)) bridgeUrl.searchParams.set("fileid", fileId)
-    return NextResponse.redirect(bridgeUrl)
+    const logoutUrl = new URL("/apps/user_oidc/sls", base)
+    const response = NextResponse.redirect(logoutUrl)
+    setNextcloudResumeCookie(response, {
+      path: requested ?? undefined,
+      fileid: fileId && /^\d+$/.test(fileId) ? fileId : undefined,
+    })
+    return response
   }
 
   const { data: utente } = await supabase

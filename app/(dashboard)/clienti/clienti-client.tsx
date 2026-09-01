@@ -63,6 +63,12 @@ import {
   INITIAL_PAGE_SIZE,
 } from "@/lib/clienti/api-types"
 import {
+  CLIENTI_VIEW_COOKIE,
+  CLIENTI_VIEW_COOKIE_PATH,
+  serializeClienteViewPreferences,
+  type ClienteViewPreferences,
+} from "@/lib/clienti/view-preferences"
+import {
   clientiKeys,
   useClientiQuery,
   useCreateCliente,
@@ -114,9 +120,14 @@ function downloadClientiCsv(rows: ClienteRecord[], filename: string) {
 interface ClientiClientProps {
   initialSp: string
   initialData: ClientiListResponse
+  initialPreferences: Omit<ClienteViewPreferences, "version" | "owner"> | null
 }
 
-export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
+export function ClientiClient({
+  initialSp,
+  initialData,
+  initialPreferences,
+}: ClientiClientProps) {
   const qc = useQueryClient()
 
   // --- Filter / sort / pagination state ---
@@ -199,10 +210,12 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
     density,
     setDensity,
     reorderColumns,
+    preferencesLoaded,
   } = useColumnPreferences<ClienteColumnId>({
     storageKey: `solair:clienti:view:${preferenceOwner}:v1`,
     validIds: new Set(CLIENTE_COLUMNS.map((c) => c.id)),
     defaultVisibleCols: DEFAULT_CLIENTE_COLUMNS,
+    initialPreferences,
   })
 
   // Le preferenze di colonna vivono in localStorage e sopravvivono a un cambio
@@ -217,6 +230,27 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
       }),
     [visibleColsGrezze, permissions],
   )
+
+  useEffect(() => {
+    if (!preferencesLoaded) return
+    const preferences: ClienteViewPreferences = {
+      version: 1,
+      owner: preferenceOwner,
+      visibleCols,
+      columnWidths,
+      density,
+    }
+    const secure = window.location.protocol === "https:" ? "; Secure" : ""
+    document.cookie =
+      `${CLIENTI_VIEW_COOKIE}=${serializeClienteViewPreferences(preferences)}` +
+      `; Path=${CLIENTI_VIEW_COOKIE_PATH}; Max-Age=31536000; SameSite=Lax${secure}`
+  }, [
+    columnWidths,
+    density,
+    preferenceOwner,
+    preferencesLoaded,
+    visibleCols,
+  ])
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] =
@@ -649,32 +683,34 @@ export function ClientiClient({ initialSp, initialData }: ClientiClientProps) {
 
         {/* Tabella */}
         {total > 0 && (
-          <ClienteTable
-            clienti={visibleRows}
-            columns={columns}
-            selected={selected}
-            onToggle={toggle}
-            onToggleAll={toggleAll}
-            onDelete={(cliente) => setDeleteTarget(cliente)}
-            onUpdate={(cliente, patch) =>
-              updateCliente.mutate(
-                { id: cliente.id, patch },
-                { onError: () => toast.error("Aggiornamento non riuscito") },
-              )
-            }
-            onRefresh={() => {
-              void qc.invalidateQueries({ queryKey: clientiKeys.lists() })
-            }}
-            sortBy={sortBy}
-            sortDir={sortDir}
-            onSort={handleSort}
-            density={density}
-            columnWidths={columnWidths}
-            onColumnWidthChange={(column, width) =>
-              setColumnWidths((current) => ({ ...current, [column]: width }))
-            }
-            onColumnReorder={reorderColumns}
-          />
+          <div style={{ visibility: preferencesLoaded ? undefined : "hidden" }}>
+            <ClienteTable
+              clienti={visibleRows}
+              columns={columns}
+              selected={selected}
+              onToggle={toggle}
+              onToggleAll={toggleAll}
+              onDelete={(cliente) => setDeleteTarget(cliente)}
+              onUpdate={(cliente, patch) =>
+                updateCliente.mutate(
+                  { id: cliente.id, patch },
+                  { onError: () => toast.error("Aggiornamento non riuscito") },
+                )
+              }
+              onRefresh={() => {
+                void qc.invalidateQueries({ queryKey: clientiKeys.lists() })
+              }}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSort={handleSort}
+              density={density}
+              columnWidths={columnWidths}
+              onColumnWidthChange={(column, width) =>
+                setColumnWidths((current) => ({ ...current, [column]: width }))
+              }
+              onColumnReorder={reorderColumns}
+            />
+          </div>
         )}
       </div>
 

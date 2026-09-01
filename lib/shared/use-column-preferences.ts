@@ -11,6 +11,12 @@ type ViewPreferences<ColId extends string> = {
   density: Density
 }
 
+type InitialViewPreferences<ColId extends string> = {
+  visibleCols: ColId[]
+  columnWidths: Partial<Record<ColId, number>>
+  density: Density
+}
+
 /**
  * Preferenze di visualizzazione tabella (colonne visibili, larghezze,
  * densità) salvate in localStorage per utente, con lo stesso pattern già
@@ -22,19 +28,30 @@ export function useColumnPreferences<ColId extends string>({
   validIds,
   defaultVisibleCols,
   defaultDensity = "normale",
+  initialPreferences = null,
 }: {
   /** Es. `solair:clienti:view:${preferenceOwner}:v1` — includere l'utente per non mischiare preferenze tra account diversi sullo stesso browser. */
   storageKey: string
   validIds: Set<ColId>
   defaultVisibleCols: ColId[]
   defaultDensity?: Density
+  initialPreferences?: InitialViewPreferences<ColId> | null
 }) {
-  const [visibleCols, setVisibleCols] = useState<ColId[]>(defaultVisibleCols)
-  const [columnWidths, setColumnWidths] = useState<Partial<Record<ColId, number>>>({})
-  const [density, setDensity] = useState<Density>(defaultDensity)
-  const [preferencesLoaded, setPreferencesLoaded] = useState(false)
+  const [visibleCols, setVisibleCols] = useState<ColId[]>(
+    initialPreferences?.visibleCols ?? defaultVisibleCols,
+  )
+  const [columnWidths, setColumnWidths] = useState<Partial<Record<ColId, number>>>(
+    initialPreferences?.columnWidths ?? {},
+  )
+  const [density, setDensity] = useState<Density>(
+    initialPreferences?.density ?? defaultDensity,
+  )
+  const [preferencesLoaded, setPreferencesLoaded] = useState(
+    initialPreferences != null,
+  )
 
   useEffect(() => {
+    if (initialPreferences) return
     let active = true
     queueMicrotask(() => {
       if (!active) return
@@ -63,7 +80,7 @@ export function useColumnPreferences<ColId extends string>({
       active = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storageKey])
+  }, [initialPreferences, storageKey])
 
   useEffect(() => {
     if (!preferencesLoaded) return

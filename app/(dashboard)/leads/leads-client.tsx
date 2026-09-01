@@ -717,10 +717,10 @@ export function LeadsClient({
     <div
       ref={rootRef}
       style={availH ? { height: availH } : undefined}
-      className="flex h-[calc(100svh-9rem)] min-w-0 flex-col gap-4 lg:h-[calc(100svh-6rem)]"
+      className="flex h-[calc(100svh-9rem)] min-w-0 flex-col gap-2.5 lg:h-[calc(100svh-6rem)] lg:gap-4"
     >
       {/* Header pagina */}
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 lg:gap-3">
         <div className="min-w-0 flex flex-col gap-0.5">
           <h1 className="break-words text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
             Lead
@@ -735,7 +735,7 @@ export function LeadsClient({
             ) : null}
           </p>
         </div>
-        <div className="grid w-full grid-cols-3 gap-2.5 lg:flex lg:w-auto lg:flex-wrap lg:justify-end lg:gap-2">
+        <div className="grid w-full grid-cols-3 gap-1.5 lg:flex lg:w-auto lg:flex-wrap lg:justify-end lg:gap-2">
           {/* Impostazioni lead (generali, vista colonne) */}
           <LeadSettingsSheet
             open={settingsOpen}
@@ -755,7 +755,7 @@ export function LeadsClient({
               <Button
                 variant="outline"
                 aria-label="Impostazioni lead"
-                className="h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-10 lg:p-0"
+                className="h-11 w-full gap-1.5 bg-card px-2 text-xs lg:h-10 lg:w-10 lg:p-0 lg:text-sm"
               >
                 <IconSettings size={22} stroke={1.8} className="lg:size-[18px]" />
                 <span className="lg:hidden">Imposta</span>
@@ -785,7 +785,7 @@ export function LeadsClient({
 
           <Button
             variant="outline"
-            className="h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-auto"
+            className="h-11 w-full gap-1.5 bg-card px-2 text-xs lg:h-10 lg:w-auto lg:gap-2 lg:px-3.5 lg:text-sm"
             onClick={() => setImportOpen(true)}
           >
             <Upload className="size-[22px] lg:size-4" />
@@ -794,7 +794,7 @@ export function LeadsClient({
 
           <Button
             variant="outline"
-            className="h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-auto"
+            className="h-11 w-full gap-1.5 bg-card px-2 text-xs lg:h-10 lg:w-auto lg:gap-2 lg:px-3.5 lg:text-sm"
             onClick={handleExportFiltered}
           >
             <Download className="size-[22px] lg:size-4" />
@@ -817,7 +817,7 @@ export function LeadsClient({
             trigger={({ onClick, count }) => (
               <Button
                 onClick={onClick}
-                className="relative h-14 w-full gap-2 bg-primary text-sm text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90 lg:h-10 lg:w-auto"
+                className="relative h-11 w-full gap-1.5 bg-primary px-2 text-xs text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90 lg:h-10 lg:w-auto lg:gap-2 lg:px-3.5 lg:text-sm"
               >
                 <SlidersHorizontal className="size-[22px] lg:size-4" />
                 Filtri
@@ -831,7 +831,7 @@ export function LeadsClient({
           />
 
           <Button
-            className="h-14 w-full gap-2 bg-teal text-sm text-teal-foreground hover:bg-teal/90 lg:h-10 lg:w-auto"
+            className="h-11 w-full gap-1.5 bg-teal px-2 text-xs text-teal-foreground hover:bg-teal/90 lg:h-10 lg:w-auto lg:gap-2 lg:px-3.5 lg:text-sm"
             onClick={() => setNewLeadOpen(true)}
           >
             <Plus className="size-[22px] lg:size-4" />
@@ -859,7 +859,7 @@ export function LeadsClient({
       ) : null}
 
       {/* Barra di ricerca — sempre su una riga, tutto il resto vive nel drawer "Filtri" */}
-      <div className="flex min-w-0 flex-row items-center gap-2 rounded-lg border border-border bg-card p-2 shadow-sm">
+      <div className="flex min-w-0 flex-row items-center gap-2 rounded-lg border border-border bg-card p-1 shadow-sm lg:p-2">
         <LeadSearchInput
           value={filters.search}
           onChange={(v) => handleFilterChange({ ...filters, search: v })}

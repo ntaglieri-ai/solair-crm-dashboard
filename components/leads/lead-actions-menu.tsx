@@ -250,7 +250,7 @@ export function LeadActionsMenu({
               variant="outline"
               size="icon"
               aria-label="Azioni"
-              className={cn("relative h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-10 lg:p-0", triggerClassName)}
+              className={cn("relative h-11 w-full gap-1.5 bg-card px-2 text-xs lg:h-10 lg:w-10 lg:p-0 lg:text-sm", triggerClassName)}
             >
               <IconDotsVertical size={20} stroke={1.8} className="lg:size-[18px]" />
               <span className="lg:hidden">Azioni</span>

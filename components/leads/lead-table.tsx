@@ -173,7 +173,7 @@ function LeadMobileList({
             key={lead.id}
             role="button"
             tabIndex={0}
-            className="flex min-h-[94px] shrink-0 cursor-pointer items-center gap-3 rounded-2xl border border-border/70 bg-card px-3.5 py-3.5 shadow-[0_14px_34px_-28px_rgb(15_23_42/0.6)] transition-all hover:-translate-y-0.5 hover:border-teal/40 hover:shadow-[0_18px_42px_-30px_rgb(15_23_42/0.65)] active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="grid min-h-[112px] shrink-0 cursor-pointer grid-cols-[auto_auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 rounded-2xl border border-border/70 bg-card px-3.5 py-3 shadow-[0_14px_34px_-28px_rgb(15_23_42/0.6)] transition-all hover:-translate-y-0.5 hover:border-teal/40 hover:shadow-[0_18px_42px_-30px_rgb(15_23_42/0.65)] active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             onClick={() => {
               startNavigationFeedback()
               router.push(`/leads/${lead.id}`)
@@ -185,7 +185,7 @@ function LeadMobileList({
               router.push(`/leads/${lead.id}`)
             }}
           >
-            <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
+            <div className="mt-2 shrink-0" onClick={(event) => event.stopPropagation()}>
               <Checkbox
                 checked={selected.has(lead.id)}
                 onCheckedChange={() => onToggle(lead.id)}
@@ -193,24 +193,25 @@ function LeadMobileList({
               />
             </div>
 
-            <LeadAvatar nome={lead["Nome Lead"]} className="size-11 text-base shadow-md" />
+            <LeadAvatar nome={lead["Nome Lead"]} className="mt-0.5 size-11 text-base shadow-md" />
 
             <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <h3 className="truncate text-lg font-black leading-tight text-foreground">
+              <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1">
+                <h3 className="min-w-0 flex-1 break-words text-lg font-black leading-tight text-foreground">
                   {lead["Nome Lead"]}
                 </h3>
                 <StatoLeadBadge stato={lead["Stato Lead"]} />
               </div>
-              <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-sm font-medium text-muted-foreground">
-                <UserRound className="size-3.5 shrink-0" />
-                <span className="truncate">{owner}</span>
+              <div className="mt-1.5 grid min-w-0 gap-1 text-sm font-medium text-muted-foreground">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <UserRound className="size-3.5 shrink-0" />
+                  <span className="truncate">{owner}</span>
+                </span>
                 {luogo ? (
-                  <>
-                    <span className="shrink-0 text-muted-foreground/50">·</span>
+                  <span className="flex min-w-0 items-center gap-1.5">
                     <MapPin className="size-3.5 shrink-0" />
                     <span className="truncate">{luogo}</span>
-                  </>
+                  </span>
                 ) : null}
               </div>
               <div className="mt-1 flex min-w-0 items-center gap-1.5">
@@ -222,7 +223,7 @@ function LeadMobileList({
             </div>
 
             <div
-              className="flex shrink-0 items-center gap-0.5"
+              className="col-start-3 flex min-w-0 items-center justify-end gap-0.5"
               onClick={(event) => event.stopPropagation()}
             >
               <QuickContactIcons

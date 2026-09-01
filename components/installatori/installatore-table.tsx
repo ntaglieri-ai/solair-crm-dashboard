@@ -92,7 +92,7 @@ function InstallatoreMobileList({
           key={installatore.id}
           role="button"
           tabIndex={0}
-          className="flex min-h-[82px] shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="grid min-h-[106px] shrink-0 cursor-pointer grid-cols-[auto_auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           onClick={() => {
             startNavigationFeedback()
             router.push(`/installatori/${installatore.id}`)
@@ -104,7 +104,7 @@ function InstallatoreMobileList({
             router.push(`/installatori/${installatore.id}`)
           }}
         >
-          <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
+          <div className="mt-1.5 shrink-0" onClick={(event) => event.stopPropagation()}>
             <Checkbox
               checked={selected.has(installatore.id)}
               onCheckedChange={() => onToggle(installatore.id)}
@@ -112,11 +112,13 @@ function InstallatoreMobileList({
             />
           </div>
 
-          <InstallatoreAvatar nome={installatore.nome} size={36} />
+          <span className="mt-0.5">
+            <InstallatoreAvatar nome={installatore.nome} size={36} />
+          </span>
 
           <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <h3 className="truncate text-base font-bold text-foreground">
+            <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1">
+              <h3 className="min-w-0 flex-1 break-words text-base font-bold leading-tight text-foreground">
                 {installatore.nome}
               </h3>
               <StatoPill tone={installatore.attivo ? "success" : "muted"}>
@@ -124,14 +126,17 @@ function InstallatoreMobileList({
               </StatoPill>
             </div>
 
-            <div className="mt-1 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
-              <UserRound className="size-3.5 shrink-0" />
-              <span className="truncate">
-                {installatore.proprietario_nome ?? "Proprietario non assegnato"}
+            <div className="mt-1 grid min-w-0 gap-1 text-sm text-muted-foreground">
+              <span className="flex min-w-0 items-center gap-1.5">
+                <UserRound className="size-3.5 shrink-0" />
+                <span className="truncate">
+                  {installatore.proprietario_nome ?? "Proprietario non assegnato"}
+                </span>
               </span>
-              <span className="shrink-0 text-muted-foreground/50">·</span>
-              <CalendarClock className="size-3.5 shrink-0" />
-              <span className="truncate">{formatDate(installatore.updated_at)}</span>
+              <span className="flex min-w-0 items-center gap-1.5">
+                <CalendarClock className="size-3.5 shrink-0" />
+                <span className="truncate">{formatDate(installatore.updated_at)}</span>
+              </span>
             </div>
 
             <div className="mt-1 min-w-0 overflow-hidden">
@@ -140,7 +145,7 @@ function InstallatoreMobileList({
           </div>
 
           <div
-            className="flex shrink-0 items-center gap-0.5"
+            className="col-start-3 flex min-w-0 items-center justify-end gap-0.5"
             onClick={(event) => event.stopPropagation()}
           >
             {installatore.telefono ? (

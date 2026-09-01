@@ -8,6 +8,7 @@ import {
   type AllegatoRecordTipo,
 } from "@/lib/allegati/paths"
 import { listCollegamenti } from "@/lib/allegati/repository"
+import { canAccessCrmRecord } from "@/lib/permissions/data-scope"
 
 const PERMISSION_MODULE: Record<AllegatoRecordTipo, string> = {
   lead: "lead",
@@ -73,6 +74,9 @@ export async function GET(request: Request) {
 
   const guard = await requireApiRecord(PERMISSION_MODULE[recordTipo], "view")
   if (guard.response) return guard.response
+  if (!(await canAccessCrmRecord(guard.permissions.snapshot, recordTipo, recordId))) {
+    return NextResponse.json({ error: "Non trovato" }, { status: 404 })
+  }
 
   try {
     const folderPath = pathConSottocartella(recordTipo, recordId, nomeRecord, sottocartella)
@@ -116,6 +120,9 @@ async function creaSottocartella(request: Request) {
 
   const guard = await requireApiRecord(PERMISSION_MODULE[recordTipo], "edit")
   if (guard.response) return guard.response
+  if (!(await canAccessCrmRecord(guard.permissions.snapshot, recordTipo, body.recordId))) {
+    return NextResponse.json({ error: "Non trovato" }, { status: 404 })
+  }
 
   // Stessa sanitizzazione dei nomi record/file (paths.ts); i soli punti sono
   // rifiutati a parte perche' sanitizeName non li tocca e "." / ".." darebbero
@@ -192,6 +199,9 @@ export async function POST(request: Request) {
 
   const guard = await requireApiRecord(PERMISSION_MODULE[recordTipo], "edit")
   if (guard.response) return guard.response
+  if (!(await canAccessCrmRecord(guard.permissions.snapshot, recordTipo, recordId))) {
+    return NextResponse.json({ error: "Non trovato" }, { status: 404 })
+  }
 
   // Nome scelto nel dialog della convenzione 5.3 ({Tipo}_{Cognome}_{AAAAMMGG},
   // estensione inclusa). Il fallback sul nome originale non e' teorico: e' il

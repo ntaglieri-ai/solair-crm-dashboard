@@ -155,7 +155,7 @@ export function CalendarioRecordSection({
         correlatoFisso={{ tipo: recordTipo, id: recordId, nome: nomeRecord }}
         modificabile={
           !eventoAperto ||
-          puoModificareEvento(eventoAperto, {
+          permissions.canAction("calendario.events.manage_all") || puoModificareEvento(eventoAperto, {
             userId: subject.userId,
             ruoloCode: subject.ruoloCode,
           })

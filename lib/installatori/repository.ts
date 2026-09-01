@@ -6,6 +6,7 @@ import type {
   InstallatoriListResponse,
   InstallatoreSortKey,
 } from "@/lib/installatori/api-types"
+import { applyOwnerScope, filterCurrentAccessibleRecordIds, resolveCurrentOwnerScope } from "@/lib/permissions/data-scope"
 
 export type InstallatoreRecord = {
   id: string
@@ -110,6 +111,7 @@ export async function queryInstallatori(
   params: InstallatoriListParams,
 ): Promise<InstallatoriListResponse> {
   const supabase = await createClient()
+  const ownerScope = await resolveCurrentOwnerScope("installatori")
   const sortCol = (params.sortBy && SORT_COLUMN[params.sortBy]) || "nome"
   const ascending = params.sortDir === "asc"
   const from = (params.page - 1) * params.pageSize
@@ -123,6 +125,11 @@ export async function queryInstallatori(
   let countQ = supabase
     .from("installatori")
     .select("id", { count: "exact", head: true })
+  listQ = applyOwnerScope(listQ, "proprietario_id", ownerScope)
+  countQ = applyOwnerScope(countQ, "proprietario_id", ownerScope)
+  const absoluteQ = applyOwnerScope(supabase.from("installatori").select("id", { count: "exact", head: true }), "proprietario_id", ownerScope)
+  const activeQ = applyOwnerScope(supabase.from("installatori").select("id", { count: "exact", head: true }).eq("attivo", true), "proprietario_id", ownerScope)
+  const inactiveQ = applyOwnerScope(supabase.from("installatori").select("id", { count: "exact", head: true }).eq("attivo", false), "proprietario_id", ownerScope)
 
   if (params.search.trim()) {
     const p = `%${params.search.trim()}%`
@@ -160,15 +167,9 @@ export async function queryInstallatori(
   ] = await Promise.all([
     listQ,
     countQ,
-    supabase.from("installatori").select("id", { count: "exact", head: true }),
-    supabase
-      .from("installatori")
-      .select("id", { count: "exact", head: true })
-      .eq("attivo", true),
-    supabase
-      .from("installatori")
-      .select("id", { count: "exact", head: true })
-      .eq("attivo", false),
+    absoluteQ,
+    activeQ,
+    inactiveQ,
   ])
 
   if (error) console.error("[installatori/repository] queryInstallatori:", error.message)
@@ -232,11 +233,11 @@ export async function getInstallatoreById(
   id: string,
 ): Promise<InstallatoreRecord | null> {
   const supabase = await createClient()
-  const { data, error } = await supabase
+  const ownerScope = await resolveCurrentOwnerScope("installatori")
+  const { data, error } = await applyOwnerScope(supabase
     .from("installatori")
     .select(INSTALLATORE_COLUMNS)
-    .eq("id", id)
-    .maybeSingle()
+    .eq("id", id), "proprietario_id", ownerScope).maybeSingle()
 
   if (error) throw new Error(`Lettura installatore: ${error.message}`)
   return data ? mapOwner(data as InstallatoreRow) : null
@@ -282,6 +283,8 @@ export async function updateInstallatoreRecord(
   id: string,
   patch: Partial<InstallatoreInput>,
 ): Promise<InstallatoreRecord | null> {
+  const allowed = await filterCurrentAccessibleRecordIds("installatori", "installatori", "proprietario_id", [id])
+  if (allowed.length === 0) return null
   const supabase = await createClient()
   const row: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
@@ -310,6 +313,8 @@ export async function updateInstallatoreRecord(
 }
 
 export async function deleteInstallatoreRecord(id: string): Promise<boolean> {
+  const allowed = await filterCurrentAccessibleRecordIds("installatori", "installatori", "proprietario_id", [id])
+  if (allowed.length === 0) return false
   const supabase = await createClient()
   const { error, count } = await supabase
     .from("installatori")

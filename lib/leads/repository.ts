@@ -19,6 +19,13 @@ import {
   removeLeads,
 } from "@/lib/leads/server-store"
 import { createClient } from "@/lib/supabase/server"
+import { filterCurrentAccessibleRecordIds, resolveCurrentOwnerScope } from "@/lib/permissions/data-scope"
+
+function ownerIdsForQuery(scope: Awaited<ReturnType<typeof resolveCurrentOwnerScope>>) {
+  if (scope.kind === "all") return undefined
+  if (scope.kind === "owners") return scope.ownerIds
+  return ["00000000-0000-0000-0000-000000000000"]
+}
 
 function project(lead: Lead, fields: string[]): LeadListItem {
   if (fields.includes("*")) {
@@ -39,6 +46,7 @@ function project(lead: Lead, fields: string[]): LeadListItem {
 }
 
 export async function queryLeads(params: LeadListParams): Promise<LeadListResponse> {
+  const visibleOwnerIds = ownerIdsForQuery(await resolveCurrentOwnerScope("lead"))
   // Tutti i filtri sono applicati nella query Supabase PRIMA di range/paginazione,
   // così total e righe restano coerenti con la pagina richiesta.
   const filters = {
@@ -49,6 +57,7 @@ export async function queryLeads(params: LeadListParams): Promise<LeadListRespon
     score: params.score,
     search: params.search,
     advanced: params.advanced,
+    visibleOwnerIds,
   }
 
   const [base, total] = await Promise.all([
@@ -69,8 +78,10 @@ export async function queryLeads(params: LeadListParams): Promise<LeadListRespon
 // computeStats — query SQL aggregata, nessun full scan
 export async function computeStats(): Promise<LeadStats> {
   const supabase = await createClient()
+  const scope = await resolveCurrentOwnerScope("lead")
+  const visibleOwnerIds = ownerIdsForQuery(scope)
   const { data: aggregate, error: aggregateError } =
-    await supabase.rpc("get_lead_stats")
+    scope.kind === "all" ? await supabase.rpc("get_lead_stats") : { data: null, error: { message: "scoped" } }
 
   if (!aggregateError && aggregate && typeof aggregate === "object") {
     const value = aggregate as Record<string, unknown>
@@ -91,16 +102,19 @@ export async function computeStats(): Promise<LeadStats> {
   const startOfToday = new Date()
   startOfToday.setHours(0, 0, 0, 0)
 
+  let statsQ = supabase.from("leads").select("stato_lead, valutazione, lead_proprietario_id")
+  let totalQ = supabase.from("leads").select("id", { count: "exact", head: true })
+  let todayQ = supabase.from("leads").select("id", { count: "exact", head: true }).gte("created_at", startOfToday.toISOString())
+  if (visibleOwnerIds) {
+    statsQ = statsQ.in("lead_proprietario_id", visibleOwnerIds)
+    totalQ = totalQ.in("lead_proprietario_id", visibleOwnerIds)
+    todayQ = todayQ.in("lead_proprietario_id", visibleOwnerIds)
+  }
   const [{ data: statsData }, { count: total }, { count: nuoviOggi }] =
     await Promise.all([
-      supabase
-        .from("leads")
-        .select("stato_lead, valutazione, lead_proprietario_id"),
-      supabase.from("leads").select("id", { count: "exact", head: true }),
-      supabase
-        .from("leads")
-        .select("id", { count: "exact", head: true })
-        .gte("created_at", startOfToday.toISOString()),
+      statsQ,
+      totalQ,
+      todayQ,
     ])
 
   const all = statsData ?? []
@@ -134,12 +148,15 @@ export async function updateLeadRecord(
   id: string,
   patch: Partial<Lead>,
 ): Promise<LeadListItem | undefined> {
+  const allowed = await filterCurrentAccessibleRecordIds("lead", "leads", "lead_proprietario_id", [id])
+  if (allowed.length === 0) return undefined
   const updated = await patchLead(id, patch)
   return updated ? project(updated, []) : undefined
 }
 
 export async function deleteLeadRecords(ids: string[]): Promise<number> {
-  return removeLeads(ids)
+  const allowed = await filterCurrentAccessibleRecordIds("lead", "leads", "lead_proprietario_id", ids)
+  return removeLeads(allowed)
 }
 
 export type BulkField = "Stato Lead" | "Sede" | "Lead Proprietario" | "Tag"
@@ -157,12 +174,14 @@ export async function bulkUpdateRecords(
   value: string,
 ): Promise<number> {
   if (ids.length === 0) return 0
+  const allowedIds = await filterCurrentAccessibleRecordIds("lead", "leads", "lead_proprietario_id", ids)
+  if (allowedIds.length === 0) return 0
 
   // Tag: il nuovo valore dipende dai tag esistenti di ciascun lead (merge senza
   // duplicati), quindi l'aggiornamento NON è uguale per tutti → resta per-riga.
   if (field === "Tag") {
     let n = 0
-    for (const id of ids) {
+    for (const id of allowedIds) {
       const current = await getLeadById(id)
       if (!current) continue
       const next = current.Tag.includes(value)
@@ -187,13 +206,18 @@ export async function bulkUpdateRecords(
       },
       { count: "exact" },
     )
-    .in("id", ids)
+    .in("id", allowedIds)
   if (error) throw new Error(`bulkUpdateRecords: ${error.message}`)
   return count ?? 0
 }
 
 export async function getFullLeadById(id: string): Promise<Lead | undefined> {
-  return getLeadById(id)
+  const lead = await getLeadById(id)
+  if (!lead) return undefined
+  const scope = await resolveCurrentOwnerScope("lead")
+  if (scope.kind === "all") return lead
+  if (scope.kind === "none") return undefined
+  return scope.ownerIds.includes(String(lead["Lead Proprietario"] ?? "")) ? lead : undefined
 }
 
 export { type LeadColumnId }
@@ -229,6 +253,7 @@ export interface ExportQueryResult<T> {
 export async function queryLeadsForExport(
   params: LeadListParams,
 ): Promise<ExportQueryResult<LeadListItem>> {
+  const visibleOwnerIds = ownerIdsForQuery(await resolveCurrentOwnerScope("lead"))
   const filters = {
     stato: params.stato,
     sede: params.sede,
@@ -237,6 +262,7 @@ export async function queryLeadsForExport(
     score: params.score,
     search: params.search,
     advanced: params.advanced,
+    visibleOwnerIds,
   }
 
   const total = await getTotalCount(filters)

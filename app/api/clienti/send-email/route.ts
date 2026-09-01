@@ -52,6 +52,7 @@ export async function POST(request: Request) {
   const { data: consenso, error: consensoError } = await filtraDestinatariConsenzienti({
     entita: "cliente",
     ids: clienteIds,
+    snapshot: guard.permissions.snapshot,
   })
   if (consensoError || !consenso) {
     return NextResponse.json({ error: consensoError ?? "Errore imprevisto" }, { status: 500 })

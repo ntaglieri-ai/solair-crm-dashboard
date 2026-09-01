@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { requireApiPage } from "@/lib/permissions/server"
 import type { CorrelatoValue } from "@/components/shared/correlato-picker"
+import { applyOwnerScope, resolveOwnerScope } from "@/lib/permissions/data-scope"
 
 /**
  * Ricerca dei record collegabili a un evento di calendario: lead,
@@ -24,10 +25,15 @@ export async function GET(request: Request) {
   const supabase = await createClient()
   const pattern = `%${q}%`
 
+  const [leadScope, clientiScope, installatoriScope] = await Promise.all([
+    resolveOwnerScope(guard.permissions.snapshot, "lead"),
+    resolveOwnerScope(guard.permissions.snapshot, "clienti"),
+    resolveOwnerScope(guard.permissions.snapshot, "installatori"),
+  ])
   const [leads, clienti, installatori] = await Promise.all([
-    supabase.from("leads").select("id, nome_lead").ilike("nome_lead", pattern).limit(limit),
-    supabase.from("clienti").select("id, nome_clienti").ilike("nome_clienti", pattern).limit(limit),
-    supabase.from("installatori").select("id, nome").ilike("nome", pattern).limit(limit),
+    applyOwnerScope(supabase.from("leads").select("id, nome_lead").ilike("nome_lead", pattern).limit(limit), "lead_proprietario_id", leadScope),
+    applyOwnerScope(supabase.from("clienti").select("id, nome_clienti").ilike("nome_clienti", pattern).limit(limit), "clienti_proprietario_id", clientiScope),
+    applyOwnerScope(supabase.from("installatori").select("id, nome").ilike("nome", pattern).limit(limit), "proprietario_id", installatoriScope),
   ])
 
   if (leads.error) console.error("[api/calendario/correlabili] leads:", leads.error.message)

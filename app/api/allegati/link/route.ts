@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getCurrentPermissions, requireApiRecord } from "@/lib/permissions/server"
 import { insertCollegamento } from "@/lib/allegati/repository"
 import type { AllegatoRecordTipo } from "@/lib/allegati/paths"
+import { canAccessCrmRecord } from "@/lib/permissions/data-scope"
 
 const PERMISSION_MODULE: Record<AllegatoRecordTipo, string> = {
   lead: "lead",
@@ -37,6 +38,9 @@ export async function POST(request: Request) {
 
   const guard = await requireApiRecord(PERMISSION_MODULE[recordTipo], "edit")
   if (guard.response) return guard.response
+  if (!(await canAccessCrmRecord(guard.permissions.snapshot, recordTipo, recordId))) {
+    return NextResponse.json({ error: "Non trovato" }, { status: 404 })
+  }
 
   const permissions = await getCurrentPermissions()
   const utenteId = permissions.snapshot.subject.userId

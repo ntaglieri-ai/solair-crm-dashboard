@@ -43,9 +43,9 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const guard = await requireApiNoteInterne()
-  if (guard.response) return guard.response
   const { id } = await params
+  const guard = await requireApiNoteInterne(id)
+  if (guard.response) return guard.response
 
   const supabase = await createClient()
   const { data, error } = await supabase
@@ -65,9 +65,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const guard = await requireApiNoteInterne()
-  if (guard.response) return guard.response
   const { id } = await params
+  const guard = await requireApiNoteInterne(id)
+  if (guard.response) return guard.response
 
   const body = (await request.json().catch(() => null)) as { contenuto?: string } | null
   const contenuto = body?.contenuto?.trim()

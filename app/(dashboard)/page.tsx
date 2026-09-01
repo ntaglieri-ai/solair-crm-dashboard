@@ -47,8 +47,6 @@ import {
   type SystemSemaphoreData,
 } from "@/lib/dashboard/repository"
 
-const BUSINESS_ROLES = new Set(["STANDARD", "DIRECTOR", "ADMIN"])
-
 const CHART_COLORS = ["#315fc5", "#20a47a", "#f2b84b", "#ef6a47", "#8b6bd6", "#2b9fb3"]
 
 function formatNumber(value: number) {
@@ -749,17 +747,21 @@ async function AgentSection({ snapshot }: { snapshot: PermissionSnapshot }) {
 async function BusinessSection({
   snapshot,
   role,
+  economicEnabled,
+  systemStatusEnabled,
 }: {
   snapshot: PermissionSnapshot
   role: string
+  economicEnabled: boolean
+  systemStatusEnabled: boolean
 }) {
   const [data, bacheca, economic, semaphore] = await Promise.all([
     getDashboardData(),
     listBachecaMessaggiSafe(),
-    role === "DIRECTOR" || role === "ADMIN"
+    economicEnabled
       ? getEconomicWidgetData(snapshot)
       : Promise.resolve(undefined),
-    role === "ADMIN" ? getSystemSemaphoreData() : Promise.resolve(undefined),
+    systemStatusEnabled ? getSystemSemaphoreData() : Promise.resolve(undefined),
   ])
   return (
     <BusinessDashboard
@@ -778,14 +780,6 @@ export default async function DashboardPage() {
   const permissions = await requirePage("dashboard")
   const subject = permissions.snapshot.subject
   const role = subject.ruoloCode.toUpperCase()
-
-  if (!BUSINESS_ROLES.has(role) && role !== "SUPERADMIN" && role !== "AGENT") {
-    return (
-      <div className="mx-auto flex max-w-[1540px] flex-col gap-6">
-        <Greeting name={subject.nome} subtitle="Dashboard non configurata per questo ruolo." />
-      </div>
-    )
-  }
 
   const intestazione =
     role === "SUPERADMIN"
@@ -819,7 +813,12 @@ export default async function DashboardPage() {
     ) : role === "AGENT" ? (
       <AgentSection snapshot={permissions.snapshot} />
     ) : (
-      <BusinessSection snapshot={permissions.snapshot} role={role} />
+      <BusinessSection
+        snapshot={permissions.snapshot}
+        role={role}
+        economicEnabled={permissions.canAction("dashboard.economic.view")}
+        systemStatusEnabled={permissions.canAction("dashboard.system_status.view")}
+      />
     )
 
   return (

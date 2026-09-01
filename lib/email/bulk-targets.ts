@@ -8,6 +8,7 @@
 // corrisponde a cio' che viene realmente inviato.
 
 import { createClient } from "@/lib/supabase/server"
+import { resolveOwnerScope } from "@/lib/permissions/data-scope"
 import type { PermissionSnapshot } from "@/lib/permissions/types"
 import type { BulkRecipient } from "./bulk-mailer"
 import type { BulkPlaceholder } from "./bulk-template"
@@ -170,13 +171,13 @@ export async function resolveBulkRecipients(params: {
 
   const rows = (data ?? []) as unknown as Record<string, unknown>[]
 
-  // Solo il ruolo AGENT e' ristretto ai propri record. DIRECTOR / ADMIN /
-  // SUPERADMIN inviano a tutta la selezione (decisione 28/07).
-  const subject = params.snapshot.subject
-  const soloPropri = subject.ruoloCode === "AGENT"
-  const owned = soloPropri
-    ? rows.filter((row) => text(row[config.ownerColumn]) === (subject.userId ?? ""))
-    : rows
+  const resource = params.tipo === "lead" ? "lead" : params.tipo === "cliente" ? "clienti" : "installatori"
+  const scope = await resolveOwnerScope(params.snapshot, resource)
+  const owned = scope.kind === "all"
+    ? rows
+    : scope.kind === "owners"
+      ? rows.filter((row) => scope.ownerIds.includes(text(row[config.ownerColumn])))
+      : []
 
   const recipients: BulkRecipient[] = []
   let conEmail = 0

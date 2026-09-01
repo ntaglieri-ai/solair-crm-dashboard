@@ -52,14 +52,16 @@ function buildPermissionRows(ruoloId: string, permessi: RuoloPermessi) {
   const uiRows = [
     {
       ruolo_id: ruoloId,
-      chiave: "visibilita_sedi",
-      abilitato: permessi.visibilita_sedi === "all",
-    },
-    {
-      ruolo_id: ruoloId,
       chiave: "riconfigurazioni",
       abilitato: permessi.riconfigurazioni === true,
     },
+    ...Object.entries(permessi.scope_dati ?? {}).flatMap(([risorsa, selected]) =>
+      (["none", "own", "assigned", "team", "all"] as const).map((scope) => ({
+        ruolo_id: ruoloId,
+        chiave: `scope:${risorsa}:${scope}`,
+        abilitato: scope === selected,
+      })),
+    ),
   ]
 
   const actionRows = Object.entries(permessi.azioni ?? {}).map(

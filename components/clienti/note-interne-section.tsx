@@ -6,7 +6,7 @@ import { IconLock, IconPencil, IconTrash, IconX, IconCheck } from "@tabler/icons
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { usePermissions } from "@/lib/permissions/provider"
-import { canAccessNoteInterne, type NotaInterna } from "@/lib/clienti/note-interne"
+import { type NotaInterna } from "@/lib/clienti/note-interne"
 import { ClienteAvatar } from "./cliente-utils"
 
 const QUANDO = new Intl.DateTimeFormat("it-IT", {
@@ -139,7 +139,7 @@ function NotaCard({
  */
 export function NoteInterneSection({ clienteId }: { clienteId: string }) {
   const permissions = usePermissions()
-  const abilitato = canAccessNoteInterne(permissions.snapshot.subject.ruoloCode)
+  const abilitato = permissions.canAction("clienti.note_interne.view")
 
   const [note, setNote] = useState<NotaInterna[]>([])
   const [loading, setLoading] = useState(true)

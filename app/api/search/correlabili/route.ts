@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { requireApiRecord } from "@/lib/permissions/server"
+import { applyOwnerScope, resolveOwnerScope } from "@/lib/permissions/data-scope"
 
 export interface CorrelabileResult {
   tipo: "lead" | "cliente" | "scadenza"
@@ -31,22 +32,27 @@ export async function GET(request: Request) {
   const supabase = await createClient()
   const pattern = `%${q}%`
 
+  const [leadScope, clientiScope, scadenzeScope] = await Promise.all([
+    resolveOwnerScope(guard.permissions.snapshot, "lead"),
+    resolveOwnerScope(guard.permissions.snapshot, "clienti"),
+    resolveOwnerScope(guard.permissions.snapshot, "scadenze"),
+  ])
   const [leads, clienti, scadenze] = await Promise.all([
-    supabase
+    applyOwnerScope(supabase
       .from("leads")
       .select("id, nome_lead")
       .ilike("nome_lead", pattern)
-      .limit(limit),
-    supabase
+      .limit(limit), "lead_proprietario_id", leadScope),
+    applyOwnerScope(supabase
       .from("clienti")
       .select("id, nome_clienti")
       .ilike("nome_clienti", pattern)
-      .limit(limit),
-    supabase
+      .limit(limit), "clienti_proprietario_id", clientiScope),
+    applyOwnerScope(supabase
       .from("scadenze")
       .select("id, nome")
       .ilike("nome", pattern)
-      .limit(limit),
+      .limit(limit), "proprietario_id", scadenzeScope),
   ])
 
   if (leads.error) console.error("[api/search/correlabili] leads:", leads.error.message)

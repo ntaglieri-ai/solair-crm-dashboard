@@ -2,6 +2,7 @@ import { NextResponse, after } from "next/server"
 import type { ClienteRecord } from "@/lib/mock-data"
 import { updateClienteRecord, deleteClienteRecords } from "@/lib/clienti/repository"
 import { requireApiRecord } from "@/lib/permissions/server"
+import { canAccessOwnedRecord } from "@/lib/permissions/data-scope"
 import { attoreDaPermessi, logAudit } from "@/lib/audit/log"
 import { campiModificati, descriviModifica, diffCampi, etichettaRecord } from "@/lib/audit/describe"
 
@@ -13,6 +14,7 @@ export async function PATCH(
   if (guard.response) return guard.response
 
   const { id } = await params
+  if (!await canAccessOwnedRecord(guard.permissions.snapshot, "clienti", "clienti", "clienti_proprietario_id", id)) return NextResponse.json({ error: "Cliente non trovato" }, { status: 404 })
   const patch = (await request.json()) as Partial<ClienteRecord>
   const updated = await updateClienteRecord(id, patch)
   if (!updated) {
@@ -47,6 +49,7 @@ export async function DELETE(
   if (guard.response) return guard.response
 
   const { id } = await params
+  if (!await canAccessOwnedRecord(guard.permissions.snapshot, "clienti", "clienti", "clienti_proprietario_id", id)) return NextResponse.json({ error: "Cliente non trovato" }, { status: 404 })
   const removed = await deleteClienteRecords([id])
   if (removed === 0) {
     return NextResponse.json({ error: "Cliente non trovato" }, { status: 404 })

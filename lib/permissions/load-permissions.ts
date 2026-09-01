@@ -222,6 +222,7 @@ export function applyUiPermission(snapshot: PermissionSnapshot, row: PermessoUiR
   }
 
   if (key.startsWith("scope:")) {
+    if (!enabled) return
     const [, resource, scope] = key.split(":")
     if (resource && scope) snapshot.scopes[resource] = scope as DataScope
     return
@@ -362,7 +363,14 @@ async function loadCurrentPermissionSnapshotUncached(): Promise<PermissionSnapsh
       snapshot.records[row.modulo] ??= {}
       snapshot.records[row.modulo][row.azione] = row.abilitato === true
     }
-    for (const row of payload.ui ?? []) applyUiPermission(snapshot, row)
+    const uiRows = payload.ui ?? []
+    const hasExplicitScopes = uiRows.some(
+      (row) => row.abilitato === true && row.chiave.startsWith("scope:"),
+    )
+    for (const row of uiRows) {
+      if (hasExplicitScopes && row.chiave === "visibilita_sedi") continue
+      applyUiPermission(snapshot, row)
+    }
     for (const row of payload.actions ?? [])
       snapshot.actions[row.azione] = row.abilitato === true
     for (const row of payload.fields ?? []) {

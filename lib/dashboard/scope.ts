@@ -4,6 +4,7 @@ type ScopeResource = "lead" | "clienti" | "compiti" | "scadenze" | "installatori
 
 type ScopedQuery = {
   eq: (column: string, value: string) => unknown
+  in: (column: string, values: string[]) => unknown
   is: (column: string, value: null) => unknown
 }
 
@@ -15,18 +16,11 @@ const OWNER_COLUMN: Record<ScopeResource, string | null> = {
   installatori: "proprietario_id",
 }
 
-const SEDE_COLUMN: Record<ScopeResource, string | null> = {
-  lead: "sede",
-  clienti: "sede",
-  compiti: "sede",
-  scadenze: null,
-  installatori: null,
-}
-
 export function applyDashboardScope<Q>(
   query: Q,
   snapshot: PermissionSnapshot,
   resource: ScopeResource,
+  teamOwnerIds: string[] = [],
 ): Q {
   const scoped = query as ScopedQuery
   const scope = snapshot.scopes[resource] ?? "none"
@@ -39,9 +33,17 @@ export function applyDashboardScope<Q>(
     return column ? (scoped.eq(column, subject.userId) as Q) : query
   }
 
-  if (scope === "own_sede" && subject.sede) {
-    const column = SEDE_COLUMN[resource]
-    return column ? (scoped.eq(column, subject.sede) as Q) : query
+  if (scope === "team") {
+    const column = OWNER_COLUMN[resource]
+    const ids = [...new Set([subject.userId, ...teamOwnerIds].filter((id): id is string => Boolean(id)))]
+    return column && ids.length > 0 ? (scoped.in(column, ids) as Q) : (scoped.is("id", null) as Q)
+  }
+
+  // Le configurazioni legacy basate sulla sede sono deliberatamente
+  // ristrette al proprietario corrente.
+  if (scope === "own_sede" && subject.userId) {
+    const column = OWNER_COLUMN[resource]
+    return column ? (scoped.eq(column, subject.userId) as Q) : query
   }
 
   return scoped.is("id", null) as Q

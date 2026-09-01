@@ -2,6 +2,7 @@ import { NextResponse, after } from "next/server"
 import type { Lead } from "@/lib/mock-data"
 import { updateLeadRecord, deleteLeadRecords } from "@/lib/leads/repository"
 import { requireApiRecord } from "@/lib/permissions/server"
+import { canAccessOwnedRecord } from "@/lib/permissions/data-scope"
 import { createClient } from "@/lib/supabase/server"
 import { attoreDaPermessi, logAudit } from "@/lib/audit/log"
 import { campiModificati, descriviModifica, diffCampi, etichettaRecord } from "@/lib/audit/describe"
@@ -18,6 +19,7 @@ export async function PATCH(
   if (guard.response) return guard.response
 
   const { id } = await params
+  if (!await canAccessOwnedRecord(guard.permissions.snapshot, "lead", "leads", "lead_proprietario_id", id)) return NextResponse.json({ error: "Lead non trovato" }, { status: 404 })
   const patch = (await request.json()) as Partial<Lead>
   const updated = await updateLeadRecord(id, patch)
   if (!updated) {
@@ -70,6 +72,7 @@ export async function DELETE(
   if (guard.response) return guard.response
 
   const { id } = await params
+  if (!await canAccessOwnedRecord(guard.permissions.snapshot, "lead", "leads", "lead_proprietario_id", id)) return NextResponse.json({ error: "Lead non trovato" }, { status: 404 })
   const removed = await deleteLeadRecords([id])
   if (removed === 0) {
     return NextResponse.json({ error: "Lead non trovato" }, { status: 404 })

@@ -16,6 +16,7 @@ import type {
 import { CLIENTI_RECORD_COLUMNS, CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
 import { applicaTagItalia } from "@/lib/clienti/tag-italia"
 import { DEFAULT_CLIENTI_PARAMS } from "@/lib/clienti/api-types"
+import { applyOwnerScope, filterCurrentAccessibleRecordIds, resolveCurrentOwnerScope } from "@/lib/permissions/data-scope"
 
 // Colonne proiettate in lettura — mai SELECT *.
 const LIST_COLUMNS = [
@@ -153,6 +154,9 @@ export async function queryClienti(
   let countQ = supabase
     .from("clienti")
     .select("id", { count: "exact", head: true })
+  const ownerScope = await resolveCurrentOwnerScope("clienti")
+  listQ = applyOwnerScope(listQ, "clienti_proprietario_id", ownerScope)
+  countQ = applyOwnerScope(countQ, "clienti_proprietario_id", ownerScope)
 
   if (params.search.trim()) {
     const p = `%${params.search.trim()}%`
@@ -283,11 +287,12 @@ export async function getClienteById(
   id: string,
 ): Promise<ClienteRecord | null> {
   const supabase = await createClient()
+  const ownerScope = await resolveCurrentOwnerScope("clienti")
 
   // Record e compiti correlati sono indipendenti: si lanciano insieme, così la
   // pagina di dettaglio paga un roundtrip invece di due in sequenza.
   const [detailResult, compiti] = await Promise.all([
-    supabase.from("clienti").select(DETAIL_COLUMNS).eq("id", id).single(),
+    applyOwnerScope(supabase.from("clienti").select(DETAIL_COLUMNS).eq("id", id), "clienti_proprietario_id", ownerScope).single(),
     loadCompitiCorrelati(id),
   ])
 
@@ -297,11 +302,11 @@ export async function getClienteById(
     return cliente
   }
 
-  const { data, error } = await supabase
+  const fallbackQ = applyOwnerScope(supabase
     .from("clienti")
     .select(LIST_COLUMNS)
-    .eq("id", id)
-    .single()
+    .eq("id", id), "clienti_proprietario_id", ownerScope)
+  const { data, error } = await fallbackQ.single()
   if (error || !data) return null
   const cliente = mapRow(data as unknown as Record<string, unknown>)
   cliente.compiti = compiti
@@ -352,6 +357,8 @@ export async function updateClienteRecord(
   id: string,
   patch: Partial<ClienteRecord>,
 ): Promise<ClienteRecord | null> {
+  const allowed = await filterCurrentAccessibleRecordIds("clienti", "clienti", "clienti_proprietario_id", [id])
+  if (allowed.length === 0) return null
   const supabase = await createClient()
   const row: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
@@ -410,11 +417,13 @@ export async function updateClienteRecord(
 
 export async function deleteClienteRecords(ids: string[]): Promise<number> {
   if (ids.length === 0) return 0
+  const allowed = await filterCurrentAccessibleRecordIds("clienti", "clienti", "clienti_proprietario_id", ids)
+  if (allowed.length === 0) return 0
   const supabase = await createClient()
   const { error, count } = await supabase
     .from("clienti")
     .delete({ count: "exact" })
-    .in("id", ids)
+    .in("id", allowed)
   if (error) throw new Error(`deleteClienteRecords: ${error.message}`)
   return count ?? 0
 }

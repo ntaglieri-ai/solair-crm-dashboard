@@ -19,6 +19,7 @@ import {
   Sparkles,
   ScrollText,
   ShieldCheck,
+  UsersRound,
   Users,
   Wrench,
 } from "lucide-react"
@@ -189,6 +190,16 @@ export const CRM_SETTINGS_CATALOG: CrmSettingsCatalogItem[] = [
     href: "/crm-settings/account/permessi",
     pageKey: "crm_settings.account.permessi",
     icon: ShieldCheck,
+    status: "active",
+  },
+  {
+    id: "teams",
+    group: "account-security",
+    title: "Team",
+    description: "Agenti e Direttori dei gruppi operativi",
+    href: "/crm-settings/account/teams",
+    pageKey: "crm_settings.account",
+    icon: UsersRound,
     status: "active",
   },
   {

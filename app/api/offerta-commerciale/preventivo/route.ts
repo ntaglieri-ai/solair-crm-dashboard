@@ -5,6 +5,7 @@
 import { NextResponse, after } from "next/server"
 import { requireApiRecord } from "@/lib/permissions/server"
 import { createClient } from "@/lib/supabase/server"
+import { applyOwnerScope, canAccessOwnedRecord, resolveOwnerScope } from "@/lib/permissions/data-scope"
 import { ensureFolder } from "@/lib/nextcloud/admin-webdav"
 import {
   documentiObbligatoriFolderPath,
@@ -46,12 +47,13 @@ export async function GET(request: Request) {
 
   const supabase = await createClient()
   const p = pattern(term)
-  const { data, error } = await supabase
+  const ownerScope = await resolveOwnerScope(guard.permissions.snapshot, "lead")
+  const { data, error } = await applyOwnerScope(supabase
     .from("leads")
     .select(CAMPI_CONTATTO)
     .or(`nome_lead.ilike.${p},nome.ilike.${p},cognome.ilike.${p},email.ilike.${p},telefono.ilike.${p}`)
     .order("created_at", { ascending: false })
-    .limit(MAX_RISULTATI)
+    .limit(MAX_RISULTATI), "lead_proprietario_id", ownerScope)
 
   if (error) {
     console.error("[offerta-commerciale/preventivo] ricerca lead:", error.message)
@@ -81,6 +83,7 @@ export async function POST(request: Request) {
   let creato = false
 
   if (leadId) {
+    if (!await canAccessOwnedRecord(guard.permissions.snapshot, "lead", "leads", "lead_proprietario_id", leadId)) return NextResponse.json({ error: "Lead non trovato" }, { status: 404 })
     const { data, error } = await supabase
       .from("leads")
       .select(CAMPI_CONTATTO)

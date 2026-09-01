@@ -87,7 +87,11 @@ function snapshotFinto(ruoloCode: "SUPERADMIN" | "AGENT" = "SUPERADMIN") {
     records: {},
     fields: {},
     actions: {},
-    scopes: {},
+    scopes: {
+      lead: ruoloCode === "AGENT" ? "assigned" : "all",
+      clienti: ruoloCode === "AGENT" ? "assigned" : "all",
+      installatori: ruoloCode === "AGENT" ? "assigned" : "all",
+    },
   } as unknown as Parameters<typeof resolveBulkRecipients>[0]["snapshot"]
 }
 

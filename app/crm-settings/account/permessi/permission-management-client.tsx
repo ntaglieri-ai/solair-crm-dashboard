@@ -14,7 +14,6 @@ import {
   type PaginaId,
   type ModuloRecordId,
   type RecordPermesso,
-  type VisibilitaScope,
 } from "@/lib/ruoli-data"
 import { SectionHeader } from "@/components/impostazioni/settings-ui"
 import { AccountProfileCard } from "@/components/crm-settings/account-profile-card"
@@ -28,7 +27,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { ACTION_KEYS, MODULE_KEYS } from "@/lib/permissions/constants"
-import type { FieldAccess } from "@/lib/permissions/types"
+import type { DataScope, FieldAccess } from "@/lib/permissions/types"
 import {
   CRM_FIELD_CATALOG,
   CRM_FIELD_MODULES,
@@ -62,37 +61,6 @@ import {
   AccordionTrigger,
   AccordionContent,
 } from "@/components/ui/accordion"
-
-/** Radio accessibile minimale (manca un componente radio-group nel progetto). */
-function RadioRow({
-  checked,
-  onSelect,
-  label,
-}: {
-  checked: boolean
-  onSelect: () => void
-  label: string
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={checked}
-      onClick={onSelect}
-      className="flex items-center gap-2.5 text-left text-sm"
-    >
-      <span
-        className={cn(
-          "flex size-4 shrink-0 items-center justify-center rounded-full border",
-          checked ? "border-teal" : "border-input",
-        )}
-      >
-        {checked ? <span className="size-2 rounded-full bg-teal" /> : null}
-      </span>
-      <span className="text-foreground">{label}</span>
-    </button>
-  )
-}
 
 function emptyPermessi(): RuoloPermessi {
   const record = Object.fromEntries(
@@ -159,6 +127,10 @@ const ROLE_COLORS: { id: RuoloColore; label: string }[] = [
 ]
 
 const ACTION_LABELS: Record<string, string> = {
+  "dashboard.economic.view": "Vede indicatori economici",
+  "dashboard.system_status.view": "Vede stato tecnico dei servizi",
+  "calendario.events.manage_all": "Gestisce tutti gli eventi calendario",
+  "clienti.note_interne.view": "Vede e gestisce note interne Clienti",
   "crm_settings.account.audit.view": "Vede Audit & Log",
   "crm_settings.account.session.view": "Vede Session & Access",
   "crm_settings.account.users.manage": "Gestisce utenti",
@@ -871,25 +843,41 @@ export function PermissionManagementClient({
               </AccordionContent>
             </AccordionItem>
 
-            {/* 4. Visibilità sedi */}
-            <AccordionItem value="sedi">
-              <AccordionTrigger>Visibilità sedi</AccordionTrigger>
+            {/* 4. Perimetro dati */}
+            <AccordionItem value="scope">
+              <AccordionTrigger>Perimetro dei dati</AccordionTrigger>
               <AccordionContent>
-                <div className="flex flex-col gap-3">
-                  {(
-                    [
-                      ["all", "Tutte le sedi"],
-                      ["own", "Solo sede assegnata all'utente"],
-                    ] as [VisibilitaScope, string][]
-                  ).map(([val, label]) => (
-                    <RadioRow
-                      key={val}
-                      label={label}
-                      checked={draft.visibilita_sedi === val}
-                      onSelect={() => setDraft({ ...draft, visibilita_sedi: val })}
-                    />
+                <div className="grid gap-3 md:grid-cols-2">
+                  {MODULE_KEYS.map((moduleKey) => (
+                    <div key={moduleKey} className="grid gap-1.5 rounded-lg border border-border p-3">
+                      <Label>{FIELD_MODULE_LABELS[moduleKey as FieldModuleKey] ?? moduleKey}</Label>
+                      <Select
+                        value={draft.scope_dati?.[moduleKey] ?? "none"}
+                        onValueChange={(value) =>
+                          setDraft({
+                            ...draft,
+                            scope_dati: {
+                              ...draft.scope_dati,
+                              [moduleKey]: value as DataScope,
+                            },
+                          })
+                        }
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nessun dato</SelectItem>
+                          <SelectItem value="own">Solo propri record</SelectItem>
+                          <SelectItem value="assigned">Solo record assegnati</SelectItem>
+                          <SelectItem value="team">Team coordinati</SelectItem>
+                          <SelectItem value="all">Tutti i record</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   ))}
                 </div>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  I team sono indipendenti dalle sedi. Un Direttore senza team vede soltanto i propri record.
+                </p>
               </AccordionContent>
             </AccordionItem>
 

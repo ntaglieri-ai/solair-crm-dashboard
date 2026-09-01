@@ -198,6 +198,7 @@ export async function getAllLeads(filters?: {
   advanced?: AdvancedFilterState
   limit?: number
   offset?: number
+  visibleOwnerIds?: string[]
 }): Promise<Lead[]> {
   const supabase = await createClient()
 
@@ -208,6 +209,10 @@ export async function getAllLeads(filters?: {
     .from("leads")
     .select(LIST_COLUMNS)
     .order(column, { ascending, nullsFirst: false })
+
+  if (filters?.visibleOwnerIds) {
+    query = query.in("lead_proprietario_id", filters.visibleOwnerIds)
+  }
 
   // Tiebreaker deterministici: garantiscono paginazione stabile a parità di valore.
   if (column !== "updated_at")
@@ -332,12 +337,17 @@ export async function getTotalCount(filters?: {
   score?: string
   search?: string
   advanced?: AdvancedFilterState
+  visibleOwnerIds?: string[]
 }): Promise<number> {
   const supabase = await createClient()
 
   let query = supabase
     .from("leads")
     .select("id", { count: "exact", head: true })
+
+  if (filters?.visibleOwnerIds) {
+    query = query.in("lead_proprietario_id", filters.visibleOwnerIds)
+  }
 
   if (filters?.stato && filters.stato !== "all")
     query = query.eq("stato_lead", filters.stato)

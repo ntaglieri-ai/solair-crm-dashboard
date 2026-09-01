@@ -99,6 +99,10 @@ export const RECORD_ACTIONS: RecordAction[] = [
 ]
 
 export const ACTION_KEYS = [
+  "dashboard.economic.view",
+  "dashboard.system_status.view",
+  "calendario.events.manage_all",
+  "clienti.note_interne.view",
   "crm_settings.account.audit.view",
   "crm_settings.account.session.view",
   "crm_settings.account.users.manage",
@@ -292,6 +296,10 @@ export function buildDefaultPermissionSnapshot(params?: {
     ])
     grantRecords([...MODULE_KEYS], ["view", "create", "edit", "delete", "export", "assign"])
     grantActions([
+      "dashboard.economic.view",
+      "dashboard.system_status.view",
+      "calendario.events.manage_all",
+      "clienti.note_interne.view",
       "crm_settings.account.users.manage",
       "crm_settings.account.roles.manage",
       "lead.columns.customize_own",
@@ -355,6 +363,9 @@ export function buildDefaultPermissionSnapshot(params?: {
       "assign",
     ])
     grantActions([
+      "dashboard.economic.view",
+      "calendario.events.manage_all",
+      "clienti.note_interne.view",
       "lead.columns.customize_own",
       "lead.tags.edit",
       "clienti.tags.edit",
@@ -370,7 +381,7 @@ export function buildDefaultPermissionSnapshot(params?: {
     ])
     for (const moduleKey of MODULE_KEYS) {
       fields[moduleKey] = roleFields[moduleKey] ?? { "*": "readonly" }
-      scopes[moduleKey] = "own_sede"
+      scopes[moduleKey] = "team"
     }
   } else {
     grantPages("rw", ["lead", "clienti", "compiti", "calendario", "scadenze", "installatori"])

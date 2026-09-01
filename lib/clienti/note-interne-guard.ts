@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getCurrentPermissions } from "@/lib/permissions/server"
-import { canAccessNoteInterne } from "./note-interne"
+import { canAccessOwnedRecord } from "@/lib/permissions/data-scope"
 
 /**
  * Guard delle route delle note interne.
@@ -10,9 +10,16 @@ import { canAccessNoteInterne } from "./note-interne"
  * Un agente che curiosa l'endpoint vede la stessa risposta che vedrebbe
  * per una rotta inesistente.
  */
-export async function requireApiNoteInterne() {
+export async function requireApiNoteInterne(clienteId?: string) {
   const permissions = await getCurrentPermissions()
-  if (!canAccessNoteInterne(permissions.snapshot.subject.ruoloCode)) {
+  const allowedRecord = !clienteId || await canAccessOwnedRecord(
+    permissions.snapshot,
+    "clienti",
+    "clienti",
+    "clienti_proprietario_id",
+    clienteId,
+  )
+  if (!permissions.canAction("clienti.note_interne.view") || !allowedRecord) {
     return {
       permissions,
       response: NextResponse.json({ error: "Not found" }, { status: 404 }),

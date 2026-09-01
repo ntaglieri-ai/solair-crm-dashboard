@@ -5,9 +5,9 @@ import { requireApiNoteInterne } from "@/lib/clienti/note-interne-guard"
 type Params = { params: Promise<{ id: string; notaId: string }> }
 
 export async function PATCH(request: Request, { params }: Params) {
-  const guard = await requireApiNoteInterne()
-  if (guard.response) return guard.response
   const { id, notaId } = await params
+  const guard = await requireApiNoteInterne(id)
+  if (guard.response) return guard.response
 
   const body = (await request.json().catch(() => null)) as { contenuto?: string } | null
   const contenuto = body?.contenuto?.trim()
@@ -38,9 +38,9 @@ export async function PATCH(request: Request, { params }: Params) {
 
 /** Soft delete: la riga resta, con `eliminato` e `eliminato_il` valorizzati. */
 export async function DELETE(_request: Request, { params }: Params) {
-  const guard = await requireApiNoteInterne()
-  if (guard.response) return guard.response
   const { id, notaId } = await params
+  const guard = await requireApiNoteInterne(id)
+  if (guard.response) return guard.response
 
   const supabase = await createClient()
   const { data, error } = await supabase

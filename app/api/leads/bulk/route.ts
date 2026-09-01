@@ -11,6 +11,7 @@ import {
   insertLeadUpdateActivity,
 } from "@/lib/leads/update-activity-log"
 import type { PermissionEngine } from "@/lib/permissions/types"
+import { filterAccessibleRecordIds } from "@/lib/permissions/data-scope"
 
 type BulkPayload =
   | { action: "delete"; ids: string[] }
@@ -64,15 +65,17 @@ export async function POST(request: Request) {
     case "delete": {
       const guard = await requireApiRecord("lead", "delete")
       if (guard.response) return guard.response
-      const affected = await deleteLeadRecords(body.ids)
+      const ids = await filterAccessibleRecordIds(guard.permissions.snapshot, "lead", "leads", "lead_proprietario_id", body.ids)
+      const affected = await deleteLeadRecords(ids)
       return NextResponse.json({ affected })
     }
     case "convert": {
       const guard = await requireApiRecord("lead", "edit")
       if (guard.response) return guard.response
-      const affected = await bulkUpdateRecords(body.ids, "Stato Lead", "Convertito")
+      const ids = await filterAccessibleRecordIds(guard.permissions.snapshot, "lead", "leads", "lead_proprietario_id", body.ids)
+      const affected = await bulkUpdateRecords(ids, "Stato Lead", "Convertito")
       await logBulkUpdate({
-        ids: body.ids,
+        ids,
         affected,
         permissions: guard.permissions,
         field: "Stato Lead",
@@ -83,9 +86,10 @@ export async function POST(request: Request) {
     case "transfer": {
       const guard = await requireApiRecord("lead", "assign")
       if (guard.response) return guard.response
-      const affected = await bulkUpdateRecords(body.ids, "Lead Proprietario", body.value)
+      const ids = await filterAccessibleRecordIds(guard.permissions.snapshot, "lead", "leads", "lead_proprietario_id", body.ids)
+      const affected = await bulkUpdateRecords(ids, "Lead Proprietario", body.value)
       await logBulkUpdate({
-        ids: body.ids,
+        ids,
         affected,
         permissions: guard.permissions,
         field: "Lead Proprietario",
@@ -96,9 +100,10 @@ export async function POST(request: Request) {
     case "update": {
       const guard = await requireApiRecord("lead", "bulk_update")
       if (guard.response) return guard.response
-      const affected = await bulkUpdateRecords(body.ids, body.field, body.value)
+      const ids = await filterAccessibleRecordIds(guard.permissions.snapshot, "lead", "leads", "lead_proprietario_id", body.ids)
+      const affected = await bulkUpdateRecords(ids, body.field, body.value)
       await logBulkUpdate({
-        ids: body.ids,
+        ids,
         affected,
         permissions: guard.permissions,
         field: body.field,

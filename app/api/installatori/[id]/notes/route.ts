@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { requireApiRecord } from "@/lib/permissions/server"
+import { canAccessOwnedRecord } from "@/lib/permissions/data-scope"
 
 export async function POST(
   request: Request,
@@ -9,6 +10,7 @@ export async function POST(
   const guard = await requireApiRecord("installatori", "edit")
   if (guard.response) return guard.response
   const { id } = await params
+  if (!await canAccessOwnedRecord(guard.permissions.snapshot, "installatori", "installatori", "proprietario_id", id)) return NextResponse.json({ error: "Installatore non trovato" }, { status: 404 })
   const body = (await request.json().catch(() => null)) as { text?: string } | null
   const text = body?.text?.trim()
   if (!text) return NextResponse.json({ error: "Nota vuota" }, { status: 400 })

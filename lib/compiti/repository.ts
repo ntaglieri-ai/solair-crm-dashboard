@@ -13,6 +13,7 @@ import type {
   CompitiListParams,
   CompitiListResponse,
 } from "@/lib/compiti/api-types"
+import { applyOwnerScope, filterCurrentAccessibleRecordIds, resolveCurrentOwnerScope } from "@/lib/permissions/data-scope"
 
 // Colonne proiettate in lettura — mai SELECT *.
 const LIST_COLUMNS = [
@@ -170,6 +171,7 @@ export async function queryCompiti(
   params: CompitiListParams,
 ): Promise<CompitiListResponse> {
   const supabase = await createClient()
+  const ownerScope = await resolveCurrentOwnerScope("compiti")
   const run = async (extended: boolean) => {
     const sortMap = extended ? SORT_COLUMN : LEGACY_SORT_COLUMN
     const sortCol = (params.sortBy && sortMap[params.sortBy]) || "scadenza"
@@ -193,6 +195,15 @@ export async function queryCompiti(
       .select("id", { count: "exact", head: true })
       .lt("scadenza", now)
       .neq("stato", "Completato")
+
+    listQ = applyOwnerScope(listQ, "proprietario_id", ownerScope)
+    countQ = applyOwnerScope(countQ, "proprietario_id", ownerScope)
+    scadutiQ = applyOwnerScope(scadutiQ, "proprietario_id", ownerScope)
+
+    const absoluteQ = applyOwnerScope(supabase.from("compiti").select("id", { count: "exact", head: true }), "proprietario_id", ownerScope)
+    const overdueQ = applyOwnerScope(supabase.from("compiti").select("id", { count: "exact", head: true }).lt("scadenza", now).neq("stato", "Completato"), "proprietario_id", ownerScope)
+    const highPriorityQ = applyOwnerScope(supabase.from("compiti").select("id", { count: "exact", head: true }).eq("priorita", "Alto"), "proprietario_id", ownerScope)
+    const openQ = applyOwnerScope(supabase.from("compiti").select("id", { count: "exact", head: true }).in("stato", OPEN_STATI), "proprietario_id", ownerScope)
 
     if (params.search.trim()) {
       const p = `%${params.search.trim()}%`
@@ -250,20 +261,10 @@ export async function queryCompiti(
       listQ,
       countQ,
       scadutiQ,
-      supabase.from("compiti").select("id", { count: "exact", head: true }),
-      supabase
-        .from("compiti")
-        .select("id", { count: "exact", head: true })
-        .lt("scadenza", now)
-        .neq("stato", "Completato"),
-      supabase
-        .from("compiti")
-        .select("id", { count: "exact", head: true })
-        .eq("priorita", "Alto"),
-      supabase
-        .from("compiti")
-        .select("id", { count: "exact", head: true })
-        .in("stato", OPEN_STATI),
+      absoluteQ,
+      overdueQ,
+      highPriorityQ,
+      openQ,
     ])
 
     return {
@@ -328,17 +329,16 @@ export async function queryCompiti(
 
 export async function getCompitoById(id: string): Promise<Compito | null> {
   const supabase = await createClient()
-  let { data, error } = await supabase
+  const ownerScope = await resolveCurrentOwnerScope("compiti")
+  let { data, error } = await applyOwnerScope(supabase
     .from("compiti")
     .select(LIST_COLUMNS)
-    .eq("id", id)
-    .single()
+    .eq("id", id), "proprietario_id", ownerScope).single()
   if (error) {
-    const fallback = await supabase
+    const fallback = await applyOwnerScope(supabase
       .from("compiti")
       .select(LEGACY_LIST_COLUMNS)
-      .eq("id", id)
-      .single()
+      .eq("id", id), "proprietario_id", ownerScope).single()
     data = fallback.data
     error = fallback.error
   }
@@ -417,6 +417,8 @@ export async function updateCompitoRecord(
   id: string,
   patch: Partial<Compito>,
 ): Promise<Compito | null> {
+  const allowed = await filterCurrentAccessibleRecordIds("compiti", "compiti", "proprietario_id", [id])
+  if (allowed.length === 0) return null
   const supabase = await createClient()
   const row: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
@@ -469,11 +471,13 @@ export async function updateCompitoRecord(
 
 export async function deleteCompitoRecords(ids: string[]): Promise<number> {
   if (ids.length === 0) return 0
+  const allowed = await filterCurrentAccessibleRecordIds("compiti", "compiti", "proprietario_id", ids)
+  if (allowed.length === 0) return 0
   const supabase = await createClient()
   const { error, count } = await supabase
     .from("compiti")
     .delete({ count: "exact" })
-    .in("id", ids)
+    .in("id", allowed)
   if (error) throw new Error(`deleteCompitoRecords: ${error.message}`)
   return count ?? 0
 }

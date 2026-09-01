@@ -3,6 +3,8 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { logAudit } from "@/lib/audit/log"
+import { applyOwnerScope, resolveOwnerScope } from "@/lib/permissions/data-scope"
+import type { PermissionSnapshot } from "@/lib/permissions/types"
 
 /** Entita' su cui il consenso email e' verificabile. */
 export type ConsentEntita = "lead" | "cliente"
@@ -14,6 +16,8 @@ type ConsentConfig = {
   modulo: "lead" | "cliente"
   etichettaSingolare: string
   etichettaPlurale: string
+  resource: "lead" | "clienti"
+  ownerColumn: string
 }
 
 const CONSENT_CONFIG: Record<ConsentEntita, ConsentConfig> = {
@@ -23,6 +27,8 @@ const CONSENT_CONFIG: Record<ConsentEntita, ConsentConfig> = {
     modulo: "lead",
     etichettaSingolare: "lead",
     etichettaPlurale: "lead",
+    resource: "lead",
+    ownerColumn: "lead_proprietario_id",
   },
   cliente: {
     table: "clienti",
@@ -30,6 +36,8 @@ const CONSENT_CONFIG: Record<ConsentEntita, ConsentConfig> = {
     modulo: "cliente",
     etichettaSingolare: "cliente",
     etichettaPlurale: "clienti",
+    resource: "clienti",
+    ownerColumn: "clienti_proprietario_id",
   },
 }
 
@@ -95,6 +103,7 @@ function text(value: unknown): string {
 export async function filtraDestinatariConsenzienti(params: {
   entita: ConsentEntita
   ids: string[]
+  snapshot?: PermissionSnapshot
 }): Promise<{ data: EsitoFiltroConsenso | null; error: string | null }> {
   const config = CONSENT_CONFIG[params.entita]
   const ids = [...new Set(params.ids)]
@@ -112,10 +121,14 @@ export async function filtraDestinatariConsenzienti(params: {
   }
 
   const supabase = await createClient()
-  const { data, error } = await supabase
+  const baseQuery = supabase
     .from(config.table)
     .select(`id,${config.emailColumn}`)
     .in("id", ids)
+  const scopedQuery = params.snapshot
+    ? applyOwnerScope(baseQuery, config.ownerColumn, await resolveOwnerScope(params.snapshot, config.resource))
+    : baseQuery
+  const { data, error } = await scopedQuery
 
   if (error) return { data: null, error: error.message }
 

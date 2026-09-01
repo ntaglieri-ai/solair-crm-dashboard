@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { triggerDocumentazioneCompleta } from "@/lib/automazioni/handoff"
 import { requireApiRecord } from "@/lib/permissions/server"
+import { canAccessOwnedRecord } from "@/lib/permissions/data-scope"
 
 // Fase 5.5 — conferma "documentazione completa" su un Cliente: crea il Compito
 // di passaggio pratica per il responsabile configurato (Paola, via
@@ -21,6 +22,7 @@ export async function POST(
   if (guard.response) return guard.response
 
   const { id } = await params
+  if (!await canAccessOwnedRecord(guard.permissions.snapshot, "clienti", "clienti", "clienti_proprietario_id", id)) return NextResponse.json({ error: "Cliente non trovato" }, { status: 404 })
   const supabase = await createClient()
   const { data: cliente, error } = await supabase
     .from("clienti")

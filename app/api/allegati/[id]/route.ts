@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { deleteFile } from "@/lib/nextcloud/admin-webdav"
 import { deleteCollegamentoRow } from "@/lib/allegati/repository"
 import { isPathInsideRecordFolder, type AllegatoRecordTipo } from "@/lib/allegati/paths"
+import { canAccessCrmRecord } from "@/lib/permissions/data-scope"
 
 const PERMISSION_MODULE: Record<AllegatoRecordTipo, string> = {
   lead: "lead",
@@ -46,6 +47,9 @@ export async function DELETE(
 
     const guard = await requireApiRecord(PERMISSION_MODULE[recordTipo], "delete")
     if (guard.response) return guard.response
+    if (!(await canAccessCrmRecord(guard.permissions.snapshot, recordTipo, recordId))) {
+      return NextResponse.json({ error: "Non trovato" }, { status: 404 })
+    }
 
     if (!isPathInsideRecordFolder(recordTipo, recordId, nomeRecord, path)) {
       return NextResponse.json({ error: "Percorso non consentito" }, { status: 403 })
@@ -66,14 +70,20 @@ export async function DELETE(
     const supabase = await createClient()
     const { data, error } = await supabase
       .from("collegamenti")
-      .select("record_tipo")
+      .select("record_tipo,record_id")
       .eq("id", id)
       .maybeSingle()
     if (error || !data) return NextResponse.json({ error: "Non trovato" }, { status: 404 })
 
     const recordTipo = data.record_tipo as AllegatoRecordTipo
+    if (!isValidTipo(recordTipo)) {
+      return NextResponse.json({ error: "Non trovato" }, { status: 404 })
+    }
     const guard = await requireApiRecord(PERMISSION_MODULE[recordTipo], "delete")
     if (guard.response) return guard.response
+    if (!(await canAccessCrmRecord(guard.permissions.snapshot, recordTipo, data.record_id as string))) {
+      return NextResponse.json({ error: "Non trovato" }, { status: 404 })
+    }
 
     await deleteCollegamentoRow(id)
     return NextResponse.json({ ok: true })

@@ -49,11 +49,22 @@ describe("applyUiPermission — visibilita_sedi", () => {
 })
 
 describe("applyUiPermission — altre chiavi", () => {
+  it("DIRECTOR usa il perimetro team come default", () => {
+    const snapshot = snapshotDi("DIRECTOR")
+    for (const scope of Object.values(snapshot.scopes)) expect(scope).toBe("team")
+  })
+
   it("una chiave 'scope:<risorsa>:<scope>' vale solo per quella risorsa", () => {
     const snapshot = snapshotDi("AGENT")
     applyUiPermission(snapshot, { chiave: "scope:lead:team", abilitato: true })
     expect(snapshot.scopes.lead).toBe("team")
     expect(snapshot.scopes.clienti).not.toBe("team")
+  })
+
+  it("ignora le alternative scope disabilitate salvate dal pannello", () => {
+    const snapshot = snapshotDi("AGENT")
+    applyUiPermission(snapshot, { chiave: "scope:lead:all", abilitato: false })
+    expect(snapshot.scopes.lead).toBe("assigned")
   })
 
   it("una chiave 'field:<modulo>:<campo>' spenta nasconde il campo", () => {

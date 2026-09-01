@@ -143,6 +143,11 @@ function buildRuoli(
     const scope_dati = buildDefaultPermissionSnapshot({
       ruoloCode: normalizeRoleCode(r.code ?? undefined),
     }).scopes
+    for (const row of permessiUi) {
+      if (row.ruolo_id !== r.id || row.abilitato !== true || !row.chiave.startsWith("scope:")) continue
+      const [, resource, scope] = row.chiave.split(":")
+      if (resource && scope) scope_dati[resource] = scope as typeof scope_dati[string]
+    }
     const campi: Record<string, Record<string, string>> = {}
     for (const row of permessiCampo) {
       if (row.ruolo_id !== r.id) continue

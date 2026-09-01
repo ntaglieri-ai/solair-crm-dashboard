@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { applyOwnerScope, filterCurrentAccessibleRecordIds, resolveCurrentOwnerScope } from "@/lib/permissions/data-scope"
 import type { ClienteCompito, StatoCompito } from "@/lib/mock-data"
 import type { ScadenzeListParams, ScadenzeListResponse, ScadenzaSortKey } from "@/lib/scadenze/api-types"
 
@@ -75,6 +76,7 @@ export async function queryScadenze(
   params: ScadenzeListParams,
 ): Promise<ScadenzeListResponse> {
   const supabase = await createClient()
+  const ownerScope = await resolveCurrentOwnerScope("scadenze")
   const sortCol = (params.sortBy && SORT_COLUMN[params.sortBy]) || "data_scadenza"
   const ascending = params.sortDir === "asc"
   const from = (params.page - 1) * params.pageSize
@@ -89,6 +91,11 @@ export async function queryScadenze(
     .order(sortCol, { ascending, nullsFirst: false })
     .range(from, to)
   let countQ = supabase.from("scadenze").select("id", { count: "exact", head: true })
+  listQ = applyOwnerScope(listQ, "proprietario_id", ownerScope)
+  countQ = applyOwnerScope(countQ, "proprietario_id", ownerScope)
+  const absoluteQ = applyOwnerScope(supabase.from("scadenze").select("id", { count: "exact", head: true }), "proprietario_id", ownerScope)
+  const expiredQ = applyOwnerScope(supabase.from("scadenze").select("id", { count: "exact", head: true }).lt("data_scadenza", nowIso), "proprietario_id", ownerScope)
+  const nextSevenQ = applyOwnerScope(supabase.from("scadenze").select("id", { count: "exact", head: true }).gte("data_scadenza", nowIso).lte("data_scadenza", in7DaysIso), "proprietario_id", ownerScope)
 
   if (params.search.trim()) {
     const p = `%${params.search.trim()}%`
@@ -128,16 +135,9 @@ export async function queryScadenze(
   ] = await Promise.all([
     listQ,
     countQ,
-    supabase.from("scadenze").select("id", { count: "exact", head: true }),
-    supabase
-      .from("scadenze")
-      .select("id", { count: "exact", head: true })
-      .lt("data_scadenza", nowIso),
-    supabase
-      .from("scadenze")
-      .select("id", { count: "exact", head: true })
-      .gte("data_scadenza", nowIso)
-      .lte("data_scadenza", in7DaysIso),
+    absoluteQ,
+    expiredQ,
+    nextSevenQ,
   ])
 
   if (error) console.error("[scadenze/repository] queryScadenze:", error.message)
@@ -177,11 +177,11 @@ export async function getScadenzaById(
   id: string,
 ): Promise<ScadenzaRecord | null> {
   const supabase = await createClient()
-  const { data, error } = await supabase
+  const ownerScope = await resolveCurrentOwnerScope("scadenze")
+  const { data, error } = await applyOwnerScope(supabase
     .from("scadenze")
     .select(SCADENZA_COLUMNS)
-    .eq("id", id)
-    .maybeSingle()
+    .eq("id", id), "proprietario_id", ownerScope).maybeSingle()
 
   if (error) throw new Error(`Lettura scadenza: ${error.message}`)
   if (!data) return null
@@ -258,6 +258,8 @@ export async function updateScadenzaRecord(
   id: string,
   patch: Partial<ScadenzaInput>,
 ): Promise<ScadenzaRecord | null> {
+  const allowed = await filterCurrentAccessibleRecordIds("scadenze", "scadenze", "proprietario_id", [id])
+  if (allowed.length === 0) return null
   const supabase = await createClient()
   const row: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
@@ -284,6 +286,8 @@ export async function updateScadenzaRecord(
 }
 
 export async function deleteScadenzaRecord(id: string): Promise<boolean> {
+  const allowed = await filterCurrentAccessibleRecordIds("scadenze", "scadenze", "proprietario_id", [id])
+  if (allowed.length === 0) return false
   const supabase = await createClient()
   const { error, count } = await supabase
     .from("scadenze")

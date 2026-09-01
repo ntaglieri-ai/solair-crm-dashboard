@@ -4,6 +4,7 @@ import type { SystemSede } from "@/lib/system-settings-data"
 import { regionFromProvince } from "@/lib/dashboard/italy-regions"
 import type { PermissionSnapshot } from "@/lib/permissions/types"
 import { applyDashboardScope } from "@/lib/dashboard/scope"
+import { resolveOwnerScope } from "@/lib/permissions/data-scope"
 import { getNextcloudAppPassword, getNextcloudUsername } from "@/lib/nextcloud/credentials"
 import { nextcloudUsernameFromEmail } from "@/lib/nextcloud/config"
 import { recentFiles } from "@/lib/nextcloud/webdav"
@@ -476,6 +477,12 @@ export async function getAgentDashboardData(
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const staleCutoff = new Date(today)
   staleCutoff.setDate(staleCutoff.getDate() - STALE_LEAD_DAYS)
+  const [leadScope, clientScope, taskScope] = await Promise.all([
+    resolveOwnerScope(snapshot, "lead"),
+    resolveOwnerScope(snapshot, "clienti"),
+    resolveOwnerScope(snapshot, "compiti"),
+  ])
+  const ids = (scope: typeof leadScope) => scope.kind === "owners" ? scope.ownerIds : []
 
   const leadsActiveQ = applyDashboardScope(
     supabase
@@ -485,11 +492,13 @@ export async function getAgentDashboardData(
       .neq("stato_lead", "Rifiutato"),
     snapshot,
     "lead",
+    ids(leadScope),
   )
   const clientsQ = applyDashboardScope(
     supabase.from("clienti").select("id", { count: "exact", head: true }),
     snapshot,
     "clienti",
+    ids(clientScope),
   )
   const overdueTasksQ = applyDashboardScope(
     supabase
@@ -499,6 +508,7 @@ export async function getAgentDashboardData(
       .neq("stato", "Completato"),
     snapshot,
     "compiti",
+    ids(taskScope),
   )
   const upcomingTasksQ = applyDashboardScope(
     supabase
@@ -509,6 +519,7 @@ export async function getAgentDashboardData(
       .limit(5),
     snapshot,
     "compiti",
+    ids(taskScope),
   )
   const staleLeadsQ = applyDashboardScope(
     supabase
@@ -520,6 +531,7 @@ export async function getAgentDashboardData(
       .limit(5),
     snapshot,
     "lead",
+    ids(leadScope),
   )
 
   const [activeLeads, clients, overdueTasks, upcomingTasks, staleLeads] =

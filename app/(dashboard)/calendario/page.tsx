@@ -21,5 +21,11 @@ export default async function CalendarioPage() {
     getCategorie(),
   ])
 
-  return <CalendarioClient eventiIniziali={eventi} categorieIniziali={categorie} />
+  return (
+    <CalendarioClient
+      eventiIniziali={eventi}
+      categorieIniziali={categorie}
+      tidycalBookingUrl={process.env.NEXT_PUBLIC_TIDYCAL_BOOKING_URL?.trim() || null}
+    />
+  )
 }

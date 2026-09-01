@@ -219,7 +219,9 @@ export function EventoDialog({
           </DialogTitle>
           <DialogDescription>
             {!modificabile
-              ? `Evento creato da ${evento?.creato_da_nome ?? "un altro utente"}: puoi solo consultarlo.`
+              ? evento?.origine === "tidycal"
+                ? "Prenotazione sincronizzata da TidyCal. Modificala o cancellala dalla piattaforma TidyCal."
+                : `Evento creato da ${evento?.creato_da_nome ?? "un altro utente"}: puoi solo consultarlo.`
               : "Gli eventi del calendario sono manuali e indipendenti da compiti e scadenze."}
           </DialogDescription>
         </DialogHeader>

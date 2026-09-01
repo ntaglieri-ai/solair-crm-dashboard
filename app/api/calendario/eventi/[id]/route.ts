@@ -60,6 +60,12 @@ export async function PATCH(request: Request, { params }: Params) {
   // DB sarebbe respinta dal CHECK con un messaggio incomprensibile.
   const attuale = await getEventoById(id)
   if (!attuale) return NextResponse.json({ error: "Evento non trovato" }, { status: 404 })
+  if (attuale.origine !== "crm") {
+    return NextResponse.json(
+      { error: "Le prenotazioni TidyCal si modificano dalla piattaforma TidyCal" },
+      { status: 409 },
+    )
+  }
   const inizioFinale = (patch.inizio as string) ?? attuale.inizio
   const fineFinale = (body.fine !== undefined ? body.fine : attuale.fine) ?? null
   if (fineFinale && new Date(fineFinale) < new Date(inizioFinale)) {
@@ -91,6 +97,15 @@ export async function DELETE(_request: Request, { params }: Params) {
   const guard = await requireApiPage("calendario")
   if (guard.response) return guard.response
   const { id } = await params
+
+  const attuale = await getEventoById(id)
+  if (!attuale) return NextResponse.json({ error: "Evento non trovato" }, { status: 404 })
+  if (attuale.origine !== "crm") {
+    return NextResponse.json(
+      { error: "Le prenotazioni TidyCal si cancellano dalla piattaforma TidyCal" },
+      { status: 409 },
+    )
+  }
 
   const supabase = await createClient()
   const { data, error } = await supabase

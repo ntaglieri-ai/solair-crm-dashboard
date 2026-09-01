@@ -5,7 +5,9 @@ import { toast } from "sonner"
 import {
   IconChevronLeft,
   IconChevronRight,
+  IconExternalLink,
   IconPlus,
+  IconRefresh,
   IconSettings,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
@@ -34,9 +36,11 @@ import {
 export function CalendarioClient({
   eventiIniziali,
   categorieIniziali,
+  tidycalBookingUrl,
 }: {
   eventiIniziali: EventoCalendario[]
   categorieIniziali: CategoriaCalendario[]
+  tidycalBookingUrl: string | null
 }) {
   const permissions = usePermissions()
   const subject = permissions.snapshot.subject
@@ -47,6 +51,7 @@ export function CalendarioClient({
   const [categorie, setCategorie] = useState(categorieIniziali)
   const [filtroCategoria, setFiltroCategoria] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [syncingTidyCal, setSyncingTidyCal] = useState(false)
 
   const [eventoAperto, setEventoAperto] = useState<EventoCalendario | undefined>()
   const [giornoIniziale, setGiornoIniziale] = useState<Date | undefined>()
@@ -128,6 +133,26 @@ export function CalendarioClient({
   const titoloPeriodo =
     vista === "mese" ? formatMeseAnno(riferimento) : formatIntervalloSettimana(riferimento)
 
+  const sincronizzaTidyCal = async () => {
+    if (syncingTidyCal) return
+    setSyncingTidyCal(true)
+    try {
+      const res = await fetch("/api/calendario/tidycal/sync", { method: "POST" })
+      const payload = (await res.json().catch(() => null)) as
+        | { error?: string; imported?: number; cancelled?: number }
+        | null
+      if (!res.ok) throw new Error(payload?.error ?? "Sincronizzazione non riuscita")
+      await carica()
+      toast.success(`${payload?.imported ?? 0} prenotazioni TidyCal sincronizzate`, {
+        description: payload?.cancelled ? `${payload.cancelled} cancellate e nascoste` : undefined,
+      })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Sincronizzazione TidyCal fallita")
+    } finally {
+      setSyncingTidyCal(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -138,11 +163,34 @@ export function CalendarioClient({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {puoGestireCategorie(subject.ruoloCode) ? (
-            <Button variant="outline" onClick={() => setCategorieAperte(true)}>
-              <IconSettings size={16} data-icon="inline-start" />
-              Categorie
+          {tidycalBookingUrl ? (
+            <Button
+              variant="outline"
+              render={<a href={tidycalBookingUrl} target="_blank" rel="noreferrer" />}
+            >
+              <IconExternalLink size={16} data-icon="inline-start" />
+              Prenota con TidyCal
             </Button>
+          ) : null}
+          {puoGestireCategorie(subject.ruoloCode) ? (
+            <>
+              <Button
+                variant="outline"
+                disabled={syncingTidyCal}
+                onClick={() => void sincronizzaTidyCal()}
+              >
+                <IconRefresh
+                  size={16}
+                  className={syncingTidyCal ? "animate-spin" : undefined}
+                  data-icon="inline-start"
+                />
+                {syncingTidyCal ? "Sincronizzazione…" : "Sincronizza TidyCal"}
+              </Button>
+              <Button variant="outline" onClick={() => setCategorieAperte(true)}>
+                <IconSettings size={16} data-icon="inline-start" />
+                Categorie
+              </Button>
+            </>
           ) : null}
           <Button onClick={() => apriNuovo(new Date())}>
             <IconPlus size={16} data-icon="inline-start" />

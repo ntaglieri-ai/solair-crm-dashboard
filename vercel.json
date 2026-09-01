@@ -9,6 +9,10 @@
     {
       "path": "/api/cron/roberta-sync",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/tidycal-sync",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

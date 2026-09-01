@@ -30,6 +30,7 @@ export const CATEGORIE_DEFAULT: CategoriaCalendario[] = [
   { id: "installazione", nome: "Installazione", colore: "#f59e0b" },
   { id: "compito", nome: "Compito", colore: "#8b5cf6" },
   { id: "scadenza", nome: "Scadenza", colore: "#dc2626" },
+  { id: "tidycal", nome: "TidyCal", colore: "#0ea5e9" },
 ]
 
 /** Colore di un evento la cui categoria non esiste piu' nella config. */
@@ -49,8 +50,12 @@ export interface EventoCalendario {
   cliente_id: string | null
   lead_id: string | null
   installatore_id: string | null
-  creato_da: string
+  creato_da: string | null
   creato_da_nome: string | null
+  origine: "crm" | "tidycal"
+  external_id: string | null
+  external_updated_at: string | null
+  external_cancelled_at: string | null
   /**
    * Tipo e nome del record collegato, risolti in lettura dal
    * repository. Non sono colonne: le colonne sono i tre *_id, e al
@@ -147,9 +152,10 @@ export function nomeCategoria(
  * la RLS respingerebbe comunque la scrittura.
  */
 export function puoModificareEvento(
-  evento: Pick<EventoCalendario, "creato_da">,
+  evento: Pick<EventoCalendario, "creato_da" | "origine">,
   subject: { userId: string | null; ruoloCode: string },
 ): boolean {
+  if (evento.origine !== "crm") return false
   if (CALENDARIO_ADMIN_ROLES.includes(subject.ruoloCode.toUpperCase())) return true
   return Boolean(subject.userId) && evento.creato_da === subject.userId
 }

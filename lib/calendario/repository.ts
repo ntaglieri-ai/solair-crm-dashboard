@@ -9,7 +9,7 @@ import {
 } from "./types"
 
 const EVENTO_COLUMNS =
-  "id,titolo,categoria_id,colore,inizio,fine,note,cliente_id,lead_id,installatore_id,creato_da,created_at,updated_at"
+  "id,titolo,categoria_id,colore,inizio,fine,note,cliente_id,lead_id,installatore_id,creato_da,origine,external_id,external_updated_at,external_cancelled_at,created_at,updated_at"
 
 type EventoRow = Omit<
   EventoCalendario,
@@ -102,7 +102,7 @@ async function autoriNomi(
   supabase: Awaited<ReturnType<typeof createClient>>,
   rows: EventoRow[],
 ) {
-  const ids = [...new Set(rows.map((row) => row.creato_da).filter(Boolean))]
+  const ids = [...new Set(rows.map((row) => row.creato_da).filter(Boolean))] as string[]
   if (ids.length === 0) return new Map<string, string>()
   const { data } = await supabase.from("utenti").select("id,nome").in("id", ids)
   return new Map((data ?? []).map((user) => [user.id as string, user.nome as string]))
@@ -111,6 +111,7 @@ async function autoriNomi(
 export async function queryEventi(params: EventiQuery): Promise<EventoCalendario[]> {
   const supabase = await createClient()
   let query = supabase.from("eventi_calendario").select(EVENTO_COLUMNS)
+  query = query.is("external_cancelled_at", null)
 
   // Il confronto e' sempre su `inizio`: un evento con `fine` oltre la
   // finestra resta incluso se comincia dentro. Va bene per le viste
@@ -133,7 +134,7 @@ export async function queryEventi(params: EventiQuery): Promise<EventoCalendario
   ])
   return rows.map((row) => ({
     ...row,
-    creato_da_nome: autori.get(row.creato_da) ?? null,
+    creato_da_nome: row.creato_da ? (autori.get(row.creato_da) ?? null) : null,
     ...correlatoDi(row, correlati),
   }))
 }
@@ -169,7 +170,7 @@ export async function getEventoById(id: string): Promise<EventoCalendario | null
   ])
   return {
     ...row,
-    creato_da_nome: autori.get(row.creato_da) ?? null,
+    creato_da_nome: row.creato_da ? (autori.get(row.creato_da) ?? null) : null,
     ...correlatoDi(row, correlati),
   }
 }

@@ -82,6 +82,8 @@ const ORIGINE_LABELS: Record<LeadIntakeOrigine, string> = {
 }
 
 const ROME_TIME_ZONE = "Europe/Rome"
+const META_DEFAULT_OWNER_NAME = "Utenza di servizio"
+const META_DEFAULT_OWNER_EMAIL = "info@solairgroup.it"
 const CONFIGURATOR_RECALL_TASK = "Richiamare per conferma preventivo"
 const CONFIGURATOR_TAGS = {
   configuratore: { name: "Configuratore", color: "#2563EB" },
@@ -1105,6 +1107,35 @@ async function createLeadActivity(
   if (error) console.error(`[lead-intake] attivita lead ${leadId}:`, error.message)
 }
 
+async function resolveDefaultLeadOwnerId(
+  supabase: SupabaseClient,
+  origine: LeadIntakeOrigine,
+) {
+  if (origine !== "meta_ads") return null
+
+  const byEmail = await supabase
+    .from("utenti")
+    .select("id")
+    .eq("attivo", true)
+    .ilike("email", META_DEFAULT_OWNER_EMAIL)
+    .maybeSingle()
+  if (byEmail.error) {
+    console.error("[lead-intake] lookup proprietario default Meta:", byEmail.error.message)
+  }
+  if (byEmail.data?.id) return byEmail.data.id as string
+
+  const byName = await supabase
+    .from("utenti")
+    .select("id")
+    .eq("attivo", true)
+    .ilike("nome", META_DEFAULT_OWNER_NAME)
+    .maybeSingle()
+  if (byName.error) {
+    console.error("[lead-intake] lookup proprietario default Meta:", byName.error.message)
+  }
+  return (byName.data?.id as string | undefined) ?? null
+}
+
 async function ensureRecallTask(
   supabase: SupabaseClient,
   params: {
@@ -1332,6 +1363,8 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
     return { id: existing.id, duplicate: true, nomeLead: updatedLeadName }
   }
 
+  const defaultOwnerId = await resolveDefaultLeadOwnerId(supabase, payload.origine)
+
   const { data, error } = await supabase
     .from("leads")
     .insert({
@@ -1360,6 +1393,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       consenso_contatto_email: consensoEmail ?? false,
       descrizione: description,
       paese: "Italia",
+      lead_proprietario_id: defaultOwnerId,
       created_at: sourceCreatedAt ?? now.toISOString(),
       ora_ultima_attivita: now.toISOString(),
     })

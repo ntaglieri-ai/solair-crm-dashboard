@@ -362,6 +362,7 @@ export function ClienteTable({
         <DataTableShell
           ariaLabel="Tabella clienti"
           minTableWidth={tableWidth}
+          alwaysShowVerticalScrollbar
           onScroll={(el) => setStuck(el.scrollTop > 0)}
         >
       <colgroup>

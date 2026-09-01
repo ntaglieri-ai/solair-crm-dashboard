@@ -26,6 +26,17 @@ export function timestampValue(value: unknown): string | null {
   const normalized = String(value ?? "").trim()
   if (!normalized) return null
 
+  const italianDate = normalized.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/,
+  )
+  if (italianDate) {
+    const [, dd, mm, yyyy, hh = "00", mi = "00", ss = "00"] = italianDate
+    const parsed = new Date(
+      `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}T${hh.padStart(2, "0")}:${mi}:${ss}Z`,
+    )
+    return Number.isNaN(parsed.valueOf()) ? null : parsed.toISOString()
+  }
+
   // Zoho CSV timestamps and CRM timestamps are treated as Italian local wall-clock values.
   // Do not apply timezone offsets here: keep the displayed hour stable.
   const withOffsetColon = normalized.replace(/([+-]\d{2})(\d{2})$/, "$1:$2")

@@ -1,12 +1,8 @@
-// Server Component: pre-carica i primi 50 lead + statistiche da Supabase
-// (selezione colonne mirata, ordine updated_at desc) e li passa a LeadsClient
-// come initialData, evitando il loading lato client dopo il mount.
 import { cookies } from "next/headers"
 import {
   getInitialLeadsParams,
   buildLeadsSearchParams,
 } from "@/lib/leads/api-types"
-import { queryLeads, computeStats } from "@/lib/leads/repository"
 import { LEAD_COLUMNS, DEFAULT_VISIBLE_COLUMNS } from "@/lib/mock-data"
 import {
   LEADS_VIEW_COOKIE,
@@ -44,17 +40,11 @@ export default async function LeadsPage() {
   }
   const initialSp = buildLeadsSearchParams(initialParams).toString()
 
-  // Fetch server-side in parallelo: prima pagina (50 righe) + conteggi header.
-  const [initialLeads, initialStats] = await Promise.all([
-    queryLeads(initialParams),
-    computeStats(),
-  ])
-
   return (
     <LeadsClient
       initialSp={initialSp}
-      initialLeads={initialLeads}
-      initialStats={initialStats}
+      initialLeads={null}
+      initialStats={null}
       initialPreferences={initialPreferences}
     />
   )

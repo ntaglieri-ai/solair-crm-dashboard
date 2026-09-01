@@ -138,10 +138,10 @@ function downloadLeadsCsv(rows: LeadListItem[], filename: string) {
 interface LeadsClientProps {
   /** Query-string del prefetch server-side (per abbinare la chiave React Query). */
   initialSp: string
-  /** Prima pagina (50 righe) pre-caricata server-side. */
-  initialLeads: LeadListResponse
-  /** Statistiche header pre-caricate server-side. */
-  initialStats: LeadStats
+  /** Prima pagina pre-caricata; null quando la route lascia lavorare la cache client. */
+  initialLeads: LeadListResponse | null
+  /** Statistiche header pre-caricate; null quando arrivano dalla cache client. */
+  initialStats: LeadStats | null
   /**
    * Preferenze di vista lette dal cookie lato server. Quando ci sono, il primo
    * render (server e client) usa già le colonne dell'utente: senza, la tabella
@@ -367,11 +367,16 @@ export function LeadsClient({
     ],
   )
 
-  const { data, isFetching, isError } = useLeadsQuery(params, {
-    sp: initialSp,
-    data: initialLeads,
-  })
-  const { data: stats } = useLeadStats(initialStats)
+  const { data, isFetching, isError } = useLeadsQuery(
+    params,
+    initialLeads
+      ? {
+          sp: initialSp,
+          data: initialLeads,
+        }
+      : undefined,
+  )
+  const { data: stats } = useLeadStats(initialStats ?? undefined)
 
   const createLead = useCreateLead()
   const deleteLead = useDeleteLead()
@@ -391,7 +396,7 @@ export function LeadsClient({
     hydrateLeadTagIds(assignments)
   }, [hydrateLeadTagIds, pageRows])
   const total = data?.total ?? 0
-  const headerTotal = stats?.total ?? 0
+  const headerTotal = stats?.total ?? data?.total
 
   const totalPages = Math.max(1, Math.ceil(total / rowsPerPage))
   const start = (page - 1) * rowsPerPage
@@ -726,7 +731,9 @@ export function LeadsClient({
             Lead
           </h1>
           <p className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-sm text-muted-foreground sm:text-[15px]">
-            {headerTotal.toLocaleString("it-IT")} lead disponibili
+            {headerTotal != null
+              ? `${headerTotal.toLocaleString("it-IT")} lead disponibili`
+              : "Caricamento lead..."}
             {isFetching ? (
               <Loader2
                 className="size-3.5 animate-spin text-muted-foreground"
@@ -920,6 +927,7 @@ export function LeadsClient({
           sortDir={sortDir}
           onSort={handleSort}
           density={density}
+          loading={isFetching && !data}
         />
       </div>
 

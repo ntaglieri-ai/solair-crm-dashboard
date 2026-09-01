@@ -88,14 +88,24 @@ function EmptySignalIcon({
 }
 
 function NoteIcons({ lead }: { lead: Lead }) {
+  const preloadedNotes = lead.noteItems ?? []
+  const hasNotes = Boolean(lead["Badge di nota"]) || preloadedNotes.length > 0
+
+  if (!hasNotes) {
+    return <EmptySignalIcon icon={StickyNote} label="Nessuna nota" />
+  }
+
+  return <LeadNotesPopover lead={lead} />
+}
+
+function LeadNotesPopover({ lead }: { lead: Lead }) {
   const [open, setOpen] = useState(false)
   const preloadedNotes = lead.noteItems ?? []
   const preloadedTasks = lead.taskItems ?? []
-  const hasNotes = Boolean(lead["Badge di nota"]) || preloadedNotes.length > 0
   const { data, isFetching, isError } = useQuery({
     queryKey: leadsKeys.signals(lead.id),
     queryFn: ({ signal }) => fetchLeadSignalDetails(lead.id, signal),
-    enabled: open && hasNotes,
+    enabled: open,
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     initialData:
@@ -104,10 +114,6 @@ function NoteIcons({ lead }: { lead: Lead }) {
         : undefined,
   })
   const notes = data?.notes ?? preloadedNotes
-
-  if (!hasNotes) {
-    return <EmptySignalIcon icon={StickyNote} label="Nessuna nota" />
-  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -175,14 +181,24 @@ function NoteIcons({ lead }: { lead: Lead }) {
 }
 
 function TaskIcons({ lead }: { lead: Lead }) {
+  const preloadedTasks = lead.taskItems ?? []
+  const hasTasks = Boolean(lead["Badge dell'attività"]) || preloadedTasks.length > 0
+
+  if (!hasTasks) {
+    return <EmptySignalIcon icon={Bell} label="Nessuna attività" />
+  }
+
+  return <LeadTasksPopover lead={lead} />
+}
+
+function LeadTasksPopover({ lead }: { lead: Lead }) {
   const [open, setOpen] = useState(false)
   const preloadedNotes = lead.noteItems ?? []
   const preloadedTasks = lead.taskItems ?? []
-  const hasTasks = Boolean(lead["Badge dell'attività"]) || preloadedTasks.length > 0
   const { data, isFetching, isError } = useQuery({
     queryKey: leadsKeys.signals(lead.id),
     queryFn: ({ signal }) => fetchLeadSignalDetails(lead.id, signal),
-    enabled: open && hasTasks,
+    enabled: open,
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     initialData:
@@ -191,10 +207,6 @@ function TaskIcons({ lead }: { lead: Lead }) {
         : undefined,
   })
   const tasks = data?.tasks ?? preloadedTasks
-
-  if (!hasTasks) {
-    return <EmptySignalIcon icon={Bell} label="Nessuna attività" />
-  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

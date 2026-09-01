@@ -74,6 +74,31 @@ const EMPTY: ReferencePayload = {
 
 const TagContext = createContext<TagContextValue | null>(null)
 
+let cachedLeadReferenceData: ReferencePayload | null = null
+let pendingLeadReferenceData: Promise<ReferencePayload> | null = null
+
+export function warmLeadReferenceData(): Promise<ReferencePayload> {
+  if (cachedLeadReferenceData) return Promise.resolve(cachedLeadReferenceData)
+  if (pendingLeadReferenceData) return pendingLeadReferenceData
+
+  pendingLeadReferenceData = fetch("/api/leads/reference-data")
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error("Caricamento riferimenti Lead non riuscito")
+      }
+      return response.json() as Promise<ReferencePayload>
+    })
+    .then((payload) => {
+      cachedLeadReferenceData = payload
+      return payload
+    })
+    .finally(() => {
+      pendingLeadReferenceData = null
+    })
+
+  return pendingLeadReferenceData
+}
+
 async function mutate(body: Record<string, unknown>) {
   const response = await fetch("/api/leads/reference-data", {
     method: "POST",
@@ -105,11 +130,7 @@ export function TagProvider({
       return
     }
     let active = true
-    fetch("/api/leads/reference-data")
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Caricamento riferimenti Lead non riuscito")
-        return response.json() as Promise<ReferencePayload>
-      })
+    warmLeadReferenceData()
       .then((payload) => {
         if (active) setData(payload)
       })

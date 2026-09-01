@@ -17,6 +17,7 @@ import {
   ExternalLink,
   UserCheck,
   Trash2,
+  Loader2,
   GripVertical,
   MapPin,
   SlidersHorizontal,
@@ -136,6 +137,7 @@ function LeadMobileList({
   onConvert,
   onDelete,
   onDuplicate,
+  loading = false,
 }: {
   leads: Lead[]
   selected: Set<string>
@@ -143,6 +145,7 @@ function LeadMobileList({
   onConvert: (lead: Lead) => void
   onDelete: (lead: Lead) => void
   onDuplicate: (lead: Lead) => void
+  loading?: boolean
 }) {
   const router = useRouter()
   const permissions = usePermissions()
@@ -152,7 +155,7 @@ function LeadMobileList({
   if (leads.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-border bg-card px-4 py-12 text-center text-base font-medium text-muted-foreground shadow-sm">
-        Nessun lead corrisponde ai filtri selezionati.
+        {loading ? "Caricamento lead..." : "Nessun lead corrisponde ai filtri selezionati."}
       </div>
     )
   }
@@ -296,6 +299,7 @@ export function LeadTable({
   sortDir,
   onSort,
   density = "normale",
+  loading = false,
   scrollRef: externalScrollRef,
   onScrollerScroll,
 }: {
@@ -316,6 +320,7 @@ export function LeadTable({
   sortDir: SortDir
   onSort: (col: LeadColumnId) => void
   density?: Density
+  loading?: boolean
   /** Ref del contenitore scrollabile (per sincronizzare la scrollbar orizzontale esterna). */
   scrollRef?: RefObject<HTMLDivElement | null>
   /** Callback ad ogni scroll del contenitore, riceve l'elemento scrollabile. */
@@ -816,6 +821,7 @@ export function LeadTable({
           onConvert={onConvert}
           onDelete={onDelete}
           onDuplicate={onDuplicate}
+          loading={loading}
         />
       </div>
 
@@ -1048,7 +1054,14 @@ export function LeadTable({
                 colSpan={colSpan}
                 className="py-12 text-center text-sm text-muted-foreground"
               >
-                Nessun lead corrisponde ai filtri selezionati.
+                {loading ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="size-4 animate-spin" />
+                    Caricamento lead...
+                  </span>
+                ) : (
+                  "Nessun lead corrisponde ai filtri selezionati."
+                )}
               </TableCell>
             </TableRow>
           ) : null}

@@ -21,8 +21,10 @@ import {
   LEAD_COLUMNS,
 } from "@/lib/mock-data"
 import { usePermissions } from "@/lib/permissions/provider"
+import { warmLeadReferenceData } from "@/lib/tag-store"
 import {
   LEADS_VIEW_COOKIE,
+  type LeadViewPreferences,
   parseLeadViewPreferences,
 } from "@/lib/leads/view-preferences"
 
@@ -42,6 +44,34 @@ function readCookie(name: string) {
     .map((part) => part.trim())
     .find((part) => part.startsWith(prefix))
     ?.slice(prefix.length)
+}
+
+function readLeadPreferenceColumns(owner: string) {
+  const validColumnIds = new Set(LEAD_COLUMNS.map((column) => column.id))
+  const fromLocalStorage = window.localStorage.getItem(
+    `solair:leads:view:${owner}:v3`,
+  )
+  if (fromLocalStorage) {
+    try {
+      const parsed = JSON.parse(fromLocalStorage) as Partial<LeadViewPreferences>
+      if (parsed.version === 3 && parsed.owner === owner) {
+        const visibleCols = (parsed.visibleCols ?? []).filter((id) =>
+          validColumnIds.has(id),
+        )
+        if (visibleCols.length) return visibleCols
+      }
+    } catch {
+      window.localStorage.removeItem(`solair:leads:view:${owner}:v3`)
+    }
+  }
+
+  return (
+    parseLeadViewPreferences(
+      readCookie(LEADS_VIEW_COOKIE),
+      owner,
+      validColumnIds,
+    )?.visibleCols ?? DEFAULT_VISIBLE_COLUMNS
+  )
 }
 
 function scheduleIdle(callback: () => void): IdleHandle {
@@ -88,15 +118,10 @@ export function CrmRouteWarmer() {
 
       if (canReadLeads && !pathname.startsWith("/leads")) {
         router.prefetch("/leads")
-        const leadPreferences = parseLeadViewPreferences(
-          readCookie(LEADS_VIEW_COOKIE),
-          preferenceOwner,
-          new Set(LEAD_COLUMNS.map((column) => column.id)),
-        )
+        void warmLeadReferenceData()
         const leadParams = {
           ...getInitialLeadsParams(),
-          fields: (leadPreferences?.visibleCols ??
-            DEFAULT_VISIBLE_COLUMNS) as unknown as string[],
+          fields: readLeadPreferenceColumns(preferenceOwner) as unknown as string[],
         }
         const leadSp = buildLeadsSearchParams(leadParams).toString()
         void queryClient.prefetchQuery({

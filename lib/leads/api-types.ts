@@ -1,6 +1,11 @@
 // Contratto API condiviso del modulo Lead (client <-> route handlers).
 // Identico a quello che soddisferà una query SQL reale (Supabase) in futuro.
-import type { Lead, LeadColumnId } from "@/lib/mock-data"
+import type {
+  Lead,
+  LeadColumnId,
+  LeadListNote,
+  LeadListTask,
+} from "@/lib/mock-data"
 import { DEFAULT_VISIBLE_COLUMNS } from "@/lib/mock-data"
 import {
   type AdvancedFilterState,
@@ -62,6 +67,11 @@ export interface LeadStats {
   nonAssegnati: number
   /** Lead creati dalla mezzanotte di oggi (KPI "Nuovi oggi"). */
   nuoviOggi: number
+}
+
+export interface LeadSignalDetails {
+  notes: LeadListNote[]
+  tasks: LeadListTask[]
 }
 
 export const DEFAULT_LIST_PARAMS: LeadListParams = {

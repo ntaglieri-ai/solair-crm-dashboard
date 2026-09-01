@@ -273,12 +273,13 @@ export async function getAllLeads(filters?: {
   const [activities, tasks, tagAssignments] = await Promise.all([
     supabase
       .from("attivita")
-      .select("id,record_id,tipo,testo,created_at")
+      .select("record_id")
       .eq("record_tipo", "lead")
+      .eq("tipo", "nota")
       .in("record_id", ids),
     supabase
       .from("compiti")
-      .select("id,correlato_id,stato,oggetto,scadenza,priorita")
+      .select("correlato_id")
       .eq("correlato_tipo", "lead")
       .in("correlato_id", ids)
       .neq("stato", "Completato"),
@@ -298,7 +299,6 @@ export async function getAllLeads(filters?: {
   }
   const noteIds = new Set(
     (activities.data ?? [])
-      .filter((item) => item.tipo === "nota")
       .map((item) => item.record_id),
   )
   const taskIds = new Set((tasks.data ?? []).map((item) => item.correlato_id))
@@ -307,22 +307,8 @@ export async function getAllLeads(filters?: {
     ...row,
     "Badge di nota": noteIds.has(row.id),
     "Badge dell'attività": taskIds.has(row.id),
-    noteItems: (activities.data ?? [])
-      .filter((item) => item.record_id === row.id && item.tipo === "nota")
-      .map((item) => ({
-        id: item.id,
-        text: item.testo ?? "",
-        createdAt: item.created_at ?? "",
-      })),
-    taskItems: (tasks.data ?? [])
-      .filter((item) => item.correlato_id === row.id)
-      .map((item) => ({
-        id: item.id,
-        title: item.oggetto ?? "",
-        dueDate: item.scadenza ?? "",
-        priority: item.priorita ?? "Medio",
-        status: item.stato ?? "Non iniziato",
-      })),
+    noteItems: [],
+    taskItems: [],
     tagIds: (tagAssignments.data ?? [])
       .filter((item) => item.lead_id === row.id)
       .map((item) => item.tag_id),

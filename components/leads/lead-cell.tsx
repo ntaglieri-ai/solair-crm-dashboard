@@ -1,6 +1,8 @@
 "use client"
 
-import { Bell, StickyNote } from "lucide-react"
+import { useState } from "react"
+import { Bell, Loader2, StickyNote } from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
 import {
   type Lead,
   type LeadColumnId,
@@ -26,6 +28,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { fetchLeadSignalDetails, leadsKeys } from "@/lib/leads/hooks"
 
 // Colonne con allineamento a destra (valori numerici)
 export const NUMERIC_COLUMNS: LeadColumnId[] = ["Valutazione", "kWp", "kWh"]
@@ -85,105 +88,177 @@ function EmptySignalIcon({
 }
 
 function NoteIcons({ lead }: { lead: Lead }) {
-  const notes = lead.noteItems ?? []
-  if (notes.length === 0) {
+  const [open, setOpen] = useState(false)
+  const preloadedNotes = lead.noteItems ?? []
+  const preloadedTasks = lead.taskItems ?? []
+  const hasNotes = Boolean(lead["Badge di nota"]) || preloadedNotes.length > 0
+  const { data, isFetching, isError } = useQuery({
+    queryKey: leadsKeys.signals(lead.id),
+    queryFn: ({ signal }) => fetchLeadSignalDetails(lead.id, signal),
+    enabled: open && hasNotes,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    initialData:
+      preloadedNotes.length > 0 || preloadedTasks.length > 0
+        ? { notes: preloadedNotes, tasks: preloadedTasks }
+        : undefined,
+  })
+  const notes = data?.notes ?? preloadedNotes
+
+  if (!hasNotes) {
     return <EmptySignalIcon icon={StickyNote} label="Nessuna nota" />
   }
+
   return (
-    <span className="flex max-w-full flex-wrap justify-center gap-1.5">
-      {notes.map((note, index) => {
-        const color = NOTE_COLORS[index % NOTE_COLORS.length]
-        return (
-          <Popover key={note.id}>
-            <PopoverTrigger
-              render={
-                <button
-                  type="button"
-                  aria-label={`Apri nota ${index + 1}`}
-                  onClick={(event) => event.stopPropagation()}
-                  className="flex size-7 items-center justify-center rounded-md transition-transform hover:-translate-y-0.5"
-                  style={{ background: color.bg, color: color.fg }}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            aria-label="Apri note"
+            onClick={(event) => event.stopPropagation()}
+            className="inline-flex size-7 items-center justify-center rounded-md bg-emerald-100 text-emerald-700 transition-transform hover:-translate-y-0.5"
+          >
+            <StickyNote className="size-4" />
+          </button>
+        }
+      />
+      <PopoverContent
+        align="center"
+        className="max-h-80 w-80 overflow-y-auto p-4 shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 font-bold text-emerald-700">
+          {isFetching && notes.length === 0 ? (
+            <Loader2 className="size-5 animate-spin" />
+          ) : (
+            <StickyNote className="size-5" />
+          )}
+          Note
+        </div>
+        {isError ? (
+          <p className="mt-3 text-sm font-medium text-muted-foreground">
+            Dettagli non disponibili.
+          </p>
+        ) : isFetching && notes.length === 0 ? (
+          <p className="mt-3 text-sm font-medium text-muted-foreground">
+            Caricamento...
+          </p>
+        ) : notes.length === 0 ? (
+          <p className="mt-3 text-sm font-medium text-muted-foreground">
+            Nessuna nota.
+          </p>
+        ) : (
+          <div className="mt-3 grid gap-2">
+            {notes.map((note, index) => {
+              const color = NOTE_COLORS[index % NOTE_COLORS.length]
+              return (
+                <article
+                  key={note.id}
+                  className="rounded-lg p-3"
+                  style={{ background: color.paper }}
                 >
-                  <StickyNote className="size-4" />
-                </button>
-              }
-            />
-            <PopoverContent
-              align="center"
-              className="w-72 border-0 p-5 shadow-xl"
-              style={{ background: color.paper }}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="mb-3 flex items-center gap-2 font-bold" style={{ color: color.fg }}>
-                <StickyNote className="size-5" />
-                Nota
-              </div>
-              <p className="whitespace-pre-wrap text-[15px] leading-6 text-foreground">
-                {note.text}
-              </p>
-              <p className="mt-4 text-xs font-medium text-muted-foreground">
-                {formatMoment(note.createdAt)}
-              </p>
-            </PopoverContent>
-          </Popover>
-        )
-      })}
-    </span>
+                  <p className="whitespace-pre-wrap text-sm leading-5 text-foreground">
+                    {note.text}
+                  </p>
+                  <p className="mt-2 text-xs font-medium text-muted-foreground">
+                    {formatMoment(note.createdAt)}
+                  </p>
+                </article>
+              )
+            })}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   )
 }
 
 function TaskIcons({ lead }: { lead: Lead }) {
-  const tasks = lead.taskItems ?? []
-  if (tasks.length === 0) {
+  const [open, setOpen] = useState(false)
+  const preloadedNotes = lead.noteItems ?? []
+  const preloadedTasks = lead.taskItems ?? []
+  const hasTasks = Boolean(lead["Badge dell'attività"]) || preloadedTasks.length > 0
+  const { data, isFetching, isError } = useQuery({
+    queryKey: leadsKeys.signals(lead.id),
+    queryFn: ({ signal }) => fetchLeadSignalDetails(lead.id, signal),
+    enabled: open && hasTasks,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    initialData:
+      preloadedNotes.length > 0 || preloadedTasks.length > 0
+        ? { notes: preloadedNotes, tasks: preloadedTasks }
+        : undefined,
+  })
+  const tasks = data?.tasks ?? preloadedTasks
+
+  if (!hasTasks) {
     return <EmptySignalIcon icon={Bell} label="Nessuna attività" />
   }
+
   return (
-    <span className="flex max-w-full flex-wrap justify-center gap-1.5">
-      {tasks.map((task, index) => {
-        const color = NOTE_COLORS[(index + 1) % NOTE_COLORS.length]
-        return (
-          <Popover key={task.id}>
-            <PopoverTrigger
-              render={
-                <button
-                  type="button"
-                  aria-label={`Apri attività ${index + 1}`}
-                  onClick={(event) => event.stopPropagation()}
-                  className="flex size-7 items-center justify-center rounded-md transition-transform hover:-translate-y-0.5"
-                  style={{ background: color.bg, color: color.fg }}
-                >
-                  <Bell className="size-4" />
-                </button>
-              }
-            />
-            <PopoverContent
-              align="center"
-              className="w-72 gap-3 p-4 shadow-xl"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="flex items-center gap-2 font-bold" style={{ color: color.fg }}>
-                <Bell className="size-5" />
-                Attività
-              </div>
-              <p className="text-[15px] font-bold text-foreground">{task.title}</p>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <span className="rounded-md bg-muted px-2.5 py-2">
-                  {task.priority}
-                </span>
-                <span className="rounded-md bg-muted px-2.5 py-2">
-                  {task.status}
-                </span>
-              </div>
-              {task.dueDate ? (
-                <p className="text-xs font-medium text-muted-foreground">
-                  Scadenza: {formatMoment(task.dueDate)}
-                </p>
-              ) : null}
-            </PopoverContent>
-          </Popover>
-        )
-      })}
-    </span>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            aria-label="Apri attività"
+            onClick={(event) => event.stopPropagation()}
+            className="inline-flex size-7 items-center justify-center rounded-md bg-blue-100 text-blue-700 transition-transform hover:-translate-y-0.5"
+          >
+            <Bell className="size-4" />
+          </button>
+        }
+      />
+      <PopoverContent
+        align="center"
+        className="max-h-80 w-80 overflow-y-auto p-4 shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 font-bold text-blue-700">
+          {isFetching && tasks.length === 0 ? (
+            <Loader2 className="size-5 animate-spin" />
+          ) : (
+            <Bell className="size-5" />
+          )}
+          Attività
+        </div>
+        {isError ? (
+          <p className="mt-3 text-sm font-medium text-muted-foreground">
+            Dettagli non disponibili.
+          </p>
+        ) : isFetching && tasks.length === 0 ? (
+          <p className="mt-3 text-sm font-medium text-muted-foreground">
+            Caricamento...
+          </p>
+        ) : tasks.length === 0 ? (
+          <p className="mt-3 text-sm font-medium text-muted-foreground">
+            Nessuna attività.
+          </p>
+        ) : (
+          <div className="mt-3 grid gap-2">
+            {tasks.map((task) => (
+              <article key={task.id} className="rounded-lg border border-border p-3">
+                <p className="text-sm font-bold text-foreground">{task.title}</p>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                  <span className="rounded-md bg-muted px-2.5 py-2">
+                    {task.priority}
+                  </span>
+                  <span className="rounded-md bg-muted px-2.5 py-2">
+                    {task.status}
+                  </span>
+                </div>
+                {task.dueDate ? (
+                  <p className="mt-2 text-xs font-medium text-muted-foreground">
+                    Scadenza: {formatMoment(task.dueDate)}
+                  </p>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   )
 }
 

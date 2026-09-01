@@ -13,6 +13,7 @@ import {
   type LeadListResponse,
   type LeadStats,
   type LeadListItem,
+  type LeadSignalDetails,
   buildLeadsSearchParams,
 } from "@/lib/leads/api-types"
 import type { BulkField } from "@/lib/leads/repository"
@@ -25,6 +26,7 @@ export const leadsKeys = {
   lists: () => [...leadsKeys.all, "list"] as const,
   list: (sp: string) => [...leadsKeys.lists(), sp] as const,
   stats: () => [...leadsKeys.all, "stats"] as const,
+  signals: (id: string) => [...leadsKeys.all, "signals", id] as const,
 }
 
 // ----------------------------------------------------------------------------
@@ -82,6 +84,20 @@ export function useLeadStats(initialData?: LeadStats) {
     refetchOnMount: initialData ? false : undefined,
     initialData,
   })
+}
+
+export async function fetchLeadSignalDetails(
+  leadId: string,
+  signal?: AbortSignal,
+): Promise<LeadSignalDetails> {
+  const res = await fetch(`/api/leads/${leadId}/signals`, { signal })
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => null)) as
+      | { error?: string }
+      | null
+    throw new Error(payload?.error ?? "Errore nel caricamento dei dettagli")
+  }
+  return (await res.json()) as LeadSignalDetails
 }
 
 // ----------------------------------------------------------------------------

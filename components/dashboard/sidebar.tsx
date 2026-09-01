@@ -2,9 +2,11 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
-import { User, Settings, LogOut, ChevronsUpDown } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { User, Settings, LogOut, ChevronsUpDown, Menu } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,7 +45,7 @@ function isActive(href: string, pathname: string) {
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
-function NavLink({ item }: { item: NavItem }) {
+function NavLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
   const Icon = NAV_ICONS[item.icon]
   const pathname = usePathname()
   const router = useRouter()
@@ -54,6 +56,7 @@ function NavLink({ item }: { item: NavItem }) {
       href={item.href}
       onMouseEnter={() => router.prefetch(item.href)}
       onFocus={() => router.prefetch(item.href)}
+      onClick={onNavigate}
       aria-current={active ? "page" : undefined}
       className={cn(
         "relative flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-[15px] font-semibold transition-colors",
@@ -69,13 +72,16 @@ function NavLink({ item }: { item: NavItem }) {
   )
 }
 
-function NavLauncherButton({ item }: { item: NavItem }) {
+function NavLauncherButton({ item, onOpen }: { item: NavItem; onOpen?: () => void }) {
   const Icon = NAV_ICONS[item.icon]
   const { openCrmSettings, open } = useCrmSettingsLauncher()
   return (
     <button
       type="button"
-      onClick={openCrmSettings}
+      onClick={() => {
+        onOpen?.()
+        openCrmSettings()
+      }}
       aria-current={open ? "true" : undefined}
       className={cn(
         "flex w-full items-center gap-3 rounded-lg border-l-2 px-3 py-2 text-sm font-medium transition-colors",
@@ -90,7 +96,7 @@ function NavLauncherButton({ item }: { item: NavItem }) {
   )
 }
 
-function ProfileMenu() {
+function ProfileMenu({ compact = false }: { compact?: boolean }) {
   const router = useRouter()
   const permissions = usePermissions()
   const subject = permissions.snapshot.subject
@@ -120,6 +126,7 @@ function ProfileMenu() {
         className={cn(
           "flex w-full items-center gap-3 border-t border-sidebar-border px-4 py-4 text-left outline-none transition-colors",
           "hover:bg-muted focus-visible:bg-muted",
+          compact && "py-3",
         )}
       >
         <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-semibold text-navy-foreground">
@@ -159,22 +166,94 @@ function ProfileMenu() {
   )
 }
 
-function NavSection({ title, items }: { title: string; items: NavItem[] }) {
+function NavSection({
+  title,
+  items,
+  onNavigate,
+}: {
+  title: string
+  items: NavItem[]
+  onNavigate?: () => void
+}) {
   return (
     <div className="flex flex-col gap-1">
       <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         {title}
       </p>
       {items.map((item) => (
-        <NavLink key={item.label} item={item} />
+        <NavLink key={item.label} item={item} onNavigate={onNavigate} />
       ))}
     </div>
   )
 }
 
+function SidebarContent({
+  companyLogo,
+  visiblePrincipale,
+  visibleGestione,
+  canOpenCrmSettings,
+  mobile = false,
+  onCrmSettingsOpen,
+  onNavigate,
+}: {
+  companyLogo: string
+  visiblePrincipale: NavItem[]
+  visibleGestione: NavItem[]
+  canOpenCrmSettings: boolean
+  mobile?: boolean
+  onCrmSettingsOpen?: () => void
+  onNavigate?: () => void
+}) {
+  return (
+    <>
+      <div className={cn("border-b border-sidebar-border px-5 py-5", mobile && "py-4")}>
+        <Link
+          href="https://www.solairgroup.it"
+          className="flex justify-center rounded-lg outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Apri il sito Solair Group"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <div className="flex h-20 w-40 items-center justify-start overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={companyLogo}
+              alt="Solair CRM"
+              className="h-16 w-36 object-contain object-left"
+            />
+          </div>
+        </Link>
+        <p className="mt-3 text-[15px] font-bold capitalize leading-5 text-primary">
+          {OGGI}
+        </p>
+      </div>
+
+      <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-5">
+        {visiblePrincipale.length > 0 ? (
+          <NavSection title="Principale" items={visiblePrincipale} onNavigate={onNavigate} />
+        ) : null}
+        {visibleGestione.length > 0 ? (
+          <NavSection title="Gestione" items={visibleGestione} onNavigate={onNavigate} />
+        ) : null}
+
+        {canOpenCrmSettings ? (
+          <div className="mt-auto border-t border-sidebar-border pt-4">
+            <NavLauncherButton item={NAV_ADMIN} onOpen={onCrmSettingsOpen} />
+          </div>
+        ) : null}
+      </nav>
+
+      <ProfileMenu compact={mobile} />
+    </>
+  )
+}
+
 export function Sidebar() {
   const permissions = usePermissions()
+  const pathname = usePathname()
+  const previousPathname = useRef(pathname)
   const [companyLogo, setCompanyLogo] = useState(DEFAULT_COMPANY_LOGO)
+  const [mobileOpen, setMobileOpen] = useState(false)
   const visiblePrincipale = NAV_PRINCIPALE.filter((item) => {
     const page = pageKeyFromPath(item.href)
     return page ? permissions.canPage(page) : true
@@ -203,49 +282,72 @@ export function Sidebar() {
     }
   }, [permissions])
 
+  useEffect(() => {
+    if (previousPathname.current === pathname) return
+    previousPathname.current = pathname
+    const frame = window.requestAnimationFrame(() => setMobileOpen(false))
+    return () => window.cancelAnimationFrame(frame)
+  }, [pathname])
+
   return (
-    <aside className="app-sidebar fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-sidebar-border bg-sidebar lg:flex">
-      {/* Logo */}
-      <div className="border-b border-sidebar-border px-5 py-5">
-        <Link
-          href="https://www.solairgroup.it"
-          className="flex justify-center rounded-lg outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="Apri il sito Solair Group"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <div className="flex h-20 w-40 items-center justify-start overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={companyLogo}
-              alt="Solair CRM"
-              className="h-16 w-36 object-contain object-left"
-            />
+    <>
+      <header className="fixed inset-x-0 top-0 z-50 flex h-20 items-center justify-between border-b border-border bg-card/98 px-4 shadow-[0_8px_26px_rgb(15_23_42/7%)] backdrop-blur supports-[backdrop-filter]:bg-card/92 lg:hidden">
+        <div className="flex min-w-0 items-center gap-4">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Apri menu"
+            aria-expanded={mobileOpen}
+            aria-controls="mobile-main-menu"
+            onClick={() => setMobileOpen(true)}
+            className="size-14 touch-manipulation rounded-2xl border-border bg-background text-foreground shadow-sm active:scale-[0.98]"
+          >
+            <Menu className="size-7" />
+          </Button>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex h-12 w-32 items-center justify-start overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={companyLogo}
+                alt="Solair CRM"
+                className="h-11 w-32 object-contain object-left"
+              />
+            </span>
           </div>
-        </Link>
-        <p className="mt-3 text-[15px] font-bold capitalize leading-5 text-primary">
+        </div>
+        <span className="min-w-0 max-w-[44vw] truncate pl-3 text-right text-sm font-bold capitalize leading-tight text-muted-foreground">
           {OGGI}
-        </p>
-      </div>
+        </span>
+      </header>
 
-      {/* Nav */}
-      <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-5">
-        {visiblePrincipale.length > 0 ? (
-          <NavSection title="Principale" items={visiblePrincipale} />
-        ) : null}
-        {visibleGestione.length > 0 ? (
-          <NavSection title="Gestione" items={visibleGestione} />
-        ) : null}
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent
+          id="mobile-main-menu"
+          side="left"
+          className="w-[min(88vw,340px)] gap-0 bg-sidebar p-0 text-sidebar-foreground sm:max-w-[340px]"
+        >
+          <SheetTitle className="sr-only">Menu principale</SheetTitle>
+          <SidebarContent
+            companyLogo={companyLogo}
+            visiblePrincipale={visiblePrincipale}
+            visibleGestione={visibleGestione}
+            canOpenCrmSettings={canOpenCrmSettings}
+            mobile
+            onNavigate={() => setMobileOpen(false)}
+            onCrmSettingsOpen={() => setMobileOpen(false)}
+          />
+        </SheetContent>
+      </Sheet>
 
-        {canOpenCrmSettings ? (
-          <div className="mt-auto border-t border-sidebar-border pt-4">
-            <NavLauncherButton item={NAV_ADMIN} />
-          </div>
-        ) : null}
-      </nav>
-
-      {/* Footer utente */}
-      <ProfileMenu />
-    </aside>
+      <aside className="app-sidebar fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-sidebar-border bg-sidebar lg:flex">
+        <SidebarContent
+          companyLogo={companyLogo}
+          visiblePrincipale={visiblePrincipale}
+          visibleGestione={visibleGestione}
+          canOpenCrmSettings={canOpenCrmSettings}
+        />
+      </aside>
+    </>
   )
 }

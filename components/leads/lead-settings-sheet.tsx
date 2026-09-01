@@ -41,10 +41,27 @@ function ColumnsSection({
   const set = new Set(visible)
 
   const toggle = (id: LeadColumnId) => {
-    const next = new Set(set)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    onChange(LEAD_COLUMNS.filter((c) => next.has(c.id)).map((c) => c.id))
+    if (set.has(id)) {
+      onChange(visible.filter((columnId) => columnId !== id))
+      return
+    }
+
+    const canonicalIndex = LEAD_COLUMNS.findIndex((column) => column.id === id)
+    const nextVisibleColumn = LEAD_COLUMNS.slice(canonicalIndex + 1).find((column) =>
+      set.has(column.id),
+    )
+
+    if (!nextVisibleColumn) {
+      onChange([...visible, id])
+      return
+    }
+
+    const insertionIndex = visible.indexOf(nextVisibleColumn.id)
+    onChange([
+      ...visible.slice(0, insertionIndex),
+      id,
+      ...visible.slice(insertionIndex),
+    ])
   }
 
   return (

@@ -65,6 +65,14 @@ import {
   type LeadColumn,
   type LeadColumnId,
 } from "@/lib/mock-data"
+import {
+  clampLeadColumnWidth,
+  fitLeadColumnWidthsToViewport,
+  isLeadDateTimeColumn,
+  LEAD_COMPACT_ICON_COLUMN_WIDTH,
+  LEAD_DATE_TIME_COLUMN_WIDTH,
+  minimumLeadColumnWidth,
+} from "@/lib/leads/column-widths"
 import { LeadCell, NUMERIC_COLUMNS } from "./lead-cell"
 import { LeadTagBadges } from "./tag-controls"
 import { LeadRowContextMenu } from "./lead-row-context-menu"
@@ -82,12 +90,6 @@ export type SortDir = "asc" | "desc"
 // tabelle condividessero lo stesso contratto di stile.
 export type { Density }
 
-const DATE_TIME_COLUMNS = new Set<LeadColumnId>([
-  "Data Click",
-  "Ora creazione",
-  "Ora ultima attività",
-  "Data/Ora",
-])
 const LEAD_TABLE_DENSITY: Record<Density, string> = {
   comoda: "py-3.5 text-[15px]",
   normale: "py-2.5 text-[15px]",
@@ -98,17 +100,9 @@ const LEAD_ROW_HEIGHT: Record<Density, number> = {
   normale: 48,
   densa: 38,
 }
-const DATE_TIME_COLUMN_WIDTH = 178
-const LEAD_COMPACT_ICON_COLUMN_WIDTH = 56
 const LEAD_ACTIONS_COLUMN_WIDTH = 80
 const LEAD_ACTIONS_TOGGLE_WIDTH = 44
-
-function minimumColumnWidth(column: LeadColumnId) {
-  if (column === "Badge dell'attività" || column === "Badge di nota") {
-    return LEAD_COMPACT_ICON_COLUMN_WIDTH
-  }
-  return DATE_TIME_COLUMNS.has(column) ? DATE_TIME_COLUMN_WIDTH : 72
-}
+const LEAD_LEFT_CONTROLS_WIDTH = 36 + 44
 
 function isCompactIconColumn(column: LeadColumnId) {
   return column === "Badge dell'attività" || column === "Badge di nota"
@@ -338,7 +332,11 @@ export function LeadTable({
   const scrollRef = externalScrollRef ?? internalScrollRef
   const [scrollerWidth, setScrollerWidth] = useState(0)
   const allSelected = leads.length > 0 && leads.every((l) => selected.has(l.id))
-  const colSpan = columns.length + 2 + (actionsColumnOpen ? 1 : 0)
+  const actionsColumnWidth = actionsColumnOpen
+    ? LEAD_ACTIONS_COLUMN_WIDTH
+    : LEAD_ACTIONS_TOGGLE_WIDTH
+  const fixedColumnsWidth = LEAD_LEFT_CONTROLS_WIDTH + actionsColumnWidth
+  const colSpan = columns.length + 3
   const cellPad = LEAD_TABLE_DENSITY[density]
   const naturalWidths = useMemo(() => {
     const widths = {} as Record<LeadColumnId, number>
@@ -351,8 +349,8 @@ export function LeadTable({
         widths[column.id] = 210
         continue
       }
-      if (DATE_TIME_COLUMNS.has(column.id)) {
-        widths[column.id] = DATE_TIME_COLUMN_WIDTH
+      if (isLeadDateTimeColumn(column.id)) {
+        widths[column.id] = LEAD_DATE_TIME_COLUMN_WIDTH
         continue
       }
       const contentLength = leads.reduce((maximum, lead) => {
@@ -362,12 +360,7 @@ export function LeadTable({
           : String(value ?? "").length
         return Math.max(maximum, length)
       }, column.label.length)
-      const minimum =
-        column.id === "Nome Lead"
-          ? 190
-          : column.id === "E-mail"
-            ? 210
-            : 116
+      const minimum = minimumLeadColumnWidth(column.id)
       widths[column.id] = Math.min(360, Math.max(minimum, contentLength * 7 + 40))
     }
     return widths
@@ -376,32 +369,25 @@ export function LeadTable({
     const widths = { ...naturalWidths }
     for (const column of columns) {
       if (columnWidths[column.id]) {
-        widths[column.id] = Math.max(
-          minimumColumnWidth(column.id),
-          columnWidths[column.id]!,
-        )
+        widths[column.id] = clampLeadColumnWidth(column.id, columnWidths[column.id]!)
       }
     }
     return widths
   }, [columnWidths, columns, naturalWidths])
-  const baseTableWidth = useMemo(
-    () =>
-      36 +
-      44 +
-      (actionsColumnOpen ? LEAD_ACTIONS_COLUMN_WIDTH : 0) +
-      columns.reduce((total, column) => total + resolvedWidths[column.id], 0),
-    [actionsColumnOpen, columns, resolvedWidths],
-  )
-  const lastDataColumn = columns[columns.length - 1]?.id
-  const lastColumnFill = Math.max(0, scrollerWidth - baseTableWidth)
   const displayWidths = useMemo(() => {
-    if (!lastDataColumn || lastColumnFill <= 0) return resolvedWidths
-    return {
-      ...resolvedWidths,
-      [lastDataColumn]: resolvedWidths[lastDataColumn] + lastColumnFill,
-    }
-  }, [lastColumnFill, lastDataColumn, resolvedWidths])
-  const tableWidth = baseTableWidth + lastColumnFill
+    return fitLeadColumnWidthsToViewport({
+      columns: columns.map((column) => column.id),
+      preferredWidths: resolvedWidths,
+      viewportWidth: scrollerWidth,
+      fixedWidth: fixedColumnsWidth,
+    })
+  }, [columns, fixedColumnsWidth, resolvedWidths, scrollerWidth])
+  const tableWidth = useMemo(
+    () =>
+      fixedColumnsWidth +
+      columns.reduce((total, column) => total + displayWidths[column.id], 0),
+    [columns, displayWidths, fixedColumnsWidth],
+  )
 
   const startResize = (
     event: React.PointerEvent<HTMLButtonElement>,
@@ -410,17 +396,11 @@ export function LeadTable({
     event.preventDefault()
     event.stopPropagation()
     const startX = event.clientX
-    const startWidth = resolvedWidths[column]
+    const startWidth = displayWidths[column]
     const onMove = (moveEvent: PointerEvent) => {
       onColumnWidthChange(
         column,
-        Math.min(
-          480,
-          Math.max(
-            minimumColumnWidth(column),
-            startWidth + moveEvent.clientX - startX,
-          ),
-        ),
+        clampLeadColumnWidth(column, startWidth + moveEvent.clientX - startX),
       )
     }
     const onEnd = () => {
@@ -660,9 +640,8 @@ export function LeadTable({
             />
           </TableCell>
 
-          {columns.map((col, columnIndex) => {
+          {columns.map((col) => {
             const isLeft = leftAligned(col.id)
-            const isLastDataColumn = columnIndex === columns.length - 1
             return (
               <TableCell
                 key={col.id}
@@ -671,7 +650,6 @@ export function LeadTable({
                   "overflow-hidden whitespace-nowrap",
                   cellPad,
                   isLeft ? "text-left" : "text-center",
-                  isLastDataColumn && "pr-6",
                 )}
                 style={{
                   width: displayWidths[col.id],
@@ -691,16 +669,16 @@ export function LeadTable({
             )
           })}
 
-          {actionsColumnOpen ? (
-            <TableCell
-              onClick={(e) => e.stopPropagation()}
-              className={cn(LIGHTNING.cellActions, cellPad)}
-              style={{
-                width: LEAD_ACTIONS_COLUMN_WIDTH,
-                minWidth: LEAD_ACTIONS_COLUMN_WIDTH,
-                maxWidth: LEAD_ACTIONS_COLUMN_WIDTH,
-              }}
-            >
+          <TableCell
+            onClick={(e) => e.stopPropagation()}
+            className={cn(LIGHTNING.cellActions, actionsColumnOpen ? cellPad : "p-0")}
+            style={{
+              width: actionsColumnWidth,
+              minWidth: actionsColumnWidth,
+              maxWidth: actionsColumnWidth,
+            }}
+          >
+            {actionsColumnOpen ? (
               <RowInlineActions>
                 <Button
                   variant="ghost"
@@ -746,8 +724,8 @@ export function LeadTable({
                   </DropdownMenuContent>
                 </DropdownMenu>
               </RowInlineActions>
-            </TableCell>
-          ) : null}
+            ) : null}
+          </TableCell>
         </TableRow>
       </LeadRowContextMenu>
     )
@@ -841,25 +819,6 @@ export function LeadTable({
       </div>
 
       <div className="relative hidden h-full overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_18px_45px_-34px_rgb(15_23_42/0.6)] lg:flex lg:max-h-full lg:flex-col">
-        {!actionsColumnOpen ? (
-          <button
-            type="button"
-            aria-label="Mostra colonna azioni"
-            title="Mostra colonna azioni"
-            onClick={() => setActionsColumnOpen(true)}
-            className={cn(
-              LIGHTNING.headCell,
-              "absolute right-0 top-0 z-50 flex items-center justify-center border-l border-l-border/80 bg-secondary/95 text-muted-foreground shadow-[-12px_0_18px_-16px_rgb(15_23_42/0.55)] backdrop-blur-md transition-colors hover:text-foreground",
-            )}
-            style={{
-              width: LEAD_ACTIONS_TOGGLE_WIDTH,
-              minWidth: LEAD_ACTIONS_TOGGLE_WIDTH,
-              maxWidth: LEAD_ACTIONS_TOGGLE_WIDTH,
-            }}
-          >
-            <SlidersHorizontal className="size-4" />
-          </button>
-        ) : null}
       {/* Area scrollabile: header sticky + body virtualizzato in un'unica table.
           Scrolla verticalmente; orizzontalmente è pilotata dalla barra dedicata. */}
       <div
@@ -904,9 +863,7 @@ export function LeadTable({
           {columns.map((column) => (
             <col key={column.id} style={{ width: displayWidths[column.id] }} />
           ))}
-          {actionsColumnOpen ? (
-            <col style={{ width: LEAD_ACTIONS_COLUMN_WIDTH }} />
-          ) : null}
+          <col style={{ width: actionsColumnWidth }} />
         </colgroup>
         <TableHeader className={cn(LIGHTNING.header, stuck && LIGHTNING.headerStuck)}>
           <TableRow className="hover:bg-transparent">
@@ -920,12 +877,11 @@ export function LeadTable({
                 aria-label="Seleziona tutti"
               />
             </TableHead>
-            {columns.map((col, columnIndex) => {
+            {columns.map((col) => {
               const numeric = NUMERIC_COLUMNS.includes(col.id)
               const isLeft = col.id === "Nome Lead" || col.id === "E-mail"
               const compact = isCompactIconColumn(col.id)
               const active = sortBy === col.id
-              const isLastDataColumn = columnIndex === columns.length - 1
               return (
                 <TableHead
                   key={col.id}
@@ -961,7 +917,6 @@ export function LeadTable({
                     dragOverColumn === col.id && "bg-teal/10",
                     numeric ? "text-right" : isLeft ? "text-left" : "text-center",
                     compact && "px-1",
-                    isLastDataColumn && (actionsColumnOpen ? "pr-7" : "pr-12"),
                   )}
                   style={{
                     width: displayWidths[col.id],
@@ -1028,31 +983,33 @@ export function LeadTable({
                 </TableHead>
               )
             })}
-            {actionsColumnOpen ? (
-              <TableHead
-                className={cn(
-                  LIGHTNING.headCell,
-                  LIGHTNING.headLabel,
-                  LIGHTNING.headActions,
-                  "p-0",
-                )}
-                style={{
-                  width: LEAD_ACTIONS_COLUMN_WIDTH,
-                  minWidth: LEAD_ACTIONS_COLUMN_WIDTH,
-                  maxWidth: LEAD_ACTIONS_COLUMN_WIDTH,
-                }}
+            <TableHead
+              className={cn(
+                LIGHTNING.headCell,
+                LIGHTNING.headLabel,
+                LIGHTNING.headActions,
+                "p-0",
+              )}
+              style={{
+                width: actionsColumnWidth,
+                minWidth: actionsColumnWidth,
+                maxWidth: actionsColumnWidth,
+              }}
+            >
+              <button
+                type="button"
+                aria-label={
+                  actionsColumnOpen ? "Nascondi colonna azioni" : "Mostra colonna azioni"
+                }
+                title={
+                  actionsColumnOpen ? "Nascondi colonna azioni" : "Mostra colonna azioni"
+                }
+                onClick={() => setActionsColumnOpen((open) => !open)}
+                className="flex h-10 w-full items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
               >
-                <button
-                  type="button"
-                  aria-label="Nascondi colonna azioni"
-                  title="Nascondi colonna azioni"
-                  onClick={() => setActionsColumnOpen(false)}
-                  className="flex h-10 w-full items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <SlidersHorizontal className="size-4" />
-                </button>
-              </TableHead>
-            ) : null}
+                <SlidersHorizontal className="size-4" />
+              </button>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

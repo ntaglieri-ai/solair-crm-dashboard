@@ -12,6 +12,7 @@
 // se il browser è condiviso e a loggarsi è un altro utente, le preferenze
 // vengono ignorate invece di essere applicate a chi non gli appartengono.
 import type { LeadColumnId } from "@/lib/mock-data"
+import { normalizeLeadColumnWidths } from "@/lib/leads/column-widths"
 
 export type LeadDensity = "comoda" | "normale" | "densa"
 
@@ -52,16 +53,12 @@ export function parseLeadViewPreferences(
     )
     if (!visibleCols.length) return null
 
-    const columnWidths: Partial<Record<LeadColumnId, number>> = {}
-    for (const [id, width] of Object.entries(parsed.columnWidths ?? {})) {
-      if (validColumnIds.has(id) && typeof width === "number" && width > 0) {
-        columnWidths[id as LeadColumnId] = width
-      }
-    }
-
     return {
       visibleCols,
-      columnWidths,
+      columnWidths: normalizeLeadColumnWidths(
+        parsed.columnWidths,
+        validColumnIds,
+      ),
       density: isDensity(parsed.density) ? parsed.density : "normale",
     }
   } catch {

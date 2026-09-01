@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Loader2, Mail, MessageCircle, Phone } from "lucide-react"
 import { toast } from "sonner"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { MittenteSelect, useMittenti } from "@/components/shared/mittente-select"
+import { cn } from "@/lib/utils"
 
 // Icone di contatto rapido (telefono/email/WhatsApp) accanto al nome, per
 // Lead e Cliente. Il telefono e' un <a href="tel:"> vero, presente nel DOM
@@ -128,18 +129,17 @@ export function QuickContactIcons({
     >
       {show.includes("phone") &&
         (hasPhone ? (
-          // Il <a> e' renderizzato dal Button (stesse classi, stesso hover):
-          // cambia l'elemento nel DOM, non l'aspetto.
-          <Button
-            variant="ghost"
-            size="icon"
-            nativeButton={false}
-            render={<a href={`tel:${telHref(telefono ?? "")}`} />}
-            className="size-6 text-muted-foreground hover:text-foreground"
+          <a
+            href={`tel:${telHref(telefono ?? "")}`}
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "icon" }),
+              "size-6 text-muted-foreground hover:text-foreground",
+            )}
             title={`Chiama ${telefono}`}
+            aria-label={`Chiama ${telefono}`}
           >
             <Phone className="size-3.5" />
-          </Button>
+          </a>
         ) : (
           // Senza numero resta un <button> nativo: è l'unico elemento su cui
           // `disabled:` di Tailwind fa presa, e un link senza href non si

@@ -84,6 +84,7 @@ import {
   serializeLeadViewPreferences,
   type LeadViewPreferences,
 } from "@/lib/leads/view-preferences"
+import { normalizeLeadColumnWidths } from "@/lib/leads/column-widths"
 import { leadsKeys } from "@/lib/leads/hooks"
 import { useIsMobile } from "@/hooks/use-is-mobile"
 
@@ -255,7 +256,7 @@ export function LeadsClient({
           const validIds = new Set(LEAD_COLUMNS.map((column) => column.id))
           const order = (stored.visibleCols ?? []).filter((id) => validIds.has(id))
           if (order.length) setVisibleCols(order)
-          if (stored.columnWidths) setColumnWidths(stored.columnWidths)
+          setColumnWidths(normalizeLeadColumnWidths(stored.columnWidths, validIds))
           if (
             stored.density === "comoda" ||
             stored.density === "normale" ||

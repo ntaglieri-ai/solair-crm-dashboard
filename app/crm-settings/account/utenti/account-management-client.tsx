@@ -92,6 +92,7 @@ type RuoloProfilo = {
 }
 
 type UserForm = typeof EMPTY_FORM
+type UserPatch = Partial<UserForm>
 
 type AccountManagementClientProps = {
   initialUsers: Utente[]
@@ -308,7 +309,7 @@ export function AccountManagementClient({
     setError(null)
   }
 
-  async function saveUser(id: string, form: UserForm) {
+  async function saveUser(id: string, form: UserPatch) {
     setSaving(true)
     setError(null)
     try {
@@ -440,7 +441,7 @@ export function AccountManagementClient({
   }
 
   async function toggleActive(user: Utente) {
-    await saveUser(user.id, { ...userToForm(user), attivo: !user.attivo })
+    await saveUser(user.id, { attivo: !user.attivo })
   }
 
   async function retryNextcloud(user: Utente) {

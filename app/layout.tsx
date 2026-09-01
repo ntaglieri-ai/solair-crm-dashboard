@@ -4,28 +4,23 @@ import { Toaster } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { QueryProvider } from '@/components/providers/query-provider'
 import { AppearanceProvider } from '@/components/providers/appearance-provider'
+import { ServiceWorkerRegistration } from '@/components/pwa/service-worker-registration'
 import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Solair CRM',
+  applicationName: 'SolairCRM',
   description: 'CRM enterprise per Solair Group — gestione lead, clienti e pipeline fotovoltaico',
   generator: 'v0.app',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: 'SolairCRM',
+    statusBarStyle: 'default',
+  },
   icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
+    icon: '/favicon.ico',
+    apple: '/pwa/apple-touch-icon.png',
   },
 }
 
@@ -55,6 +50,7 @@ export default function RootLayout({
           </AppearanceProvider>
         </QueryProvider>
         <Toaster position="bottom-right" richColors closeButton />
+        <ServiceWorkerRegistration />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

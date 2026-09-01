@@ -4,13 +4,13 @@ import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
-  MapPin,
   MoreHorizontal,
   Plus,
   RefreshCw,
   Search,
   ShieldCheck,
   UserCheck,
+  UserX,
   Users,
 } from "lucide-react"
 import {
@@ -83,6 +83,7 @@ type Utente = {
   must_change_password?: boolean
   welcome_email_status?: WelcomeEmailStatus
   welcome_email_error?: string | null
+  teamNames?: string[]
 }
 
 type RuoloProfilo = {
@@ -169,19 +170,51 @@ function RolePill({ code, label }: { code: string; label: string }) {
   )
 }
 
+function TeamPills({ names }: { names?: string[] }) {
+  if (!names?.length) {
+    return <span className="text-sm text-muted-foreground">-</span>
+  }
+
+  return (
+    <div className="flex max-w-52 flex-wrap gap-1.5">
+      {names.map((name) => (
+        <Badge
+          key={name}
+          variant="outline"
+          className="max-w-full truncate border-sky-200 bg-sky-50 text-sky-700"
+          title={name}
+        >
+          {name}
+        </Badge>
+      ))}
+    </div>
+  )
+}
+
 function MetricCard({
   label,
   value,
   icon,
   tone,
+  active = false,
+  onClick,
 }: {
   label: string
   value: React.ReactNode
   icon: React.ReactNode
   tone: string
+  active?: boolean
+  onClick?: () => void
 }) {
   return (
-    <div className="group relative overflow-hidden rounded-xl border border-white/80 bg-white px-4 py-3.5 shadow-[0_14px_32px_rgb(30_58_95/8%)] ring-1 ring-slate-900/[0.03] transition-transform hover:-translate-y-0.5">
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "group relative overflow-hidden rounded-xl border border-white/80 bg-white px-4 py-3.5 text-left shadow-[0_14px_32px_rgb(30_58_95/8%)] ring-1 ring-slate-900/[0.03] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0176d3]/35",
+        active && "border-slate-300 ring-2 ring-slate-900/10",
+      )}
+    >
       <div className={cn("absolute inset-x-0 top-0 h-1 bg-gradient-to-r", tone)} aria-hidden />
       <div className="flex items-center justify-between gap-3">
         <div className="flex flex-col gap-0.5">
@@ -192,7 +225,7 @@ function MetricCard({
           {icon}
         </div>
       </div>
-    </div>
+    </button>
   )
 }
 
@@ -257,6 +290,7 @@ export function AccountManagementClient({
   const [error, setError] = useState<string | null>(initialError)
   const [search, setSearch] = useState("")
   const [ruolo, setRuolo] = useState("")
+  const [roleGroup, setRoleGroup] = useState<"admin" | "">("")
   const [sede, setSede] = useState("")
   const [stato, setStato] = useState("")
   const [newOpen, setNewOpen] = useState(false)
@@ -281,18 +315,37 @@ export function AccountManagementClient({
     () => ({
       totali: users.length,
       attivi: users.filter((u) => u.attivo).length,
+      inattivi: users.filter((u) => !u.attivo).length,
       admin: users.filter((u) =>
         ["SUPERADMIN", "ADMIN"].includes(u.ruolo.toUpperCase()),
       ).length,
-      sedi: new Set(users.map((u) => u.sede)).size,
     }),
     [users],
   )
+  const statusMetric =
+    stato === "active"
+      ? {
+          label: "Utenti inattivi",
+          value: stats.inattivi,
+          tone: "from-[#dd7a01] to-[#f5b041]",
+          icon: <UserX className="size-5" />,
+          nextStatus: "inactive",
+        }
+      : {
+          label: "Utenti attivi",
+          value: stats.attivi,
+          tone: "from-[#2e8b72] to-[#35b79a]",
+          icon: <UserCheck className="size-5" />,
+          nextStatus: "active",
+        }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return users.filter((u) => {
       if (q && !u.nome.toLowerCase().includes(q) && !u.email.toLowerCase().includes(q)) {
+        return false
+      }
+      if (roleGroup === "admin" && !["SUPERADMIN", "ADMIN"].includes(u.ruolo.toUpperCase())) {
         return false
       }
       if (ruolo && u.ruolo !== ruolo) return false
@@ -301,12 +354,20 @@ export function AccountManagementClient({
       if (stato === "inactive" && u.attivo) return false
       return true
     })
-  }, [users, search, ruolo, sede, stato])
+  }, [users, search, roleGroup, ruolo, sede, stato])
 
   function openEdit(user: Utente) {
     setSelected(user)
     setEditForm(userToForm(user))
     setError(null)
+  }
+
+  function showAllUsers() {
+    setSearch("")
+    setRuolo("")
+    setRoleGroup("")
+    setSede("")
+    setStato("")
   }
 
   async function saveUser(id: string, form: UserPatch) {
@@ -656,11 +717,34 @@ export function AccountManagementClient({
         </p>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricCard label="Utenti totali" value={stats.totali} icon={<Users className="size-5" />} tone="from-[#0176d3] to-[#2e8bff]" />
-        <MetricCard label="Utenti attivi" value={stats.attivi} icon={<UserCheck className="size-5" />} tone="from-[#2e8b72] to-[#35b79a]" />
-        <MetricCard label="Admin" value={stats.admin} icon={<ShieldCheck className="size-5" />} tone="from-[#6f42c1] to-[#9f7aea]" />
-        <MetricCard label="Sedi coperte" value={stats.sedi} icon={<MapPin className="size-5" />} tone="from-[#dd7a01] to-[#f5b041]" />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <MetricCard
+          label="Utenti totali"
+          value={stats.totali}
+          icon={<Users className="size-5" />}
+          tone="from-[#0176d3] to-[#2e8bff]"
+          active={!search && !roleGroup && !ruolo && !sede && !stato}
+          onClick={showAllUsers}
+        />
+        <MetricCard
+          label={statusMetric.label}
+          value={statusMetric.value}
+          icon={statusMetric.icon}
+          tone={statusMetric.tone}
+          active={stato === statusMetric.nextStatus}
+          onClick={() => setStato(statusMetric.nextStatus)}
+        />
+        <MetricCard
+          label="Admin"
+          value={stats.admin}
+          icon={<ShieldCheck className="size-5" />}
+          tone="from-[#6f42c1] to-[#9f7aea]"
+          active={roleGroup === "admin"}
+          onClick={() => {
+            setRuolo("")
+            setRoleGroup("admin")
+          }}
+        />
       </div>
 
       <div className="flex flex-col gap-3 rounded-xl border border-white/75 bg-white/86 p-3 shadow-[0_12px_30px_rgb(30_58_95/7%)] ring-1 ring-slate-900/[0.03] sm:flex-row sm:flex-wrap sm:items-center">
@@ -673,7 +757,13 @@ export function AccountManagementClient({
             className="border-slate-200 bg-white pl-9 shadow-inner shadow-slate-900/[0.02]"
           />
         </div>
-        <Select value={ruolo} onValueChange={(v) => setRuolo(v === "all" ? "" : v ?? "")}>
+        <Select
+          value={ruolo}
+          onValueChange={(v) => {
+            setRoleGroup("")
+            setRuolo(v === "all" ? "" : v ?? "")
+          }}
+        >
           <SelectTrigger className="w-full border-slate-200 bg-white shadow-inner shadow-slate-900/[0.02] sm:w-48">
             <SelectValue placeholder="Tutti i ruoli" />
           </SelectTrigger>
@@ -717,6 +807,7 @@ export function AccountManagementClient({
             <TableRow className="hover:bg-transparent">
               <TableHead className="px-4 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Utente</TableHead>
               <TableHead className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Ruolo</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Team</TableHead>
               <TableHead className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Sede</TableHead>
               <TableHead className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Creato il</TableHead>
               <TableHead className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Stato</TableHead>
@@ -749,6 +840,9 @@ export function AccountManagementClient({
                     code={user.ruolo}
                     label={roleLabel.get(user.ruolo.toUpperCase()) ?? user.ruolo}
                   />
+                </TableCell>
+                <TableCell>
+                  <TeamPills names={user.teamNames} />
                 </TableCell>
                 <TableCell className="text-muted-foreground">{user.sede}</TableCell>
                 <TableCell className="text-muted-foreground">
@@ -813,7 +907,7 @@ export function AccountManagementClient({
             ))}
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                   Nessun account trovato.
                 </TableCell>
               </TableRow>

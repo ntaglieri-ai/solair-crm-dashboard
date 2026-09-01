@@ -24,12 +24,25 @@ type RuoloProfilo = {
   nome: string
 }
 
+type Team = {
+  id: string
+  nome: string
+}
+
+type TeamRelation = {
+  team_id: string
+  utente_id: string
+}
+
 async function loadAccountManagementData() {
   const supabase = await createClient()
   const [
     currentPermissions,
     { data: utenti, error: utentiError },
     { data: ruoli, error: ruoliError },
+    { data: teams, error: teamsError },
+    { data: teamAgenti, error: teamAgentiError },
+    { data: teamDirettori, error: teamDirettoriError },
   ] =
     await Promise.all([
       loadCurrentPermissionSnapshot(),
@@ -43,9 +56,24 @@ async function loadAccountManagementData() {
         .from("ruoli")
         .select("id, code, nome")
         .order("ordinamento", { ascending: true }),
+      supabase
+        .from("teams")
+        .select("id, nome")
+        .order("nome"),
+      supabase
+        .from("team_agenti")
+        .select("team_id, utente_id"),
+      supabase
+        .from("team_direttori")
+        .select("team_id, utente_id"),
     ])
 
-  const error = utentiError ?? ruoliError
+  const error =
+    utentiError ??
+    ruoliError ??
+    teamsError ??
+    teamAgentiError ??
+    teamDirettoriError
   const normalizedRoles = ((ruoli ?? []) as RuoloProfilo[]).map((ruolo) => ({
     ...ruolo,
     code: ruolo.code ?? "",
@@ -58,6 +86,23 @@ async function loadAccountManagementData() {
   const ncStatuses = await getNextcloudCredentialStatuses(
     ((utenti ?? []) as Utente[]).map((u) => u.id),
   )
+  const teamNameById = new Map(
+    ((teams ?? []) as Team[]).map((team) => [team.id, team.nome]),
+  )
+  const teamNamesByUserId = new Map<string, Set<string>>()
+  const addTeamName = (relation: TeamRelation) => {
+    const nome = teamNameById.get(relation.team_id)
+    if (!nome) return
+    const names = teamNamesByUserId.get(relation.utente_id) ?? new Set<string>()
+    names.add(nome)
+    teamNamesByUserId.set(relation.utente_id, names)
+  }
+  const teamRelations = [
+    ...((teamAgenti ?? []) as TeamRelation[]),
+    ...((teamDirettori ?? []) as TeamRelation[]),
+  ]
+
+  teamRelations.forEach(addTeamName)
 
   return {
     initialUsers: ((utenti ?? []) as Utente[]).map((utente) => ({
@@ -74,6 +119,9 @@ async function loadAccountManagementData() {
       must_change_password: utente.must_change_password ?? false,
       welcome_email_status: utente.welcome_email_status ?? "pending",
       welcome_email_error: utente.welcome_email_error ?? null,
+      teamNames: Array.from(teamNamesByUserId.get(utente.id) ?? []).sort((a, b) =>
+        a.localeCompare(b),
+      ),
     })),
     initialRoles: normalizedRoles,
     currentProfile: currentAccountProfileFromSnapshot(currentPermissions),

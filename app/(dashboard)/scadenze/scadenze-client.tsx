@@ -291,10 +291,10 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
   return (
     <div
       ref={rootRef}
-      className="flex min-w-0 flex-col gap-5 lg:h-auto lg:overflow-visible"
+      className="flex min-w-0 flex-col gap-2.5 lg:h-auto lg:gap-5 lg:overflow-visible"
       style={availH ? { height: availH, overflow: "hidden" } : undefined}
     >
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 lg:gap-3">
         <div className="min-w-0 flex flex-col gap-0.5">
           <h1 className="break-words text-2xl font-bold tracking-tight text-foreground">Scadenze</h1>
           <p className="break-words text-sm text-muted-foreground">
@@ -305,7 +305,7 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
           </p>
         </div>
 
-        <div className="grid w-full grid-cols-2 gap-2.5 lg:flex lg:w-auto lg:flex-wrap lg:justify-end lg:gap-2">
+        <div className="grid w-full grid-cols-2 gap-1.5 lg:flex lg:w-auto lg:flex-wrap lg:justify-end lg:gap-2">
           <ScadenzaSettingsSheet
             open={settingsOpen}
             onOpenChange={setSettingsOpen}
@@ -315,7 +315,7 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
               <Button
                 variant="outline"
                 aria-label="Impostazioni scadenze"
-                className="h-14 w-full gap-2 bg-card text-sm lg:h-10 lg:w-10 lg:p-0"
+                className="h-11 w-full gap-1.5 bg-card px-2 text-xs lg:h-10 lg:w-10 lg:p-0 lg:text-sm"
               >
                 <IconSettings size={22} stroke={1.8} className="lg:size-[18px]" />
                 <span className="lg:hidden">Imposta</span>
@@ -336,7 +336,7 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
             trigger={({ onClick, count }) => (
               <Button
                 onClick={onClick}
-                className="relative h-14 w-full gap-2 bg-primary text-sm text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90 lg:h-10 lg:w-auto"
+                className="relative h-11 w-full gap-1.5 bg-primary px-2 text-xs text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90 lg:h-10 lg:w-auto lg:gap-2 lg:px-3.5 lg:text-sm"
               >
                 <SlidersHorizontal className="size-[22px] lg:size-4" />
                 Filtri
@@ -350,7 +350,7 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
           />
 
           <Button
-            className="h-14 w-full gap-2 bg-teal text-sm text-teal-foreground hover:bg-teal/90 lg:h-10 lg:w-auto"
+            className="h-11 w-full gap-1.5 bg-teal px-2 text-xs text-teal-foreground hover:bg-teal/90 lg:h-10 lg:w-auto lg:gap-2 lg:px-3.5 lg:text-sm"
             onClick={() => setNewOpen(true)}
           >
             <Plus className="size-[22px] lg:size-4" />
@@ -361,7 +361,7 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
       </div>
 
       {/* Barra di ricerca — sempre su una riga; il resto dei filtri vive nel drawer "Filtri" */}
-      <div className="flex min-w-0 flex-row items-center gap-2 rounded-lg border border-border bg-card p-2 shadow-sm">
+      <div className="flex min-w-0 flex-row items-center gap-2 rounded-lg border border-border bg-card p-1 shadow-sm lg:p-2">
         <ScadenzaSearchInput
           value={filters.search}
           onChange={(v) => handleFilterChange({ ...filters, search: v })}

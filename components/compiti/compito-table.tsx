@@ -91,7 +91,7 @@ function CompitoMobileList({
             key={compito.id}
             role="button"
             tabIndex={0}
-            className="flex min-h-[82px] shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="grid min-h-[108px] shrink-0 cursor-pointer grid-cols-[auto_auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             onClick={() => {
               startNavigationFeedback()
               router.push(`/compiti/${compito.id}`)
@@ -103,7 +103,7 @@ function CompitoMobileList({
               router.push(`/compiti/${compito.id}`)
             }}
           >
-            <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
+            <div className="mt-1.5 shrink-0" onClick={(event) => event.stopPropagation()}>
               <Checkbox
                 checked={selected.has(compito.id)}
                 onCheckedChange={() => onToggle(compito.id)}
@@ -111,13 +111,15 @@ function CompitoMobileList({
               />
             </div>
 
-            <CompitoAvatar nome={compito["Proprietario del compito"]} size={36} />
+            <span className="mt-0.5">
+              <CompitoAvatar nome={compito["Proprietario del compito"]} size={36} />
+            </span>
 
             <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-1.5">
+              <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1">
                 <h3
                   className={cn(
-                    "truncate text-base font-bold text-foreground",
+                    "min-w-0 flex-1 break-words text-base font-bold leading-tight text-foreground",
                     completato && "text-muted-foreground line-through",
                   )}
                 >
@@ -126,14 +128,17 @@ function CompitoMobileList({
                 <PrioritaBadge priorita={compito.Priorità} />
               </div>
 
-              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
-                <CalendarClock className={cn("size-3.5 shrink-0", scaduto && "text-destructive")} />
-                <span className={cn("truncate", scaduto && "font-medium text-destructive")}>
-                  {compito["Data di scadenza"]}
+              <div className="mt-1 grid min-w-0 gap-1 text-sm text-muted-foreground">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <CalendarClock className={cn("size-3.5 shrink-0", scaduto && "text-destructive")} />
+                  <span className={cn("truncate", scaduto && "font-medium text-destructive")}>
+                    {compito["Data di scadenza"]}
+                  </span>
                 </span>
-                <span className="shrink-0 text-muted-foreground/50">·</span>
-                <UserRound className="size-3.5 shrink-0" />
-                <span className="truncate">{compito["Proprietario del compito"]}</span>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <UserRound className="size-3.5 shrink-0" />
+                  <span className="truncate">{compito["Proprietario del compito"]}</span>
+                </span>
               </div>
 
               <div className="mt-1 flex min-w-0 items-center gap-1.5">
@@ -162,7 +167,7 @@ function CompitoMobileList({
               </div>
             </div>
 
-            <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
+            <div className="col-start-3 flex justify-end" onClick={(event) => event.stopPropagation()}>
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={

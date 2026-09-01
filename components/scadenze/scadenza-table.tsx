@@ -84,7 +84,7 @@ function ScadenzaMobileList({
             key={scadenza.id}
             role="button"
             tabIndex={0}
-            className="flex min-h-[82px] shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="grid min-h-[108px] shrink-0 cursor-pointer grid-cols-[auto_auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 rounded-xl border border-border bg-card px-3 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal/30 hover:shadow-md active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             onClick={() => {
               startNavigationFeedback()
               router.push(`/scadenze/${scadenza.id}`)
@@ -96,7 +96,7 @@ function ScadenzaMobileList({
               router.push(`/scadenze/${scadenza.id}`)
             }}
           >
-            <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
+            <div className="mt-1.5 shrink-0" onClick={(event) => event.stopPropagation()}>
               <Checkbox
                 checked={selected.has(scadenza.id)}
                 onCheckedChange={() => onToggle(scadenza.id)}
@@ -104,25 +104,30 @@ function ScadenzaMobileList({
               />
             </div>
 
-            <ScadenzaAvatar nome={scadenza.proprietario_nome ?? scadenza.nome} size={36} />
+            <span className="mt-0.5">
+              <ScadenzaAvatar nome={scadenza.proprietario_nome ?? scadenza.nome} size={36} />
+            </span>
 
             <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <h3 className="truncate text-base font-bold text-foreground">
+              <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1">
+                <h3 className="min-w-0 flex-1 break-words text-base font-bold leading-tight text-foreground">
                   {scadenza.nome}
                 </h3>
                 {scaduta ? <ScadutaBadge /> : null}
               </div>
 
-              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
-                <CalendarClock className={cn("size-3.5 shrink-0", scaduta && "text-destructive")} />
-                <span className={cn("truncate", scaduta && "font-medium text-destructive")}>
-                  {formatDateTime(scadenza.data_scadenza)}
+              <div className="mt-1 grid min-w-0 gap-1 text-sm text-muted-foreground">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <CalendarClock className={cn("size-3.5 shrink-0", scaduta && "text-destructive")} />
+                  <span className={cn("truncate", scaduta && "font-medium text-destructive")}>
+                    {formatDateTime(scadenza.data_scadenza)}
+                  </span>
                 </span>
-                <span className="shrink-0 text-muted-foreground/50">·</span>
-                <UserRound className="size-3.5 shrink-0" />
-                <span className="truncate">
-                  {scadenza.proprietario_nome ?? "Proprietario non assegnato"}
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <UserRound className="size-3.5 shrink-0" />
+                  <span className="truncate">
+                    {scadenza.proprietario_nome ?? "Proprietario non assegnato"}
+                  </span>
                 </span>
               </div>
 
@@ -141,7 +146,7 @@ function ScadenzaMobileList({
               </div>
             </div>
 
-            <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
+            <div className="col-start-3 flex justify-end" onClick={(event) => event.stopPropagation()}>
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={

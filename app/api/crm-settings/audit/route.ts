@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { requireApiPage } from "@/lib/permissions/server"
+import { requireApiSuperadmin } from "@/lib/permissions/server"
 import {
   isAuditEventType,
   isAuditPeriodo,
@@ -11,11 +11,10 @@ import { loadAuditEvents } from "@/lib/audit/queries"
 // caricamento arriva gia' renderizzato dal server component: questa rotta
 // risponde solo alle interazioni successive.
 //
-// Stesso permesso della pagina: senza `crm_settings.account.audit` il registro
-// non e' leggibile nemmeno chiamando l'endpoint a mano.
+// Registro sensibile: solo SUPERADMIN, anche se un ruolo eredita CRM Settings.
 
 export async function GET(request: Request) {
-  const guard = await requireApiPage("crm_settings.account.audit")
+  const guard = await requireApiSuperadmin()
   if (guard.response) return guard.response
 
   const params = new URL(request.url).searchParams

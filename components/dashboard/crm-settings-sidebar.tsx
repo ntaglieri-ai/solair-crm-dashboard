@@ -155,6 +155,7 @@ export function CrmSettingsSidebar() {
   const visibleItems = (group: CrmSettingsGroupId): CrmSettingsCatalogItem[] => {
     if (group === "maintenance" && !permissions.isSuperadmin) return []
     return crmSettingsItemsForGroup(group).filter((item) => {
+      if (item.superadminOnly && !permissions.isSuperadmin) return false
       const page = pageKeyFromPath(item.href)
       return page ? permissions.canPage(page) : true
     })

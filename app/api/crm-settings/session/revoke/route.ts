@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { requireApiPage } from "@/lib/permissions/server"
+import { requireApiSuperadmin } from "@/lib/permissions/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { attoreDaPermessi, logAudit } from "@/lib/audit/log"
 import { sessionIdCorrente } from "@/lib/session-access/queries"
@@ -28,7 +28,7 @@ interface Corpo {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export async function POST(request: Request) {
-  const guard = await requireApiPage("crm_settings.account.session")
+  const guard = await requireApiSuperadmin()
   if (guard.response) return guard.response
 
   const admin = createAdminClient()

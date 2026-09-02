@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { requireApiPage } from "@/lib/permissions/server"
+import { requireApiSuperadmin } from "@/lib/permissions/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { attoreDaPermessi, logAudit } from "@/lib/audit/log"
 
@@ -31,7 +31,7 @@ function ipValido(raw: unknown): string | null {
 }
 
 export async function POST(request: Request) {
-  const guard = await requireApiPage("crm_settings.account.session")
+  const guard = await requireApiSuperadmin()
   if (guard.response) return guard.response
 
   const admin = createAdminClient()
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const guard = await requireApiPage("crm_settings.account.session")
+  const guard = await requireApiSuperadmin()
   if (guard.response) return guard.response
 
   const admin = createAdminClient()

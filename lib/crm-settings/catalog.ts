@@ -169,6 +169,7 @@ export interface CrmSettingsCatalogItem {
   pageKey: string
   icon: LucideIcon
   status?: "active" | "restricted"
+  superadminOnly?: boolean
 }
 
 export const CRM_SETTINGS_CATALOG: CrmSettingsCatalogItem[] = [
@@ -211,6 +212,7 @@ export const CRM_SETTINGS_CATALOG: CrmSettingsCatalogItem[] = [
     pageKey: "crm_settings.account.audit",
     icon: ScrollText,
     status: "restricted",
+    superadminOnly: true,
   },
   {
     id: "sessions",
@@ -221,6 +223,7 @@ export const CRM_SETTINGS_CATALOG: CrmSettingsCatalogItem[] = [
     pageKey: "crm_settings.account.session",
     icon: KeyRound,
     status: "restricted",
+    superadminOnly: true,
   },
   {
     id: "roberta",
@@ -353,6 +356,7 @@ export const CRM_SETTINGS_CATALOG: CrmSettingsCatalogItem[] = [
     pageKey: "crm_settings.maintenance.health",
     icon: Activity,
     status: "restricted",
+    superadminOnly: true,
   },
   {
     id: "backup",
@@ -363,6 +367,7 @@ export const CRM_SETTINGS_CATALOG: CrmSettingsCatalogItem[] = [
     pageKey: "crm_settings.system.backup",
     icon: DatabaseBackup,
     status: "restricted",
+    superadminOnly: true,
   },
 ]
 

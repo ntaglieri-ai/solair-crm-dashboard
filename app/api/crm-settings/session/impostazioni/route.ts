@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { requireApiPage } from "@/lib/permissions/server"
+import { requireApiSuperadmin } from "@/lib/permissions/server"
 import { attoreDaPermessi, logAudit } from "@/lib/audit/log"
 import { salvaImpostazioniSicurezza } from "@/lib/session-access/security-settings"
 import { clampTentativi, clampTimeoutMinuti } from "@/lib/session-access/constants"
@@ -16,7 +16,7 @@ import { clampTentativi, clampTimeoutMinuti } from "@/lib/session-access/constan
 // scrivibile anche fuori da questa rotta e il clamp in lettura non basta.
 
 export async function PUT(request: Request) {
-  const guard = await requireApiPage("crm_settings.account.session")
+  const guard = await requireApiSuperadmin()
   if (guard.response) return guard.response
 
   const body = (await request.json().catch(() => null)) as

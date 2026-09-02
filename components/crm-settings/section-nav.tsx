@@ -25,6 +25,7 @@ export function CrmSettingsSectionNav({ group }: { group: CrmSettingsGroupId }) 
   const meta = CRM_SETTINGS_GROUPS[group]
 
   const links = crmSettingsItemsForGroup(group).filter((item) => {
+    if (item.superadminOnly && !permissions.isSuperadmin) return false
     const page = pageKeyFromPath(item.href)
     return page ? permissions.canPage(page) : true
   })

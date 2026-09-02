@@ -20,6 +20,12 @@ export async function requirePathname(pathname: string, redirectTo = "/") {
   return requirePage(page, redirectTo)
 }
 
+export async function requireSuperadmin(redirectTo = "/") {
+  const permissions = await getCurrentPermissions()
+  if (!permissions.isSuperadmin) redirect(redirectTo)
+  return permissions
+}
+
 export async function requireApiPage(page: string) {
   const permissions = await getCurrentPermissions()
   if (!permissions.canPage(page)) {

@@ -1,12 +1,15 @@
 import { loadIpBloccati, loadSessioniAttive } from "@/lib/session-access/queries"
 import { leggiImpostazioniSicurezza } from "@/lib/session-access/security-settings"
+import { requireSuperadmin } from "@/lib/permissions/server"
 import { SessionAccessClient } from "./session-access-client"
 
-// Il gate di permesso vive nel layout della sezione (crm_settings.account.session)
-// e ogni rotta API applica lo stesso controllo: qui si carica soltanto.
+// Sessioni e criteri di sicurezza sono amministrazione sensibile: accesso solo
+// a SUPERADMIN, indipendente dai permessi generali di CRM Settings.
 export const dynamic = "force-dynamic"
 
 export default async function SessionAccessPage() {
+  await requireSuperadmin()
+
   const [sessioni, ip, impostazioni] = await Promise.all([
     loadSessioniAttive(),
     loadIpBloccati(),

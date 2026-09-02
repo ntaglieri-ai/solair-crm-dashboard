@@ -55,7 +55,7 @@ export function ClienteCell({
   density?: "comoda" | "normale" | "densa"
 }) {
   const value = cliente[column]
-  const { owners, loading: ownersLoading } = useClienteTags()
+  const { ownerNames, loading: ownersLoading } = useClienteTags()
 
   switch (column) {
     case "Clienti Proprietario":
@@ -69,7 +69,9 @@ export function ClienteCell({
       }
       return (
         <span className="text-foreground">
-          {owners.find((owner) => owner.id === value)?.nome || "—"}
+          {typeof value === "string" && value
+            ? ownerNames[value] ?? "Utente non disponibile"
+            : "—"}
         </span>
       )
 

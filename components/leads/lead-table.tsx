@@ -150,7 +150,7 @@ function LeadMobileList({
   const router = useRouter()
   const permissions = usePermissions()
   const canDelete = permissions.canRecord("lead", "delete")
-  const { owners } = useTags()
+  const { ownerNames } = useTags()
 
   if (leads.length === 0) {
     return (
@@ -163,10 +163,9 @@ function LeadMobileList({
   return (
     <div className="flex h-full flex-col gap-2 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
       {leads.map((lead) => {
-        const owner =
-          owners.find((item) => item.id === lead["Lead Proprietario"])?.nome ??
-          lead["Lead Proprietario"] ??
-          "Non assegnato"
+        const owner = lead["Lead Proprietario"]
+          ? ownerNames[lead["Lead Proprietario"]] ?? "Utente non disponibile"
+          : "Non assegnato"
         const luogo = [lead["Città"], lead.Provincia, lead.Sede]
           .filter(Boolean)
           .join(" · ")

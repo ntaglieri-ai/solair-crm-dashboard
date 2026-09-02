@@ -11,11 +11,7 @@ export async function loadLeadReferenceData(): Promise<ReferencePayload> {
         .select("id,nome,colore")
         .eq("modulo", "lead")
         .order("nome"),
-      supabase
-        .from("utenti")
-        .select("id,nome")
-        .eq("attivo", true)
-        .order("nome"),
+      supabase.from("utenti").select("id,nome,attivo").order("nome"),
       supabase
         .from("installatori")
         .select("id,nome")
@@ -34,7 +30,8 @@ export async function loadLeadReferenceData(): Promise<ReferencePayload> {
     })),
     // Le assegnazioni vengono caricate dalla query della sola pagina visibile.
     leadTagIds: {},
-    owners: ownersResult.data ?? [],
+    owners: (ownersResult.data ?? []).filter((owner) => owner.attivo).map(({ id, nome }) => ({ id, nome })),
+    ownerNames: Object.fromEntries((ownersResult.data ?? []).map((owner) => [owner.id, owner.nome])),
     installers: installersResult.data ?? [],
   }
 }

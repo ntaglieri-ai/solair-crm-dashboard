@@ -88,7 +88,7 @@ function GateDocumentiLabel({
 }
 
 export function LeadDetailHeader({ lead }: { lead: Lead }) {
-  const { owners } = useTags()
+  const { ownerNames } = useTags()
   const router = useRouter()
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -123,10 +123,9 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id])
 
-  const ownerName =
-    owners.find((owner) => owner.id === lead["Lead Proprietario"])?.nome ||
-    lead["Lead Proprietario"] ||
-    "Non assegnato"
+  const ownerName = lead["Lead Proprietario"]
+    ? ownerNames[lead["Lead Proprietario"]] ?? "Utente non disponibile"
+    : "Non assegnato"
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card p-5 shadow-[0_18px_45px_-32px_rgb(15_23_42/0.55)]">

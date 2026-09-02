@@ -142,7 +142,7 @@ function ClienteMobileList({
   onDelete: (cliente: ClienteRecord) => void
 }) {
   const router = useRouter()
-  const { owners } = useClienteTags()
+  const { ownerNames } = useClienteTags()
 
   if (clienti.length === 0) {
     return (
@@ -155,10 +155,9 @@ function ClienteMobileList({
   return (
     <div className="flex h-full flex-col gap-2 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
       {clienti.map((cliente) => {
-        const owner =
-          owners.find((item) => item.id === cliente["Clienti Proprietario"])?.nome ??
-          cliente["Clienti Proprietario"] ??
-          "Non assegnato"
+        const owner = cliente["Clienti Proprietario"]
+          ? ownerNames[cliente["Clienti Proprietario"]] ?? "Utente non disponibile"
+          : "Non assegnato"
 
         return (
           <article

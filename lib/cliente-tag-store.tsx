@@ -29,6 +29,8 @@ export type ClienteReferencePayload = {
   tags: ClienteTag[]
   clienteTagIds: Record<string, string[]>
   owners: ClienteReferenceOption[]
+  /** Nomi di tutti gli utenti, inclusi gli inattivi, per i record storici. */
+  ownerNames: Record<string, string>
 }
 
 /**
@@ -106,6 +108,7 @@ const EMPTY: ClienteReferencePayload = {
   tags: [],
   clienteTagIds: {},
   owners: [],
+  ownerNames: {},
 }
 
 const Ctx = createContext<ClienteTagContextValue | null>(null)

@@ -505,7 +505,7 @@ export function SessionAccessClient({
                             {s.utenteNome ?? "Utente non in anagrafica"}
                           </span>
                           <span className="truncate text-xs text-muted-foreground">
-                            {s.utenteEmail ?? s.authUserId}
+                            {s.utenteEmail ?? "Email non disponibile"}
                           </span>
                         </div>
                         {s.corrente ? (

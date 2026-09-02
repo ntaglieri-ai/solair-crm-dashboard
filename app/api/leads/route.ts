@@ -39,6 +39,8 @@ export async function POST(request: Request) {
       { status: 400 },
     )
   }
+  // L'autore viene dalla sessione, mai dal proprietario scelto nel form e mai da un UUID mostrabile.
+  body["Creato da"] = guard.permissions.snapshot.subject.nome ?? "Utente CRM"
   const created = await createLeadRecord(body)
 
   // Cartella Nextcloud creata subito (non al primo upload) cosi' e'

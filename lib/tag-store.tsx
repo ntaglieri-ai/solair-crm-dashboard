@@ -33,6 +33,8 @@ export type ReferencePayload = {
   tags: Tag[]
   leadTagIds: Record<string, string[]>
   owners: ReferenceOption[]
+  /** Nomi di tutti gli utenti, inclusi gli inattivi, per non mostrare mai UUID nei record storici. */
+  ownerNames: Record<string, string>
   installers: ReferenceOption[]
 }
 
@@ -69,6 +71,7 @@ const EMPTY: ReferencePayload = {
   tags: [],
   leadTagIds: {},
   owners: [],
+  ownerNames: {},
   installers: [],
 }
 

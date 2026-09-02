@@ -111,7 +111,7 @@ function dmyToISO(dmy: string): string | null {
   return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}T00:00:00Z`
 }
 
-function mapRow(row: Record<string, unknown>): Compito {
+function mapRow(row: Record<string, unknown>, ownerNames = new Map<string, string>()): Compito {
   // Linkabile solo con lo uuid interno: l'id Zoho produrrebbe link 404.
   const correlatoUuid = (row.correlato_id as string | null) || null
   const correlatoRef = correlatoUuid || (row.correlato_zoho_id as string | null)
@@ -126,8 +126,9 @@ function mapRow(row: Record<string, unknown>): Compito {
     Priorità: (row.priorita as PrioritaCompito) ?? "Medio",
     "Data di scadenza": isoToDMY(row.scadenza as string | null),
     "Proprietario del compito.id": (row.proprietario_zoho_id as string) ?? "",
-    "Proprietario del compito":
-      (row.proprietario_nome as string) ?? (row.proprietario_id as string) ?? "",
+    "Proprietario del compito": (row.proprietario_nome as string) ||
+      ownerNames.get((row.proprietario_id as string) ?? "") ||
+      (row.proprietario_id ? "Utente non disponibile" : "Non assegnato"),
     "Nome contatto.id": (row.nome_contatto_zoho_id as string) ?? "",
     "Nome contatto": (row.nome_contatto as string) ?? "",
     "Correlato a.id": (row.correlato_zoho_id as string) ?? "",
@@ -312,9 +313,16 @@ export async function queryCompiti(
   if (result.openTotalError)
     console.error("[compiti/repository] openTotal:", result.openTotalError.message)
 
+  const resultRows = (result.data ?? []) as unknown as Record<string, unknown>[]
+  const ownerIds = [...new Set(resultRows.map((row) => row.proprietario_id as string | null).filter((id): id is string => Boolean(id)))]
+  const ownerResult = ownerIds.length
+    ? await supabase.from("utenti").select("id,nome").in("id", ownerIds)
+    : { data: [] }
+  const ownerNames = new Map((ownerResult.data ?? []).map((owner) => [owner.id, owner.nome]))
+
   return {
-    rows: (result.data ?? []).map((r) =>
-      mapRow(r as unknown as Record<string, unknown>),
+    rows: resultRows.map((row) =>
+      mapRow(row, ownerNames),
     ),
     absoluteTotal: result.absoluteTotal ?? result.count ?? 0,
     total: result.count ?? 0,
@@ -343,7 +351,12 @@ export async function getCompitoById(id: string): Promise<Compito | null> {
     error = fallback.error
   }
   if (error || !data) return null
-  const compito = mapRow(data as unknown as Record<string, unknown>)
+  const rawCompito = data as unknown as Record<string, unknown>
+  const ownerId = rawCompito.proprietario_id as string | null
+  const ownerResult = ownerId
+    ? await supabase.from("utenti").select("id,nome").eq("id", ownerId).maybeSingle()
+    : { data: null }
+  const compito = mapRow(rawCompito, new Map(ownerResult.data ? [[ownerResult.data.id, ownerResult.data.nome]] : []))
 
   // Note persistite in `attivita` (stesso pattern dei Lead).
   const notes = await supabase

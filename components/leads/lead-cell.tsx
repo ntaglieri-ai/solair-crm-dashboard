@@ -282,7 +282,7 @@ export function LeadCell({
   column: LeadColumnId
   density?: "comoda" | "normale" | "densa"
 }) {
-  const { owners, loading } = useTags()
+  const { ownerNames, loading } = useTags()
   const value = lead[column]
 
   switch (column) {
@@ -379,7 +379,9 @@ export function LeadCell({
       }
       return (
         <span className="text-foreground">
-          {owners.find((owner) => owner.id === value)?.nome || "—"}
+          {typeof value === "string" && value
+            ? ownerNames[value] ?? "Utente non disponibile"
+            : "—"}
         </span>
       )
 

@@ -32,6 +32,8 @@ export async function POST(request: Request) {
       { status: 400 },
     )
   }
+  // L'autore e il proprietario sono concetti distinti: il primo viene dalla sessione.
+  body["Creato da"] = guard.permissions.snapshot.subject.nome ?? "Utente CRM"
   const created = await createClienteRecord(body)
 
   // Cartella Nextcloud creata subito (non al primo upload) cosi' e'

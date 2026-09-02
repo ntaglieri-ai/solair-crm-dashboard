@@ -7,7 +7,7 @@ export async function loadClienteReferenceData(): Promise<ClienteReferencePayloa
   const supabase = await createClient()
   const [tagsResult, ownersResult] = await Promise.all([
     supabase.from("tag").select("id,nome,colore,created_at").eq("modulo", "cliente").order("nome"),
-    supabase.from("utenti").select("id,nome").eq("attivo", true).order("nome"),
+    supabase.from("utenti").select("id,nome,attivo").order("nome"),
   ])
 
   const error = tagsResult.error ?? ownersResult.error
@@ -22,6 +22,7 @@ export async function loadClienteReferenceData(): Promise<ClienteReferencePayloa
     })),
     // Le assegnazioni vengono caricate dalla query della sola pagina visibile.
     clienteTagIds: {},
-    owners: ownersResult.data ?? [],
+    owners: (ownersResult.data ?? []).filter((owner) => owner.attivo).map(({ id, nome }) => ({ id, nome })),
+    ownerNames: Object.fromEntries((ownersResult.data ?? []).map((owner) => [owner.id, owner.nome])),
   }
 }

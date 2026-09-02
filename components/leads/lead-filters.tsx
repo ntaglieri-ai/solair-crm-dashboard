@@ -121,7 +121,7 @@ export function LeadQuickFilterFields({
   onReset: () => void
   tags: string[]
 }) {
-  const { owners } = useTags()
+  const { owners, ownerNames } = useTags()
   const set = <K extends keyof LeadFilterState>(
     key: K,
     value: LeadFilterState[K],
@@ -131,7 +131,7 @@ export function LeadQuickFilterFields({
     filters.stato !== "all" ? ["stato", filters.stato] : null,
     filters.sede !== "all" ? ["sede", filters.sede] : null,
     filters.commerciale !== "all"
-      ? ["commerciale", owners.find((owner) => owner.id === filters.commerciale)?.nome ?? filters.commerciale]
+      ? ["commerciale", ownerNames[filters.commerciale] ?? "Utente non disponibile"]
       : null,
     filters.origine !== "all" ? ["origine", filters.origine] : null,
     filters.tag !== "all" ? ["tag", filters.tag] : null,

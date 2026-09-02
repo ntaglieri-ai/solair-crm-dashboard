@@ -45,6 +45,7 @@ import { type ClienteRecord, type Compito, OPEN_TASK_STATI } from "@/lib/mock-da
 import { ClienteAvatar } from "./cliente-utils"
 import { InstallatoreAssegnatoSelect } from "./installatore-assegnato-select"
 import { QuickCompitoDialog } from "@/components/compiti/quick-compito-dialog"
+import { useClienteTags } from "@/lib/cliente-tag-store"
 
 /* ---------- Helpers ---------- */
 
@@ -230,6 +231,10 @@ function RelatedNav({ vediNoteInterne }: { vediNoteInterne: boolean }) {
 /* ---------- Anagrafica ---------- */
 
 function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
+  const { ownerNames } = useClienteTags()
+  const ownerName = cliente["Clienti Proprietario"]
+    ? ownerNames[cliente["Clienti Proprietario"]] ?? "Utente non disponibile"
+    : "Non assegnato"
   const [editing, setEditing] = useState(false)
   const [descr, setDescr] = useState(cliente.Descrizione ?? "")
   const [draft, setDraft] = useState(cliente.Descrizione ?? "")
@@ -286,7 +291,7 @@ function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
           <CopyField label="Cellulare" value={cliente.Cellulare} icon={IconPhone} />
           <CopyField label="Altro telefono" value={cliente["Altro telefono"]} icon={IconPhone} />
           <DataField label="Clienti Proprietario">
-            {val(cliente["Clienti Proprietario"])}
+            {ownerName}
           </DataField>
           <DataField label="Origine Lead">{val(cliente["Origine Lead"])}</DataField>
           <DataField label="Creato da">
@@ -1151,7 +1156,7 @@ function NoteSection({ cliente }: { cliente: ClienteRecord }) {
     ? [
         {
           id: "n1",
-          autore: cliente["Clienti Proprietario"] ?? "Sistema",
+          autore: "Sistema/importazione",
           quando: "2 ore fa",
           testo: cliente.Note,
         },

@@ -18,6 +18,7 @@ import {
 import { LeadTagBadges } from "./tag-controls"
 import { useTags } from "@/lib/tag-store"
 import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
+import { MentionText } from "@/components/shared/note-mentions"
 import {
   Popover,
   PopoverContent,
@@ -164,9 +165,7 @@ function LeadNotesPopover({ lead }: { lead: Lead }) {
                   className="rounded-lg p-3"
                   style={{ background: color.paper }}
                 >
-                  <p className="whitespace-pre-wrap text-sm leading-5 text-foreground">
-                    {note.text}
-                  </p>
+                  <MentionText text={note.text} mentions={note.menzioni} className="text-sm leading-5 text-foreground" />
                   <p className="mt-2 text-xs font-medium text-muted-foreground">
                     {formatMoment(note.createdAt)}
                   </p>

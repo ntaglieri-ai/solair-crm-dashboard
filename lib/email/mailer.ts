@@ -49,6 +49,72 @@ function loginUrl(): string {
   return `${base}/login`
 }
 
+export async function sendMentionNotificationEmail(params: {
+  to: string
+  recipientName: string
+  authorName: string
+  noteText: string
+  recordLabel: string
+  recordUrl: string
+}): Promise<{ ok: boolean; error: string | null }> {
+  const cfg = smtpConfig()
+  if (!cfg) return { ok: false, error: "SMTP non configurato" }
+
+  try {
+    const transport = getTransport(cfg)
+    const safeRecipient = escapeHtml(params.recipientName)
+    const safeAuthor = escapeHtml(params.authorName)
+    const safeText = escapeHtml(params.noteText).replace(/\n/g, "<br/>")
+    const safeLabel = escapeHtml(params.recordLabel)
+    const safeUrl = escapeHtml(params.recordUrl)
+    await transport.sendMail({
+      from: cfg.from,
+      to: params.to,
+      subject: `${params.authorName} ti ha menzionato in una nota`,
+      text: [
+        `Ciao ${params.recipientName},`,
+        "",
+        `${params.authorName} ti ha menzionato in una nota su ${params.recordLabel}.`,
+        "",
+        params.noteText,
+        "",
+        `Apri la scheda: ${params.recordUrl}`,
+      ].join("\n"),
+      html: `
+        <p>Ciao ${safeRecipient},</p>
+        <p><strong>${safeAuthor}</strong> ti ha menzionato in una nota su ${safeLabel}.</p>
+        <blockquote style="margin:16px 0;padding:12px 16px;border-left:3px solid #0f766e;background:#f5f5f5">${safeText}</blockquote>
+        <p><a href="${safeUrl}">Apri la scheda nel CRM</a></p>
+      `,
+    })
+    return { ok: true, error: null }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Errore invio email" }
+  }
+}
+
+export async function sendDirectEmail(params: {
+  to: string
+  subject: string
+  body: string
+  fromEmail?: string | null
+}): Promise<{ ok: boolean; error: string | null }> {
+  const cfg = smtpConfig()
+  if (!cfg) return { ok: false, error: "SMTP non configurato" }
+  try {
+    await getTransport(cfg).sendMail({
+      from: params.fromEmail || cfg.from,
+      to: params.to,
+      subject: params.subject,
+      text: params.body,
+      html: `<p>${escapeHtml(params.body).replace(/\n/g, "<br/>")}</p>`,
+    })
+    return { ok: true, error: null }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Errore invio email" }
+  }
+}
+
 export async function sendWelcomeEmail(params: {
   to: string
   nome: string

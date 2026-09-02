@@ -39,7 +39,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
+import { MentionTextarea } from "@/components/shared/note-mentions"
+import type { NoteMentionDraft } from "@/lib/notes/mentions"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { formatDMY } from "@/components/compiti/new-compito-dialog"
@@ -89,6 +90,7 @@ export function ClienteRowContextMenu({
   const [noteOpen, setNoteOpen] = useState(false)
   const [taskOpen, setTaskOpen] = useState(false)
   const [noteText, setNoteText] = useState("")
+  const [noteMentions, setNoteMentions] = useState<NoteMentionDraft[]>([])
   const [taskTitle, setTaskTitle] = useState("")
   const [taskDueDate, setTaskDueDate] = useState("")
   const [taskPriority, setTaskPriority] = useState("Medio")
@@ -101,13 +103,16 @@ export function ClienteRowContextMenu({
       const response = await fetch(`/api/clienti/${cliente.id}/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: noteText }),
+        body: JSON.stringify({ text: noteText, mentions: noteMentions }),
       })
       if (!response.ok) throw new Error()
+      const result = (await response.json()) as { notificationFailures?: number }
       setNoteText("")
+      setNoteMentions([])
       setNoteOpen(false)
       onRefresh()
       toast.success("Nota creata")
+      if (result.notificationFailures) toast.warning("Nota salvata, ma una o più notifiche email non sono state inviate")
     } catch {
       toast.error("Creazione nota non riuscita")
     } finally {
@@ -357,9 +362,11 @@ export function ClienteRowContextMenu({
               La nota sarà collegata a {cliente["Nome Clienti"]}.
             </DialogDescription>
           </DialogHeader>
-          <Textarea
+          <MentionTextarea
             value={noteText}
-            onChange={(event) => setNoteText(event.target.value)}
+            onChange={setNoteText}
+            mentions={noteMentions}
+            onMentionsChange={setNoteMentions}
             placeholder="Scrivi una nota..."
             className="min-h-28"
           />

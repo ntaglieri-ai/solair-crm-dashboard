@@ -522,6 +522,7 @@ export interface LeadActivity {
   descrizione: string
   timestamp: string
   autore?: string
+  menzioni?: import("@/lib/notes/mentions").NoteMention[]
 }
 
 export interface LeadTask {
@@ -537,6 +538,7 @@ export interface LeadListNote {
   id: string
   text: string
   createdAt: string
+  menzioni?: import("@/lib/notes/mentions").NoteMention[]
 }
 
 export interface LeadListTask {
@@ -2549,6 +2551,7 @@ export interface CompitoNota {
   testo: string
   autore: string
   data: string
+  menzioni?: import("@/lib/notes/mentions").NoteMention[]
 }
 
 /**

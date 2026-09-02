@@ -27,7 +27,7 @@ export async function GET(
   const [notesResult, tasksResult] = await Promise.all([
     supabase
       .from("attivita")
-      .select("id,testo,created_at")
+      .select("id,testo,created_at,menzioni")
       .eq("record_tipo", "lead")
       .eq("record_id", id)
       .eq("tipo", "nota")
@@ -54,6 +54,7 @@ export async function GET(
       id: item.id as string,
       text: item.testo ?? "",
       createdAt: item.created_at ?? "",
+      menzioni: (item.menzioni ?? []) as import("@/lib/notes/mentions").NoteMention[],
     })),
     tasks: (tasksResult.data ?? []).map((item) => ({
       id: item.id as string,

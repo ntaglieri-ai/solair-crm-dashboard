@@ -15,7 +15,8 @@ import {
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
+import { MentionText, MentionTextarea } from "@/components/shared/note-mentions"
+import type { NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   type Compito,
@@ -49,6 +50,7 @@ function InfoRow({
 export function CompitoDetailView({ compito }: { compito: Compito }) {
   const [note, setNote] = useState<CompitoNota[]>(compito.Note)
   const [draft, setDraft] = useState("")
+  const [menzioni, setMenzioni] = useState<NoteMentionDraft[]>([])
   const [notaSaving, setNotaSaving] = useState(false)
   const scaduto = isCompitoScaduto(compito)
 
@@ -60,7 +62,7 @@ export function CompitoDetailView({ compito }: { compito: Compito }) {
       const res = await fetch(`/api/compiti/${compito.id}/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: testo }),
+        body: JSON.stringify({ text: testo, mentions: menzioni }),
       })
       if (!res.ok) throw new Error("Salvataggio non riuscito")
       const saved = (await res.json()) as {
@@ -68,16 +70,21 @@ export function CompitoDetailView({ compito }: { compito: Compito }) {
         testo: string | null
         created_at: string | null
         autore: string | null
+        menzioni?: NoteMention[]
+        notificationFailures?: number
       }
       const nota: CompitoNota = {
         id: saved.id,
         testo: saved.testo ?? testo,
         autore: saved.autore ?? "Utente CRM",
         data: formatCompitoNotaData(saved.created_at ?? ""),
+        menzioni: saved.menzioni,
       }
       setNote((prev) => [nota, ...prev])
       setDraft("")
+      setMenzioni([])
       toast.success("Nota aggiunta")
+      if (saved.notificationFailures) toast.warning("Nota salvata, ma una o più notifiche email non sono state inviate")
     } catch {
       toast.error("Errore nel salvataggio della nota")
     } finally {
@@ -159,10 +166,12 @@ export function CompitoDetailView({ compito }: { compito: Compito }) {
                     Note
                   </h2>
                   <div className="flex flex-col gap-2">
-                    <Textarea
+                    <MentionTextarea
                       rows={3}
                       value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
+                      onChange={setDraft}
+                      mentions={menzioni}
+                      onMentionsChange={setMenzioni}
                       placeholder="Aggiungi una nota…"
                       className="bg-card"
                     />
@@ -199,9 +208,7 @@ export function CompitoDetailView({ compito }: { compito: Compito }) {
                                 {n.data}
                               </span>
                             </div>
-                            <p className="text-pretty text-sm text-muted-foreground">
-                              {n.testo}
-                            </p>
+                            <MentionText text={n.testo} mentions={n.menzioni} className="text-pretty text-sm text-muted-foreground" />
                           </div>
                         </div>
                       ))

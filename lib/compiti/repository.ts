@@ -348,7 +348,7 @@ export async function getCompitoById(id: string): Promise<Compito | null> {
   // Note persistite in `attivita` (stesso pattern dei Lead).
   const notes = await supabase
     .from("attivita")
-    .select("id,testo,created_at,utente_id")
+    .select("id,testo,created_at,utente_id,menzioni")
     .eq("record_tipo", "compito")
     .eq("record_id", id)
     .eq("tipo", "nota")
@@ -375,6 +375,7 @@ export async function getCompitoById(id: string): Promise<Compito | null> {
       ? names.get(row.utente_id) ?? "Utente CRM"
       : "Sistema",
     data: formatCompitoNotaData((row.created_at as string) ?? ""),
+    menzioni: (row.menzioni ?? []) as import("@/lib/notes/mentions").NoteMention[],
   }))
   return compito
 }

@@ -31,6 +31,8 @@ import { CalendarioRecordSection } from "@/components/calendario/calendario-reco
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { MentionText, MentionTextarea } from "@/components/shared/note-mentions"
+import type { NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ConsensoEmailToggle } from "@/components/shared/consenso-email-toggle"
@@ -224,6 +226,7 @@ interface Nota {
   autore: string
   quando: string
   testo: string
+  menzioni?: NoteMention[]
 }
 
 interface Task {
@@ -603,30 +606,35 @@ function NoteSection({ lead }: { lead: Lead }) {
               .format(new Date(item.timestamp))
           : "",
         testo: item.descrizione,
+        menzioni: item.menzioni,
       })),
   )
   const [nuova, setNuova] = useState("")
+  const [menzioni, setMenzioni] = useState<NoteMentionDraft[]>([])
 
   const aggiungi = async () => {
     if (nuova.trim() === "") return
     const response = await fetch(`/api/leads/${lead.id}/notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: nuova }),
+      body: JSON.stringify({ text: nuova, mentions: menzioni }),
     })
     if (!response.ok) {
       toast.error("Creazione nota non riuscita")
       return
     }
-    const created = (await response.json()) as { id: string; testo: string; created_at: string }
+    const created = (await response.json()) as { id: string; testo: string; created_at: string; autore: string; menzioni?: NoteMention[]; notificationFailures?: number }
     setNote((prev) => [{
       id: created.id,
-      autore: lead["Lead Proprietario"],
+      autore: created.autore,
       quando: "adesso",
       testo: created.testo,
+      menzioni: created.menzioni,
     }, ...prev])
     setNuova("")
+    setMenzioni([])
     toast.success("Nota aggiunta")
+    if (created.notificationFailures) toast.warning("Nota salvata, ma una o più notifiche email non sono state inviate")
   }
 
   return (
@@ -650,15 +658,17 @@ function NoteSection({ lead }: { lead: Lead }) {
                   Modifica
                 </button>
               </div>
-              <p className="text-[13px] text-foreground">{n.testo}</p>
+              <MentionText text={n.testo} mentions={n.menzioni} className="text-[13px] text-foreground" />
             </div>
           </li>
         ))}
       </ul>
       <div className="flex flex-col gap-2 rounded-lg border border-border bg-secondary/40 p-3">
-        <Textarea
+        <MentionTextarea
           value={nuova}
-          onChange={(e) => setNuova(e.target.value)}
+          onChange={setNuova}
+          mentions={menzioni}
+          onMentionsChange={setMenzioni}
           rows={2}
           placeholder="Aggiungi nota…"
           className="bg-card text-[13px]"

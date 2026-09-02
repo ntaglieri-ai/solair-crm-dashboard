@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { AllegatiSection } from "@/components/shared/allegati-section"
 import { NoteInterneSection } from "./note-interne-section"
@@ -33,6 +33,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { MentionText, MentionTextarea } from "@/components/shared/note-mentions"
+import type { NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { ConsensoEmailToggle } from "@/components/shared/consenso-email-toggle"
@@ -1141,6 +1143,7 @@ interface Nota {
   autore: string
   quando: string
   testo: string
+  menzioni?: NoteMention[]
 }
 
 function NoteSection({ cliente }: { cliente: ClienteRecord }) {
@@ -1156,20 +1159,52 @@ function NoteSection({ cliente }: { cliente: ClienteRecord }) {
     : []
   const [note, setNote] = useState<Nota[]>(seed)
   const [nuova, setNuova] = useState("")
+  const [menzioni, setMenzioni] = useState<NoteMentionDraft[]>([])
 
-  const aggiungi = () => {
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/clienti/${cliente.id}/notes`)
+      .then((response) => response.ok ? response.json() : Promise.reject())
+      .then((body: { notes?: Array<{ id: string; testo: string; created_at: string; autore: string; menzioni?: NoteMention[] }> }) => {
+        if (cancelled) return
+        setNote((body.notes ?? []).map((item) => ({
+          id: item.id,
+          autore: item.autore,
+          quando: new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at)),
+          testo: item.testo,
+          menzioni: item.menzioni,
+        })))
+      })
+      .catch(() => undefined)
+    return () => { cancelled = true }
+  }, [cliente.id])
+
+  const aggiungi = async () => {
     if (nuova.trim() === "") return
+    const response = await fetch(`/api/clienti/${cliente.id}/notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: nuova, mentions: menzioni }),
+    })
+    if (!response.ok) {
+      toast.error("Creazione nota non riuscita")
+      return
+    }
+    const created = (await response.json()) as { id: string; testo: string; autore: string; menzioni?: NoteMention[]; notificationFailures?: number }
     setNote((prev) => [
       {
-        id: `n${Date.now()}`,
-        autore: cliente["Clienti Proprietario"] ?? "Tu",
+        id: created.id,
+        autore: created.autore,
         quando: "adesso",
-        testo: nuova.trim(),
+        testo: created.testo,
+        menzioni: created.menzioni,
       },
       ...prev,
     ])
     setNuova("")
+    setMenzioni([])
     toast.success("Nota aggiunta")
+    if (created.notificationFailures) toast.warning("Nota salvata, ma una o più notifiche email non sono state inviate")
   }
 
   // "Note ufficio" non ha restrizioni configurate; le altre due si', e sono
@@ -1200,16 +1235,18 @@ function NoteSection({ cliente }: { cliente: ClienteRecord }) {
                     <span className="text-[13px] font-semibold text-foreground">{n.autore}</span>
                     <span className="text-[11px] text-muted-foreground">{n.quando}</span>
                   </div>
-                  <p className="text-[13px] text-foreground">{n.testo}</p>
+                  <MentionText text={n.testo} mentions={n.menzioni} className="text-[13px] text-foreground" />
                 </div>
               </li>
             ))}
           </ul>
         ) : null}
         <div className="flex flex-col gap-2 rounded-lg border border-border bg-secondary/40 p-3">
-          <Textarea
+          <MentionTextarea
             value={nuova}
-            onChange={(e) => setNuova(e.target.value)}
+            onChange={setNuova}
+            mentions={menzioni}
+            onMentionsChange={setMenzioni}
             rows={2}
             placeholder="Aggiungi nota…"
             className="bg-card text-[13px]"

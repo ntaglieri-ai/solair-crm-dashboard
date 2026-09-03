@@ -1,5 +1,6 @@
 import { cache } from "react"
 import { createClient } from "@/lib/supabase/server"
+import { identitaMcpDalContesto } from "@/lib/mcp/context"
 import { buildDefaultPermissionSnapshot, normalizeRoleCode } from "./constants"
 import type { DataScope, FieldAccess, PageAccess, PermissionSnapshot } from "./types"
 
@@ -303,7 +304,61 @@ function rememberSnapshot(authUserId: string, snapshot: PermissionSnapshot) {
   return snapshot
 }
 
+/**
+ * Snapshot per una richiesta del server MCP.
+ *
+ * Il percorso normale parte da `auth.getClaims()`, cioe' dalla sessione del
+ * browser. Il client MCP una sessione non ce l'ha: porta il JWT dell'utente
+ * come header `Authorization` e basta, quindi `getSession()` — che legge dallo
+ * storage, vuoto per costruzione — restituisce null e `getClaims()` risponde
+ * `{data: null, error: null}`. Senza errore. Da li' in poi lo snapshot era
+ * quello di un utente non autenticato: tutti gli scope a "none", e i cinque
+ * repository sotto perimetro dati (lead, clienti, compiti, scadenze,
+ * installatori) filtravano su un id proprietario inesistente. Zero righe,
+ * esito "ok", nessun errore da nessuna parte.
+ *
+ * Qui l'identita' non si va a cercare: e' gia' nel contesto della richiesta,
+ * messa dalla verifica del token in /api/mcp, dove utente, stato dell'account
+ * e ruolo sono stati riletti dal database un istante prima.
+ *
+ * Perche' i permessi si fermano ai default del ruolo, senza leggere le
+ * personalizzazioni da `permessi_*`: quelle tabelle sono fuori dal perimetro
+ * MCP (lib/mcp/denylist.ts) e la RPC `get_permission_snapshot` non e'
+ * nell'allowlist. Non e' una perdita di sicurezza — l'ambito dati configurato
+ * resta imposto dal database, dalle policy RESTRICTIVE che chiamano
+ * `crm_current_user_can_access_owner()`: questo snapshot decide il filtro
+ * applicativo, non l'ultima parola. Ed e' anche una differenza teorica finche'
+ * `permessi_ui` non contiene nessuna chiave `scope:`/`visibilita_sedi`
+ * (verificato: zero righe), cioe' finche' nessun ruolo ha uno scope diverso
+ * dal proprio default.
+ */
+function snapshotDaContestoMcp(): PermissionSnapshot | null {
+  const identita = identitaMcpDalContesto()
+  if (!identita) return null
+
+  return buildDefaultPermissionSnapshot({
+    authUserId: identita.authUserId,
+    userId: identita.utenteId,
+    email: identita.email || null,
+    nome: identita.nome || null,
+    // Il contesto porta il codice del ruolo, non la sua riga: senza `ruoloId`
+    // il caricamento dei permessi per ruolo viene saltato, che e' esattamente
+    // cio' che serve — quelle tabelle sono negate al server MCP.
+    ruoloId: null,
+    ruoloCode: identita.ruolo,
+    ruoloNome: identita.ruolo,
+    sede: null,
+  })
+}
+
 async function loadCurrentPermissionSnapshotUncached(): Promise<PermissionSnapshot> {
+  // Prima di tutto il resto: dentro /api/mcp non ci sono cookie da leggere, e
+  // l'identita' e' gia' nota. La cache per utente qui sotto non viene ne' letta
+  // ne' scritta di proposito, cosi' uno snapshot costruito dai soli default del
+  // ruolo non puo' finire a servire una richiesta del browser (e viceversa).
+  const daContestoMcp = snapshotDaContestoMcp()
+  if (daContestoMcp) return daContestoMcp
+
   const fastSupabase = await createClient()
   const { data: claimsData } = await fastSupabase.auth.getClaims()
   const claims = claimsData?.claims

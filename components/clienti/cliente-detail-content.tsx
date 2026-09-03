@@ -46,6 +46,7 @@ import { ClienteAvatar } from "./cliente-utils"
 import { InstallatoreAssegnatoSelect } from "./installatore-assegnato-select"
 import { QuickCompitoDialog } from "@/components/compiti/quick-compito-dialog"
 import { useClienteTags } from "@/lib/cliente-tag-store"
+import { displayClienteOwner } from "@/lib/clienti/owner-display"
 
 /* ---------- Helpers ---------- */
 
@@ -232,9 +233,7 @@ function RelatedNav({ vediNoteInterne }: { vediNoteInterne: boolean }) {
 
 function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
   const { ownerNames } = useClienteTags()
-  const ownerName = cliente["Clienti Proprietario"]
-    ? ownerNames[cliente["Clienti Proprietario"]] ?? "Utente non disponibile"
-    : "Non assegnato"
+  const ownerName = displayClienteOwner(cliente, ownerNames, "Non assegnato")
   const [editing, setEditing] = useState(false)
   const [descr, setDescr] = useState(cliente.Descrizione ?? "")
   const [draft, setDraft] = useState(cliente.Descrizione ?? "")

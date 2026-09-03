@@ -53,12 +53,13 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
   type ClienteRecord,
-  mockCommerciali,
   STATO_CLIENTE_VALUES,
   SEDE_LABELS,
 } from "@/lib/mock-data"
 import { BulkEmailMenuItem } from "@/components/shared/bulk-email-triggers"
 import type { ClienteSettingsSectionId } from "./cliente-settings-sheet"
+import { useClienteTags } from "@/lib/cliente-tag-store"
+import { displayClienteOwner } from "@/lib/clienti/owner-display"
 
 type Dialogs =
   | "none"
@@ -128,9 +129,10 @@ export function ClienteActionsMenu({
 }) {
   const [dialog, setDialog] = useState<Dialogs>("none")
   const permissions = usePermissions()
+  const { owners, ownerNames } = useClienteTags()
   const hasSelection = selectedCount > 0
 
-  const [owner, setOwner] = useState(mockCommerciali[0])
+  const [owner, setOwner] = useState("")
   const [updField, setUpdField] = useState<UpdateField>("Stato")
   const [updValue, setUpdValue] = useState("")
   const [subject, setSubject] = useState("")
@@ -182,6 +184,11 @@ export function ClienteActionsMenu({
     setDialog("update")
   }
 
+  const openTransfer = () => {
+    setOwner((current) => current || owners[0]?.id || "")
+    setDialog("transfer")
+  }
+
   const openDedup = () => {
     const init: Record<string, string> = {}
     for (const g of dupGroups) init[g.key] = g.rows[0].id
@@ -230,7 +237,7 @@ export function ClienteActionsMenu({
                 <DropdownMenuLabel>
                   {selectedCount} selezionati
                 </DropdownMenuLabel>
-                <DropdownMenuItem onClick={() => setDialog("transfer")}>
+                <DropdownMenuItem onClick={openTransfer}>
                   <IconArrowsExchange size={16} stroke={1.8} data-icon="inline-start" />
                   Trasferimento di massa
                 </DropdownMenuItem>
@@ -506,7 +513,7 @@ export function ClienteActionsMenu({
                       {c.Sede}
                     </td>
                     <td className="whitespace-nowrap border-r border-border/40 px-3 py-1.5 text-muted-foreground">
-                      {c["Clienti Proprietario"]}
+                      {displayClienteOwner(c, ownerNames, "Non assegnato")}
                     </td>
                     <td className="whitespace-nowrap border-r border-border/40 px-3 py-1.5 text-muted-foreground">
                       {c.Installatore}
@@ -537,15 +544,19 @@ export function ClienteActionsMenu({
           </DialogHeader>
           <div className="flex flex-col gap-1.5 py-1">
             <Label>Nuovo Clienti Proprietario</Label>
-            <Select value={owner} onValueChange={(v) => setOwner(v ?? "")}>
+            <Select
+              value={owner}
+              onValueChange={(v) => setOwner(v ?? "")}
+              disabled={owners.length === 0}
+            >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue placeholder="Seleziona proprietario" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {mockCommerciali.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
+                  {owners.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.nome}
                     </SelectItem>
                   ))}
                 </SelectGroup>
@@ -557,6 +568,7 @@ export function ClienteActionsMenu({
               Annulla
             </Button>
             <Button
+              disabled={!owner}
               onClick={() => {
                 onBulkTransfer(owner)
                 setDialog("none")

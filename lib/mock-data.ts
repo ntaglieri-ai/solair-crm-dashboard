@@ -1685,6 +1685,11 @@ export interface ClienteRecord {
 
   // --- Anagrafica ---
   "Clienti Proprietario"?: string
+  /**
+   * Nome testuale arrivato da Zoho. Serve solo per mostrare i clienti importati
+   * quando il relativo id utente non e' stato risolto in `clienti_proprietario_id`.
+   */
+  ClientiProprietarioNome?: string
   "Origine Lead"?: string
   Nome?: string
   Cognome: string

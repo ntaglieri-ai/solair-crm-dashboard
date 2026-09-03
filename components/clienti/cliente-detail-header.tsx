@@ -40,6 +40,7 @@ import { usePermissions } from "@/lib/permissions/provider"
 import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
 import { ClienteTagBadges } from "./cliente-tag-controls"
 import { useClienteTags } from "@/lib/cliente-tag-store"
+import { displayClienteOwner } from "@/lib/clienti/owner-display"
 
 function val(v: string | number | null | undefined): string {
   if (v === null || v === undefined || v === "") return "—"
@@ -55,9 +56,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
   const [editOpen, setEditOpen] = useState(false)
   const nome = cliente["Nome Clienti"]
   const { ownerNames, installerNames } = useClienteTags()
-  const ownerName = cliente["Clienti Proprietario"]
-    ? ownerNames[cliente["Clienti Proprietario"]] ?? "Utente non disponibile"
-    : "Non assegnato"
+  const ownerName = displayClienteOwner(cliente, ownerNames, "Non assegnato")
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card p-5 shadow-[0_18px_45px_-32px_rgb(15_23_42/0.55)]">

@@ -7,6 +7,7 @@ import { useClienteTags } from "@/lib/cliente-tag-store"
 import { ClienteTagBadges } from "./cliente-tag-controls"
 import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
 import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
+import { displayClienteOwner } from "@/lib/clienti/owner-display"
 import {
   Tooltip,
   TooltipContent,
@@ -69,9 +70,7 @@ export function ClienteCell({
       }
       return (
         <span className="text-foreground">
-          {typeof value === "string" && value
-            ? ownerNames[value] ?? "Utente non disponibile"
-            : "—"}
+          {displayClienteOwner(cliente, ownerNames, "—")}
         </span>
       )
 

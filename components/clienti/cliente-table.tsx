@@ -55,6 +55,7 @@ import { ClienteCell } from "./cliente-cell"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
 import { ClienteTagBadges } from "./cliente-tag-controls"
+import { displayClienteOwner } from "@/lib/clienti/owner-display"
 
 export type SortDir = "asc" | "desc"
 // Ri-esportata per i chiamanti che la importavano da qui prima che le tre
@@ -155,9 +156,7 @@ function ClienteMobileList({
   return (
     <div className="flex h-full flex-col gap-2 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
       {clienti.map((cliente) => {
-        const owner = cliente["Clienti Proprietario"]
-          ? ownerNames[cliente["Clienti Proprietario"]] ?? "Utente non disponibile"
-          : "Non assegnato"
+        const owner = displayClienteOwner(cliente, ownerNames, "Non assegnato")
 
         return (
           <article

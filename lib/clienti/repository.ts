@@ -32,6 +32,7 @@ const LIST_COLUMNS = [
   "sede",
   "installatore",
   "installatore_id",
+  "clienti_proprietario",
   "clienti_proprietario_id",
   // Serve anche in lista: e' cio' che decide se l'invio email e' possibile.
   "consenso_contatto_email",
@@ -96,6 +97,15 @@ function parseTags(value: unknown): string[] {
 }
 
 function mapRow(row: Record<string, unknown>): ClienteRecord {
+  const clientiProprietarioId =
+    typeof row.clienti_proprietario_id === "string"
+      ? row.clienti_proprietario_id.trim()
+      : ""
+  const clientiProprietarioNome =
+    typeof row.clienti_proprietario === "string"
+      ? row.clienti_proprietario.trim()
+      : ""
+
   const record: ClienteRecord = {
     id: row.id as string,
     "Badge dell'attività": false,
@@ -115,9 +125,8 @@ function mapRow(row: Record<string, unknown>): ClienteRecord {
     Cellulare: (row.cellulare as string) || undefined,
     "Codice fiscale": (row.codice_fiscale as string) || undefined,
     "Clienti Proprietario":
-      (row.clienti_proprietario as string) ||
-      (row.clienti_proprietario_id as string) ||
-      undefined,
+      clientiProprietarioId || clientiProprietarioNome || undefined,
+    ClientiProprietarioNome: clientiProprietarioNome || undefined,
     Installatore: (row.installatore as string) || undefined,
     InstallatoreId: (row.installatore_id as string) || undefined,
     "Ora creazione":

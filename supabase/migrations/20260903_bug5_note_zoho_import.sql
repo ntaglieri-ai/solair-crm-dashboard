@@ -8,16 +8,21 @@
 -- Idempotente: la clausola NOT EXISTS impedisce di creare doppioni se lo
 -- script viene rilanciato per errore.
 --
+-- Nota: niente colonna "menzioni" nell'insert — la migration che la
+-- aggiunge (20260902_note_mentions.sql) non risulta ancora eseguita sul DB
+-- reale (l'errore "column menzioni does not exist" lo conferma). Se la
+-- lanci prima o dopo questo script non cambia nulla: la colonna ha un
+-- default, le righe inserite qui restano compatibili.
+--
 -- Esegui una volta in Supabase SQL Editor.
 
-insert into public.attivita (tipo, testo, record_id, record_tipo, utente_id, menzioni, created_at)
+insert into public.attivita (tipo, testo, record_id, record_tipo, utente_id, created_at)
 select
   'nota',
   '— Importato da Zoho —' || chr(10) || chr(10) || clienti.descrizione,
   clienti.id,
   'cliente',
   null,                    -- autore nullo = mostrato come "Sistema" (vedi app/api/clienti/[id]/notes/route.ts)
-  '[]'::jsonb,
   coalesce(clienti.ora_creazione, now())
 from public.clienti
 where clienti.descrizione is not null

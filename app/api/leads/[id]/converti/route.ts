@@ -30,6 +30,20 @@ export async function POST(
     return NextResponse.json({ error: "Lead non trovato" }, { status: 404 })
   }
 
+  // Bug 6.1 (report Vito, 02/09): niente qui impediva una seconda
+  // conversione dello stesso lead — ne' la route ne' il pulsante in UI
+  // (che si disabilita solo DURANTE la richiesta in corso, non dopo che e'
+  // andata a buon fine). Riaprire il dialog e ricliccare "Converti" creava
+  // un secondo cliente agganciato allo stesso lead. Controllo entrambi i
+  // segnali di conversione gia' avvenuta: lo stato e il riferimento al
+  // cliente gia' creato, non solo uno dei due, in caso disallineassero.
+  if (lead["Stato Lead"] === "Convertito" || lead["Account convertito"]) {
+    return NextResponse.json(
+      { error: "Questo lead è già stato convertito in cliente." },
+      { status: 409 },
+    )
+  }
+
   // Gate dei tre documenti obbligatori (spec FASE 1.3). Controllato QUI e non
   // solo nella UI: il pulsante disabilitato e' un aiuto, non una garanzia —
   // la route resta chiamabile direttamente.

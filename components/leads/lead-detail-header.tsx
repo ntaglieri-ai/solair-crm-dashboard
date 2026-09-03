@@ -110,6 +110,11 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
   // route di conversione risponde 400 e il messaggio finisce nel toast.
   const documenti = useDocumentiObbligatori(lead.id)
   const gateSoddisfatto = documenti.data?.completo === true
+  // Bug 6.1 (report Vito): senza questo, riaprire il dialog dopo una
+  // conversione gia' riuscita e ricliccare "Converti" creava un secondo
+  // cliente sullo stesso lead — la route ora rifiuta (409), ma il pulsante
+  // va disabilitato anche qui, non solo lato server.
+  const giaConvertito = lead["Stato Lead"] === "Convertito" || Boolean(lead["Account convertito"])
 
   // La sezione allegati sta su un altro ramo della pagina: avvisa via evento
   // quando si carica o elimina un documento, cosi' il conteggio qui si
@@ -176,11 +181,11 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
           <GateDocumentiLabel stato={documenti} />
           <Button
             className="h-10 bg-teal px-4 text-sm font-bold text-teal-foreground shadow-sm hover:bg-teal/90"
-            disabled={!gateSoddisfatto}
+            disabled={!gateSoddisfatto || giaConvertito}
             onClick={() => setShowConvert(true)}
           >
             <UserCheck data-icon="inline-start" />
-            Converti a cliente
+            {giaConvertito ? "Già convertito" : "Converti a cliente"}
           </Button>
           <Button
             variant="outline"

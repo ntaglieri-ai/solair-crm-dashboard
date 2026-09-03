@@ -1,0 +1,55 @@
+diff --git a/app/api/leads/[id]/converti/route.ts b/app/api/leads/[id]/converti/route.ts
+index c45b692..4544100 100644
+--- a/app/api/leads/[id]/converti/route.ts
++++ b/app/api/leads/[id]/converti/route.ts
+@@ -30,6 +30,20 @@ export async function POST(
+     return NextResponse.json({ error: "Lead non trovato" }, { status: 404 })
+   }
+ 
++  // Bug 6.1 (report Vito, 02/09): niente qui impediva una seconda
++  // conversione dello stesso lead — ne' la route ne' il pulsante in UI
++  // (che si disabilita solo DURANTE la richiesta in corso, non dopo che e'
++  // andata a buon fine). Riaprire il dialog e ricliccare "Converti" creava
++  // un secondo cliente agganciato allo stesso lead. Controllo entrambi i
++  // segnali di conversione gia' avvenuta: lo stato e il riferimento al
++  // cliente gia' creato, non solo uno dei due, in caso disallineassero.
++  if (lead["Stato Lead"] === "Convertito" || lead["Account convertito"]) {
++    return NextResponse.json(
++      { error: "Questo lead è già stato convertito in cliente." },
++      { status: 409 },
++    )
++  }
++
+   // Gate dei tre documenti obbligatori (spec FASE 1.3). Controllato QUI e non
+   // solo nella UI: il pulsante disabilitato e' un aiuto, non una garanzia —
+   // la route resta chiamabile direttamente.
+diff --git a/components/leads/lead-detail-header.tsx b/components/leads/lead-detail-header.tsx
+index 170b3a8..e35d7bc 100644
+--- a/components/leads/lead-detail-header.tsx
++++ b/components/leads/lead-detail-header.tsx
+@@ -110,6 +110,11 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
+   // route di conversione risponde 400 e il messaggio finisce nel toast.
+   const documenti = useDocumentiObbligatori(lead.id)
+   const gateSoddisfatto = documenti.data?.completo === true
++  // Bug 6.1 (report Vito): senza questo, riaprire il dialog dopo una
++  // conversione gia' riuscita e ricliccare "Converti" creava un secondo
++  // cliente sullo stesso lead — la route ora rifiuta (409), ma il pulsante
++  // va disabilitato anche qui, non solo lato server.
++  const giaConvertito = lead["Stato Lead"] === "Convertito" || Boolean(lead["Account convertito"])
+ 
+   // La sezione allegati sta su un altro ramo della pagina: avvisa via evento
+   // quando si carica o elimina un documento, cosi' il conteggio qui si
+@@ -176,11 +181,11 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
+           <GateDocumentiLabel stato={documenti} />
+           <Button
+             className="h-10 bg-teal px-4 text-sm font-bold text-teal-foreground shadow-sm hover:bg-teal/90"
+-            disabled={!gateSoddisfatto}
++            disabled={!gateSoddisfatto || giaConvertito}
+             onClick={() => setShowConvert(true)}
+           >
+             <UserCheck data-icon="inline-start" />
+-            Converti a cliente
++            {giaConvertito ? "Già convertito" : "Converti a cliente"}
+           </Button>
+           <Button
+             variant="outline"

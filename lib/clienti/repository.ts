@@ -75,6 +75,11 @@ const SORT_COLUMN: Record<string, string> = {
   // Ordina sul nome (colonna testo, popolata da Zoho): installatore_id e' un
   // uuid quasi sempre null, ordinava di fatto per niente.
   Installatore: "installatore",
+  // Report Vito (4): mancava, ordinamento appariva "solo alfabetico" perche'
+  // Zona non era tra le colonne cliccabili — presente ovunque nel resto.
+  // Rimossa per errore dal commit del filtro TAG (8de2d6e, patch generato
+  // su un diff non sincronizzato), rimessa qui.
+  Zona: "zona",
   "Ora modifica": "updated_at",
   "Ora creazione": "created_at",
 }

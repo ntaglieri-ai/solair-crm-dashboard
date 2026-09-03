@@ -268,6 +268,7 @@ export function ClientiClient({
       sede: filters.sede,
       proprietario: filters.proprietario,
       installatore: filters.installatore,
+      tag: filters.tag,
     }),
     [page, rowsPerPage, sortBy, sortDir, filters],
   )

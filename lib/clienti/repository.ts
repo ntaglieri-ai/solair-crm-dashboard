@@ -75,9 +75,6 @@ const SORT_COLUMN: Record<string, string> = {
   // Ordina sul nome (colonna testo, popolata da Zoho): installatore_id e' un
   // uuid quasi sempre null, ordinava di fatto per niente.
   Installatore: "installatore",
-  // Report Vito (4): mancava, ordinamento appariva "solo alfabetico" perche'
-  // Zona non era tra le colonne cliccabili — presente ovunque nel resto.
-  Zona: "zona",
   "Ora modifica": "updated_at",
   "Ora creazione": "created_at",
 }
@@ -184,6 +181,24 @@ export async function queryClienti(
     // quasi sempre null e un valore non-uuid faceva errare l'intera query.
     listQ = listQ.eq("installatore", params.installatore)
     countQ = countQ.eq("installatore", params.installatore)
+  }
+  if (params.tag !== "all") {
+    // cliente_tags e' una tabella ponte (cliente_id, tag_id): niente join
+    // diretto via query builder per un .eq su una colonna di clienti, quindi
+    // si risolve prima l'elenco di id con quel tag, poi si restringe con
+    // .in(). Array vuoto = nessun cliente ha quel tag: si esce subito senza
+    // interrogare "clienti" (un .in("id", []) su alcune versioni del client
+    // restituirebbe tutte le righe invece di zero).
+    const taggedIds = await supabase.from("cliente_tags").select("cliente_id").eq("tag_id", params.tag)
+    if (taggedIds.error) {
+      console.error("[clienti/repository] filtro tag:", taggedIds.error.message)
+    }
+    const ids = (taggedIds.data ?? []).map((r) => r.cliente_id)
+    if (ids.length === 0) {
+      return { rows: [], total: 0, page: params.page, pageSize: params.pageSize }
+    }
+    listQ = listQ.in("id", ids)
+    countQ = countQ.in("id", ids)
   }
   // Restringe a una selezione esplicita di id (usato solo dall'export di una
   // selezione). Passa dagli stessi filtri della lista, cosi' un cliente che

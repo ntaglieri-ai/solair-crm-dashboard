@@ -135,7 +135,7 @@ export function ClienteQuickFilterFields({
   ) => onChange({ ...filters, [key]: value })
 
   const hasActiveFilters = countActiveClienteFilters(filters) > 0
-  const { owners, installerNames } = useClienteTags()
+  const { owners, installerNames, tags } = useClienteTags()
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -199,8 +199,10 @@ export function ClienteQuickFilterFields({
           value={filters.tag}
           onValueChange={(v) => set("tag", v)}
           placeholder="Tag"
-          disabled
-          options={[["all", "Tag (presto)"]]}
+          options={[
+            ["all", "Tutti i tag"],
+            ...tags.map((t) => [t.id, t.name] as [string, string]),
+          ]}
         />
       </div>
 

@@ -1,0 +1,115 @@
+diff --git a/app/(dashboard)/clienti/clienti-client.tsx b/app/(dashboard)/clienti/clienti-client.tsx
+index ea04930..49252b5 100644
+--- a/app/(dashboard)/clienti/clienti-client.tsx
++++ b/app/(dashboard)/clienti/clienti-client.tsx
+@@ -268,6 +268,7 @@ export function ClientiClient({
+       sede: filters.sede,
+       proprietario: filters.proprietario,
+       installatore: filters.installatore,
++      tag: filters.tag,
+     }),
+     [page, rowsPerPage, sortBy, sortDir, filters],
+   )
+diff --git a/components/clienti/cliente-filters.tsx b/components/clienti/cliente-filters.tsx
+index 7f073be..7f5be39 100644
+--- a/components/clienti/cliente-filters.tsx
++++ b/components/clienti/cliente-filters.tsx
+@@ -135,7 +135,7 @@ export function ClienteQuickFilterFields({
+   ) => onChange({ ...filters, [key]: value })
+ 
+   const hasActiveFilters = countActiveClienteFilters(filters) > 0
+-  const { owners, installerNames } = useClienteTags()
++  const { owners, installerNames, tags } = useClienteTags()
+ 
+   return (
+     <div className="flex min-w-0 flex-col gap-4">
+@@ -199,8 +199,10 @@ export function ClienteQuickFilterFields({
+           value={filters.tag}
+           onValueChange={(v) => set("tag", v)}
+           placeholder="Tag"
+-          disabled
+-          options={[["all", "Tag (presto)"]]}
++          options={[
++            ["all", "Tutti i tag"],
++            ...tags.map((t) => [t.id, t.name] as [string, string]),
++          ]}
+         />
+       </div>
+ 
+diff --git a/lib/clienti/api-types.ts b/lib/clienti/api-types.ts
+index 7e20bd0..6c3b944 100644
+--- a/lib/clienti/api-types.ts
++++ b/lib/clienti/api-types.ts
+@@ -15,6 +15,10 @@ export interface ClientiListParams {
+   sede: string
+   proprietario: string
+   installatore: string
++  // Report Vito (3): esisteva l'infrastruttura tag (tabella, badge,
++  // gestione) ma nessun modo di filtrare la lista per tag — mancava
++  // interamente da qui in giu', tendina UI disabilitata inclusa.
++  tag: string
+ }
+ 
+ export interface ClientiListResponse {
+@@ -36,6 +40,7 @@ export const DEFAULT_CLIENTI_PARAMS: ClientiListParams = {
+   sede: "all",
+   proprietario: "all",
+   installatore: "all",
++  tag: "all",
+ }
+ 
+ export function buildClientiSearchParams(p: ClientiListParams): URLSearchParams {
+@@ -49,6 +54,7 @@ export function buildClientiSearchParams(p: ClientiListParams): URLSearchParams
+   if (p.sede !== "all") sp.set("sede", p.sede)
+   if (p.proprietario !== "all") sp.set("proprietario", p.proprietario)
+   if (p.installatore !== "all") sp.set("installatore", p.installatore)
++  if (p.tag !== "all") sp.set("tag", p.tag)
+   return sp
+ }
+ 
+@@ -63,5 +69,6 @@ export function parseClientiSearchParams(sp: URLSearchParams): ClientiListParams
+     sede: sp.get("sede") ?? "all",
+     proprietario: sp.get("proprietario") ?? "all",
+     installatore: sp.get("installatore") ?? "all",
++    tag: sp.get("tag") ?? "all",
+   }
+ }
+diff --git a/lib/clienti/repository.ts b/lib/clienti/repository.ts
+index d299a25..102f2f4 100644
+--- a/lib/clienti/repository.ts
++++ b/lib/clienti/repository.ts
+@@ -75,9 +75,6 @@ const SORT_COLUMN: Record<string, string> = {
+   // Ordina sul nome (colonna testo, popolata da Zoho): installatore_id e' un
+   // uuid quasi sempre null, ordinava di fatto per niente.
+   Installatore: "installatore",
+-  // Report Vito (4): mancava, ordinamento appariva "solo alfabetico" perche'
+-  // Zona non era tra le colonne cliccabili — presente ovunque nel resto.
+-  Zona: "zona",
+   "Ora modifica": "updated_at",
+   "Ora creazione": "created_at",
+ }
+@@ -185,6 +182,24 @@ export async function queryClienti(
+     listQ = listQ.eq("installatore", params.installatore)
+     countQ = countQ.eq("installatore", params.installatore)
+   }
++  if (params.tag !== "all") {
++    // cliente_tags e' una tabella ponte (cliente_id, tag_id): niente join
++    // diretto via query builder per un .eq su una colonna di clienti, quindi
++    // si risolve prima l'elenco di id con quel tag, poi si restringe con
++    // .in(). Array vuoto = nessun cliente ha quel tag: si esce subito senza
++    // interrogare "clienti" (un .in("id", []) su alcune versioni del client
++    // restituirebbe tutte le righe invece di zero).
++    const taggedIds = await supabase.from("cliente_tags").select("cliente_id").eq("tag_id", params.tag)
++    if (taggedIds.error) {
++      console.error("[clienti/repository] filtro tag:", taggedIds.error.message)
++    }
++    const ids = (taggedIds.data ?? []).map((r) => r.cliente_id)
++    if (ids.length === 0) {
++      return { rows: [], total: 0, page: params.page, pageSize: params.pageSize }
++    }
++    listQ = listQ.in("id", ids)
++    countQ = countQ.in("id", ids)
++  }
+   // Restringe a una selezione esplicita di id (usato solo dall'export di una
+   // selezione). Passa dagli stessi filtri della lista, cosi' un cliente che
+   // l'utente non potrebbe comunque vedere non esce dall'export.

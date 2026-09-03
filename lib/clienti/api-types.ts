@@ -15,6 +15,10 @@ export interface ClientiListParams {
   sede: string
   proprietario: string
   installatore: string
+  // Report Vito (3): esisteva l'infrastruttura tag (tabella, badge,
+  // gestione) ma nessun modo di filtrare la lista per tag — mancava
+  // interamente da qui in giu', tendina UI disabilitata inclusa.
+  tag: string
 }
 
 export interface ClientiListResponse {
@@ -36,6 +40,7 @@ export const DEFAULT_CLIENTI_PARAMS: ClientiListParams = {
   sede: "all",
   proprietario: "all",
   installatore: "all",
+  tag: "all",
 }
 
 export function buildClientiSearchParams(p: ClientiListParams): URLSearchParams {
@@ -49,6 +54,7 @@ export function buildClientiSearchParams(p: ClientiListParams): URLSearchParams 
   if (p.sede !== "all") sp.set("sede", p.sede)
   if (p.proprietario !== "all") sp.set("proprietario", p.proprietario)
   if (p.installatore !== "all") sp.set("installatore", p.installatore)
+  if (p.tag !== "all") sp.set("tag", p.tag)
   return sp
 }
 
@@ -63,5 +69,6 @@ export function parseClientiSearchParams(sp: URLSearchParams): ClientiListParams
     sede: sp.get("sede") ?? "all",
     proprietario: sp.get("proprietario") ?? "all",
     installatore: sp.get("installatore") ?? "all",
+    tag: sp.get("tag") ?? "all",
   }
 }

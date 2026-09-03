@@ -1,0 +1,372 @@
+diff --git a/app/api/leads/[id]/converti/route.ts b/app/api/leads/[id]/converti/route.ts
+index 4544100..7e4621f 100644
+--- a/app/api/leads/[id]/converti/route.ts
++++ b/app/api/leads/[id]/converti/route.ts
+@@ -3,10 +3,6 @@ import { getFullLeadById } from "@/lib/leads/repository"
+ import { patchLead } from "@/lib/leads/server-store"
+ import { createClienteRecord } from "@/lib/clienti/repository"
+ import { requireApiRecord } from "@/lib/permissions/server"
+-import {
+-  contaDocumentiObbligatori,
+-  messaggioGateNonSoddisfatto,
+-} from "@/lib/allegati/documenti-obbligatori"
+ 
+ // Conversione reale Lead -> Cliente: prima "Converti a cliente" chiudeva
+ // solo il dialog, nessuna azione reale (audit "funzionalità finte" 24/07).
+@@ -44,25 +40,11 @@ export async function POST(
+     )
+   }
+ 
+-  // Gate dei tre documenti obbligatori (spec FASE 1.3). Controllato QUI e non
+-  // solo nella UI: il pulsante disabilitato e' un aiuto, non una garanzia —
+-  // la route resta chiamabile direttamente.
+-  const documenti = await contaDocumentiObbligatori(lead.id, lead["Nome Lead"] ?? "")
+-  if (!documenti.ok) {
+-    // Nextcloud irraggiungibile: non sappiamo se i documenti ci sono, quindi
+-    // NON convertiamo (una conversione e' difficile da annullare, un retry no).
+-    console.error(`[converti] conteggio documenti obbligatori lead ${id} fallito:`, documenti.error)
+-    return NextResponse.json(
+-      { error: "Impossibile verificare i documenti obbligatori su Nextcloud, riprova" },
+-      { status: 502 },
+-    )
+-  }
+-  if (!documenti.completo) {
+-    return NextResponse.json(
+-      { error: messaggioGateNonSoddisfatto(documenti.count), count: documenti.count },
+-      { status: 400 },
+-    )
+-  }
++  // Gate dei tre documenti obbligatori RIMOSSO (report Vito, punto 17,
++  // 03/09): era un blocco di processo esplicito, non un bug — Vito ha
++  // chiesto di poter convertire un lead anche senza i tre documenti gia'
++  // caricati. Il conteggio in UI (GateDocumentiLabel) resta come indicatore
++  // informativo, non blocca piu' la conversione.
+ 
+   const cliente = await createClienteRecord(
+     {
+diff --git a/components/clienti/cliente-detail-content.tsx b/components/clienti/cliente-detail-content.tsx
+index 3651dfa..495c4c8 100644
+--- a/components/clienti/cliente-detail-content.tsx
++++ b/components/clienti/cliente-detail-content.tsx
+@@ -191,11 +191,11 @@ function BoolChip({ label, on }: { label: string; on: boolean | undefined }) {
+ 
+ const NAV_ITEMS = [
+   { id: "section-anagrafica", label: "Anagrafica" },
++  { id: "section-documenti", label: "Documenti" },
++  { id: "section-iter", label: "Iter burocratico" },
+   { id: "section-impianto", label: "Impianto" },
+   { id: "section-pagamenti", label: "Pagamenti" },
+-  { id: "section-iter", label: "Iter burocratico" },
+   { id: "section-logistica", label: "Logistica" },
+-  { id: "section-documenti", label: "Documenti" },
+   { id: "section-comunicazioni", label: "Comunicazioni" },
+   { id: "section-note", label: "Note cliente" },
+   { id: "section-note-interne", label: "Note interne" },
+@@ -318,6 +318,12 @@ function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
+           <span className="text-border">·</span>
+           <span>{val(cliente["Codice postale indirizzo"])}</span>
+         </div>
++        {/* Report Vito (1): Zona subito sotto l'indirizzo — prima stava in
++            Iter burocratico, lontana dal resto dei dati di localizzazione. */}
++        <div className="flex items-center gap-1.5 text-[13px] text-foreground">
++          <span className="text-muted-foreground">Zona:</span>
++          <span>{val(cliente.Zona)}</span>
++        </div>
+       </div>
+ 
+       {/* Descrizione */}
+@@ -594,6 +600,9 @@ function Pagamenti({ cliente }: { cliente: ClienteRecord }) {
+   const vediBonificoPdc = useCampoVisibile("clienti", "bonificopdc")
+   const vediFatturaPdc = useCampoVisibile("clienti", "fatturapdc")
+   const vediSaldo = useCampoVisibile("clienti", "saldo")
++  // Report Vito (1): Note pagamenti vicino agli importi contrattuali — prima
++  // stava dentro "Note cliente", lontana dagli importi a cui si riferisce.
++  const vediNotePagamenti = useCampoVisibile("clienti", "note_pagamenti")
+ 
+   const nascosto = "—"
+   const tranche: [string, string, string][] = [
+@@ -667,6 +676,17 @@ function Pagamenti({ cliente }: { cliente: ClienteRecord }) {
+         </CampoProtetto>
+       </div>
+ 
++      {vediNotePagamenti && hasValue(cliente["Note pagamenti"]) ? (
++        <div className="rounded-lg border border-border bg-secondary/20 p-3">
++          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
++            Note pagamenti
++          </span>
++          <p className="mt-1 whitespace-pre-wrap text-[13px] text-foreground">
++            {cliente["Note pagamenti"]}
++          </p>
++        </div>
++      ) : null}
++
+       {/* Tranche */}
+       <div className="overflow-hidden rounded-lg border border-border">
+         <table className="w-full text-[12px]">
+@@ -908,7 +928,6 @@ function Iter({ cliente }: { cliente: ClienteRecord }) {
+       </div>
+       <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+         <DataField label="POD">{val(cliente.POD)}</DataField>
+-        <DataField label="Zona">{val(cliente.Zona)}</DataField>
+         <DataField label="Data ammissibilità">{val(cliente["Data ammissibilità"])}</DataField>
+         <DataField label="Data sopralluogo">{val(cliente["Data sopralluogo"])}</DataField>
+         <DataField label="Data affidamento sopralluogo">
+@@ -1212,16 +1231,14 @@ function NoteSection({ cliente }: { cliente: ClienteRecord }) {
+     if (created.notificationFailures) toast.warning("Nota salvata, ma una o più notifiche email non sono state inviate")
+   }
+ 
+-  // "Note ufficio" non ha restrizioni configurate; le altre due si', e sono
+-  // voci di un array costruito prima del render: si filtrano qui.
+-  const vediNotePagamenti = useCampoVisibile("clienti", "note_pagamenti")
++  // "Note ufficio" non ha restrizioni configurate; "Note Provvigioni" si',
++  // ed e' l'unica voce di un array costruito prima del render qui filtrata.
++  // "Note pagamenti" e' stata spostata dentro la sezione Pagamenti (report
++  // Vito, punto 1: vicino agli importi contrattuali a cui si riferisce).
+   const vediNoteProvvigioni = useCampoVisibile("clienti", "note_provvigioni")
+ 
+   const extra: { label: string; value: string | undefined }[] = [
+     { label: "Note ufficio", value: cliente["Note ufficio"] },
+-    ...(vediNotePagamenti
+-      ? [{ label: "Note pagamenti", value: cliente["Note pagamenti"] }]
+-      : []),
+     ...(vediNoteProvvigioni
+       ? [{ label: "Note Provvigioni", value: cliente["Note Provvigioni"] }]
+       : []),
+@@ -1406,6 +1423,17 @@ export function ClienteDetailContent({ cliente }: { cliente: ClienteRecord }) {
+         <Anagrafica cliente={cliente} />
+       </Section>
+ 
++      {/* Documenti e Iter spostati subito dopo Anagrafica (report Vito, punti
++          1/10): verifica documentale/layout e sopralluogo sono tra le prime
++          attività operative, prima erano in fondo alla pagina. */}
++      <Section id="section-documenti" title="Documenti e pratiche" icon={IconPaperclip}>
++        <Documenti cliente={cliente} />
++      </Section>
++
++      <Section id="section-iter" title="Iter burocratico" icon={IconRoute}>
++        <Iter cliente={cliente} />
++      </Section>
++
+       <Section id="section-impianto" title="Impianto" icon={IconBolt}>
+         <Impianto cliente={cliente} />
+       </Section>
+@@ -1414,18 +1442,10 @@ export function ClienteDetailContent({ cliente }: { cliente: ClienteRecord }) {
+         <Pagamenti cliente={cliente} />
+       </Section>
+ 
+-      <Section id="section-iter" title="Iter burocratico" icon={IconRoute}>
+-        <Iter cliente={cliente} />
+-      </Section>
+-
+       <Section id="section-logistica" title="Logistica e cantiere" icon={IconTruck}>
+         <Logistica cliente={cliente} />
+       </Section>
+ 
+-      <Section id="section-documenti" title="Documenti e pratiche" icon={IconPaperclip}>
+-        <Documenti cliente={cliente} />
+-      </Section>
+-
+       <Section
+         id="section-comunicazioni"
+         title="Comunicazioni automatiche"
+diff --git a/components/clienti/cliente-detail-header.tsx b/components/clienti/cliente-detail-header.tsx
+index 11a8db5..c7d7954 100644
+--- a/components/clienti/cliente-detail-header.tsx
++++ b/components/clienti/cliente-detail-header.tsx
+@@ -54,7 +54,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
+   const permissions = usePermissions()
+   const [editOpen, setEditOpen] = useState(false)
+   const nome = cliente["Nome Clienti"]
+-  const { ownerNames } = useClienteTags()
++  const { ownerNames, installerNames } = useClienteTags()
+   const ownerName = cliente["Clienti Proprietario"]
+     ? ownerNames[cliente["Clienti Proprietario"]] ?? "Utente non disponibile"
+     : "Non assegnato"
+@@ -230,7 +230,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
+         onOpenChange={setEditOpen}
+         title="Modifica cliente"
+         endpoint={`/api/clienti/${cliente.id}`}
+-        fields={buildClienteEditFields(cliente, permissions)}
++        fields={buildClienteEditFields(cliente, permissions, installerNames)}
+       />
+     </div>
+   )
+diff --git a/components/clienti/cliente-row-context-menu.tsx b/components/clienti/cliente-row-context-menu.tsx
+index f7d45c3..c12a407 100644
+--- a/components/clienti/cliente-row-context-menu.tsx
++++ b/components/clienti/cliente-row-context-menu.tsx
+@@ -53,6 +53,7 @@ import { ClienteTagPicker } from "./cliente-tag-controls"
+ import { useClienteTags } from "@/lib/cliente-tag-store"
+ import { usePermissions } from "@/lib/permissions/provider"
+ import { EditRecordDialog, buildClienteEditFields } from "@/components/shared/edit-record-dialog"
++import { useClienteTags } from "@/lib/cliente-tag-store"
+ import { telHref } from "@/components/shared/quick-contact-icons"
+ 
+ // "Crea nota"/"Crea attività" — costruiti il 25/07 (endpoint note dedicato
+@@ -80,6 +81,7 @@ export function ClienteRowContextMenu({
+ }) {
+   const { owners } = useClienteTags()
+   const permissions = usePermissions()
++  const { installerNames } = useClienteTags()
+   const router = useRouter()
+   const [tagOpen, setTagOpen] = useState(false)
+   const [owner, setOwner] = useState(cliente["Clienti Proprietario"] ?? "")
+@@ -347,7 +349,7 @@ export function ClienteRowContextMenu({
+         onOpenChange={setEditOpen}
+         title="Modifica cliente"
+         endpoint={`/api/clienti/${cliente.id}`}
+-        fields={buildClienteEditFields(cliente, permissions)}
++        fields={buildClienteEditFields(cliente, permissions, installerNames)}
+         onSaved={onRefresh}
+       />
+ 
+diff --git a/components/leads/lead-detail-header.tsx b/components/leads/lead-detail-header.tsx
+index e35d7bc..c21d7b0 100644
+--- a/components/leads/lead-detail-header.tsx
++++ b/components/leads/lead-detail-header.tsx
+@@ -61,9 +61,9 @@ function GateDocumentiLabel({
+     return <span className="text-xs text-muted-foreground">Verifica documenti…</span>
+   }
+ 
+-  // Nextcloud irraggiungibile: il conteggio non e' noto e la conversione
+-  // sarebbe comunque respinta (502) — meglio dirlo che lasciare il pulsante
+-  // spento e muto.
++  // Nextcloud irraggiungibile: il conteggio non e' noto. Non blocca piu' la
++  // conversione (gate rimosso, report Vito punto 17) — resta solo un avviso
++  // informativo.
+   if (stato.isError || !stato.data) {
+     return (
+       <span className="text-xs text-destructive">
+@@ -109,7 +109,6 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
+   // — se il pulsante viene attivato lo stesso (tastiera, automazione), la
+   // route di conversione risponde 400 e il messaggio finisce nel toast.
+   const documenti = useDocumentiObbligatori(lead.id)
+-  const gateSoddisfatto = documenti.data?.completo === true
+   // Bug 6.1 (report Vito): senza questo, riaprire il dialog dopo una
+   // conversione gia' riuscita e ricliccare "Converti" creava un secondo
+   // cliente sullo stesso lead — la route ora rifiuta (409), ma il pulsante
+@@ -181,7 +180,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
+           <GateDocumentiLabel stato={documenti} />
+           <Button
+             className="h-10 bg-teal px-4 text-sm font-bold text-teal-foreground shadow-sm hover:bg-teal/90"
+-            disabled={!gateSoddisfatto || giaConvertito}
++            disabled={giaConvertito}
+             onClick={() => setShowConvert(true)}
+           >
+             <UserCheck data-icon="inline-start" />
+diff --git a/components/shared/edit-record-dialog.tsx b/components/shared/edit-record-dialog.tsx
+index 40cd373..908c256 100644
+--- a/components/shared/edit-record-dialog.tsx
++++ b/components/shared/edit-record-dialog.tsx
+@@ -18,13 +18,23 @@ import { Textarea } from "@/components/ui/textarea"
+ import { CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
+ import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
+ import type { Lead, ClienteRecord } from "@/lib/mock-data"
++import { STATO_CLIENTE_VALUES } from "@/lib/mock-data"
+ import type { PermissionEngine } from "@/lib/permissions/types"
++import {
++  Select,
++  SelectContent,
++  SelectItem,
++  SelectTrigger,
++  SelectValue,
++} from "@/components/ui/select"
+ 
+ export type EditField = {
+   key: string
+   label: string
+   value: unknown
+-  type?: "text" | "email" | "tel" | "number" | "boolean" | "textarea" | "date"
++  type?: "text" | "email" | "tel" | "number" | "boolean" | "textarea" | "date" | "select"
++  /** Solo per type "select": valori ammessi nella tendina. */
++  options?: string[]
+ }
+ 
+ type EditValue = string | boolean
+@@ -105,16 +115,41 @@ export function buildLeadEditFields(
+ export function buildClienteEditFields(
+   cliente: ClienteRecord,
+   permissions: PermissionEngine,
++  // Report Vito (11, 12): Stato e Installatore erano testo libero nel form
++  // di modifica anche se le tendine "vere" esistono gia' altrove nell'app
++  // (menu contestuale riga, filtri). installerNames = valori reali distinti
++  // gia' presenti sui clienti, stessa fonte usata per il filtro (bug 4/12).
++  installerNames: string[],
+ ): EditField[] {
+   return CLIENTI_RECORD_FIELDS
+     .filter((field) => permissions.canField("clienti", field.column, "edit"))
+     .filter((field) => isEditableRuntimeValue(cliente[field.appField as keyof ClienteRecord]))
+-    .map((field) => ({
+-      key: field.appField,
+-      label: field.appField,
+-      value: cliente[field.appField as keyof ClienteRecord],
+-      type: isLongField(field.appField) ? "textarea" : fieldType(field.type),
+-    }))
++    .map((field) => {
++      if (field.appField === "Stato") {
++        return {
++          key: field.appField,
++          label: field.appField,
++          value: cliente[field.appField as keyof ClienteRecord],
++          type: "select" as const,
++          options: STATO_CLIENTE_VALUES,
++        }
++      }
++      if (field.appField === "Installatore") {
++        return {
++          key: field.appField,
++          label: field.appField,
++          value: cliente[field.appField as keyof ClienteRecord],
++          type: "select" as const,
++          options: installerNames,
++        }
++      }
++      return {
++        key: field.appField,
++        label: field.appField,
++        value: cliente[field.appField as keyof ClienteRecord],
++        type: isLongField(field.appField) ? "textarea" as const : fieldType(field.type),
++      }
++    })
+ }
+ 
+ /**
+@@ -254,6 +289,24 @@ function EditRecordDialogBody({
+                       }
+                       className="min-h-28"
+                     />
++                  ) : field.type === "select" ? (
++                    <Select
++                      value={String(values[field.key] ?? "")}
++                      onValueChange={(v) =>
++                        setValues((prev) => ({ ...prev, [field.key]: v }))
++                      }
++                    >
++                      <SelectTrigger id={`edit-${field.key}`} className="w-full">
++                        <SelectValue placeholder={`Seleziona ${field.label.toLowerCase()}`} />
++                      </SelectTrigger>
++                      <SelectContent>
++                        {(field.options ?? []).map((option) => (
++                          <SelectItem key={option} value={option}>
++                            {option}
++                          </SelectItem>
++                        ))}
++                      </SelectContent>
++                    </Select>
+                   ) : (
+                     <Input
+                       id={`edit-${field.key}`}
+diff --git a/lib/clienti/repository.ts b/lib/clienti/repository.ts
+index 34626be..d299a25 100644
+--- a/lib/clienti/repository.ts
++++ b/lib/clienti/repository.ts
+@@ -75,6 +75,9 @@ const SORT_COLUMN: Record<string, string> = {
+   // Ordina sul nome (colonna testo, popolata da Zoho): installatore_id e' un
+   // uuid quasi sempre null, ordinava di fatto per niente.
+   Installatore: "installatore",
++  // Report Vito (4): mancava, ordinamento appariva "solo alfabetico" perche'
++  // Zona non era tra le colonne cliccabili — presente ovunque nel resto.
++  Zona: "zona",
+   "Ora modifica": "updated_at",
+   "Ora creazione": "created_at",
+ }

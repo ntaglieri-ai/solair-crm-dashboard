@@ -191,11 +191,11 @@ function BoolChip({ label, on }: { label: string; on: boolean | undefined }) {
 
 const NAV_ITEMS = [
   { id: "section-anagrafica", label: "Anagrafica" },
+  { id: "section-documenti", label: "Documenti" },
+  { id: "section-iter", label: "Iter burocratico" },
   { id: "section-impianto", label: "Impianto" },
   { id: "section-pagamenti", label: "Pagamenti" },
-  { id: "section-iter", label: "Iter burocratico" },
   { id: "section-logistica", label: "Logistica" },
-  { id: "section-documenti", label: "Documenti" },
   { id: "section-comunicazioni", label: "Comunicazioni" },
   { id: "section-note", label: "Note cliente" },
   { id: "section-note-interne", label: "Note interne" },
@@ -317,6 +317,12 @@ function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
           <span>{val(cliente["Provincia indirizzo postale"])}</span>
           <span className="text-border">·</span>
           <span>{val(cliente["Codice postale indirizzo"])}</span>
+        </div>
+        {/* Report Vito (1): Zona subito sotto l'indirizzo — prima stava in
+            Iter burocratico, lontana dal resto dei dati di localizzazione. */}
+        <div className="flex items-center gap-1.5 text-[13px] text-foreground">
+          <span className="text-muted-foreground">Zona:</span>
+          <span>{val(cliente.Zona)}</span>
         </div>
       </div>
 
@@ -594,6 +600,9 @@ function Pagamenti({ cliente }: { cliente: ClienteRecord }) {
   const vediBonificoPdc = useCampoVisibile("clienti", "bonificopdc")
   const vediFatturaPdc = useCampoVisibile("clienti", "fatturapdc")
   const vediSaldo = useCampoVisibile("clienti", "saldo")
+  // Report Vito (1): Note pagamenti vicino agli importi contrattuali — prima
+  // stava dentro "Note cliente", lontana dagli importi a cui si riferisce.
+  const vediNotePagamenti = useCampoVisibile("clienti", "note_pagamenti")
 
   const nascosto = "—"
   const tranche: [string, string, string][] = [
@@ -666,6 +675,17 @@ function Pagamenti({ cliente }: { cliente: ClienteRecord }) {
         </DataField>
         </CampoProtetto>
       </div>
+
+      {vediNotePagamenti && hasValue(cliente["Note pagamenti"]) ? (
+        <div className="rounded-lg border border-border bg-secondary/20 p-3">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Note pagamenti
+          </span>
+          <p className="mt-1 whitespace-pre-wrap text-[13px] text-foreground">
+            {cliente["Note pagamenti"]}
+          </p>
+        </div>
+      ) : null}
 
       {/* Tranche */}
       <div className="overflow-hidden rounded-lg border border-border">
@@ -908,7 +928,6 @@ function Iter({ cliente }: { cliente: ClienteRecord }) {
       </div>
       <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
         <DataField label="POD">{val(cliente.POD)}</DataField>
-        <DataField label="Zona">{val(cliente.Zona)}</DataField>
         <DataField label="Data ammissibilità">{val(cliente["Data ammissibilità"])}</DataField>
         <DataField label="Data sopralluogo">{val(cliente["Data sopralluogo"])}</DataField>
         <DataField label="Data affidamento sopralluogo">
@@ -1212,16 +1231,14 @@ function NoteSection({ cliente }: { cliente: ClienteRecord }) {
     if (created.notificationFailures) toast.warning("Nota salvata, ma una o più notifiche email non sono state inviate")
   }
 
-  // "Note ufficio" non ha restrizioni configurate; le altre due si', e sono
-  // voci di un array costruito prima del render: si filtrano qui.
-  const vediNotePagamenti = useCampoVisibile("clienti", "note_pagamenti")
+  // "Note ufficio" non ha restrizioni configurate; "Note Provvigioni" si',
+  // ed e' l'unica voce di un array costruito prima del render qui filtrata.
+  // "Note pagamenti" e' stata spostata dentro la sezione Pagamenti (report
+  // Vito, punto 1: vicino agli importi contrattuali a cui si riferisce).
   const vediNoteProvvigioni = useCampoVisibile("clienti", "note_provvigioni")
 
   const extra: { label: string; value: string | undefined }[] = [
     { label: "Note ufficio", value: cliente["Note ufficio"] },
-    ...(vediNotePagamenti
-      ? [{ label: "Note pagamenti", value: cliente["Note pagamenti"] }]
-      : []),
     ...(vediNoteProvvigioni
       ? [{ label: "Note Provvigioni", value: cliente["Note Provvigioni"] }]
       : []),
@@ -1406,6 +1423,17 @@ export function ClienteDetailContent({ cliente }: { cliente: ClienteRecord }) {
         <Anagrafica cliente={cliente} />
       </Section>
 
+      {/* Documenti e Iter spostati subito dopo Anagrafica (report Vito, punti
+          1/10): verifica documentale/layout e sopralluogo sono tra le prime
+          attività operative, prima erano in fondo alla pagina. */}
+      <Section id="section-documenti" title="Documenti e pratiche" icon={IconPaperclip}>
+        <Documenti cliente={cliente} />
+      </Section>
+
+      <Section id="section-iter" title="Iter burocratico" icon={IconRoute}>
+        <Iter cliente={cliente} />
+      </Section>
+
       <Section id="section-impianto" title="Impianto" icon={IconBolt}>
         <Impianto cliente={cliente} />
       </Section>
@@ -1414,16 +1442,8 @@ export function ClienteDetailContent({ cliente }: { cliente: ClienteRecord }) {
         <Pagamenti cliente={cliente} />
       </Section>
 
-      <Section id="section-iter" title="Iter burocratico" icon={IconRoute}>
-        <Iter cliente={cliente} />
-      </Section>
-
       <Section id="section-logistica" title="Logistica e cantiere" icon={IconTruck}>
         <Logistica cliente={cliente} />
-      </Section>
-
-      <Section id="section-documenti" title="Documenti e pratiche" icon={IconPaperclip}>
-        <Documenti cliente={cliente} />
       </Section>
 
       <Section

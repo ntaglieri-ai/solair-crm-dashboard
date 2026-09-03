@@ -53,6 +53,7 @@ import { ClienteTagPicker } from "./cliente-tag-controls"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { usePermissions } from "@/lib/permissions/provider"
 import { EditRecordDialog, buildClienteEditFields } from "@/components/shared/edit-record-dialog"
+import { useClienteTags } from "@/lib/cliente-tag-store"
 import { telHref } from "@/components/shared/quick-contact-icons"
 
 // "Crea nota"/"Crea attività" — costruiti il 25/07 (endpoint note dedicato
@@ -80,6 +81,7 @@ export function ClienteRowContextMenu({
 }) {
   const { owners } = useClienteTags()
   const permissions = usePermissions()
+  const { installerNames } = useClienteTags()
   const router = useRouter()
   const [tagOpen, setTagOpen] = useState(false)
   const [owner, setOwner] = useState(cliente["Clienti Proprietario"] ?? "")
@@ -347,7 +349,7 @@ export function ClienteRowContextMenu({
         onOpenChange={setEditOpen}
         title="Modifica cliente"
         endpoint={`/api/clienti/${cliente.id}`}
-        fields={buildClienteEditFields(cliente, permissions)}
+        fields={buildClienteEditFields(cliente, permissions, installerNames)}
         onSaved={onRefresh}
       />
 

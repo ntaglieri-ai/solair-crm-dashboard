@@ -54,7 +54,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
   const permissions = usePermissions()
   const [editOpen, setEditOpen] = useState(false)
   const nome = cliente["Nome Clienti"]
-  const { ownerNames } = useClienteTags()
+  const { ownerNames, installerNames } = useClienteTags()
   const ownerName = cliente["Clienti Proprietario"]
     ? ownerNames[cliente["Clienti Proprietario"]] ?? "Utente non disponibile"
     : "Non assegnato"
@@ -230,7 +230,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
         onOpenChange={setEditOpen}
         title="Modifica cliente"
         endpoint={`/api/clienti/${cliente.id}`}
-        fields={buildClienteEditFields(cliente, permissions)}
+        fields={buildClienteEditFields(cliente, permissions, installerNames)}
       />
     </div>
   )

@@ -61,9 +61,9 @@ function GateDocumentiLabel({
     return <span className="text-xs text-muted-foreground">Verifica documenti…</span>
   }
 
-  // Nextcloud irraggiungibile: il conteggio non e' noto e la conversione
-  // sarebbe comunque respinta (502) — meglio dirlo che lasciare il pulsante
-  // spento e muto.
+  // Nextcloud irraggiungibile: il conteggio non e' noto. Non blocca piu' la
+  // conversione (gate rimosso, report Vito punto 17) — resta solo un avviso
+  // informativo.
   if (stato.isError || !stato.data) {
     return (
       <span className="text-xs text-destructive">
@@ -109,7 +109,6 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
   // — se il pulsante viene attivato lo stesso (tastiera, automazione), la
   // route di conversione risponde 400 e il messaggio finisce nel toast.
   const documenti = useDocumentiObbligatori(lead.id)
-  const gateSoddisfatto = documenti.data?.completo === true
   // Bug 6.1 (report Vito): senza questo, riaprire il dialog dopo una
   // conversione gia' riuscita e ricliccare "Converti" creava un secondo
   // cliente sullo stesso lead — la route ora rifiuta (409), ma il pulsante
@@ -181,7 +180,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
           <GateDocumentiLabel stato={documenti} />
           <Button
             className="h-10 bg-teal px-4 text-sm font-bold text-teal-foreground shadow-sm hover:bg-teal/90"
-            disabled={!gateSoddisfatto || giaConvertito}
+            disabled={giaConvertito}
             onClick={() => setShowConvert(true)}
           >
             <UserCheck data-icon="inline-start" />

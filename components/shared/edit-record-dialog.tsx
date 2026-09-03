@@ -18,13 +18,23 @@ import { Textarea } from "@/components/ui/textarea"
 import { CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
 import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
 import type { Lead, ClienteRecord } from "@/lib/mock-data"
+import { STATO_CLIENTE_VALUES } from "@/lib/mock-data"
 import type { PermissionEngine } from "@/lib/permissions/types"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 export type EditField = {
   key: string
   label: string
   value: unknown
-  type?: "text" | "email" | "tel" | "number" | "boolean" | "textarea" | "date"
+  type?: "text" | "email" | "tel" | "number" | "boolean" | "textarea" | "date" | "select"
+  /** Solo per type "select": valori ammessi nella tendina. */
+  options?: string[]
 }
 
 type EditValue = string | boolean
@@ -105,16 +115,41 @@ export function buildLeadEditFields(
 export function buildClienteEditFields(
   cliente: ClienteRecord,
   permissions: PermissionEngine,
+  // Report Vito (11, 12): Stato e Installatore erano testo libero nel form
+  // di modifica anche se le tendine "vere" esistono gia' altrove nell'app
+  // (menu contestuale riga, filtri). installerNames = valori reali distinti
+  // gia' presenti sui clienti, stessa fonte usata per il filtro (bug 4/12).
+  installerNames: string[],
 ): EditField[] {
   return CLIENTI_RECORD_FIELDS
     .filter((field) => permissions.canField("clienti", field.column, "edit"))
     .filter((field) => isEditableRuntimeValue(cliente[field.appField as keyof ClienteRecord]))
-    .map((field) => ({
-      key: field.appField,
-      label: field.appField,
-      value: cliente[field.appField as keyof ClienteRecord],
-      type: isLongField(field.appField) ? "textarea" : fieldType(field.type),
-    }))
+    .map((field) => {
+      if (field.appField === "Stato") {
+        return {
+          key: field.appField,
+          label: field.appField,
+          value: cliente[field.appField as keyof ClienteRecord],
+          type: "select" as const,
+          options: STATO_CLIENTE_VALUES,
+        }
+      }
+      if (field.appField === "Installatore") {
+        return {
+          key: field.appField,
+          label: field.appField,
+          value: cliente[field.appField as keyof ClienteRecord],
+          type: "select" as const,
+          options: installerNames,
+        }
+      }
+      return {
+        key: field.appField,
+        label: field.appField,
+        value: cliente[field.appField as keyof ClienteRecord],
+        type: isLongField(field.appField) ? "textarea" as const : fieldType(field.type),
+      }
+    })
 }
 
 /**
@@ -254,6 +289,24 @@ function EditRecordDialogBody({
                       }
                       className="min-h-28"
                     />
+                  ) : field.type === "select" ? (
+                    <Select
+                      value={String(values[field.key] ?? "")}
+                      onValueChange={(v) =>
+                        setValues((prev) => ({ ...prev, [field.key]: v }))
+                      }
+                    >
+                      <SelectTrigger id={`edit-${field.key}`} className="w-full">
+                        <SelectValue placeholder={`Seleziona ${field.label.toLowerCase()}`} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(field.options ?? []).map((option) => (
+                          <SelectItem key={option} value={option}>
+                            {option}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : (
                     <Input
                       id={`edit-${field.key}`}

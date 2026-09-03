@@ -1,0 +1,13 @@
+diff --git a/components/shared/edit-record-dialog.tsx b/components/shared/edit-record-dialog.tsx
+index 908c256..1ce629c 100644
+--- a/components/shared/edit-record-dialog.tsx
++++ b/components/shared/edit-record-dialog.tsx
+@@ -293,7 +293,7 @@ function EditRecordDialogBody({
+                     <Select
+                       value={String(values[field.key] ?? "")}
+                       onValueChange={(v) =>
+-                        setValues((prev) => ({ ...prev, [field.key]: v }))
++                        setValues((prev) => ({ ...prev, [field.key]: v ?? "" }))
+                       }
+                     >
+                       <SelectTrigger id={`edit-${field.key}`} className="w-full">

@@ -293,7 +293,7 @@ function EditRecordDialogBody({
                     <Select
                       value={String(values[field.key] ?? "")}
                       onValueChange={(v) =>
-                        setValues((prev) => ({ ...prev, [field.key]: v }))
+                        setValues((prev) => ({ ...prev, [field.key]: v ?? "" }))
                       }
                     >
                       <SelectTrigger id={`edit-${field.key}`} className="w-full">

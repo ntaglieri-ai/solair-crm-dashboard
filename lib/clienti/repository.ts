@@ -356,6 +356,12 @@ export async function createClienteRecord(
 export async function updateClienteRecord(
   id: string,
   patch: Partial<ClienteRecord>,
+  // Opzionale e in coda: i chiamanti esistenti (tag-italia.ts, tool MCP)
+  // continuano a funzionare invariati con `null` silenzioso per design. Solo
+  // la route HTTP lo passa, per non mostrare piu' "Cliente non trovato" a un
+  // cliente che esiste benissimo ma il cui update e' stato rifiutato da
+  // Postgres (es. una data in formato non valido).
+  onError?: (message: string) => void,
 ): Promise<ClienteRecord | null> {
   const allowed = await filterCurrentAccessibleRecordIds("clienti", "clienti", "clienti_proprietario_id", [id])
   if (allowed.length === 0) return null
@@ -401,7 +407,11 @@ export async function updateClienteRecord(
     .eq("id", id)
     .select(LIST_COLUMNS)
     .single()
-  if (error || !data) return null
+  if (error) {
+    onError?.(error.message)
+    return null
+  }
+  if (!data) return null
 
   // Tag "Italia" (spec 2.3) rivalutato a ogni modifica della provincia — la
   // colonna e' scritta dal ciclo generico qui sopra, quindi il controllo va

@@ -16,8 +16,19 @@ export async function PATCH(
   const { id } = await params
   if (!await canAccessOwnedRecord(guard.permissions.snapshot, "clienti", "clienti", "clienti_proprietario_id", id)) return NextResponse.json({ error: "Cliente non trovato" }, { status: 404 })
   const patch = (await request.json()) as Partial<ClienteRecord>
-  const updated = await updateClienteRecord(id, patch)
+  let saveError: string | null = null
+  const updated = await updateClienteRecord(id, patch, (message) => {
+    saveError = message
+  })
   if (!updated) {
+    // Due cause diverse dietro lo stesso "updated === null": distinguerle
+    // qui, non solo internamente, e' il punto — prima erano entrambe un
+    // 404 "Cliente non trovato" anche quando il cliente esisteva benissimo
+    // e l'unico problema era un valore che Postgres rifiutava (es. una
+    // data in formato non valido dal vecchio campo testo libero).
+    if (saveError) {
+      return NextResponse.json({ error: `Salvataggio non riuscito: ${saveError}` }, { status: 400 })
+    }
     return NextResponse.json({ error: "Cliente non trovato" }, { status: 404 })
   }
 

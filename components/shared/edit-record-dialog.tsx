@@ -24,7 +24,7 @@ export type EditField = {
   key: string
   label: string
   value: unknown
-  type?: "text" | "email" | "tel" | "number" | "boolean" | "textarea"
+  type?: "text" | "email" | "tel" | "number" | "boolean" | "textarea" | "date"
 }
 
 type EditValue = string | boolean
@@ -32,12 +32,25 @@ type EditValue = string | boolean
 function fieldType(type: "text" | "numeric" | "boolean" | "timestamp") {
   if (type === "boolean") return "boolean"
   if (type === "numeric") return "number"
+  // Prima cadeva su "text": l'utente scriveva una data in formato libero
+  // (es. "26/08/2026"), il server la mandava cosi' com'era a Postgres, che
+  // la rifiutava — e l'errore veniva mascherato da un generico "non
+  // trovato" (vedi outgoingEditValue e la route PATCH). Con l'input nativo
+  // date il browser garantisce sempre YYYY-MM-DD in uscita.
+  if (type === "timestamp") return "date"
   return "text"
 }
 
 function initialEditValue(field: EditField): EditValue {
   if (field.type === "boolean") return field.value === true
   if (field.value === null || field.value === undefined) return ""
+  if (field.type === "date") {
+    // L'input nativo type="date" richiede esattamente YYYY-MM-DD: un
+    // timestamp ISO completo (es. "2026-08-26T10:00:00+00:00") non renderizza
+    // correttamente il valore preselezionato.
+    const iso = String(field.value)
+    return iso.length >= 10 ? iso.slice(0, 10) : iso
+  }
   return String(field.value)
 }
 
@@ -48,6 +61,13 @@ function outgoingEditValue(field: EditField, value: EditValue) {
     if (!text) return null
     const number = Number(text)
     return Number.isFinite(number) ? number : null
+  }
+  if (field.type === "date") {
+    const text = String(value).trim()
+    // Campo svuotato = azzera la data. L'input nativo garantisce sempre
+    // YYYY-MM-DD quando non e' vuoto, quindi qui non serve validare il
+    // formato: e' esattamente cio' che Postgres si aspetta per un timestamp.
+    return text ? text : null
   }
   return String(value)
 }
@@ -185,13 +205,16 @@ function EditRecordDialogBody({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildBody(changed)),
       })
-      if (!res.ok) throw new Error("Salvataggio non riuscito")
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null
+        throw new Error(body?.error ?? "Salvataggio non riuscito")
+      }
       toast.success("Modifiche salvate")
       onOpenChange(false)
       onSaved?.()
       router.refresh()
-    } catch {
-      toast.error("Salvataggio non riuscito")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Salvataggio non riuscito")
     } finally {
       setSaving(false)
     }

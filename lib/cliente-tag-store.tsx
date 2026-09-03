@@ -31,6 +31,13 @@ export type ClienteReferencePayload = {
   owners: ClienteReferenceOption[]
   /** Nomi di tutti gli utenti, inclusi gli inattivi, per i record storici. */
   ownerNames: Record<string, string>
+  /**
+   * Valori distinti REALMENTE presenti in clienti.installatore (colonna
+   * testo, non FK). Il filtro server confronta esattamente questa colonna:
+   * usare l'anagrafica installatori invece di questi valori rischierebbe
+   * mismatch su nomi storici/refusi che non esistono più li'.
+   */
+  installerNames: string[]
 }
 
 /**
@@ -109,6 +116,7 @@ const EMPTY: ClienteReferencePayload = {
   clienteTagIds: {},
   owners: [],
   ownerNames: {},
+  installerNames: [],
 }
 
 const Ctx = createContext<ClienteTagContextValue | null>(null)

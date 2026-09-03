@@ -111,7 +111,7 @@ export function ClienteCell({
         <span className="flex min-w-0 items-center justify-between gap-2.5">
           <span className="flex min-w-0 items-center gap-2.5">
             <ClienteAvatar nome={cliente["Nome Clienti"]} className="size-9 text-xs" />
-            <span className="truncate font-semibold text-foreground">
+            <span className="line-clamp-2 break-words font-semibold text-foreground">
               {cliente["Nome Clienti"]}
             </span>
           </span>
@@ -127,7 +127,7 @@ export function ClienteCell({
         <span className="flex min-w-0 items-center justify-between gap-2.5">
           <span className="flex min-w-0 items-center gap-2.5">
             <ClienteAvatar nome={cliente["Nome Clienti"]} className="size-7 text-[10px]" />
-            <span className="truncate font-semibold text-foreground">
+            <span className="line-clamp-2 break-words font-semibold text-foreground">
               {cliente["Nome Clienti"]}
             </span>
           </span>

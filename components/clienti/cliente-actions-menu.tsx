@@ -275,6 +275,10 @@ export function ClienteActionsMenu({
                   <IconTags size={16} stroke={1.8} data-icon="inline-start" />
                   Gestisci tag
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onOpenSettings("colonne")}>
+                  <IconTable size={16} stroke={1.8} data-icon="inline-start" />
+                  Gestisci colonne
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={onCheckDuplicates}>
                   <IconCopyCheck size={16} stroke={1.8} data-icon="inline-start" />
                   Controlla duplicati

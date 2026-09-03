@@ -534,7 +534,7 @@ export function ClienteTable({
                     key={col.id}
                     className={cn(
                       LIGHTNING.cell,
-                      "whitespace-nowrap",
+                      col.id === "Nome Clienti" ? "whitespace-normal" : "whitespace-nowrap",
                       cellPad,
                       left ? "text-left" : "text-center",
                     )}

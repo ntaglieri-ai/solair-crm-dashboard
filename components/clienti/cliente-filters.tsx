@@ -14,9 +14,8 @@ import { Button } from "@/components/ui/button"
 import {
   STATO_CLIENTE_VALUES,
   SEDE_LABELS,
-  mockCommerciali,
-  mockInstallatori,
 } from "@/lib/mock-data"
+import { useClienteTags } from "@/lib/cliente-tag-store"
 
 export interface ClienteFilterState {
   search: string
@@ -136,6 +135,7 @@ export function ClienteQuickFilterFields({
   ) => onChange({ ...filters, [key]: value })
 
   const hasActiveFilters = countActiveClienteFilters(filters) > 0
+  const { owners, installerNames } = useClienteTags()
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -172,7 +172,9 @@ export function ClienteQuickFilterFields({
           placeholder="Proprietario"
           options={[
             ["all", "Tutti i proprietari"],
-            ...mockCommerciali.map((c) => [c, c] as [string, string]),
+            // value = id (UUID): il server filtra su clienti_proprietario_id,
+            // non sul nome — mandare il nome non avrebbe mai potuto matchare.
+            ...owners.map((o) => [o.id, o.nome] as [string, string]),
           ]}
         />
 
@@ -184,7 +186,10 @@ export function ClienteQuickFilterFields({
           placeholder="Installatore"
           options={[
             ["all", "Tutti gli installatori"],
-            ...mockInstallatori.map((i) => [i, i] as [string, string]),
+            // Nomi distinti REALI presenti sui clienti (colonna testo), non
+            // l'anagrafica installatori: e' quella colonna a essere
+            // confrontata dal filtro server.
+            ...installerNames.map((i) => [i, i] as [string, string]),
           ]}
         />
 

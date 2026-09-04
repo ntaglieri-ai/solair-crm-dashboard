@@ -1841,7 +1841,7 @@ export interface ClienteRecord {
   POD?: string
   Zona?: string
   "Data ammissibilità"?: string
-  "Data sopralluogo"?: string
+  "Data sopralluogo"?: string | null
   "Data affidamento sopralluogo"?: string
   "Stato sopralluogo"?: string
   /**
@@ -1905,6 +1905,9 @@ export interface CustomFieldValue {
   label: string
   tipo: string
   value: unknown
+  column?: string
+  required?: boolean
+  options?: string[]
 }
 
 export interface ClienteCompito {

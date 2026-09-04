@@ -1,78 +1,52 @@
 import { NextResponse } from "next/server"
 import { getFullLeadById } from "@/lib/leads/repository"
-import { patchLead } from "@/lib/leads/server-store"
-import { createClienteRecord } from "@/lib/clienti/repository"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { createClient } from "@/lib/supabase/server"
 import { requireApiRecord } from "@/lib/permissions/server"
+import { resolveOwnerScope, type OwnerScope } from "@/lib/permissions/data-scope"
+import { applicaTagItalia } from "@/lib/clienti/tag-italia"
 
-// Conversione reale Lead -> Cliente: prima "Converti a cliente" chiudeva
-// solo il dialog, nessuna azione reale (audit "funzionalità finte" 24/07).
-// Crea un cliente collegato (clienti.lead_id) con i dati anagrafici del
-// lead, poi marca il lead come "Convertito" e salva l'id del cliente creato
-// (leads.account_convertito_id) — cosi' il lead resta nello storico con il
-// riferimento a dove è confluito, invece di sparire o duplicarsi in modo
-// scollegato.
-export async function POST(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+function scopeIds(scope: OwnerScope): string[] | null {
+  return scope.kind === "all" ? null : scope.kind === "owners" ? scope.ownerIds : []
+}
+
+export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const guardLead = await requireApiRecord("lead", "edit")
   if (guardLead.response) return guardLead.response
   const guardCliente = await requireApiRecord("clienti", "create")
   if (guardCliente.response) return guardCliente.response
-
   const { id } = await params
   const lead = await getFullLeadById(id)
-  if (!lead) {
-    return NextResponse.json({ error: "Lead non trovato" }, { status: 404 })
-  }
-
-  // Bug 6.1 (report Vito, 02/09): niente qui impediva una seconda
-  // conversione dello stesso lead — ne' la route ne' il pulsante in UI
-  // (che si disabilita solo DURANTE la richiesta in corso, non dopo che e'
-  // andata a buon fine). Riaprire il dialog e ricliccare "Converti" creava
-  // un secondo cliente agganciato allo stesso lead. Controllo entrambi i
-  // segnali di conversione gia' avvenuta: lo stato e il riferimento al
-  // cliente gia' creato, non solo uno dei due, in caso disallineassero.
+  if (!lead) return NextResponse.json({ error: "Lead non trovato" }, { status: 404 })
   if (lead["Stato Lead"] === "Convertito" || lead["Account convertito"]) {
-    return NextResponse.json(
-      { error: "Questo lead è già stato convertito in cliente." },
-      { status: 409 },
-    )
+    return NextResponse.json({ error: "Questo lead è già stato convertito in cliente." }, { status: 409 })
   }
-
-  // Gate dei tre documenti obbligatori RIMOSSO (report Vito, punto 17,
-  // 03/09): era un blocco di processo esplicito, non un bug — Vito ha
-  // chiesto di poter convertire un lead anche senza i tre documenti gia'
-  // caricati. Il conteggio in UI (GateDocumentiLabel) resta come indicatore
-  // informativo, non blocca piu' la conversione.
-
-  const cliente = await createClienteRecord(
-    {
-      "Nome Clienti": lead["Nome Lead"],
-      Nome: lead.Nome || undefined,
-      Cognome: lead.Cognome || undefined,
-      "E-mail": lead["E-mail"] || undefined,
-      Cellulare: lead.Telefono || undefined,
-      Sede: lead.Sede,
-      "Clienti Proprietario": lead["Lead Proprietario"] || undefined,
-      // La provincia del lead diventa la provincia postale del cliente: e' il
-      // dato su cui createClienteRecord applica il tag "Italia" automatico
-      // (spec 2.3). Senza questa riga il cliente nascerebbe senza provincia e
-      // la regola non potrebbe scattare al momento della conversione.
-      "Provincia indirizzo postale": lead.Provincia || undefined,
-    },
-    lead.id,
-  )
-
-  const updated = await patchLead(id, {
-    "Stato Lead": "Convertito",
-    "Account convertito": cliente.id,
+  const admin = createAdminClient()
+  if (!admin) return NextResponse.json({ error: "Servizio conversione non disponibile" }, { status: 503 })
+  const [leadScope, clienteScope] = await Promise.all([
+    resolveOwnerScope(guardLead.permissions.snapshot, "lead"),
+    resolveOwnerScope(guardCliente.permissions.snapshot, "clienti"),
+  ])
+  // Lock, scope check and both writes in one transaction. No unsafe fallback.
+  const { data: clienteId, error } = await admin.rpc("crm_convert_lead_atomic", {
+    p_lead_id: id, p_lead_owner_ids: scopeIds(leadScope), p_cliente_owner_ids: scopeIds(clienteScope),
   })
-  if (!updated) {
-    // Il cliente e' comunque stato creato: non blocchiamo la risposta per
-    // questo, ma lo segnaliamo per non far credere che sia andato storto.
-    console.error(`[converti] cliente ${cliente.id} creato ma lead ${id} non aggiornato`)
+  if (error) {
+    const status = error.code === "23505" ? 409 : error.code === "P0002" ? 404 : error.code === "42501" ? 403 : 503
+    const message = status === 409 ? "Questo lead è già stato convertito in cliente."
+      : status === 404 ? "Lead non trovato" : status === 403 ? "Conversione non consentita per questo proprietario"
+        : "Conversione non riuscita. Ricarica il Lead per verificarne lo stato prima di riprovare."
+    console.error("[converti] RPC", error.code)
+    return NextResponse.json({ error: message }, { status })
   }
-
-  return NextResponse.json({ clienteId: cliente.id }, { status: 201 })
+  // Preserve the ancillary tag rule using the committed province.
+  // Its failure must not turn a committed conversion into an apparent failure.
+  try {
+    const supabase = await createClient()
+    const { data: cliente } = await supabase.from("clienti").select("provincia_indirizzo_postale").eq("id", clienteId).single()
+    if (cliente) await applicaTagItalia(clienteId, cliente.provincia_indirizzo_postale)
+  } catch {
+    console.warn("[converti] Verifica tag Italia non riuscita")
+  }
+  return NextResponse.json({ clienteId }, { status: 201 })
 }

@@ -24,23 +24,20 @@ import {
 import {
   STATO_CLIENTE_VALUES,
   SEDE_LABELS,
-  mockCommerciali,
-  mockInstallatori,
   type ClienteRecord,
   type StatoCliente,
   type SedeLabel,
 } from "@/lib/mock-data"
+import { useClienteTags } from "@/lib/cliente-tag-store"
 
 interface NewClienteDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onCreate: (cliente: ClienteRecord) => void
+  onCreate: (cliente: ClienteRecord) => Promise<void>
 }
 
 const STATO_ITEMS = Object.fromEntries(STATO_CLIENTE_VALUES.map((s) => [s, s]))
 const SEDE_ITEMS = Object.fromEntries(SEDE_LABELS.map((s) => [s, s]))
-const COMM_ITEMS = Object.fromEntries(mockCommerciali.map((c) => [c, c]))
-const INST_ITEMS = Object.fromEntries(mockInstallatori.map((i) => [i, i]))
 
 interface FormState {
   nome: string
@@ -60,8 +57,8 @@ const EMPTY_FORM: FormState = {
   cellulare: "",
   stato: "Nuovo contratto digitale",
   sede: SEDE_LABELS[0],
-  proprietario: mockCommerciali[0],
-  installatore: mockInstallatori[0],
+  proprietario: "",
+  installatore: "",
 }
 
 function nowStamp() {
@@ -84,14 +81,18 @@ export function NewClienteDialog({
   onCreate,
 }: NewClienteDialogProps) {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  const [saving, setSaving] = useState(false)
+  const { owners, installers, loading } = useClienteTags()
+  const ownerItems = Object.fromEntries(owners.map((owner) => [owner.id, owner.nome]))
+  const installerItems = Object.fromEntries(installers.map((installer) => [installer.id, installer.nome]))
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }))
 
   const canSubmit = form.nome.trim() !== "" && form.cognome.trim() !== ""
 
-  const handleSubmit = () => {
-    if (!canSubmit) return
+  const handleSubmit = async () => {
+    if (!canSubmit || saving || loading) return
     const stamp = nowStamp()
     const nomeCompleto = `${form.nome.trim()} ${form.cognome.trim()}`.trim()
     const cliente: ClienteRecord = {
@@ -107,21 +108,27 @@ export function NewClienteDialog({
       Cognome: form.cognome.trim(),
       Cellulare: form.cellulare.trim(),
       "Clienti Proprietario": form.proprietario,
-      Installatore: form.installatore,
+      Installatore: installers.find((installer) => installer.id === form.installatore)?.nome,
+      InstallatoreId: form.installatore || null,
       "Creato da": form.proprietario,
       "Ora creazione": stamp,
       Stato: form.stato,
     }
-    onCreate(cliente)
-    toast.success("Cliente creato", {
-      description: `${nomeCompleto} è stato aggiunto all'elenco.`,
-    })
-    setForm(EMPTY_FORM)
-    onOpenChange(false)
+    setSaving(true)
+    try {
+      await onCreate(cliente)
+      toast.success("Cliente creato", { description: `${nomeCompleto} è stato aggiunto all'elenco.` })
+      setForm(EMPTY_FORM)
+      onOpenChange(false)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Creazione non riuscita")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => { if (!saving) onOpenChange(next) }}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Nuovo cliente</DialogTitle>
@@ -171,13 +178,13 @@ export function NewClienteDialog({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label>Stato</Label>
+            <Label htmlFor="cli-stato">Stato</Label>
             <Select
               items={STATO_ITEMS}
               value={form.stato}
               onValueChange={(v) => set("stato", v as StatoCliente)}
             >
-              <SelectTrigger>
+              <SelectTrigger id="cli-stato">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -192,13 +199,13 @@ export function NewClienteDialog({
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>Sede</Label>
+            <Label htmlFor="cli-sede">Sede</Label>
             <Select
               items={SEDE_ITEMS}
               value={form.sede}
               onValueChange={(v) => set("sede", v as SedeLabel)}
             >
-              <SelectTrigger>
+              <SelectTrigger id="cli-sede">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -213,20 +220,20 @@ export function NewClienteDialog({
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>Clienti Proprietario</Label>
+            <Label htmlFor="cli-proprietario">Clienti Proprietario</Label>
             <Select
-              items={COMM_ITEMS}
+              items={ownerItems}
               value={form.proprietario}
               onValueChange={(v) => set("proprietario", v ?? "")}
             >
-              <SelectTrigger>
-                <SelectValue />
+              <SelectTrigger id="cli-proprietario">
+                <SelectValue placeholder="Seleziona proprietario" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {mockCommerciali.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
+                  {owners.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.nome}
                     </SelectItem>
                   ))}
                 </SelectGroup>
@@ -234,20 +241,20 @@ export function NewClienteDialog({
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>Installatore</Label>
+            <Label htmlFor="cli-installatore">Installatore</Label>
             <Select
-              items={INST_ITEMS}
+              items={installerItems}
               value={form.installatore}
               onValueChange={(v) => set("installatore", v ?? "")}
             >
-              <SelectTrigger>
-                <SelectValue />
+              <SelectTrigger id="cli-installatore">
+                <SelectValue placeholder="Seleziona installatore" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {mockInstallatori.map((i) => (
-                    <SelectItem key={i} value={i}>
-                      {i}
+                  {installers.map((i) => (
+                    <SelectItem key={i.id} value={i.id}>
+                      {i.nome}
                     </SelectItem>
                   ))}
                 </SelectGroup>
@@ -257,15 +264,15 @@ export function NewClienteDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Annulla
           </Button>
           <Button
             className="bg-teal text-teal-foreground hover:bg-teal/90"
-            disabled={!canSubmit}
+            disabled={!canSubmit || saving || loading}
             onClick={handleSubmit}
           >
-            Crea cliente
+            {saving ? "Salvataggio..." : "Crea cliente"}
           </Button>
         </DialogFooter>
       </DialogContent>

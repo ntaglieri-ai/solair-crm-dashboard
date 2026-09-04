@@ -78,7 +78,7 @@ export function ClienteRowContextMenu({
   onUpdate: (cliente: ClienteRecord, patch: Partial<ClienteRecord>) => void
   onRefresh: () => void
 }) {
-  const { owners, installerNames } = useClienteTags()
+  const { owners, installers } = useClienteTags()
   const permissions = usePermissions()
   const router = useRouter()
   const [tagOpen, setTagOpen] = useState(false)
@@ -347,7 +347,7 @@ export function ClienteRowContextMenu({
         onOpenChange={setEditOpen}
         title="Modifica cliente"
         endpoint={`/api/clienti/${cliente.id}`}
-        fields={buildClienteEditFields(cliente, permissions, installerNames)}
+        fields={buildClienteEditFields(cliente, permissions, installers)}
         onSaved={onRefresh}
       />
 

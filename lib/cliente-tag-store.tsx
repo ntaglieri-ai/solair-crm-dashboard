@@ -38,6 +38,8 @@ export type ClienteReferencePayload = {
    * mismatch su nomi storici/refusi che non esistono più li'.
    */
   installerNames: string[]
+  /** Anagrafica reale per assegnazione; separata dai nomi storici dei filtri. */
+  installers: ClienteReferenceOption[]
 }
 
 /**
@@ -117,6 +119,7 @@ const EMPTY: ClienteReferencePayload = {
   owners: [],
   ownerNames: {},
   installerNames: [],
+  installers: [],
 }
 
 const Ctx = createContext<ClienteTagContextValue | null>(null)

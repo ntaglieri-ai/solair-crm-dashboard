@@ -356,17 +356,9 @@ export function ClientiClient({
     setSelected(new Set())
   }
 
-  const handleCreate = (cliente: ClienteRecord) => {
-    createCliente.mutate(cliente, {
-      onSuccess: () => {
-        toast.success("Cliente creato", {
-          description: `${cliente["Nome Clienti"]} è stato aggiunto.`,
-        })
-        setNewClienteOpen(false)
-        setPage(1)
-      },
-      onError: () => toast.error("Errore nella creazione del cliente"),
-    })
+  const handleCreate = async (cliente: ClienteRecord) => {
+    await createCliente.mutateAsync(cliente)
+    setPage(1)
   }
 
   const handleCheckDuplicates = () => {

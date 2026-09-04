@@ -67,7 +67,7 @@ function GateDocumentiLabel({
   if (stato.isError || !stato.data) {
     return (
       <span className="text-xs text-destructive">
-        Documenti obbligatori non verificabili
+        Conteggio documenti non disponibile — conversione consentita
       </span>
     )
   }
@@ -76,13 +76,13 @@ function GateDocumentiLabel({
   if (completo) {
     return (
       <span className="text-xs text-success">
-        {richiesti} documenti obbligatori caricati
+        {richiesti} documenti caricati
       </span>
     )
   }
   return (
     <span className="text-xs text-muted-foreground">
-      Servono {richiesti} documenti obbligatori (caricati: {count}/{richiesti})
+      Documenti caricati: {count}/{richiesti} — conversione consentita
     </span>
   )
 }

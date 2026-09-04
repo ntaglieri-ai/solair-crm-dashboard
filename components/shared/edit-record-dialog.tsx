@@ -19,6 +19,9 @@ import { CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
 import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
 import type { Lead, ClienteRecord } from "@/lib/mock-data"
 import { STATO_CLIENTE_VALUES } from "@/lib/mock-data"
+import { CUSTOM_FIELD_PREFIX, validateCustomValue } from "@/lib/clienti/custom-fields"
+import type { CustomFieldValue } from "@/lib/mock-data"
+import type { ClienteReferenceOption } from "@/lib/cliente-tag-store"
 import type { PermissionEngine } from "@/lib/permissions/types"
 import {
   Select,
@@ -32,9 +35,11 @@ export type EditField = {
   key: string
   label: string
   value: unknown
-  type?: "text" | "email" | "tel" | "number" | "boolean" | "textarea" | "date" | "select"
+  type?: "text" | "email" | "tel" | "number" | "boolean" | "textarea" | "date" | "datetime-local" | "select"
   /** Solo per type "select": valori ammessi nella tendina. */
   options?: string[]
+  optionLabels?: Record<string, string>
+  custom?: CustomFieldValue
 }
 
 type EditValue = string | boolean
@@ -51,9 +56,15 @@ function fieldType(type: "text" | "numeric" | "boolean" | "timestamp") {
   return "text"
 }
 
-function initialEditValue(field: EditField): EditValue {
+export function initialEditValue(field: EditField): EditValue {
   if (field.type === "boolean") return field.value === true
   if (field.value === null || field.value === undefined) return ""
+  if (field.custom?.tipo === "multiselect") return Array.isArray(field.value) ? field.value.join("\n") : ""
+  if (field.type === "datetime-local") {
+    const date = new Date(String(field.value))
+    if (!Number.isFinite(date.getTime())) return ""
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
+  }
   if (field.type === "date") {
     // L'input nativo type="date" richiede esattamente YYYY-MM-DD: un
     // timestamp ISO completo (es. "2026-08-26T10:00:00+00:00") non renderizza
@@ -64,14 +75,23 @@ function initialEditValue(field: EditField): EditValue {
   return String(field.value)
 }
 
-function outgoingEditValue(field: EditField, value: EditValue) {
+export function outgoingEditValue(field: EditField, value: EditValue): unknown {
+  if (field.custom) {
+    const plain = { ...field, custom: undefined }
+    const parsed = field.custom.tipo === "multiselect"
+      ? String(value).split("\n").map((v) => v.trim()).filter(Boolean)
+      : outgoingEditValue(plain, value)
+    return validateCustomValue(field.custom, parsed)
+  }
   if (field.type === "boolean") return value === true
   if (field.type === "number") {
     const text = String(value).trim()
     if (!text) return null
     const number = Number(text)
-    return Number.isFinite(number) ? number : null
+    if (!Number.isFinite(number)) throw new Error(`${field.label}: numero non valido`)
+    return number
   }
+  if (field.type === "datetime-local") return value ? new Date(String(value)).toISOString() : null
   if (field.type === "date") {
     const text = String(value).trim()
     // Campo svuotato = azzera la data. L'input nativo garantisce sempre
@@ -115,13 +135,12 @@ export function buildLeadEditFields(
 export function buildClienteEditFields(
   cliente: ClienteRecord,
   permissions: PermissionEngine,
-  // Report Vito (11, 12): Stato e Installatore erano testo libero nel form
-  // di modifica anche se le tendine "vere" esistono gia' altrove nell'app
-  // (menu contestuale riga, filtri). installerNames = valori reali distinti
-  // gia' presenti sui clienti, stessa fonte usata per il filtro (bug 4/12).
-  installerNames: string[],
+  // Stato usa i valori canonici; Installatore usa UUID e nomi dell'anagrafica
+  // reale, senza confondere l'elenco di assegnazione con i filtri storici.
+  installers: ClienteReferenceOption[],
 ): EditField[] {
-  return CLIENTI_RECORD_FIELDS
+  const fields: EditField[] = CLIENTI_RECORD_FIELDS
+    .filter((field) => !["Ora modifica", "Ora creazione"].includes(field.appField))
     .filter((field) => permissions.canField("clienti", field.column, "edit"))
     .filter((field) => isEditableRuntimeValue(cliente[field.appField as keyof ClienteRecord]))
     .map((field) => {
@@ -135,12 +154,19 @@ export function buildClienteEditFields(
         }
       }
       if (field.appField === "Installatore") {
+        const currentId = cliente.InstallatoreId || ""
+        const options = [...installers.map((installer) => installer.id)]
+        const labels = Object.fromEntries(installers.map((installer) => [installer.id, installer.nome]))
+        // A historical value remains visible and unchanged until a real installer is selected.
+        const current = currentId || (cliente.Installatore ? "__legacy_installer__" : "")
+        if (current && !options.includes(current)) { options.push(current); labels[current] = cliente.Installatore || "Installatore storico" }
         return {
-          key: field.appField,
+          key: "InstallatoreId",
           label: field.appField,
-          value: cliente[field.appField as keyof ClienteRecord],
+          value: current,
           type: "select" as const,
-          options: installerNames,
+          options,
+          optionLabels: labels,
         }
       }
       return {
@@ -150,6 +176,13 @@ export function buildClienteEditFields(
         type: isLongField(field.appField) ? "textarea" as const : fieldType(field.type),
       }
     })
+  for (const custom of cliente.customFields ?? []) {
+    if (!custom.column || !permissions.canField("clienti", custom.column, "edit")) continue
+    const type: EditField["type"] = ({ number: "number", currency: "number", boolean: "boolean", date: "date", datetime: "datetime-local", email: "email", phone: "tel", textarea: "textarea", multiselect: "textarea" } as Record<string, EditField["type"]>)[custom.tipo]
+      ?? (custom.tipo === "select" && custom.options?.length ? "select" : "text")
+    fields.push({ key: `${CUSTOM_FIELD_PREFIX}${custom.key}`, label: `${custom.label}${custom.required ? " *" : ""}`, value: custom.value, type, options: custom.options, custom })
+  }
+  return fields
 }
 
 /**
@@ -219,22 +252,24 @@ function EditRecordDialogBody({
   const router = useRouter()
 
   async function handleSave() {
-    const changed = Object.fromEntries(
-      fields
-        .filter((field) => values[field.key] !== initialValues[field.key])
-        .map((field) => [
-          field.key,
-          outgoingEditValue(field, values[field.key] ?? ""),
-        ]),
-    )
-
-    if (Object.keys(changed).length === 0) {
-      onOpenChange(false)
-      return
-    }
-
-    setSaving(true)
+    if (saving) return
     try {
+      const changed = Object.fromEntries(
+        fields
+          .filter((field) => values[field.key] !== initialValues[field.key])
+          .filter((field) => !(field.key === "InstallatoreId" && values[field.key] === "__legacy_installer__"))
+          .map((field) => [
+            field.key,
+            outgoingEditValue(field, values[field.key] ?? ""),
+          ]),
+      )
+
+      if (Object.keys(changed).length === 0) {
+        onOpenChange(false)
+        return
+      }
+
+      setSaving(true)
       const res = await fetch(endpoint, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -291,6 +326,7 @@ function EditRecordDialogBody({
                     />
                   ) : field.type === "select" ? (
                     <Select
+                      items={Object.fromEntries((field.options ?? []).map((option) => [option, field.optionLabels?.[option] ?? option]))}
                       value={String(values[field.key] ?? "")}
                       onValueChange={(v) =>
                         setValues((prev) => ({ ...prev, [field.key]: v ?? "" }))
@@ -300,9 +336,10 @@ function EditRecordDialogBody({
                         <SelectValue placeholder={`Seleziona ${field.label.toLowerCase()}`} />
                       </SelectTrigger>
                       <SelectContent>
+                        {(field.key === "InstallatoreId" || field.custom && !field.custom.required) && <SelectItem value="">Non assegnato</SelectItem>}
                         {(field.options ?? []).map((option) => (
                           <SelectItem key={option} value={option}>
-                            {option}
+                            {field.optionLabels?.[option] ?? option}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -318,6 +355,7 @@ function EditRecordDialogBody({
                       }
                     />
                   )}
+                  {field.custom?.tipo === "multiselect" && <p className="text-xs text-muted-foreground">Un valore per riga.</p>}
                 </>
               )}
             </div>

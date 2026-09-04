@@ -5,16 +5,17 @@ import type { ClienteReferencePayload } from "@/lib/cliente-tag-store"
 
 export async function loadClienteReferenceData(): Promise<ClienteReferencePayload> {
   const supabase = await createClient()
-  const [tagsResult, ownersResult, installerRowsResult] = await Promise.all([
+  const [tagsResult, ownersResult, installerRowsResult, installersResult] = await Promise.all([
     supabase.from("tag").select("id,nome,colore,created_at").eq("modulo", "cliente").order("nome"),
     supabase.from("utenti").select("id,nome,attivo").order("nome"),
     // Valori distinti REALI dalla colonna testo clienti.installatore — non
     // dall'anagrafica installatori, perche' e' quella colonna a essere
     // confrontata dal filtro server (vedi tipo ClienteReferencePayload).
     supabase.from("clienti").select("installatore").not("installatore", "is", null).neq("installatore", ""),
+    supabase.from("installatori").select("id,nome").or("attivo.eq.true,attivo.is.null").order("nome"),
   ])
 
-  const error = tagsResult.error ?? ownersResult.error ?? installerRowsResult.error
+  const error = tagsResult.error ?? ownersResult.error ?? installerRowsResult.error ?? installersResult.error
   if (error) throw new Error(`Riferimenti Cliente: ${error.message}`)
 
   const installerNames = [...new Set(
@@ -35,5 +36,6 @@ export async function loadClienteReferenceData(): Promise<ClienteReferencePayloa
     owners: (ownersResult.data ?? []).filter((owner) => owner.attivo).map(({ id, nome }) => ({ id, nome })),
     ownerNames: Object.fromEntries((ownersResult.data ?? []).map((owner) => [owner.id, owner.nome])),
     installerNames,
+    installers: (installersResult.data ?? []).map(({ id, nome }) => ({ id, nome })),
   }
 }

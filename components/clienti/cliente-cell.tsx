@@ -122,10 +122,10 @@ export function ClienteCell({
 
     case "Nome Clienti":
       return density === "comoda" ? (
-        <span className="flex min-w-0 items-center justify-between gap-2.5">
-          <span className="flex min-w-0 items-center gap-2.5">
+        <span className="flex w-full min-w-0 flex-wrap items-center justify-between gap-2.5">
+          <span className="flex min-w-0 flex-1 basis-40 items-center gap-2.5">
             <ClienteAvatar nome={cliente["Nome Clienti"]} className="size-9 text-xs" />
-            <span className="line-clamp-2 break-words font-semibold text-foreground">
+            <span className="min-w-0 whitespace-normal font-semibold text-foreground [overflow-wrap:anywhere]">
               {cliente["Nome Clienti"]}
             </span>
           </span>
@@ -138,10 +138,10 @@ export function ClienteCell({
           />
         </span>
       ) : (
-        <span className="flex min-w-0 items-center justify-between gap-2.5">
-          <span className="flex min-w-0 items-center gap-2.5">
+        <span className="flex w-full min-w-0 flex-wrap items-center justify-between gap-2.5">
+          <span className="flex min-w-0 flex-1 basis-40 items-center gap-2.5">
             <ClienteAvatar nome={cliente["Nome Clienti"]} className="size-7 text-[10px]" />
-            <span className="line-clamp-2 break-words font-semibold text-foreground">
+            <span className="min-w-0 whitespace-normal font-semibold text-foreground [overflow-wrap:anywhere]">
               {cliente["Nome Clienti"]}
             </span>
           </span>

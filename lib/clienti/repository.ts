@@ -16,6 +16,9 @@ import type {
 import { CLIENTI_RECORD_COLUMNS, CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
 import { applicaTagItalia } from "@/lib/clienti/tag-italia"
 import { DEFAULT_CLIENTI_PARAMS } from "@/lib/clienti/api-types"
+import { getCurrentPermissions } from "@/lib/permissions/server"
+import { buildCustomPatch, CUSTOM_FIELD_PREFIX, customOptions, validDate, type CustomFieldMetadata } from "./custom-fields"
+import { resolveInstallerAssignment } from "./installer-assignment"
 import { applyOwnerScope, filterCurrentAccessibleRecordIds, resolveCurrentOwnerScope } from "@/lib/permissions/data-scope"
 
 // Colonne proiettate in lettura — mai SELECT *.
@@ -30,6 +33,7 @@ const LIST_COLUMNS = [
   "tag",
   "stato",
   "sede",
+  "zona",
   "installatore",
   "installatore_id",
   "clienti_proprietario",
@@ -38,6 +42,8 @@ const LIST_COLUMNS = [
   "consenso_contatto_email",
   "created_at",
   "updated_at",
+  "ora_modifica",
+  "ora_creazione",
 ].join(",")
 
 const DETAIL_COLUMNS = [
@@ -72,7 +78,7 @@ const SORT_COLUMN: Record<string, string> = {
   "Codice fiscale": "codice_fiscale",
   Stato: "stato",
   Sede: "sede",
-  "Clienti Proprietario": "clienti_proprietario_id",
+  "Clienti Proprietario": "proprietario_ordinamento",
   // Ordina sul nome (colonna testo, popolata da Zoho): installatore_id e' un
   // uuid quasi sempre null, ordinava di fatto per niente.
   Installatore: "installatore",
@@ -81,8 +87,8 @@ const SORT_COLUMN: Record<string, string> = {
   // Rimossa per errore dal commit del filtro TAG (8de2d6e, patch generato
   // su un diff non sincronizzato), rimessa qui.
   Zona: "zona",
-  "Ora modifica": "updated_at",
-  "Ora creazione": "created_at",
+  "Ora modifica": "modifica_visualizzata",
+  "Ora creazione": "creazione_visualizzata",
 }
 
 function parseTags(value: unknown): string[] {
@@ -153,16 +159,17 @@ export async function queryClienti(
   options?: { ids?: string[] },
 ): Promise<ClientiListResponse> {
   const supabase = await createClient()
-  const sortCol = (params.sortBy && SORT_COLUMN[params.sortBy]) || "updated_at"
+  const sortCol = (params.sortBy && SORT_COLUMN[params.sortBy]) || "modifica_visualizzata"
   const ascending = params.sortDir === "asc"
   const from = (params.page - 1) * params.pageSize
   const to = from + params.pageSize - 1
 
   // Construisce entrambe le query con gli stessi filtri per consistenza.
   let listQ = supabase
-    .from("clienti")
+    .from("clienti_report_list")
     .select(LIST_COLUMNS)
     .order(sortCol, { ascending, nullsFirst: false })
+    .order("id", { ascending: true })
     .range(from, to)
 
   let countQ = supabase
@@ -227,8 +234,10 @@ export async function queryClienti(
     countQ,
   ])
 
-  if (error) console.error("[clienti/repository] queryClienti:", error.message)
-  if (countError) console.error("[clienti/repository] count:", countError.message)
+  if (error || countError) {
+    console.error("[clienti/repository] queryClienti:", (error ?? countError)?.message)
+    throw new Error("Caricamento clienti non riuscito. Verificare le migrazioni del database.")
+  }
 
   const rows = (data ?? []).map((r) => mapRow(r as unknown as Record<string, unknown>))
   const pageIds = rows.map((r) => r.id)
@@ -328,7 +337,7 @@ async function loadClienteCustomFieldValues(
 ): Promise<ClienteRecord["customFields"]> {
   const { data: fields, error: fieldsError } = await supabase
     .from("crm_custom_fields")
-    .select("field_key, label, tipo, column_name")
+    .select("field_key, label, tipo, column_name, required, options")
     .eq("table_name", "clienti")
     .eq("visible", true)
     .is("deleted_at", null)
@@ -336,7 +345,10 @@ async function loadClienteCustomFieldValues(
 
   if (fieldsError || !fields || fields.length === 0) return []
 
-  const columns = fields.map((f) => f.column_name as string)
+  const permissions = await getCurrentPermissions()
+  const visibleFields = fields.filter((f) => /^[a-z][a-z0-9_]*$/.test(f.column_name) && permissions.canField("clienti", f.column_name, "view"))
+  if (!visibleFields.length) return []
+  const columns = visibleFields.map((f) => f.column_name as string)
   const { data: row, error: valuesError } = await supabase
     .from("clienti")
     .select(columns.join(","))
@@ -345,10 +357,13 @@ async function loadClienteCustomFieldValues(
 
   if (valuesError || !row) return []
 
-  return fields.map((f) => ({
+  return visibleFields.map((f) => ({
     key: f.field_key as string,
     label: f.label as string,
     tipo: f.tipo as string,
+    column: f.column_name as string,
+    required: Boolean(f.required),
+    options: customOptions(f.options),
     value: (row as unknown as Record<string, unknown>)[f.column_name as string] ?? null,
   }))
 }
@@ -390,6 +405,9 @@ export async function createClienteRecord(
   leadId?: string,
 ): Promise<ClienteRecord> {
   const supabase = await createClient()
+  const installer = body.InstallatoreId !== undefined
+    ? await resolveInstallerAssignment(supabase, body.InstallatoreId)
+    : { installatore: body.Installatore || null, installatore_id: null }
   const { data, error } = await supabase
     .from("clienti")
     .insert({
@@ -404,8 +422,7 @@ export async function createClienteRecord(
       clienti_proprietario_id: body["Clienti Proprietario"] || null,
       // installatore = nome (testo), installatore_id = FK uuid: scrivere il
       // nome nell'uuid faceva fallire l'intera insert.
-      installatore: body.Installatore || null,
-      installatore_id: body.InstallatoreId || null,
+      ...installer,
       // Serve alla regola 2.3 (tag "Italia"): la conversione Lead->Cliente
       // porta con se' la provincia del lead, quindi va scritta subito invece
       // di aspettare che qualcuno riapra il cliente e la ricompili a mano.
@@ -441,6 +458,7 @@ export async function updateClienteRecord(
   const row: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   }
+  row.ora_modifica = row.updated_at
   if (patch["Nome Clienti"] !== undefined) row.nome_clienti = patch["Nome Clienti"]
   if (patch.Nome !== undefined) row.nome = patch.Nome
   if (patch.Cognome !== undefined) row.cognome = patch.Cognome
@@ -456,6 +474,10 @@ export async function updateClienteRecord(
   // nell'uuid faceva fallire l'intero update.
   if (patch.Installatore !== undefined) row.installatore = patch.Installatore
   if (patch.InstallatoreId !== undefined) row.installatore_id = patch.InstallatoreId
+  if (patch.InstallatoreId !== undefined) {
+    try { Object.assign(row, await resolveInstallerAssignment(supabase, patch.InstallatoreId)) }
+    catch (error) { onError?.(error instanceof Error ? error.message : "Installatore non valido"); return null }
+  }
   if (patch.Descrizione !== undefined) row.descrizione = patch.Descrizione
 
   // Supporto generico per tutti i campi del record — quelli importati da Zoho
@@ -469,7 +491,30 @@ export async function updateClienteRecord(
   const patchRecord = patch as Record<string, unknown>
   for (const field of CLIENTI_RECORD_FIELDS) {
     if (field.appField in patchRecord && !(field.column in row)) {
+      if (field.type === "timestamp" && patchRecord[field.appField] !== null && patchRecord[field.appField] !== "") {
+        const value = patchRecord[field.appField]
+        if (typeof value !== "string" || !validDate(value.slice(0, 10)) || (value.length !== 10 && !Number.isFinite(Date.parse(value)))) {
+          onError?.(`${field.appField}: data non valida`)
+          return null
+        }
+      }
       row[field.column] = patchRecord[field.appField]
+    }
+  }
+
+  if (Object.keys(patchRecord).some((key) => key.startsWith(CUSTOM_FIELD_PREFIX))) {
+    const { data: fields, error: metadataError } = await supabase.from("crm_custom_fields")
+      .select("field_key,column_name,label,tipo,required,options")
+      .eq("table_name", "clienti").eq("visible", true).eq("system", false).is("deleted_at", null)
+    if (metadataError) { onError?.("Impossibile verificare i campi personalizzati"); return null }
+    const permissions = await getCurrentPermissions()
+    try {
+      const custom = buildCustomPatch(patchRecord, (fields ?? []) as CustomFieldMetadata[],
+        (column) => !CLIENTI_RECORD_COLUMNS.includes(column) && !["id", "updated_at", "created_at", "clienti_proprietario_id", "installatore_id", "lead_id", "sede"].includes(column) && permissions.canField("clienti", column, "edit"))
+      Object.assign(row, custom)
+    } catch (error) {
+      onError?.(error instanceof Error ? error.message : "Campi personalizzati non validi")
+      return null
     }
   }
 
@@ -494,7 +539,11 @@ export async function updateClienteRecord(
     await applicaTagItalia(id, patchRecord["Provincia indirizzo postale"])
   }
 
-  return mapRow(data as unknown as Record<string, unknown>)
+  const updated = mapRow(data as unknown as Record<string, unknown>)
+  if (Object.keys(patchRecord).some((key) => key.startsWith(CUSTOM_FIELD_PREFIX))) {
+    updated.customFields = await loadClienteCustomFieldValues(supabase, id)
+  }
+  return updated
 }
 
 export async function deleteClienteRecords(ids: string[]): Promise<number> {

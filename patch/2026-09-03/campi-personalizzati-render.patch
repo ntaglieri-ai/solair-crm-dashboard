@@ -1,0 +1,214 @@
+diff --git a/components/clienti/cliente-detail-content.tsx b/components/clienti/cliente-detail-content.tsx
+index 495c4c8..b141205 100644
+--- a/components/clienti/cliente-detail-content.tsx
++++ b/components/clienti/cliente-detail-content.tsx
+@@ -29,6 +29,7 @@ import {
+   IconCalendarEvent,
+   IconPlus,
+   IconLock,
++  IconAdjustmentsAlt,
+ } from "@tabler/icons-react"
+ import { Button } from "@/components/ui/button"
+ import { Input } from "@/components/ui/input"
+@@ -59,6 +60,43 @@ function hasValue(v: unknown): boolean {
+   return v !== null && v !== undefined && v !== ""
+ }
+ 
++/**
++ * Stesso trattamento visivo di val()/DataField, esteso ai tipi che i campi
++ * custom possono avere (date/timestamptz formattate, non ISO grezzo).
++ */
++function valCustomField(tipo: string, v: unknown): string {
++  if (v === null || v === undefined || v === "") return "—"
++  if (tipo === "boolean") return v ? "Sì" : "No"
++  if (tipo === "date" || tipo === "timestamptz") {
++    const d = new Date(String(v))
++    if (Number.isNaN(d.getTime())) return String(v)
++    return new Intl.DateTimeFormat("it-IT", { dateStyle: "medium" }).format(d)
++  }
++  return String(v)
++}
++
++/**
++ * Campi aggiunti da CRM Settings → Attributi (report Vito, punto 6): prima
++ * la colonna veniva creata davvero nel database ma non compariva in nessuna
++ * scheda — mancava proprio questa lettura/rendering. Stessa identica resa
++ * grafica di DataField, cosi' un campo custom e' indistinguibile da uno
++ * nativo. Sezione nascosta del tutto se non e' stato aggiunto nulla (il
++ * caso comune oggi), per non introdurre disordine visivo gratuito.
++ */
++function CampiPersonalizzati({ cliente }: { cliente: ClienteRecord }) {
++  const campi = cliente.customFields ?? []
++  if (campi.length === 0) return null
++  return (
++    <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
++      {campi.map((c) => (
++        <DataField key={c.key} label={c.label}>
++          {valCustomField(c.tipo, c.value)}
++        </DataField>
++      ))}
++    </div>
++  )
++}
++
+ /* ---------- Sezione collassabile ---------- */
+ 
+ function Section({
+@@ -191,6 +229,7 @@ function BoolChip({ label, on }: { label: string; on: boolean | undefined }) {
+ 
+ const NAV_ITEMS = [
+   { id: "section-anagrafica", label: "Anagrafica" },
++  { id: "section-campi-personalizzati", label: "Campi personalizzati" },
+   { id: "section-documenti", label: "Documenti" },
+   { id: "section-iter", label: "Iter burocratico" },
+   { id: "section-impianto", label: "Impianto" },
+@@ -203,14 +242,23 @@ const NAV_ITEMS = [
+   { id: "section-attivita", label: "Attività" },
+ ] as const
+ 
+-function RelatedNav({ vediNoteInterne }: { vediNoteInterne: boolean }) {
++function RelatedNav({
++  vediNoteInterne,
++  hasCustomFields,
++}: {
++  vediNoteInterne: boolean
++  hasCustomFields: boolean
++}) {
+   const go = (id: string) =>
+     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+   // La voce "Note interne" sparisce con la sezione: lasciarla porterebbe
+   // a uno scroll verso un'ancora inesistente, e soprattutto rivelerebbe
+-  // che quella sezione esiste per qualcun altro.
++  // che quella sezione esiste per qualcun altro. Stesso motivo per "Campi
++  // personalizzati": non ha senso in nav se non e' stato aggiunto nulla.
+   const items = NAV_ITEMS.filter(
+-    (item) => vediNoteInterne || item.id !== "section-note-interne",
++    (item) =>
++      (vediNoteInterne || item.id !== "section-note-interne") &&
++      (hasCustomFields || item.id !== "section-campi-personalizzati"),
+   )
+   return (
+     <nav className="flex flex-wrap items-center gap-1 border-b border-border pb-3">
+@@ -1417,12 +1465,18 @@ export function ClienteDetailContent({ cliente }: { cliente: ClienteRecord }) {
+ 
+   return (
+     <div className="flex min-w-0 flex-1 flex-col gap-1">
+-      <RelatedNav vediNoteInterne={vediNoteInterne} />
++      <RelatedNav vediNoteInterne={vediNoteInterne} hasCustomFields={(cliente.customFields?.length ?? 0) > 0} />
+ 
+       <Section id="section-anagrafica" title="Anagrafica" icon={IconUser}>
+         <Anagrafica cliente={cliente} />
+       </Section>
+ 
++      {(cliente.customFields?.length ?? 0) > 0 ? (
++        <Section id="section-campi-personalizzati" title="Campi personalizzati" icon={IconAdjustmentsAlt}>
++          <CampiPersonalizzati cliente={cliente} />
++        </Section>
++      ) : null}
++
+       {/* Documenti e Iter spostati subito dopo Anagrafica (report Vito, punti
+           1/10): verifica documentale/layout e sopralluogo sono tra le prime
+           attività operative, prima erano in fondo alla pagina. */}
+diff --git a/lib/clienti/repository.ts b/lib/clienti/repository.ts
+index 102f2f4..a1bd8b0 100644
+--- a/lib/clienti/repository.ts
++++ b/lib/clienti/repository.ts
+@@ -75,6 +75,11 @@ const SORT_COLUMN: Record<string, string> = {
+   // Ordina sul nome (colonna testo, popolata da Zoho): installatore_id e' un
+   // uuid quasi sempre null, ordinava di fatto per niente.
+   Installatore: "installatore",
++  // Report Vito (4): mancava, ordinamento appariva "solo alfabetico" perche'
++  // Zona non era tra le colonne cliccabili — presente ovunque nel resto.
++  // Rimossa per errore dal commit del filtro TAG (8de2d6e, patch generato
++  // su un diff non sincronizzato), rimessa qui.
++  Zona: "zona",
+   "Ora modifica": "updated_at",
+   "Ora creazione": "created_at",
+ }
+@@ -301,6 +306,44 @@ async function loadCompitiCorrelati(id: string): Promise<ClienteCompito[]> {
+   }))
+ }
+ 
++/**
++ * Legge i campi custom visibili per il modulo Clienti (crm_custom_fields,
++ * colonna reale aggiunta via ALTER TABLE da CRM Settings → Attributi) e i
++ * loro valori per QUESTO cliente. Sempre a prova di errore: se la tabella
++ * metadata non esiste ancora o la query fallisce, ritorna array vuoto
++ * invece di far fallire l'intera pagina cliente per un pezzo accessorio.
++ */
++async function loadClienteCustomFieldValues(
++  supabase: Awaited<ReturnType<typeof createClient>>,
++  clienteId: string,
++): Promise<ClienteRecord["customFields"]> {
++  const { data: fields, error: fieldsError } = await supabase
++    .from("crm_custom_fields")
++    .select("field_key, label, tipo, column_name")
++    .eq("table_name", "clienti")
++    .eq("visible", true)
++    .is("deleted_at", null)
++    .order("ordinamento", { ascending: true })
++
++  if (fieldsError || !fields || fields.length === 0) return []
++
++  const columns = fields.map((f) => f.column_name as string)
++  const { data: row, error: valuesError } = await supabase
++    .from("clienti")
++    .select(columns.join(","))
++    .eq("id", clienteId)
++    .maybeSingle()
++
++  if (valuesError || !row) return []
++
++  return fields.map((f) => ({
++    key: f.field_key as string,
++    label: f.label as string,
++    tipo: f.tipo as string,
++    value: (row as Record<string, unknown>)[f.column_name as string] ?? null,
++  }))
++}
++
+ export async function getClienteById(
+   id: string,
+ ): Promise<ClienteRecord | null> {
+@@ -317,6 +360,7 @@ export async function getClienteById(
+   if (!detailResult.error && detailResult.data) {
+     const cliente = mapRow(detailResult.data as unknown as Record<string, unknown>)
+     cliente.compiti = compiti
++    cliente.customFields = await loadClienteCustomFieldValues(supabase, id)
+     return cliente
+   }
+ 
+@@ -327,6 +371,7 @@ export async function getClienteById(
+   const { data, error } = await fallbackQ.single()
+   if (error || !data) return null
+   const cliente = mapRow(data as unknown as Record<string, unknown>)
++  cliente.customFields = await loadClienteCustomFieldValues(supabase, id)
+   cliente.compiti = compiti
+   return cliente
+ }
+diff --git a/lib/mock-data.ts b/lib/mock-data.ts
+index 60f6244..6433fcf 100644
+--- a/lib/mock-data.ts
++++ b/lib/mock-data.ts
+@@ -1885,6 +1885,21 @@ export interface ClienteRecord {
+ 
+   /** Id dei tag assegnati (cliente_tags), popolato dal server. */
+   tagIds?: string[]
++
++  /**
++   * Campi aggiunti da CRM Settings → Attributi (crm_custom_fields + colonna
++   * reale via ALTER TABLE). Prima di questo, un campo creato li' esisteva
++   * nel database ma non compariva mai in nessuna scheda: mancava proprio
++   * questa lettura. Popolato server-side da getClienteById.
++   */
++  customFields?: CustomFieldValue[]
++}
++
++export interface CustomFieldValue {
++  key: string
++  label: string
++  tipo: string
++  value: unknown
+ }
+ 
+ export interface ClienteCompito {

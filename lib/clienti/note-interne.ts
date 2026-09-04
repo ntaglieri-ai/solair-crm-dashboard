@@ -1,4 +1,5 @@
 import type { RoleCode } from "@/lib/permissions/types"
+import type { NoteMention } from "@/lib/notes/mentions"
 
 /**
  * Ruoli che vedono le note interne. Deve restare allineato al gate SQL
@@ -20,6 +21,7 @@ export function canAccessNoteInterne(ruoloCode: string | null | undefined): bool
 export interface NotaInterna {
   id: string
   contenuto: string
+  menzioni?: NoteMention[]
   creato_da: string | null
   creato_da_nome: string | null
   creato_il: string

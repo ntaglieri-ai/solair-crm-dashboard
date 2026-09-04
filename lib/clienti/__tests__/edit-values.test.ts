@@ -21,7 +21,7 @@ describe("client edit values", () => {
       { key: "secret", column: "secret", label: "Secret", tipo: "text", value: "hidden" },
     ] } as ClienteRecord
     const permissions = { canField: (_module: string, column: string) => column !== "secret" } as PermissionEngine
-    const fields = buildClienteEditFields(cliente, permissions, [{ id: "real-id", nome: "Reale" }])
+    const fields = buildClienteEditFields(cliente, permissions, [{ id: "real-id", nome: "Reale" }], ["Installato"])
     expect(fields.find((f) => f.key === "custom:extra")?.value).toBe(12)
     expect(fields.some((f) => f.key === "custom:secret")).toBe(false)
     expect(fields.find((f) => f.key === "InstallatoreId")?.options).toEqual(["real-id", "__legacy_installer__"])

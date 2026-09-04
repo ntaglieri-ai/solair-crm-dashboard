@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getCurrentPermissions } from "@/lib/permissions/server"
 import { canAccessOwnedRecord } from "@/lib/permissions/data-scope"
+import { canAccessNoteInterne } from "./note-interne"
 
 /**
  * Guard delle route delle note interne.
@@ -19,7 +20,7 @@ export async function requireApiNoteInterne(clienteId?: string) {
     "clienti_proprietario_id",
     clienteId,
   )
-  if (!permissions.canAction("clienti.note_interne.view") || !allowedRecord) {
+  if (!canAccessNoteInterne(permissions.snapshot.subject.ruoloCode) || !permissions.canAction("clienti.note_interne.view") || !allowedRecord) {
     return {
       permissions,
       response: NextResponse.json({ error: "Not found" }, { status: 404 }),

@@ -2,9 +2,11 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { requireApiNoteInterne } from "@/lib/clienti/note-interne-guard"
 import type { NotaInterna } from "@/lib/clienti/note-interne"
+import { notaInternaInput } from "@/lib/clienti/note-interne-input"
+import { resolveInternalMentions, notifyInternalMentions } from "@/lib/clienti/note-interne-mentions-server"
 
 const COLUMNS =
-  "id,contenuto,creato_da,creato_il,modificato_da,modificato_il"
+  "id,contenuto,menzioni,creato_da,creato_il,modificato_da,modificato_il"
 
 type NotaRow = Omit<NotaInterna, "creato_da_nome" | "modificato_da_nome">
 
@@ -69,9 +71,9 @@ export async function POST(
   const guard = await requireApiNoteInterne(id)
   if (guard.response) return guard.response
 
-  const body = (await request.json().catch(() => null)) as { contenuto?: string } | null
-  const contenuto = body?.contenuto?.trim()
-  if (!contenuto) return NextResponse.json({ error: "Nota vuota" }, { status: 400 })
+  const parsed = notaInternaInput.safeParse(await request.json().catch(() => null))
+  if (!parsed.success) return NextResponse.json({ error: "Nota vuota o menzioni non valide" }, { status: 400 })
+  const { contenuto } = parsed.data
 
   const autoreId = guard.permissions.snapshot.subject.userId
   // La policy di insert impone creato_da = current_utente_id(): senza id
@@ -84,10 +86,16 @@ export async function POST(
     )
   }
 
+  let menzioni
+  try {
+    menzioni = await resolveInternalMentions(id, contenuto, parsed.data.menzioni ?? [])
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Verifica menzioni non riuscita" }, { status: 400 })
+  }
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("cliente_note_interne")
-    .insert({ cliente_id: id, contenuto, creato_da: autoreId })
+    .insert({ cliente_id: id, contenuto, menzioni, creato_da: autoreId })
     .select(COLUMNS)
     .single()
 
@@ -95,5 +103,9 @@ export async function POST(
 
   const rows = [data as NotaRow]
   const [nota] = withAutori(rows, await autoriNomi(supabase, rows))
-  return NextResponse.json(nota, { status: 201 })
+  const notificationFailures = await notifyInternalMentions({
+    request, clienteId: id, mentions: menzioni, authorId: autoreId,
+    authorName: guard.permissions.snapshot.subject.nome ?? "Utente CRM",
+  })
+  return NextResponse.json({ ...nota, notificationFailures }, { status: 201 })
 }

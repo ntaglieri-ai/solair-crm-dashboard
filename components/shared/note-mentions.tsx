@@ -50,6 +50,8 @@ export function MentionTextarea({
   className,
   rows = 2,
   placeholder,
+  usersUrl = "/api/mentions/users",
+  disabled = false,
 }: {
   value: string
   onChange: (value: string) => void
@@ -58,24 +60,33 @@ export function MentionTextarea({
   className?: string
   rows?: number
   placeholder?: string
+  usersUrl?: string
+  disabled?: boolean
 }) {
   const ref = useRef<HTMLTextAreaElement>(null)
-  const [users, setUsers] = useState<MentionUser[]>([])
+  const [userList, setUserList] = useState<{ url: string; users: MentionUser[]; failed: boolean } | null>(null)
   const [query, setQuery] = useState<{ start: number; text: string } | null>(null)
   const [active, setActive] = useState(0)
   const [popupPosition, setPopupPosition] = useState({ top: 0, left: 0, width: 320 })
 
   useEffect(() => {
-    loadMentionUsers()
-      .then(setUsers)
-      .catch(() => setUsers([]))
-  }, [])
+    let current = true
+    // Le liste riservate sono per scheda e non entrano nella cache globale.
+    const request = usersUrl === "/api/mentions/users" ? loadMentionUsers()
+      : fetch(usersUrl, { cache: "no-store" }).then(async (response) => {
+        if (!response.ok) throw new Error("Utenti non disponibili")
+        return ((await response.json()) as { users?: MentionUser[] }).users ?? []
+      })
+    request.then((users) => { if (current) setUserList({ url: usersUrl, users, failed: false }) })
+      .catch(() => { if (current) setUserList({ url: usersUrl, users: [], failed: true }) })
+    return () => { current = false }
+  }, [usersUrl])
 
   const filtered = useMemo(() => {
-    if (!query) return []
+    if (!query || userList?.url !== usersUrl) return []
     const term = query.text.toLocaleLowerCase("it")
-    return users.filter((user) => user.nome.toLocaleLowerCase("it").includes(term)).slice(0, 8)
-  }, [query, users])
+    return userList.users.filter((user) => user.nome.toLocaleLowerCase("it").includes(term)).slice(0, 8)
+  }, [query, userList, usersUrl])
 
   useEffect(() => {
     if (!query) return
@@ -175,12 +186,19 @@ export function MentionTextarea({
         value={value}
         rows={rows}
         placeholder={placeholder}
+        aria-label={placeholder}
+        disabled={disabled}
         className={className}
         onChange={(event) => handleChange(event.target.value, event.target.selectionStart)}
         onClick={(event) => updateQuery(value, event.currentTarget.selectionStart)}
         onKeyDown={handleKeyDown}
       />
-      {query && filtered.length > 0 && typeof document !== "undefined" ? createPortal(
+      {!disabled && query && filtered.length === 0 ? <p role="status" className="mt-1 text-xs text-muted-foreground">
+        {userList?.url !== usersUrl ? "Caricamento utenti…" : userList.failed
+          ? "Impossibile caricare gli utenti da menzionare. Riprova riaprendo la nota."
+          : "Nessun utente disponibile per questa menzione."}
+      </p> : null}
+      {!disabled && query && filtered.length > 0 && typeof document !== "undefined" ? createPortal(
         <div
           role="listbox"
           aria-label="Utenti CRM da menzionare"
@@ -220,7 +238,7 @@ export function MentionTextarea({
   )
 }
 
-export function MentionText({ text, mentions, className }: { text: string; mentions?: NoteMention[]; className?: string }) {
+export function MentionText({ text, mentions, className, allowEmail = true }: { text: string; mentions?: NoteMention[]; className?: string; allowEmail?: boolean }) {
   const valid = (mentions ?? []).toSorted((a, b) => a.start - b.start)
   const [selected, setSelected] = useState<NoteMention | null>(null)
   const parts: React.ReactNode[] = []
@@ -229,9 +247,9 @@ export function MentionText({ text, mentions, className }: { text: string; menti
     if (mention.start < cursor || text.slice(mention.start, mention.end) !== `@${mention.name}`) return
     parts.push(text.slice(cursor, mention.start))
     parts.push(
-      <button key={`${mention.userId}-${mention.start}`} type="button" className="font-semibold text-teal hover:underline" onClick={() => setSelected(mention)}>
+      allowEmail ? <button key={`${mention.userId}-${mention.start}`} type="button" className="font-semibold text-teal hover:underline" onClick={() => setSelected(mention)}>
         {mention.name}
-      </button>,
+      </button> : <span key={`${mention.userId}-${mention.start}`} className="font-semibold text-teal">@{mention.name}</span>,
     )
     cursor = mention.end
   })
@@ -239,7 +257,7 @@ export function MentionText({ text, mentions, className }: { text: string; menti
   return (
     <>
       <p className={cn("whitespace-pre-wrap", className)}>{parts}</p>
-      <UserEmailDialog mention={selected} onOpenChange={(open) => !open && setSelected(null)} />
+      {allowEmail ? <UserEmailDialog mention={selected} onOpenChange={(open) => !open && setSelected(null)} /> : null}
     </>
   )
 }

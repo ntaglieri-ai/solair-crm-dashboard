@@ -39,7 +39,7 @@ export default function ImportExportPage() {
         title="Import / Export"
         description="Importa ed esporta dati dal CRM in formato CSV."
         action={
-          <Button variant="outline" render={<Link href="/crm-settings/system/import-export/zoho-t0" />}>
+          <Button variant="outline" nativeButton={false} render={<Link href="/crm-settings/system/import-export/zoho-t0" />}>
             Import Zoho T0
             <ArrowRight className="size-4" />
           </Button>

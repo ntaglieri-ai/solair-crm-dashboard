@@ -166,6 +166,7 @@ export function CalendarioClient({
           {tidycalBookingUrl ? (
             <Button
               variant="outline"
+              nativeButton={false}
               render={<a href={tidycalBookingUrl} target="_blank" rel="noreferrer" />}
             >
               <IconExternalLink size={16} data-icon="inline-start" />

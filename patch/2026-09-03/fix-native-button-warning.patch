@@ -1,0 +1,25 @@
+diff --git a/app/(dashboard)/calendario/calendario-client.tsx b/app/(dashboard)/calendario/calendario-client.tsx
+index 77d364a..2677507 100644
+--- a/app/(dashboard)/calendario/calendario-client.tsx
++++ b/app/(dashboard)/calendario/calendario-client.tsx
+@@ -166,6 +166,7 @@ export function CalendarioClient({
+           {tidycalBookingUrl ? (
+             <Button
+               variant="outline"
++              nativeButton={false}
+               render={<a href={tidycalBookingUrl} target="_blank" rel="noreferrer" />}
+             >
+               <IconExternalLink size={16} data-icon="inline-start" />
+diff --git a/app/crm-settings/system/import-export/page.tsx b/app/crm-settings/system/import-export/page.tsx
+index 8f5ee6c..5eba362 100644
+--- a/app/crm-settings/system/import-export/page.tsx
++++ b/app/crm-settings/system/import-export/page.tsx
+@@ -39,7 +39,7 @@ export default function ImportExportPage() {
+         title="Import / Export"
+         description="Importa ed esporta dati dal CRM in formato CSV."
+         action={
+-          <Button variant="outline" render={<Link href="/crm-settings/system/import-export/zoho-t0" />}>
++          <Button variant="outline" nativeButton={false} render={<Link href="/crm-settings/system/import-export/zoho-t0" />}>
+             Import Zoho T0
+             <ArrowRight className="size-4" />
+           </Button>

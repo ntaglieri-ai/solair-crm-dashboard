@@ -2,14 +2,6 @@
 
 import { useState } from "react"
 import { Search, X, Plus, Loader2 } from "lucide-react"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -19,74 +11,25 @@ import {
 } from "@/lib/mock-data"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { useStatoClienteQuery, useCreateStatoCliente } from "@/lib/clienti/stato-cliente-store"
+import { MultiFilterSelect } from "@/components/shared/multi-filter-select"
+import { EMPTY_FILTER_VALUE, hasFilterValues } from "@/lib/shared/filter-values"
 
 export interface ClienteFilterState {
   search: string
-  stato: string
-  sede: string
-  proprietario: string
-  installatore: string
-  tag: string
+  stato: string[]
+  sede: string[]
+  proprietario: string[]
+  installatore: string[]
+  tag: string[]
 }
 
 export const DEFAULT_CLIENTE_FILTERS: ClienteFilterState = {
   search: "",
-  stato: "all",
-  sede: "all",
-  proprietario: "all",
-  installatore: "all",
-  tag: "all",
-}
-
-function toItems(entries: [string, string][]): Record<string, string> {
-  return entries.reduce<Record<string, string>>((acc, [k, v]) => {
-    acc[k] = v
-    return acc
-  }, {})
-}
-
-function FilterSelect({
-  value,
-  onValueChange,
-  placeholder,
-  options,
-  className,
-  ariaLabel,
-  disabled,
-}: {
-  value: string
-  onValueChange: (v: string) => void
-  placeholder: string
-  options: [string, string][]
-  className?: string
-  ariaLabel: string
-  disabled?: boolean
-}) {
-  const items = toItems(options)
-  return (
-    <Select
-      items={items}
-      value={value}
-      onValueChange={(v) => onValueChange(v ?? "")}
-      disabled={disabled}
-    >
-      <SelectTrigger
-        className={className ?? "w-full bg-card sm:w-[160px]"}
-        aria-label={ariaLabel}
-      >
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectGroup>
-          {options.map(([val, label]) => (
-            <SelectItem key={val} value={val}>
-              {label}
-            </SelectItem>
-          ))}
-        </SelectGroup>
-      </SelectContent>
-    </Select>
-  )
+  stato: [],
+  sede: [],
+  proprietario: [],
+  installatore: [],
+  tag: [],
 }
 
 /**
@@ -158,11 +101,11 @@ function AggiungiStatoPopover() {
 
 export function countActiveClienteFilters(filters: ClienteFilterState): number {
   return (
-    (filters.stato !== "all" ? 1 : 0) +
-    (filters.sede !== "all" ? 1 : 0) +
-    (filters.proprietario !== "all" ? 1 : 0) +
-    (filters.installatore !== "all" ? 1 : 0) +
-    (filters.tag !== "all" ? 1 : 0)
+    (hasFilterValues(filters.stato) ? 1 : 0) +
+    (hasFilterValues(filters.sede) ? 1 : 0) +
+    (hasFilterValues(filters.proprietario) ? 1 : 0) +
+    (hasFilterValues(filters.installatore) ? 1 : 0) +
+    (hasFilterValues(filters.tag) ? 1 : 0)
   )
 }
 
@@ -212,71 +155,63 @@ export function ClienteQuickFilterFields({
     <div className="flex min-w-0 flex-col gap-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex items-center gap-1.5">
-          <FilterSelect
+          <MultiFilterSelect
             ariaLabel="Filtra per Stato"
             className="w-full bg-card"
             value={filters.stato}
             onValueChange={(v) => set("stato", v)}
-            placeholder="Stato"
+            allLabel="Tutti gli stati"
             options={[
-              ["all", "Tutti gli stati"],
-              ...(statoOptions ?? []).map((s) => [s.valore, s.valore] as [string, string]),
+              ...(statoOptions ?? []).map((s) => ({ value: s.valore, label: s.valore })),
+              { value: EMPTY_FILTER_VALUE, label: "Vuoto" },
             ]}
           />
           <AggiungiStatoPopover />
         </div>
 
-        <FilterSelect
+        <MultiFilterSelect
           ariaLabel="Filtra per Sede"
           className="w-full bg-card"
           value={filters.sede}
           onValueChange={(v) => set("sede", v)}
-          placeholder="Sede"
-          options={[
-            ["all", "Tutte le sedi"],
-            ...SEDE_LABELS.map((s) => [s, s] as [string, string]),
-          ]}
+          allLabel="Tutte le sedi"
+          options={SEDE_LABELS.map((s) => ({ value: s, label: s }))}
         />
 
-        <FilterSelect
+        <MultiFilterSelect
           ariaLabel="Filtra per Clienti Proprietario"
           className="w-full bg-card"
           value={filters.proprietario}
           onValueChange={(v) => set("proprietario", v)}
-          placeholder="Proprietario"
+          allLabel="Tutti i proprietari"
           options={[
-            ["all", "Tutti i proprietari"],
             // value = id (UUID): il server filtra su clienti_proprietario_id,
             // non sul nome — mandare il nome non avrebbe mai potuto matchare.
-            ...owners.map((o) => [o.id, o.nome] as [string, string]),
+            ...owners.map((o) => ({ value: o.id, label: o.nome })),
           ]}
         />
 
-        <FilterSelect
+        <MultiFilterSelect
           ariaLabel="Filtra per Installatore"
           className="w-full bg-card"
           value={filters.installatore}
           onValueChange={(v) => set("installatore", v)}
-          placeholder="Installatore"
+          allLabel="Tutti gli installatori"
           options={[
-            ["all", "Tutti gli installatori"],
             // Nomi distinti REALI presenti sui clienti (colonna testo), non
             // l'anagrafica installatori: e' quella colonna a essere
             // confrontata dal filtro server.
-            ...installerNames.map((i) => [i, i] as [string, string]),
+            ...installerNames.map((i) => ({ value: i, label: i })),
           ]}
         />
 
-        <FilterSelect
+        <MultiFilterSelect
           ariaLabel="Filtra per Tag"
           className="w-full bg-card"
           value={filters.tag}
           onValueChange={(v) => set("tag", v)}
-          placeholder="Tag"
-          options={[
-            ["all", "Tutti i tag"],
-            ...tags.map((t) => [t.id, t.name] as [string, string]),
-          ]}
+          allLabel="Tutti i tag"
+          options={tags.map((t) => ({ value: t.id, label: t.name }))}
         />
       </div>
 

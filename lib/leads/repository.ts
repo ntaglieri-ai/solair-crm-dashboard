@@ -9,7 +9,6 @@ import {
   LIST_BASE_FIELDS,
 } from "@/lib/leads/api-types"
 import {
-  candidateIdsByIndex,
   getAllLeads,
   getLeadsByIds,
   getLeadById,
@@ -54,6 +53,7 @@ export async function queryLeads(params: LeadListParams): Promise<LeadListRespon
     sede: params.sede,
     commerciale: params.commerciale,
     origine: params.origine,
+    tag: params.tag,
     score: params.score,
     search: params.search,
     advanced: params.advanced,
@@ -259,6 +259,7 @@ export async function queryLeadsForExport(
     sede: params.sede,
     commerciale: params.commerciale,
     origine: params.origine,
+    tag: params.tag,
     score: params.score,
     search: params.search,
     advanced: params.advanced,

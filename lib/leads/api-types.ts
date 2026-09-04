@@ -11,8 +11,13 @@ import {
   type AdvancedFilterState,
   EMPTY_ADVANCED,
 } from "@/lib/leads/advanced-filter-logic"
+import {
+  appendFilterValues,
+  parseFilterValues,
+} from "@/lib/shared/filter-values"
 
 export type ScoreFilter = "all" | "caldo" | "medio" | "freddo"
+export type ScoreFilterValue = Exclude<ScoreFilter, "all">
 export type SortDir = "asc" | "desc"
 
 // Riga "leggera" della lista: solo i campi proiettati (mai i campi pesanti
@@ -40,12 +45,12 @@ export interface LeadListParams {
   sortBy: LeadColumnId | null
   sortDir: SortDir
   search: string
-  stato: string
-  sede: string
-  commerciale: string
-  origine: string
-  tag: string
-  score: ScoreFilter
+  stato: string[]
+  sede: string[]
+  commerciale: string[]
+  origine: string[]
+  tag: string[]
+  score: ScoreFilterValue[]
   onlyDuplicates: boolean
   advanced: AdvancedFilterState
   /** Colonne richieste oltre alla base; [] => solo base. "*" => tutte. */
@@ -80,12 +85,12 @@ export const DEFAULT_LIST_PARAMS: LeadListParams = {
   sortBy: null,
   sortDir: "desc",
   search: "",
-  stato: "all",
-  sede: "all",
-  commerciale: "all",
-  origine: "all",
-  tag: "all",
-  score: "all",
+  stato: [],
+  sede: [],
+  commerciale: [],
+  origine: [],
+  tag: [],
+  score: [],
   onlyDuplicates: false,
   advanced: EMPTY_ADVANCED,
   fields: [],
@@ -114,12 +119,12 @@ export function buildLeadsSearchParams(p: LeadListParams): URLSearchParams {
   if (p.sortBy) sp.set("sortBy", p.sortBy)
   sp.set("sortDir", p.sortDir)
   if (p.search.trim()) sp.set("search", p.search.trim())
-  if (p.stato !== "all") sp.set("stato", p.stato)
-  if (p.sede !== "all") sp.set("sede", p.sede)
-  if (p.commerciale !== "all") sp.set("commerciale", p.commerciale)
-  if (p.origine !== "all") sp.set("origine", p.origine)
-  if (p.tag !== "all") sp.set("tag", p.tag)
-  if (p.score !== "all") sp.set("score", p.score)
+  appendFilterValues(sp, "stato", p.stato)
+  appendFilterValues(sp, "sede", p.sede)
+  appendFilterValues(sp, "commerciale", p.commerciale)
+  appendFilterValues(sp, "origine", p.origine)
+  appendFilterValues(sp, "tag", p.tag)
+  appendFilterValues(sp, "score", p.score)
   if (p.onlyDuplicates) sp.set("onlyDuplicates", "1")
   if (p.fields.length > 0) sp.set("fields", p.fields.join(","))
   // advanced solo se attivo (riduce la lunghezza dell'URL/chiave cache)
@@ -132,7 +137,7 @@ export function buildLeadsSearchParams(p: LeadListParams): URLSearchParams {
 
 // --- Decode: URLSearchParams -> params (lato server, route handler) ---
 export function parseLeadsSearchParams(sp: URLSearchParams): LeadListParams {
-  const scoreRaw = sp.get("score") as ScoreFilter | null
+  const scoreRaw = parseFilterValues(sp, "score")
   let advanced = EMPTY_ADVANCED
   const adv = sp.get("advanced")
   if (adv) {
@@ -149,12 +154,15 @@ export function parseLeadsSearchParams(sp: URLSearchParams): LeadListParams {
     sortBy: (sp.get("sortBy") as LeadColumnId | null) ?? null,
     sortDir: sp.get("sortDir") === "asc" ? "asc" : "desc",
     search: sp.get("search") ?? "",
-    stato: sp.get("stato") ?? "all",
-    sede: sp.get("sede") ?? "all",
-    commerciale: sp.get("commerciale") ?? "all",
-    origine: sp.get("origine") ?? "all",
-    tag: sp.get("tag") ?? "all",
-    score: scoreRaw ?? "all",
+    stato: parseFilterValues(sp, "stato"),
+    sede: parseFilterValues(sp, "sede"),
+    commerciale: parseFilterValues(sp, "commerciale"),
+    origine: parseFilterValues(sp, "origine"),
+    tag: parseFilterValues(sp, "tag"),
+    score: scoreRaw.filter(
+      (value): value is ScoreFilterValue =>
+        value === "caldo" || value === "medio" || value === "freddo",
+    ),
     onlyDuplicates: sp.get("onlyDuplicates") === "1",
     advanced,
     fields: fieldsRaw ? fieldsRaw.split(",").filter(Boolean) : [],

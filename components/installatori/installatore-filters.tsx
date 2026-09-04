@@ -1,78 +1,32 @@
 "use client"
 
 import { Search, X } from "lucide-react"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useInstallatoriReferenceData } from "@/lib/installatori/hooks"
 import type { InstallatoriListParams } from "@/lib/installatori/api-types"
+import { MultiFilterSelect } from "@/components/shared/multi-filter-select"
+import { hasFilterValues } from "@/lib/shared/filter-values"
 
 export interface InstallatoreFilterState {
   search: string
-  proprietario: string
-  tag: string
+  proprietario: string[]
+  tag: string[]
   stato: InstallatoriListParams["stato"]
 }
 
 export const DEFAULT_INSTALLATORE_FILTERS: InstallatoreFilterState = {
   search: "",
-  proprietario: "all",
-  tag: "all",
-  stato: "all",
-}
-
-function toItems(entries: [string, string][]): Record<string, string> {
-  return entries.reduce<Record<string, string>>((acc, [k, v]) => {
-    acc[k] = v
-    return acc
-  }, {})
-}
-
-function FilterSelect({
-  value,
-  onValueChange,
-  placeholder,
-  options,
-  className,
-  ariaLabel,
-}: {
-  value: string
-  onValueChange: (v: string) => void
-  placeholder: string
-  options: [string, string][]
-  className?: string
-  ariaLabel: string
-}) {
-  return (
-    <Select items={toItems(options)} value={value} onValueChange={(v) => onValueChange(v ?? "")}>
-      <SelectTrigger className={className ?? "w-full bg-card sm:w-[160px]"} aria-label={ariaLabel}>
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectGroup>
-          {options.map(([val, label]) => (
-            <SelectItem key={val} value={val}>
-              {label}
-            </SelectItem>
-          ))}
-        </SelectGroup>
-      </SelectContent>
-    </Select>
-  )
+  proprietario: [],
+  tag: [],
+  stato: [],
 }
 
 export function countActiveInstallatoreFilters(filters: InstallatoreFilterState): number {
   return (
-    (filters.proprietario !== "all" ? 1 : 0) +
-    (filters.tag !== "all" ? 1 : 0) +
-    (filters.stato !== "all" ? 1 : 0)
+    (hasFilterValues(filters.proprietario) ? 1 : 0) +
+    (hasFilterValues(filters.tag) ? 1 : 0) +
+    (hasFilterValues(filters.stato) ? 1 : 0)
   )
 }
 
@@ -123,38 +77,34 @@ export function InstallatoreQuickFilterFields({
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <div className="grid gap-4 sm:grid-cols-2">
-        <FilterSelect
+        <MultiFilterSelect
           ariaLabel="Filtra per Stato"
           className="w-full bg-card"
           value={filters.stato}
           onValueChange={(v) => set("stato", v as InstallatoreFilterState["stato"])}
-          placeholder="Stato"
+          allLabel="Tutti gli stati"
           options={[
-            ["all", "Tutti gli stati"],
-            ["attivo", "Attivo"],
-            ["non_attivo", "Non attivo"],
+            { value: "attivo", label: "Attivo" },
+            { value: "non_attivo", label: "Non attivo" },
           ]}
         />
 
-        <FilterSelect
+        <MultiFilterSelect
           ariaLabel="Filtra per Proprietario"
           className="w-full bg-card"
           value={filters.proprietario}
           onValueChange={(v) => set("proprietario", v)}
-          placeholder="Proprietario"
-          options={[
-            ["all", "Tutti i proprietari"],
-            ...proprietari.map((p) => [p.id, p.nome] as [string, string]),
-          ]}
+          allLabel="Tutti i proprietari"
+          options={proprietari.map((p) => ({ value: p.id, label: p.nome }))}
         />
 
-        <FilterSelect
+        <MultiFilterSelect
           ariaLabel="Filtra per Tag"
           className="w-full bg-card"
           value={filters.tag}
           onValueChange={(v) => set("tag", v)}
-          placeholder="Tag"
-          options={[["all", "Tutti i tag"], ...tags.map((t) => [t.id, t.name] as [string, string])]}
+          allLabel="Tutti i tag"
+          options={tags.map((t) => ({ value: t.id, label: t.name }))}
         />
       </div>
 

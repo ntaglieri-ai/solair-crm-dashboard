@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { hasFilterValues } from "@/lib/shared/filter-values"
 import type { ScadenzaRecord } from "@/lib/scadenze/repository"
 import {
   ScadenzaSearchInput,
@@ -190,11 +191,11 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
 
   const hasActiveFilters =
     filters.search.trim().length > 0 ||
-    filters.proprietario !== "all" ||
-    filters.tag !== "all" ||
+    hasFilterValues(filters.proprietario) ||
+    hasFilterValues(filters.tag) ||
     Boolean(filters.scadenzaDa) ||
     Boolean(filters.scadenzaA) ||
-    filters.collegamento !== "all"
+    hasFilterValues(filters.collegamento)
 
   const isOverdueFilterActive = filters.scadenzaDa === "" && filters.scadenzaA === todayISO()
   const isNext7FilterActive =

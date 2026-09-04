@@ -34,9 +34,9 @@ const DEFAULT_INSTALLATORI_PARAMS: InstallatoriListParams = {
   sortBy: "nome",
   sortDir: "asc",
   search: "",
-  proprietario: "all",
-  tag: "all",
-  stato: "all",
+  proprietario: [],
+  tag: [],
+  stato: [],
 }
 
 export function registraToolInstallatori(server: McpServer): void {
@@ -65,9 +65,9 @@ export function registraToolInstallatori(server: McpServer): void {
         sortBy: args.ordina_per ?? "nome",
         sortDir: args.direzione ?? "asc",
         search: args.cerca ?? "",
-        proprietario: args.proprietario_id ?? "all",
-        tag: args.tag ?? "all",
-        stato: args.stato ?? "all",
+        proprietario: args.proprietario_id ? [args.proprietario_id] : [],
+        tag: args.tag ? [args.tag] : [],
+        stato: args.stato && args.stato !== "all" ? [args.stato] : [],
       }
       const esito = await queryInstallatori(params)
       return { dati: esito, righe: esito.rows.length }

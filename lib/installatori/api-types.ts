@@ -1,4 +1,8 @@
 import type { InstallatoreRecord } from "@/lib/installatori/repository"
+import {
+  appendFilterValues,
+  parseFilterValues,
+} from "@/lib/shared/filter-values"
 
 export type SortDir = "asc" | "desc"
 
@@ -36,12 +40,12 @@ export interface InstallatoriListParams {
   sortDir: SortDir
   /** Ricerca su Nome Installatore ed E-mail. */
   search: string
-  /** id utente (o "all"). */
-  proprietario: string
-  /** Valore tag esatto (o "all"). */
-  tag: string
-  /** "all" | "attivo" | "non_attivo". */
-  stato: "all" | "attivo" | "non_attivo"
+  /** id utenti selezionati. [] = tutti. */
+  proprietario: string[]
+  /** Tag selezionati. [] = tutti. */
+  tag: string[]
+  /** Valori selezionati tra "attivo" e "non_attivo". [] = tutti. */
+  stato: Array<"attivo" | "non_attivo">
 }
 
 export interface InstallatoriListResponse {
@@ -63,9 +67,9 @@ export const DEFAULT_INSTALLATORI_PARAMS: InstallatoriListParams = {
   sortBy: "nome",
   sortDir: "asc",
   search: "",
-  proprietario: "all",
-  tag: "all",
-  stato: "all",
+  proprietario: [],
+  tag: [],
+  stato: [],
 }
 
 export function buildInstallatoriSearchParams(
@@ -77,24 +81,27 @@ export function buildInstallatoriSearchParams(
   if (p.sortBy) sp.set("sortBy", p.sortBy)
   sp.set("sortDir", p.sortDir)
   if (p.search.trim()) sp.set("search", p.search.trim())
-  if (p.proprietario !== "all") sp.set("proprietario", p.proprietario)
-  if (p.tag !== "all") sp.set("tag", p.tag)
-  if (p.stato !== "all") sp.set("stato", p.stato)
+  appendFilterValues(sp, "proprietario", p.proprietario)
+  appendFilterValues(sp, "tag", p.tag)
+  appendFilterValues(sp, "stato", p.stato)
   return sp
 }
 
 export function parseInstallatoriSearchParams(
   sp: URLSearchParams,
 ): InstallatoriListParams {
-  const stato = sp.get("stato")
+  const stato = parseFilterValues(sp, "stato").filter(
+    (value): value is "attivo" | "non_attivo" =>
+      value === "attivo" || value === "non_attivo",
+  )
   return {
     page: Math.max(1, Number(sp.get("page") ?? "1") || 1),
     pageSize: Math.min(200, Math.max(1, Number(sp.get("pageSize") ?? "50") || 50)),
     sortBy: (sp.get("sortBy") as InstallatoreSortKey | null) ?? null,
     sortDir: sp.get("sortDir") === "desc" ? "desc" : "asc",
     search: sp.get("search") ?? "",
-    proprietario: sp.get("proprietario") ?? "all",
-    tag: sp.get("tag") ?? "all",
-    stato: stato === "attivo" || stato === "non_attivo" ? stato : "all",
+    proprietario: parseFilterValues(sp, "proprietario"),
+    tag: parseFilterValues(sp, "tag"),
+    stato,
   }
 }

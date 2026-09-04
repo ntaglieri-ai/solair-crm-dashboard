@@ -14,6 +14,118 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
+const CLIENTE_DATE_COLUMNS = new Set<ClienteColumnId>([
+  "Ora modifica",
+  "Ora creazione",
+  "Ora ultima attività",
+  "Ora iscrizione annullata",
+  "Visita più recente",
+  "Prima visita",
+  "Data Fatt/Pagamento",
+  "Data installazione ultimata",
+  "Data appuntamento allaccio",
+  "Data ammissibilità",
+  "Data sopralluogo",
+  "Data affidamento sopralluogo",
+  "Data conferma Iter E-distribuzione",
+  "Data scadenza TICA",
+  "Data iter Enel Concluso",
+  "Data interlocutorio",
+  "Data Click",
+])
+
+const ISO_DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/
+const IT_DATE_RE =
+  /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i
+
+function isValidDatePart(year: number, month: number, day: number) {
+  const date = new Date(year, month - 1, day)
+  return (
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  )
+}
+
+function parseClienteDate(value: string) {
+  const trimmed = value.trim()
+  const isoDateOnlyMatch = ISO_DATE_ONLY_RE.exec(trimmed)
+  if (isoDateOnlyMatch) {
+    const [, yearValue, monthValue, dayValue] = isoDateOnlyMatch
+    const year = Number(yearValue)
+    const month = Number(monthValue)
+    const day = Number(dayValue)
+    if (isValidDatePart(year, month, day)) {
+      return { date: new Date(year, month - 1, day), hasTime: false }
+    }
+  }
+
+  const itDateMatch = IT_DATE_RE.exec(trimmed)
+  if (itDateMatch) {
+    const [, dayValue, monthValue, yearValue, hourValue, minuteValue, secondValue, meridiem] =
+      itDateMatch
+    const year = Number(yearValue)
+    const month = Number(monthValue)
+    const day = Number(dayValue)
+    const hasTime = hourValue !== undefined && minuteValue !== undefined
+    let hour = hasTime ? Number(hourValue) : 0
+    const minute = hasTime ? Number(minuteValue) : 0
+    const second = secondValue ? Number(secondValue) : 0
+
+    if (meridiem) {
+      const marker = meridiem.toUpperCase()
+      if (marker === "AM" && hour === 12) hour = 0
+      if (marker === "PM" && hour < 12) hour += 12
+    }
+
+    const isValidTime =
+      !hasTime ||
+      (hour >= 0 &&
+        hour <= 23 &&
+        minute >= 0 &&
+        minute <= 59 &&
+        second >= 0 &&
+        second <= 59)
+
+    if (isValidDatePart(year, month, day) && isValidTime) {
+      return {
+        date: new Date(year, month - 1, day, hour, minute, second),
+        hasTime,
+      }
+    }
+  }
+
+  const fallbackDate = new Date(trimmed)
+  if (Number.isNaN(fallbackDate.getTime())) return null
+
+  return {
+    date: fallbackDate,
+    hasTime: /(?:T|\s)\d{1,2}:\d{2}/.test(trimmed),
+  }
+}
+
+function formatClienteMoment(value: string) {
+  const parsed = parseClienteDate(value)
+  if (!parsed) return value
+
+  return new Intl.DateTimeFormat("it-IT", {
+    dateStyle: "medium",
+    ...(parsed.hasTime ? { timeStyle: "short" as const } : {}),
+  }).format(parsed.date)
+}
+
+function FriendlyDateTime({ value }: { value: unknown }) {
+  if (typeof value !== "string" || !value.trim()) {
+    return <span className="text-muted-foreground">—</span>
+  }
+  const formatted = formatClienteMoment(value)
+  return (
+    <span className="whitespace-nowrap tabular-nums text-foreground" title={value}>
+      {formatted}
+    </span>
+  )
+}
+
 function SignalIcon({
   icon: Icon,
   label,
@@ -189,6 +301,9 @@ export function ClienteCell({
       )
 
     default: {
+      if (CLIENTE_DATE_COLUMNS.has(column)) {
+        return <FriendlyDateTime value={value} />
+      }
       if (value === null || value === undefined || value === "") {
         return <span className="text-muted-foreground">—</span>
       }

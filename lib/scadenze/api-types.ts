@@ -1,4 +1,8 @@
 import type { ScadenzaRecord } from "@/lib/scadenze/repository"
+import {
+  appendFilterValues,
+  parseFilterValues,
+} from "@/lib/shared/filter-values"
 
 export type SortDir = "asc" | "desc"
 
@@ -11,14 +15,14 @@ export interface ScadenzeListParams {
   sortDir: SortDir
   /** Ricerca su Nome Scadenze. */
   search: string
-  /** id utente (o "all"). */
-  proprietario: string
-  /** Valore tag esatto (o "all"). */
-  tag: string
+  /** id utenti selezionati. [] = tutti. */
+  proprietario: string[]
+  /** Tag selezionati. [] = tutti. */
+  tag: string[]
   scadenzaDa: string
   scadenzaA: string
-  /** "all" | "si" (ha connesso_a_id) | "no" (nessun collegamento). */
-  collegamento: "all" | "si" | "no"
+  /** Valori selezionati tra "si" e "no". [] = tutti. */
+  collegamento: Array<"si" | "no">
 }
 
 export interface ScadenzeListResponse {
@@ -42,11 +46,11 @@ export const DEFAULT_SCADENZE_PARAMS: ScadenzeListParams = {
   sortBy: "data_scadenza",
   sortDir: "asc",
   search: "",
-  proprietario: "all",
-  tag: "all",
+  proprietario: [],
+  tag: [],
   scadenzaDa: "",
   scadenzaA: "",
-  collegamento: "all",
+  collegamento: [],
 }
 
 export function buildScadenzeSearchParams(p: ScadenzeListParams): URLSearchParams {
@@ -56,26 +60,28 @@ export function buildScadenzeSearchParams(p: ScadenzeListParams): URLSearchParam
   if (p.sortBy) sp.set("sortBy", p.sortBy)
   sp.set("sortDir", p.sortDir)
   if (p.search.trim()) sp.set("search", p.search.trim())
-  if (p.proprietario !== "all") sp.set("proprietario", p.proprietario)
-  if (p.tag !== "all") sp.set("tag", p.tag)
+  appendFilterValues(sp, "proprietario", p.proprietario)
+  appendFilterValues(sp, "tag", p.tag)
   if (p.scadenzaDa) sp.set("scadenzaDa", p.scadenzaDa)
   if (p.scadenzaA) sp.set("scadenzaA", p.scadenzaA)
-  if (p.collegamento !== "all") sp.set("collegamento", p.collegamento)
+  appendFilterValues(sp, "collegamento", p.collegamento)
   return sp
 }
 
 export function parseScadenzeSearchParams(sp: URLSearchParams): ScadenzeListParams {
-  const collegamento = sp.get("collegamento")
+  const collegamento = parseFilterValues(sp, "collegamento").filter(
+    (value): value is "si" | "no" => value === "si" || value === "no",
+  )
   return {
     page: Math.max(1, Number(sp.get("page") ?? "1") || 1),
     pageSize: Math.min(200, Math.max(1, Number(sp.get("pageSize") ?? "50") || 50)),
     sortBy: (sp.get("sortBy") as ScadenzaSortKey | null) ?? null,
     sortDir: sp.get("sortDir") === "desc" ? "desc" : "asc",
     search: sp.get("search") ?? "",
-    proprietario: sp.get("proprietario") ?? "all",
-    tag: sp.get("tag") ?? "all",
+    proprietario: parseFilterValues(sp, "proprietario"),
+    tag: parseFilterValues(sp, "tag"),
     scadenzaDa: sp.get("scadenzaDa") ?? "",
     scadenzaA: sp.get("scadenzaA") ?? "",
-    collegamento: collegamento === "si" || collegamento === "no" ? collegamento : "all",
+    collegamento,
   }
 }

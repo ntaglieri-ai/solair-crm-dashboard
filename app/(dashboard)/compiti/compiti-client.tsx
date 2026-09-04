@@ -37,6 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { hasFilterValues } from "@/lib/shared/filter-values"
 import { type Compito, type StatoCompito, OPEN_TASK_STATI } from "@/lib/mock-data"
 import {
   buildKanbanDoneParams,
@@ -271,14 +272,15 @@ export function CompitiClient({
     filters.stati.length === OPEN_TASK_STATI.length &&
     OPEN_TASK_STATI.every((stato) => filters.stati.includes(stato))
   const isOverdueFilterActive = hasOpenStateFilter && filters.overdue
-  const isHighPriorityFilterActive = filters.priorita === "Alto"
+  const isHighPriorityFilterActive =
+    filters.priorita.length === 1 && filters.priorita.includes("Alto")
   const isOpenFilterActive = hasOpenStateFilter && !filters.overdue
   const hasActiveFilters =
     filters.search.trim().length > 0 ||
     filters.stati.length > 0 ||
-    filters.priorita !== "all" ||
-    filters.proprietario !== "all" ||
-    filters.sede !== "all" ||
+    hasFilterValues(filters.priorita) ||
+    hasFilterValues(filters.proprietario) ||
+    hasFilterValues(filters.sede) ||
     Boolean(filters.scadenzaDa) ||
     Boolean(filters.scadenzaA) ||
     filters.overdue
@@ -317,7 +319,7 @@ export function CompitiClient({
 
   const showHighPriorityTasks = () => {
     applyQuickFilter({
-      priorita: "Alto",
+      priorita: ["Alto"],
     })
   }
 

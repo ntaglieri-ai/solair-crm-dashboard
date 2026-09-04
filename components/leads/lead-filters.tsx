@@ -1,14 +1,6 @@
 "use client"
 
 import { Search, X } from "lucide-react"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {
@@ -17,27 +9,30 @@ import {
   SEDE_LABELS,
 } from "@/lib/mock-data"
 import { useTags } from "@/lib/tag-store"
+import { MultiFilterSelect, type MultiFilterOption } from "@/components/shared/multi-filter-select"
+import { hasFilterValues } from "@/lib/shared/filter-values"
 
 export type ScoreFilter = "all" | "caldo" | "medio" | "freddo"
+type ScoreFilterValue = Exclude<ScoreFilter, "all">
 
 export interface LeadFilterState {
   search: string
-  stato: string
-  sede: string
-  commerciale: string
-  origine: string
-  tag: string
-  score: ScoreFilter
+  stato: string[]
+  sede: string[]
+  commerciale: string[]
+  origine: string[]
+  tag: string[]
+  score: ScoreFilterValue[]
 }
 
 export const DEFAULT_FILTERS: LeadFilterState = {
   search: "",
-  stato: "all",
-  sede: "all",
-  commerciale: "all",
-  origine: "all",
-  tag: "all",
-  score: "all",
+  stato: [],
+  sede: [],
+  commerciale: [],
+  origine: [],
+  tag: [],
+  score: [],
 }
 
 function FilterSelect({
@@ -45,31 +40,26 @@ function FilterSelect({
   onValueChange,
   label,
   options,
+  allLabel,
 }: {
-  value: string
-  onValueChange: (v: string) => void
+  value: string[]
+  onValueChange: (v: string[]) => void
   label: string
-  options: [string, string][]
+  options: MultiFilterOption[]
+  allLabel: string
 }) {
   return (
     <label className="grid gap-1.5">
       <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
-      <Select value={value} onValueChange={(next) => onValueChange(next ?? "all")}>
-        <SelectTrigger className="h-11 w-full bg-card" aria-label={label}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            {options.map(([optionValue, optionLabel]) => (
-              <SelectItem key={optionValue} value={optionValue}>
-                {optionLabel}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
+      <MultiFilterSelect
+        value={value}
+        onValueChange={onValueChange}
+        options={options}
+        allLabel={allLabel}
+        ariaLabel={label}
+      />
     </label>
   )
 }
@@ -77,12 +67,12 @@ function FilterSelect({
 /** Numero di filtri rapidi attivi (stato/sede/proprietario/origine/tag/valutazione). */
 export function countActiveLeadFilters(filters: LeadFilterState): number {
   return (
-    (filters.stato !== "all" ? 1 : 0) +
-    (filters.sede !== "all" ? 1 : 0) +
-    (filters.commerciale !== "all" ? 1 : 0) +
-    (filters.origine !== "all" ? 1 : 0) +
-    (filters.tag !== "all" ? 1 : 0) +
-    (filters.score !== "all" ? 1 : 0)
+    (hasFilterValues(filters.stato) ? 1 : 0) +
+    (hasFilterValues(filters.sede) ? 1 : 0) +
+    (hasFilterValues(filters.commerciale) ? 1 : 0) +
+    (hasFilterValues(filters.origine) ? 1 : 0) +
+    (hasFilterValues(filters.tag) ? 1 : 0) +
+    (hasFilterValues(filters.score) ? 1 : 0)
   )
 }
 
@@ -114,28 +104,43 @@ export function LeadQuickFilterFields({
   filters,
   onChange,
   onReset,
-  tags,
 }: {
   filters: LeadFilterState
   onChange: (next: LeadFilterState) => void
   onReset: () => void
-  tags: string[]
 }) {
-  const { owners, ownerNames } = useTags()
+  const { owners, tags } = useTags()
   const set = <K extends keyof LeadFilterState>(
     key: K,
     value: LeadFilterState[K],
   ) => onChange({ ...filters, [key]: value })
 
+  const optionsByKey = {
+    stato: STATO_LEAD_ORDER.map((value) => ({ value, label: value })),
+    sede: SEDE_LABELS.map((value) => ({ value, label: value })),
+    commerciale: owners.map((owner) => ({ value: owner.id, label: owner.nome })),
+    origine: ORIGINE_LEAD_VALUES.map((value) => ({ value, label: value })),
+    tag: tags.map((tag) => ({ value: tag.id, label: tag.name })),
+    score: [
+      { value: "caldo", label: "Caldo (>80)" },
+      { value: "medio", label: "Medio (50-80)" },
+      { value: "freddo", label: "Freddo (<50)" },
+    ],
+  } satisfies Record<Exclude<keyof LeadFilterState, "search">, MultiFilterOption[]>
+  const labelsFor = (selected: string[], options: MultiFilterOption[]) =>
+    selected
+      .map((value) => options.find((option) => option.value === value)?.label ?? value)
+      .join(", ")
+
   const active = [
-    filters.stato !== "all" ? ["stato", filters.stato] : null,
-    filters.sede !== "all" ? ["sede", filters.sede] : null,
-    filters.commerciale !== "all"
-      ? ["commerciale", ownerNames[filters.commerciale] ?? "Utente non disponibile"]
+    filters.stato.length > 0 ? ["stato", labelsFor(filters.stato, optionsByKey.stato)] : null,
+    filters.sede.length > 0 ? ["sede", labelsFor(filters.sede, optionsByKey.sede)] : null,
+    filters.commerciale.length > 0
+      ? ["commerciale", labelsFor(filters.commerciale, optionsByKey.commerciale)]
       : null,
-    filters.origine !== "all" ? ["origine", filters.origine] : null,
-    filters.tag !== "all" ? ["tag", filters.tag] : null,
-    filters.score !== "all" ? ["score", filters.score] : null,
+    filters.origine.length > 0 ? ["origine", labelsFor(filters.origine, optionsByKey.origine)] : null,
+    filters.tag.length > 0 ? ["tag", labelsFor(filters.tag, optionsByKey.tag)] : null,
+    filters.score.length > 0 ? ["score", labelsFor(filters.score, optionsByKey.score)] : null,
   ].filter(Boolean) as Array<[keyof LeadFilterState, string]>
 
   return (
@@ -145,42 +150,43 @@ export function LeadQuickFilterFields({
           label="Stato"
           value={filters.stato}
           onValueChange={(value) => set("stato", value)}
-          options={[["all", "Tutti gli stati"], ...STATO_LEAD_ORDER.map((value) => [value, value] as [string, string])]}
+          allLabel="Tutti gli stati"
+          options={optionsByKey.stato}
         />
         <FilterSelect
           label="Sede"
           value={filters.sede}
           onValueChange={(value) => set("sede", value)}
-          options={[["all", "Tutte le sedi"], ...SEDE_LABELS.map((value) => [value, value] as [string, string])]}
+          allLabel="Tutte le sedi"
+          options={optionsByKey.sede}
         />
         <FilterSelect
           label="Proprietario"
           value={filters.commerciale}
           onValueChange={(value) => set("commerciale", value)}
-          options={[["all", "Tutti i proprietari"], ...owners.map((owner) => [owner.id, owner.nome] as [string, string])]}
+          allLabel="Tutti i proprietari"
+          options={optionsByKey.commerciale}
         />
         <FilterSelect
           label="Origine"
           value={filters.origine}
           onValueChange={(value) => set("origine", value)}
-          options={[["all", "Tutte le origini"], ...ORIGINE_LEAD_VALUES.map((value) => [value, value] as [string, string])]}
+          allLabel="Tutte le origini"
+          options={optionsByKey.origine}
         />
         <FilterSelect
           label="Tag"
           value={filters.tag}
           onValueChange={(value) => set("tag", value)}
-          options={[["all", "Tutti i tag"], ...tags.map((value) => [value, value] as [string, string])]}
+          allLabel="Tutti i tag"
+          options={optionsByKey.tag}
         />
         <FilterSelect
           label="Valutazione"
           value={filters.score}
-          onValueChange={(value) => set("score", value as ScoreFilter)}
-          options={[
-            ["all", "Tutte le valutazioni"],
-            ["caldo", "Caldo (>80)"],
-            ["medio", "Medio (50-80)"],
-            ["freddo", "Freddo (<50)"],
-          ]}
+          onValueChange={(value) => set("score", value as ScoreFilterValue[])}
+          allLabel="Tutte le valutazioni"
+          options={optionsByKey.score}
         />
       </div>
 
@@ -190,7 +196,7 @@ export function LeadQuickFilterFields({
             <button
               type="button"
               key={key}
-              onClick={() => set(key, "all" as never)}
+              onClick={() => set(key, [] as never)}
               className="flex min-w-0 max-w-full items-center gap-2 rounded-lg border border-primary/15 bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground transition-colors hover:bg-secondary/70"
             >
               <span className="min-w-0 break-words">{label}</span>

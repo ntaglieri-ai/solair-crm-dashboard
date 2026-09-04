@@ -147,9 +147,9 @@ export function registraToolCompiti(server: McpServer): void {
         sortDir: args.direzione ?? "asc",
         search: args.cerca ?? "",
         stati: args.stati ?? [],
-        priorita: args.priorita ?? "all",
-        proprietario: args.proprietario_id ?? "all",
-        sede: args.sede ?? "all",
+        priorita: args.priorita ? [args.priorita] : [],
+        proprietario: args.proprietario_id ? [args.proprietario_id] : [],
+        sede: args.sede ? [args.sede] : [],
         scadenzaDa: args.scadenza_da ?? "",
         scadenzaA: args.scadenza_a ?? "",
         overdue: args.solo_scaduti ?? false,
@@ -351,11 +351,11 @@ export function registraToolScadenze(server: McpServer): void {
         sortBy: args.ordina_per ?? DEFAULT_SCADENZE_PARAMS.sortBy,
         sortDir: args.direzione ?? "asc",
         search: args.cerca ?? "",
-        proprietario: args.proprietario_id ?? "all",
-        tag: args.tag ?? "all",
+        proprietario: args.proprietario_id ? [args.proprietario_id] : [],
+        tag: args.tag ? [args.tag] : [],
         scadenzaDa: args.da ?? "",
         scadenzaA: args.a ?? "",
-        collegamento: args.collegamento ?? "all",
+        collegamento: args.collegamento && args.collegamento !== "all" ? [args.collegamento] : [],
       }
       const esito = await queryScadenze(params)
       return { dati: esito, righe: esito.rows.length }

@@ -1,23 +1,17 @@
 "use client"
 
 import { Search, X } from "lucide-react"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useScadenzeReferenceData } from "@/lib/scadenze/hooks"
 import type { ScadenzeListParams } from "@/lib/scadenze/api-types"
+import { MultiFilterSelect } from "@/components/shared/multi-filter-select"
+import { hasFilterValues } from "@/lib/shared/filter-values"
 
 export interface ScadenzaFilterState {
   search: string
-  proprietario: string
-  tag: string
+  proprietario: string[]
+  tag: string[]
   scadenzaDa: string
   scadenzaA: string
   collegamento: ScadenzeListParams["collegamento"]
@@ -25,60 +19,20 @@ export interface ScadenzaFilterState {
 
 export const DEFAULT_SCADENZA_FILTERS: ScadenzaFilterState = {
   search: "",
-  proprietario: "all",
-  tag: "all",
+  proprietario: [],
+  tag: [],
   scadenzaDa: "",
   scadenzaA: "",
-  collegamento: "all",
-}
-
-function toItems(entries: [string, string][]): Record<string, string> {
-  return entries.reduce<Record<string, string>>((acc, [k, v]) => {
-    acc[k] = v
-    return acc
-  }, {})
-}
-
-function FilterSelect({
-  value,
-  onValueChange,
-  placeholder,
-  options,
-  className,
-  ariaLabel,
-}: {
-  value: string
-  onValueChange: (v: string) => void
-  placeholder: string
-  options: [string, string][]
-  className?: string
-  ariaLabel: string
-}) {
-  return (
-    <Select items={toItems(options)} value={value} onValueChange={(v) => onValueChange(v ?? "")}>
-      <SelectTrigger className={className ?? "w-full bg-card sm:w-[160px]"} aria-label={ariaLabel}>
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectGroup>
-          {options.map(([val, label]) => (
-            <SelectItem key={val} value={val}>
-              {label}
-            </SelectItem>
-          ))}
-        </SelectGroup>
-      </SelectContent>
-    </Select>
-  )
+  collegamento: [],
 }
 
 export function countActiveScadenzaFilters(filters: ScadenzaFilterState): number {
   return (
-    (filters.proprietario !== "all" ? 1 : 0) +
-    (filters.tag !== "all" ? 1 : 0) +
+    (hasFilterValues(filters.proprietario) ? 1 : 0) +
+    (hasFilterValues(filters.tag) ? 1 : 0) +
     (filters.scadenzaDa !== "" ? 1 : 0) +
     (filters.scadenzaA !== "" ? 1 : 0) +
-    (filters.collegamento !== "all" ? 1 : 0)
+    (hasFilterValues(filters.collegamento) ? 1 : 0)
   )
 }
 
@@ -127,37 +81,33 @@ export function ScadenzaQuickFilterFields({
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <div className="grid gap-4 sm:grid-cols-2">
-        <FilterSelect
+        <MultiFilterSelect
           ariaLabel="Filtra per Proprietario"
           className="w-full bg-card"
           value={filters.proprietario}
           onValueChange={(v) => set("proprietario", v)}
-          placeholder="Proprietario"
-          options={[
-            ["all", "Tutti i proprietari"],
-            ...proprietari.map((p) => [p.id, p.nome] as [string, string]),
-          ]}
+          allLabel="Tutti i proprietari"
+          options={proprietari.map((p) => ({ value: p.id, label: p.nome }))}
         />
 
-        <FilterSelect
+        <MultiFilterSelect
           ariaLabel="Filtra per Tag"
           className="w-full bg-card"
           value={filters.tag}
           onValueChange={(v) => set("tag", v)}
-          placeholder="Tag"
-          options={[["all", "Tutti i tag"], ...tags.map((t) => [t, t] as [string, string])]}
+          allLabel="Tutti i tag"
+          options={tags.map((t) => ({ value: t, label: t }))}
         />
 
-        <FilterSelect
+        <MultiFilterSelect
           ariaLabel="Filtra per Collegamento"
           className="w-full bg-card"
           value={filters.collegamento}
           onValueChange={(v) => set("collegamento", v as ScadenzeListParams["collegamento"])}
-          placeholder="Collegamento"
+          allLabel="Tutti"
           options={[
-            ["all", "Tutti"],
-            ["si", "Con collegamento"],
-            ["no", "Senza collegamento"],
+            { value: "si", label: "Con collegamento" },
+            { value: "no", label: "Senza collegamento" },
           ]}
         />
       </div>

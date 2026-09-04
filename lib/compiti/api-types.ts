@@ -1,5 +1,9 @@
 import type { Compito, StatoCompito } from "@/lib/mock-data"
 import type { CompitoSortKey } from "@/components/compiti/compito-table"
+import {
+  appendFilterValues,
+  parseFilterValues,
+} from "@/lib/shared/filter-values"
 
 export type SortDir = "asc" | "desc"
 
@@ -14,9 +18,9 @@ export interface CompitiListParams {
   search: string
   /** Array degli stati selezionati; [] = nessun filtro. */
   stati: StatoCompito[]
-  priorita: string
-  proprietario: string
-  sede: string
+  priorita: string[]
+  proprietario: string[]
+  sede: string[]
   scadenzaDa: string
   scadenzaA: string
   /** Solo compiti scaduti (scadenza < adesso, stato ≠ Completato) — coerente con il KPI. */
@@ -47,9 +51,9 @@ export const DEFAULT_COMPITI_PARAMS: CompitiListParams = {
   sortDir: "asc",
   search: "",
   stati: [],
-  priorita: "all",
-  proprietario: "all",
-  sede: "all",
+  priorita: [],
+  proprietario: [],
+  sede: [],
   scadenzaDa: "",
   scadenzaA: "",
   overdue: false,
@@ -68,9 +72,9 @@ export const KANBAN_OPEN_PAGE_SIZE = 200
 /** Sottoinsieme di CompitoFilterState che incide sulle query della kanban. */
 export type KanbanFilterInput = {
   search: string
-  priorita: string
-  proprietario: string
-  sede: string
+  priorita: string[]
+  proprietario: string[]
+  sede: string[]
   scadenzaDa: string
   scadenzaA: string
   overdue: boolean
@@ -84,9 +88,9 @@ export type KanbanFilterInput = {
  */
 export const DEFAULT_KANBAN_FILTERS: KanbanFilterInput = {
   search: "",
-  priorita: "all",
-  proprietario: "all",
-  sede: "all",
+  priorita: [],
+  proprietario: [],
+  sede: [],
   scadenzaDa: "",
   scadenzaA: "",
   overdue: false,
@@ -136,10 +140,10 @@ export function buildCompitiSearchParams(p: CompitiListParams): URLSearchParams 
   if (p.sortBy) sp.set("sortBy", p.sortBy)
   sp.set("sortDir", p.sortDir)
   if (p.search.trim()) sp.set("search", p.search.trim())
-  if (p.stati.length > 0) sp.set("stati", p.stati.join(","))
-  if (p.priorita !== "all") sp.set("priorita", p.priorita)
-  if (p.proprietario !== "all") sp.set("proprietario", p.proprietario)
-  if (p.sede !== "all") sp.set("sede", p.sede)
+  appendFilterValues(sp, "stati", p.stati)
+  appendFilterValues(sp, "priorita", p.priorita)
+  appendFilterValues(sp, "proprietario", p.proprietario)
+  appendFilterValues(sp, "sede", p.sede)
   if (p.scadenzaDa) sp.set("scadenzaDa", p.scadenzaDa)
   if (p.scadenzaA) sp.set("scadenzaA", p.scadenzaA)
   if (p.overdue) sp.set("overdue", "true")
@@ -147,17 +151,16 @@ export function buildCompitiSearchParams(p: CompitiListParams): URLSearchParams 
 }
 
 export function parseCompitiSearchParams(sp: URLSearchParams): CompitiListParams {
-  const statiRaw = sp.get("stati")
   return {
     page: Math.max(1, Number(sp.get("page") ?? "1") || 1),
     pageSize: Math.min(200, Math.max(1, Number(sp.get("pageSize") ?? "50") || 50)),
     sortBy: (sp.get("sortBy") as CompitoSortKey | null) ?? null,
     sortDir: sp.get("sortDir") === "desc" ? "desc" : "asc",
     search: sp.get("search") ?? "",
-    stati: statiRaw ? (statiRaw.split(",").filter(Boolean) as StatoCompito[]) : [],
-    priorita: sp.get("priorita") ?? "all",
-    proprietario: sp.get("proprietario") ?? "all",
-    sede: sp.get("sede") ?? "all",
+    stati: parseFilterValues(sp, "stati") as StatoCompito[],
+    priorita: parseFilterValues(sp, "priorita"),
+    proprietario: parseFilterValues(sp, "proprietario"),
+    sede: parseFilterValues(sp, "sede"),
     scadenzaDa: sp.get("scadenzaDa") ?? "",
     scadenzaA: sp.get("scadenzaA") ?? "",
     overdue: sp.get("overdue") === "true",

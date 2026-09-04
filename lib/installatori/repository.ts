@@ -7,6 +7,7 @@ import type {
   InstallatoreSortKey,
 } from "@/lib/installatori/api-types"
 import { applyOwnerScope, filterCurrentAccessibleRecordIds, resolveCurrentOwnerScope } from "@/lib/permissions/data-scope"
+import { activeFilterValues } from "@/lib/shared/filter-values"
 
 export type InstallatoreRecord = {
   id: string
@@ -137,25 +138,28 @@ export async function queryInstallatori(
     listQ = listQ.or(f)
     countQ = countQ.or(f)
   }
-  if (params.proprietario !== "all") {
-    listQ = listQ.eq("proprietario_id", params.proprietario)
-    countQ = countQ.eq("proprietario_id", params.proprietario)
+  const proprietarioValues = activeFilterValues(params.proprietario)
+  if (proprietarioValues.length > 0) {
+    listQ = listQ.in("proprietario_id", proprietarioValues)
+    countQ = countQ.in("proprietario_id", proprietarioValues)
   }
-  if (params.tag !== "all") {
+  const tagValues = activeFilterValues(params.tag)
+  if (tagValues.length > 0) {
     // Filtro relazionale (tabella installatore_tags), non piu' sul vecchio
     // campo singolo di testo libero installatori.tag — trovato ridondante
     // e sostituito il 26/07 dal vero sistema multi-tag.
     const { data: tagRows } = await supabase
       .from("installatore_tags")
       .select("installatore_id")
-      .eq("tag_id", params.tag)
+      .in("tag_id", tagValues)
     const idsWithTag = (tagRows ?? []).map((r) => r.installatore_id as string)
     listQ = listQ.in("id", idsWithTag.length > 0 ? idsWithTag : ["00000000-0000-0000-0000-000000000000"])
     countQ = countQ.in("id", idsWithTag.length > 0 ? idsWithTag : ["00000000-0000-0000-0000-000000000000"])
   }
-  if (params.stato !== "all") {
-    listQ = listQ.eq("attivo", params.stato === "attivo")
-    countQ = countQ.eq("attivo", params.stato === "attivo")
+  const statoValues = activeFilterValues(params.stato)
+  if (statoValues.length === 1) {
+    listQ = listQ.eq("attivo", statoValues[0] === "attivo")
+    countQ = countQ.eq("attivo", statoValues[0] === "attivo")
   }
 
   const [

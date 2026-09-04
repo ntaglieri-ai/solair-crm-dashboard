@@ -140,10 +140,10 @@ export function registraToolClienti(server: McpServer): void {
         sortBy: (args.ordina_per ?? DEFAULT_CLIENTI_PARAMS.sortBy) as ClientiListParams["sortBy"],
         sortDir: args.direzione ?? "desc",
         search: args.cerca ?? "",
-        stato: args.stato ?? "all",
-        sede: args.sede ?? "all",
-        proprietario: args.proprietario ?? "all",
-        installatore: args.installatore ?? "all",
+        stato: args.stato ? [args.stato] : [],
+        sede: args.sede ? [args.sede] : [],
+        proprietario: args.proprietario ? [args.proprietario] : [],
+        installatore: args.installatore ? [args.installatore] : [],
       }
       const esito = await queryClienti(params)
       return { dati: esito, righe: esito.rows.length }

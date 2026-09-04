@@ -14,6 +14,7 @@ import type {
   CompitiListResponse,
 } from "@/lib/compiti/api-types"
 import { applyOwnerScope, filterCurrentAccessibleRecordIds, resolveCurrentOwnerScope } from "@/lib/permissions/data-scope"
+import { activeFilterValues } from "@/lib/shared/filter-values"
 
 // Colonne proiettate in lettura — mai SELECT *.
 const LIST_COLUMNS = [
@@ -221,21 +222,24 @@ export async function queryCompiti(
       countQ = countQ.in("stato", dbStati)
       scadutiQ = scadutiQ.in("stato", dbStati)
     }
-    if (params.priorita !== "all") {
-      listQ = listQ.eq("priorita", params.priorita)
-      countQ = countQ.eq("priorita", params.priorita)
-      scadutiQ = scadutiQ.eq("priorita", params.priorita)
+    const prioritaValues = activeFilterValues(params.priorita)
+    if (prioritaValues.length > 0) {
+      listQ = listQ.in("priorita", prioritaValues)
+      countQ = countQ.in("priorita", prioritaValues)
+      scadutiQ = scadutiQ.in("priorita", prioritaValues)
     }
-    if (params.proprietario !== "all") {
+    const proprietarioValues = activeFilterValues(params.proprietario)
+    if (proprietarioValues.length > 0) {
       const ownerColumn = extended ? "proprietario_nome" : "proprietario_id"
-      listQ = listQ.eq(ownerColumn, params.proprietario)
-      countQ = countQ.eq(ownerColumn, params.proprietario)
-      scadutiQ = scadutiQ.eq(ownerColumn, params.proprietario)
+      listQ = listQ.in(ownerColumn, proprietarioValues)
+      countQ = countQ.in(ownerColumn, proprietarioValues)
+      scadutiQ = scadutiQ.in(ownerColumn, proprietarioValues)
     }
-    if (params.sede !== "all") {
-      listQ = listQ.eq("sede", params.sede)
-      countQ = countQ.eq("sede", params.sede)
-      scadutiQ = scadutiQ.eq("sede", params.sede)
+    const sedeValues = activeFilterValues(params.sede)
+    if (sedeValues.length > 0) {
+      listQ = listQ.in("sede", sedeValues)
+      countQ = countQ.in("sede", sedeValues)
+      scadutiQ = scadutiQ.in("sede", sedeValues)
     }
     if (params.scadenzaDa) {
       listQ = listQ.gte("scadenza", params.scadenzaDa)

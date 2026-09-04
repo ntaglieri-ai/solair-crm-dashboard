@@ -1,17 +1,8 @@
 "use client"
 
 import { Search, X } from "lucide-react"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
 import {
   STATO_COMPITO_ORDER,
   PRIORITA_COMPITO_ORDER,
@@ -19,13 +10,15 @@ import {
   type StatoCompito,
 } from "@/lib/mock-data"
 import { useCompitiReferenceData } from "@/lib/compiti/hooks"
+import { MultiFilterSelect } from "@/components/shared/multi-filter-select"
+import { hasFilterValues } from "@/lib/shared/filter-values"
 
 export interface CompitoFilterState {
   search: string
   stati: StatoCompito[]
-  priorita: string
-  proprietario: string
-  sede: string
+  priorita: string[]
+  proprietario: string[]
+  sede: string[]
   scadenzaDa: string
   scadenzaA: string
   /** Quick-filter KPI: solo scaduti (scadenza < adesso, stato ≠ Completato). */
@@ -35,67 +28,20 @@ export interface CompitoFilterState {
 export const DEFAULT_COMPITO_FILTERS: CompitoFilterState = {
   search: "",
   stati: [],
-  priorita: "all",
-  proprietario: "all",
-  sede: "all",
+  priorita: [],
+  proprietario: [],
+  sede: [],
   scadenzaDa: "",
   scadenzaA: "",
   overdue: false,
 }
 
-function toItems(entries: [string, string][]): Record<string, string> {
-  return entries.reduce<Record<string, string>>((acc, [k, v]) => {
-    acc[k] = v
-    return acc
-  }, {})
-}
-
-function FilterSelect({
-  value,
-  onValueChange,
-  placeholder,
-  options,
-  className,
-  ariaLabel,
-}: {
-  value: string
-  onValueChange: (v: string) => void
-  placeholder: string
-  options: [string, string][]
-  className?: string
-  ariaLabel: string
-}) {
-  return (
-    <Select
-      items={toItems(options)}
-      value={value}
-      onValueChange={(v) => onValueChange(v ?? "")}
-    >
-      <SelectTrigger
-        className={className ?? "w-full bg-card sm:w-[160px]"}
-        aria-label={ariaLabel}
-      >
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectGroup>
-          {options.map(([val, label]) => (
-            <SelectItem key={val} value={val}>
-              {label}
-            </SelectItem>
-          ))}
-        </SelectGroup>
-      </SelectContent>
-    </Select>
-  )
-}
-
 export function countActiveCompitoFilters(filters: CompitoFilterState): number {
   return (
     (filters.stati.length > 0 ? 1 : 0) +
-    (filters.priorita !== "all" ? 1 : 0) +
-    (filters.proprietario !== "all" ? 1 : 0) +
-    (filters.sede !== "all" ? 1 : 0) +
+    (hasFilterValues(filters.priorita) ? 1 : 0) +
+    (hasFilterValues(filters.proprietario) ? 1 : 0) +
+    (hasFilterValues(filters.sede) ? 1 : 0) +
     (filters.scadenzaDa !== "" ? 1 : 0) +
     (filters.scadenzaA !== "" ? 1 : 0) +
     (filters.overdue ? 1 : 0)
@@ -143,73 +89,45 @@ export function CompitoQuickFilterFields({
     value: CompitoFilterState[K],
   ) => onChange({ ...filters, [key]: value })
 
-  const toggleStato = (s: StatoCompito) => {
-    const next = filters.stati.includes(s)
-      ? filters.stati.filter((x) => x !== s)
-      : [...filters.stati, s]
-    set("stati", next)
-  }
-
   const hasActiveFilters = countActiveCompitoFilters(filters) > 0
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <div>
-        <p className="mb-2 text-sm font-semibold text-foreground">Stato</p>
-        <div className="flex flex-wrap gap-2">
-          {STATO_COMPITO_ORDER.map((s) => (
-            <button
-              type="button"
-              key={s}
-              onClick={() => toggleStato(s)}
-              className={cn(
-                "h-9 shrink-0 rounded-lg px-3 text-sm font-semibold transition-colors",
-                filters.stati.includes(s)
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "border border-border bg-card text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="grid gap-4 sm:grid-cols-2">
-        <FilterSelect
+        <MultiFilterSelect
+          ariaLabel="Filtra per Stato"
+          className="w-full bg-card"
+          value={filters.stati}
+          onValueChange={(v) => set("stati", v as StatoCompito[])}
+          allLabel="Tutti gli stati"
+          options={STATO_COMPITO_ORDER.map((s) => ({ value: s, label: s }))}
+        />
+
+        <MultiFilterSelect
           ariaLabel="Filtra per Priorità"
           className="w-full bg-card"
           value={filters.priorita}
           onValueChange={(v) => set("priorita", v)}
-          placeholder="Priorità"
-          options={[
-            ["all", "Tutte le priorità"],
-            ...PRIORITA_COMPITO_ORDER.map((p) => [p, p] as [string, string]),
-          ]}
+          allLabel="Tutte le priorità"
+          options={PRIORITA_COMPITO_ORDER.map((p) => ({ value: p, label: p }))}
         />
 
-        <FilterSelect
+        <MultiFilterSelect
           ariaLabel="Filtra per Proprietario"
           className="w-full bg-card"
           value={filters.proprietario}
           onValueChange={(v) => set("proprietario", v)}
-          placeholder="Proprietario"
-          options={[
-            ["all", "Tutti i proprietari"],
-            ...proprietari.map((p) => [p.nome, p.nome] as [string, string]),
-          ]}
+          allLabel="Tutti i proprietari"
+          options={proprietari.map((p) => ({ value: p.nome, label: p.nome }))}
         />
 
-        <FilterSelect
+        <MultiFilterSelect
           ariaLabel="Filtra per Sede"
           className="w-full bg-card"
           value={filters.sede}
           onValueChange={(v) => set("sede", v)}
-          placeholder="Sede"
-          options={[
-            ["all", "Tutte le sedi"],
-            ...SEDE_LABELS.map((s) => [s, s] as [string, string]),
-          ]}
+          allLabel="Tutte le sedi"
+          options={SEDE_LABELS.map((s) => ({ value: s, label: s }))}
         />
       </div>
 

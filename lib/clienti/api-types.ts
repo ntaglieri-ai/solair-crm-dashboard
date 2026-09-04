@@ -1,4 +1,8 @@
 import type { ClienteRecord, ClienteColumnId } from "@/lib/mock-data"
+import {
+  appendFilterValues,
+  parseFilterValues,
+} from "@/lib/shared/filter-values"
 
 export type SortDir = "asc" | "desc"
 
@@ -11,14 +15,14 @@ export interface ClientiListParams {
   sortBy: ClienteColumnId | null
   sortDir: SortDir
   search: string
-  stato: string
-  sede: string
-  proprietario: string
-  installatore: string
+  stato: string[]
+  sede: string[]
+  proprietario: string[]
+  installatore: string[]
   // Report Vito (3): esisteva l'infrastruttura tag (tabella, badge,
   // gestione) ma nessun modo di filtrare la lista per tag — mancava
   // interamente da qui in giu', tendina UI disabilitata inclusa.
-  tag: string
+  tag: string[]
 }
 
 export interface ClientiListResponse {
@@ -36,11 +40,11 @@ export const DEFAULT_CLIENTI_PARAMS: ClientiListParams = {
   sortBy: "Ora modifica",
   sortDir: "desc",
   search: "",
-  stato: "all",
-  sede: "all",
-  proprietario: "all",
-  installatore: "all",
-  tag: "all",
+  stato: [],
+  sede: [],
+  proprietario: [],
+  installatore: [],
+  tag: [],
 }
 
 export function buildClientiSearchParams(p: ClientiListParams): URLSearchParams {
@@ -50,11 +54,11 @@ export function buildClientiSearchParams(p: ClientiListParams): URLSearchParams 
   if (p.sortBy) sp.set("sortBy", p.sortBy)
   sp.set("sortDir", p.sortDir)
   if (p.search.trim()) sp.set("search", p.search.trim())
-  if (p.stato !== "all") sp.set("stato", p.stato)
-  if (p.sede !== "all") sp.set("sede", p.sede)
-  if (p.proprietario !== "all") sp.set("proprietario", p.proprietario)
-  if (p.installatore !== "all") sp.set("installatore", p.installatore)
-  if (p.tag !== "all") sp.set("tag", p.tag)
+  appendFilterValues(sp, "stato", p.stato)
+  appendFilterValues(sp, "sede", p.sede)
+  appendFilterValues(sp, "proprietario", p.proprietario)
+  appendFilterValues(sp, "installatore", p.installatore)
+  appendFilterValues(sp, "tag", p.tag)
   return sp
 }
 
@@ -65,10 +69,10 @@ export function parseClientiSearchParams(sp: URLSearchParams): ClientiListParams
     sortBy: (sp.get("sortBy") as ClienteColumnId | null) ?? null,
     sortDir: sp.get("sortDir") === "asc" ? "asc" : "desc",
     search: sp.get("search") ?? "",
-    stato: sp.get("stato") ?? "all",
-    sede: sp.get("sede") ?? "all",
-    proprietario: sp.get("proprietario") ?? "all",
-    installatore: sp.get("installatore") ?? "all",
-    tag: sp.get("tag") ?? "all",
+    stato: parseFilterValues(sp, "stato"),
+    sede: parseFilterValues(sp, "sede"),
+    proprietario: parseFilterValues(sp, "proprietario"),
+    installatore: parseFilterValues(sp, "installatore"),
+    tag: parseFilterValues(sp, "tag"),
   }
 }

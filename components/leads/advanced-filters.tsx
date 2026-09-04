@@ -426,7 +426,6 @@ export function AdvancedFilters({
                 filters={quickFilters}
                 onChange={onQuickFiltersChange}
                 onReset={onQuickFiltersReset}
-                tags={tags}
               />
             </div>
           ) : null}

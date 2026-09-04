@@ -177,11 +177,11 @@ export function registraToolLeads(server: McpServer): void {
         sortBy: (args.ordina_per ?? DEFAULT_LIST_PARAMS.sortBy) as LeadListParams["sortBy"],
         sortDir: args.direzione ?? "desc",
         search: args.cerca ?? "",
-        stato: args.stato ?? "all",
-        sede: args.sede ?? "all",
-        commerciale: args.commerciale ?? "all",
-        origine: args.origine ?? "all",
-        score: args.punteggio ?? "all",
+        stato: args.stato ? [args.stato] : [],
+        sede: args.sede ? [args.sede] : [],
+        commerciale: args.commerciale ? [args.commerciale] : [],
+        origine: args.origine ? [args.origine] : [],
+        score: args.punteggio && args.punteggio !== "all" ? [args.punteggio] : [],
         fields: args.tutti_i_campi ? ["*"] : [],
       }
       const esito = await queryLeads(params)

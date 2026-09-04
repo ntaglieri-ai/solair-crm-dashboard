@@ -1,6 +1,7 @@
 // Store server-side — Supabase async puro ottimizzato.
 // Search fulltext con indice GIN, paginazione server-side, query aggregate.
 import { createClient } from "@/lib/supabase/server"
+import { activeFilterValues, postgrestInList } from "@/lib/shared/filter-values"
 import type { Lead } from "@/lib/mock-data"
 import type { AdvancedFilterState } from "@/lib/leads/advanced-filter-logic"
 import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
@@ -178,20 +179,21 @@ function applyAdvancedFilters<
 }
 
 export async function candidateIdsByIndex(_filters: {
-  stato?: string
-  sede?: string
-  commerciale?: string
+  stato?: string[]
+  sede?: string[]
+  commerciale?: string[]
 }): Promise<Set<string> | null> {
   void _filters
   return null
 }
 
 export async function getAllLeads(filters?: {
-  stato?: string
-  sede?: string
-  commerciale?: string
-  origine?: string
-  score?: string
+  stato?: string[]
+  sede?: string[]
+  commerciale?: string[]
+  origine?: string[]
+  tag?: string[]
+  score?: string[]
   search?: string
   sortBy?: string | null
   sortDir?: "asc" | "desc"
@@ -220,23 +222,48 @@ export async function getAllLeads(filters?: {
   if (column !== "created_at")
     query = query.order("created_at", { ascending: false, nullsFirst: false })
 
-  if (filters?.stato && filters.stato !== "all")
-    query = query.eq("stato_lead", filters.stato)
-  if (filters?.sede && filters.sede !== "all")
-    query = query.eq("sede", filters.sede)
-  if (filters?.commerciale === "__unassigned__") {
+  const statoValues = activeFilterValues(filters?.stato)
+  if (statoValues.length > 0)
+    query = query.in("stato_lead", statoValues)
+  const sedeValues = activeFilterValues(filters?.sede)
+  if (sedeValues.length > 0)
+    query = query.in("sede", sedeValues)
+  const commercialeValues = activeFilterValues(filters?.commerciale)
+  const ownerValues = commercialeValues.filter((value) => value !== "__unassigned__")
+  if (commercialeValues.includes("__unassigned__") && ownerValues.length > 0) {
+    query = query.or(`lead_proprietario_id.in.(${postgrestInList(ownerValues)}),lead_proprietario_id.is.null`)
+  } else if (commercialeValues.includes("__unassigned__")) {
     query = query.is("lead_proprietario_id", null)
-  } else if (filters?.commerciale && filters.commerciale !== "all") {
-    query = query.eq("lead_proprietario_id", filters.commerciale)
+  } else if (ownerValues.length > 0) {
+    query = query.in("lead_proprietario_id", ownerValues)
   }
-  if (filters?.origine && filters.origine !== "all")
-    query = query.eq("origine_lead", filters.origine)
-  if (filters?.score && filters.score !== "all") {
+  const origineValues = activeFilterValues(filters?.origine)
+  if (origineValues.length > 0)
+    query = query.in("origine_lead", origineValues)
+  const scoreValues = activeFilterValues(filters?.score)
+  if (scoreValues.length > 0 && scoreValues.length < 3) {
     // Fasce di valutazione: caldo > 80, medio 50–80, freddo < 50.
-    if (filters.score === "caldo") query = query.gt("valutazione", 80)
-    else if (filters.score === "medio")
+    if (scoreValues.includes("caldo") && scoreValues.includes("freddo")) {
+      query = query.or("valutazione.gt.80,valutazione.lt.50")
+    } else if (scoreValues.includes("caldo") && scoreValues.includes("medio")) {
+      query = query.gte("valutazione", 50)
+    } else if (scoreValues.includes("medio") && scoreValues.includes("freddo")) {
+      query = query.lte("valutazione", 80)
+    } else if (scoreValues.includes("caldo")) query = query.gt("valutazione", 80)
+    else if (scoreValues.includes("medio"))
       query = query.gte("valutazione", 50).lte("valutazione", 80)
-    else if (filters.score === "freddo") query = query.lt("valutazione", 50)
+    else if (scoreValues.includes("freddo")) query = query.lt("valutazione", 50)
+  }
+  const tagValues = activeFilterValues(filters?.tag)
+  if (tagValues.length > 0) {
+    const { data: tagRows, error: tagError } = await supabase
+      .from("lead_tags")
+      .select("lead_id")
+      .in("tag_id", tagValues)
+    if (tagError) throw new Error(`Filtro tag lead non riuscito: ${tagError.message}`)
+    const ids = [...new Set((tagRows ?? []).map((row) => row.lead_id as string))]
+    if (ids.length === 0) return []
+    query = query.in("id", ids)
   }
   if (filters?.search?.trim()) {
     // Non esiste una colonna tsvector reale su leads (verificato 25/07 via
@@ -316,11 +343,12 @@ export async function getAllLeads(filters?: {
 }
 
 export async function getTotalCount(filters?: {
-  stato?: string
-  sede?: string
-  commerciale?: string
-  origine?: string
-  score?: string
+  stato?: string[]
+  sede?: string[]
+  commerciale?: string[]
+  origine?: string[]
+  tag?: string[]
+  score?: string[]
   search?: string
   advanced?: AdvancedFilterState
   visibleOwnerIds?: string[]
@@ -335,23 +363,48 @@ export async function getTotalCount(filters?: {
     query = query.in("lead_proprietario_id", filters.visibleOwnerIds)
   }
 
-  if (filters?.stato && filters.stato !== "all")
-    query = query.eq("stato_lead", filters.stato)
-  if (filters?.sede && filters.sede !== "all")
-    query = query.eq("sede", filters.sede)
-  if (filters?.commerciale === "__unassigned__") {
+  const statoValues = activeFilterValues(filters?.stato)
+  if (statoValues.length > 0)
+    query = query.in("stato_lead", statoValues)
+  const sedeValues = activeFilterValues(filters?.sede)
+  if (sedeValues.length > 0)
+    query = query.in("sede", sedeValues)
+  const commercialeValues = activeFilterValues(filters?.commerciale)
+  const ownerValues = commercialeValues.filter((value) => value !== "__unassigned__")
+  if (commercialeValues.includes("__unassigned__") && ownerValues.length > 0) {
+    query = query.or(`lead_proprietario_id.in.(${postgrestInList(ownerValues)}),lead_proprietario_id.is.null`)
+  } else if (commercialeValues.includes("__unassigned__")) {
     query = query.is("lead_proprietario_id", null)
-  } else if (filters?.commerciale && filters.commerciale !== "all") {
-    query = query.eq("lead_proprietario_id", filters.commerciale)
+  } else if (ownerValues.length > 0) {
+    query = query.in("lead_proprietario_id", ownerValues)
   }
-  if (filters?.origine && filters.origine !== "all")
-    query = query.eq("origine_lead", filters.origine)
-  if (filters?.score && filters.score !== "all") {
+  const origineValues = activeFilterValues(filters?.origine)
+  if (origineValues.length > 0)
+    query = query.in("origine_lead", origineValues)
+  const scoreValues = activeFilterValues(filters?.score)
+  if (scoreValues.length > 0 && scoreValues.length < 3) {
     // Fasce di valutazione: caldo > 80, medio 50–80, freddo < 50.
-    if (filters.score === "caldo") query = query.gt("valutazione", 80)
-    else if (filters.score === "medio")
+    if (scoreValues.includes("caldo") && scoreValues.includes("freddo")) {
+      query = query.or("valutazione.gt.80,valutazione.lt.50")
+    } else if (scoreValues.includes("caldo") && scoreValues.includes("medio")) {
+      query = query.gte("valutazione", 50)
+    } else if (scoreValues.includes("medio") && scoreValues.includes("freddo")) {
+      query = query.lte("valutazione", 80)
+    } else if (scoreValues.includes("caldo")) query = query.gt("valutazione", 80)
+    else if (scoreValues.includes("medio"))
       query = query.gte("valutazione", 50).lte("valutazione", 80)
-    else if (filters.score === "freddo") query = query.lt("valutazione", 50)
+    else if (scoreValues.includes("freddo")) query = query.lt("valutazione", 50)
+  }
+  const tagValues = activeFilterValues(filters?.tag)
+  if (tagValues.length > 0) {
+    const { data: tagRows, error: tagError } = await supabase
+      .from("lead_tags")
+      .select("lead_id")
+      .in("tag_id", tagValues)
+    if (tagError) throw new Error(`Filtro tag lead non riuscito: ${tagError.message}`)
+    const ids = [...new Set((tagRows ?? []).map((row) => row.lead_id as string))]
+    if (ids.length === 0) return 0
+    query = query.in("id", ids)
   }
   if (filters?.search?.trim()) {
     const p = `%${filters.search.trim()}%`

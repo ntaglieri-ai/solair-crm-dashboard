@@ -1970,7 +1970,7 @@ export const CLIENTE_COLUMNS: ClienteColumn[] = [
   { id: "E-mail", label: "E-mail", group: "Base", defaultVisible: true },
   { id: "Ora modifica", label: "Ora modifica", group: "Base", defaultVisible: true },
   { id: "Tag", label: "Tag", group: "Base", defaultVisible: true },
-  { id: "Sede", label: "Sede", group: "Base", defaultVisible: true },
+  { id: "Sede", label: "Sede", group: "Base", defaultVisible: false },
   // Anagrafica
   { id: "Clienti Proprietario", label: "Clienti Proprietario", group: "Anagrafica", defaultVisible: true },
   { id: "Origine Lead", label: "Origine Lead", group: "Anagrafica" },

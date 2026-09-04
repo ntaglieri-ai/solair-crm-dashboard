@@ -5,7 +5,6 @@ import type {
   ClienteCompito,
   ClienteRecord,
   SedeLabel,
-  StatoCliente,
   StatoCompito,
 } from "@/lib/mock-data"
 import type {
@@ -20,6 +19,11 @@ import { getCurrentPermissions } from "@/lib/permissions/server"
 import { buildCustomPatch, CUSTOM_FIELD_PREFIX, customOptions, validDate, type CustomFieldMetadata } from "./custom-fields"
 import { resolveInstallerAssignment } from "./installer-assignment"
 import { applyOwnerScope, filterCurrentAccessibleRecordIds, resolveCurrentOwnerScope } from "@/lib/permissions/data-scope"
+import {
+  EMPTY_FILTER_VALUE,
+  activeFilterValues,
+  postgrestInList,
+} from "@/lib/shared/filter-values"
 
 // Colonne proiettate in lettura — mai SELECT *.
 const LIST_COLUMNS = [
@@ -185,32 +189,48 @@ export async function queryClienti(
     listQ = listQ.or(filter)
     countQ = countQ.or(filter)
   }
-  if (params.stato !== "all") {
-    listQ = listQ.eq("stato", params.stato)
-    countQ = countQ.eq("stato", params.stato)
+  const statoValues = activeFilterValues(params.stato)
+  if (statoValues.length > 0) {
+    const wantsEmpty = statoValues.includes(EMPTY_FILTER_VALUE)
+    const realValues = statoValues.filter((value) => value !== EMPTY_FILTER_VALUE)
+    if (wantsEmpty && realValues.length > 0) {
+      const filter = `stato.in.(${postgrestInList(realValues)}),stato.is.null,stato.eq.`
+      listQ = listQ.or(filter)
+      countQ = countQ.or(filter)
+    } else if (wantsEmpty) {
+      listQ = listQ.or("stato.is.null,stato.eq.")
+      countQ = countQ.or("stato.is.null,stato.eq.")
+    } else {
+      listQ = listQ.in("stato", realValues)
+      countQ = countQ.in("stato", realValues)
+    }
   }
-  if (params.sede !== "all") {
-    listQ = listQ.eq("sede", params.sede)
-    countQ = countQ.eq("sede", params.sede)
+  const sedeValues = activeFilterValues(params.sede)
+  if (sedeValues.length > 0) {
+    listQ = listQ.in("sede", sedeValues)
+    countQ = countQ.in("sede", sedeValues)
   }
-  if (params.proprietario !== "all") {
-    listQ = listQ.eq("clienti_proprietario_id", params.proprietario)
-    countQ = countQ.eq("clienti_proprietario_id", params.proprietario)
+  const proprietarioValues = activeFilterValues(params.proprietario)
+  if (proprietarioValues.length > 0) {
+    listQ = listQ.in("clienti_proprietario_id", proprietarioValues)
+    countQ = countQ.in("clienti_proprietario_id", proprietarioValues)
   }
-  if (params.installatore !== "all") {
+  const installatoreValues = activeFilterValues(params.installatore)
+  if (installatoreValues.length > 0) {
     // Il filtro arriva come nome (colonna testo): installatore_id e' un uuid
     // quasi sempre null e un valore non-uuid faceva errare l'intera query.
-    listQ = listQ.eq("installatore", params.installatore)
-    countQ = countQ.eq("installatore", params.installatore)
+    listQ = listQ.in("installatore", installatoreValues)
+    countQ = countQ.in("installatore", installatoreValues)
   }
-  if (params.tag !== "all") {
+  const tagValues = activeFilterValues(params.tag)
+  if (tagValues.length > 0) {
     // cliente_tags e' una tabella ponte (cliente_id, tag_id): niente join
     // diretto via query builder per un .eq su una colonna di clienti, quindi
     // si risolve prima l'elenco di id con quel tag, poi si restringe con
     // .in(). Array vuoto = nessun cliente ha quel tag: si esce subito senza
     // interrogare "clienti" (un .in("id", []) su alcune versioni del client
     // restituirebbe tutte le righe invece di zero).
-    const taggedIds = await supabase.from("cliente_tags").select("cliente_id").eq("tag_id", params.tag)
+    const taggedIds = await supabase.from("cliente_tags").select("cliente_id").in("tag_id", tagValues)
     if (taggedIds.error) {
       console.error("[clienti/repository] filtro tag:", taggedIds.error.message)
     }

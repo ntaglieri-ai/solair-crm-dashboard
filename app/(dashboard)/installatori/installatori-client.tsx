@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { hasFilterValues } from "@/lib/shared/filter-values"
 import type { InstallatoreRecord } from "@/lib/installatori/repository"
 import {
   InstallatoreSearchInput,
@@ -186,12 +187,12 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
 
   const hasActiveFilters =
     filters.search.trim().length > 0 ||
-    filters.proprietario !== "all" ||
-    filters.tag !== "all" ||
-    filters.stato !== "all"
+    hasFilterValues(filters.proprietario) ||
+    hasFilterValues(filters.tag) ||
+    hasFilterValues(filters.stato)
 
-  const isAttivoFilterActive = filters.stato === "attivo"
-  const isNonAttivoFilterActive = filters.stato === "non_attivo"
+  const isAttivoFilterActive = filters.stato.length === 1 && filters.stato.includes("attivo")
+  const isNonAttivoFilterActive = filters.stato.length === 1 && filters.stato.includes("non_attivo")
 
   const deleteSingle = useDeleteInstallatore()
   const deleteBulk = useDeleteInstallatori()
@@ -390,7 +391,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
 
         <button
           type="button"
-          onClick={() => applyQuickFilter({ stato: "attivo" })}
+          onClick={() => applyQuickFilter({ stato: ["attivo"] })}
           className={cn(
             "rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400",
             isAttivoFilterActive && "ring-2 ring-emerald-300",
@@ -410,7 +411,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
 
         <button
           type="button"
-          onClick={() => applyQuickFilter({ stato: "non_attivo" })}
+          onClick={() => applyQuickFilter({ stato: ["non_attivo"] })}
           className={cn(
             "rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400",
             isNonAttivoFilterActive && "ring-2 ring-slate-300",

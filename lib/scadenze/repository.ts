@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { applyOwnerScope, filterCurrentAccessibleRecordIds, resolveCurrentOwnerScope } from "@/lib/permissions/data-scope"
 import type { ClienteCompito, StatoCompito } from "@/lib/mock-data"
 import type { ScadenzeListParams, ScadenzeListResponse, ScadenzaSortKey } from "@/lib/scadenze/api-types"
+import { activeFilterValues } from "@/lib/shared/filter-values"
 
 export type ScadenzaRecord = {
   id: string
@@ -102,13 +103,15 @@ export async function queryScadenze(
     listQ = listQ.ilike("nome", p)
     countQ = countQ.ilike("nome", p)
   }
-  if (params.proprietario !== "all") {
-    listQ = listQ.eq("proprietario_id", params.proprietario)
-    countQ = countQ.eq("proprietario_id", params.proprietario)
+  const proprietarioValues = activeFilterValues(params.proprietario)
+  if (proprietarioValues.length > 0) {
+    listQ = listQ.in("proprietario_id", proprietarioValues)
+    countQ = countQ.in("proprietario_id", proprietarioValues)
   }
-  if (params.tag !== "all") {
-    listQ = listQ.eq("tag", params.tag)
-    countQ = countQ.eq("tag", params.tag)
+  const tagValues = activeFilterValues(params.tag)
+  if (tagValues.length > 0) {
+    listQ = listQ.in("tag", tagValues)
+    countQ = countQ.in("tag", tagValues)
   }
   if (params.scadenzaDa) {
     listQ = listQ.gte("data_scadenza", params.scadenzaDa)
@@ -118,10 +121,11 @@ export async function queryScadenze(
     listQ = listQ.lte("data_scadenza", params.scadenzaA + "T23:59:59Z")
     countQ = countQ.lte("data_scadenza", params.scadenzaA + "T23:59:59Z")
   }
-  if (params.collegamento === "si") {
+  const collegamentoValues = activeFilterValues(params.collegamento)
+  if (collegamentoValues.length === 1 && collegamentoValues[0] === "si") {
     listQ = listQ.not("connesso_a_id", "is", null)
     countQ = countQ.not("connesso_a_id", "is", null)
-  } else if (params.collegamento === "no") {
+  } else if (collegamentoValues.length === 1 && collegamentoValues[0] === "no") {
     listQ = listQ.is("connesso_a_id", null)
     countQ = countQ.is("connesso_a_id", null)
   }

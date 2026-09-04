@@ -817,9 +817,19 @@ export function LeadsClient({
             onQuickFiltersReset={handleReset}
             quickViews={QUICK_VIEWS.map((view) => ({
               label: view.label,
-              active: filters.stato === view.stato && filters.commerciale === view.commerciale,
+              active:
+                (view.stato === "all"
+                  ? filters.stato.length === 0
+                  : filters.stato.length === 1 && filters.stato.includes(view.stato)) &&
+                (view.commerciale === "all"
+                  ? filters.commerciale.length === 0
+                  : filters.commerciale.length === 1 && filters.commerciale.includes(view.commerciale)),
               onSelect: () =>
-                handleFilterChange({ ...DEFAULT_FILTERS, stato: view.stato, commerciale: view.commerciale }),
+                handleFilterChange({
+                  ...DEFAULT_FILTERS,
+                  stato: view.stato === "all" ? [] : [view.stato],
+                  commerciale: view.commerciale === "all" ? [] : [view.commerciale],
+                }),
             }))}
             trigger={({ onClick, count }) => (
               <Button

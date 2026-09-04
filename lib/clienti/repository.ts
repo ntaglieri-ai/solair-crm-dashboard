@@ -349,7 +349,7 @@ async function loadClienteCustomFieldValues(
     key: f.field_key as string,
     label: f.label as string,
     tipo: f.tipo as string,
-    value: (row as Record<string, unknown>)[f.column_name as string] ?? null,
+    value: (row as unknown as Record<string, unknown>)[f.column_name as string] ?? null,
   }))
 }
 

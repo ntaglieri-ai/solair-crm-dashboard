@@ -72,6 +72,11 @@ describe("client persistence", () => {
     expect(state.row.installatore).toBeNull()
     expect(state.row.installatore_id).toBeNull()
   })
+  it("keeps an empty imported client status empty instead of inventing a default", async () => {
+    state.row.stato = null
+    const result = await updateClienteRecord("client", { Nome: "Test" })
+    expect(result?.Stato).toBe("")
+  })
   it("surfaces database errors without reporting success", async () => {
     state.failWrite = true
     const error = vi.fn()

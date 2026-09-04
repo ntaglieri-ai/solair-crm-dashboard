@@ -126,7 +126,7 @@ function mapRow(row: Record<string, unknown>): ClienteRecord {
     Tag: parseTags(row.tag),
     Sede: (row.sede as SedeLabel) ?? ("" as SedeLabel),
     Cognome: (row.cognome as string) ?? "",
-    Stato: (row.stato as StatoCliente) ?? "Attesa cliente",
+    Stato: typeof row.stato === "string" ? row.stato : "",
     Nome: (row.nome as string) || undefined,
     Cellulare: (row.cellulare as string) || undefined,
     "Codice fiscale": (row.codice_fiscale as string) || undefined,

@@ -1718,7 +1718,7 @@ export interface ClienteRecord {
   Descrizione?: string
   "Modalità iscrizione annullata"?: string | null
   "Ora iscrizione annullata"?: string | null
-  Stato: StatoCliente
+  Stato: string
   Note?: string
   "Note ufficio"?: string
   "Note pagamenti"?: string

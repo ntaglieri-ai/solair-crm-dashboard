@@ -44,10 +44,7 @@ import type { NoteMentionDraft } from "@/lib/notes/mentions"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { formatDMY } from "@/components/compiti/new-compito-dialog"
-import {
-  type ClienteRecord,
-  type StatoCliente,
-} from "@/lib/mock-data"
+import { type ClienteRecord } from "@/lib/mock-data"
 import { ClienteTagPicker } from "./cliente-tag-controls"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
@@ -83,7 +80,7 @@ export function ClienteRowContextMenu({
   const router = useRouter()
   const [tagOpen, setTagOpen] = useState(false)
   const [owner, setOwner] = useState(cliente["Clienti Proprietario"] ?? "")
-  const [stato, setStato] = useState<StatoCliente>(cliente.Stato)
+  const [stato, setStato] = useState(cliente.Stato)
   const [confirmDel, setConfirmDel] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
@@ -289,13 +286,8 @@ export function ClienteRowContextMenu({
                   <ContextMenuItem
                     key={s}
                     onClick={() => {
-                      // Cast necessario: prima STATO_CLIENTE_VALUES era
-                      // tipizzato StatoCliente[] (unione fissa), ora la
-                      // lista e' dinamica (crm_stato_cliente) quindi TS
-                      // vede solo string — il valore resta comunque uno
-                      // dei valori reali configurati, non arbitrario.
-                      setStato(s as StatoCliente)
-                      onUpdate(cliente, { Stato: s as StatoCliente })
+                      setStato(s)
+                      onUpdate(cliente, { Stato: s })
                       toast.success("Stato aggiornato", {
                         description: `${cliente["Nome Clienti"]} → ${s}`,
                       })

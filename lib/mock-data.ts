@@ -1656,20 +1656,23 @@ export function leadInitials(nomeLead: string): string {
 // Molti campi sono opzionali: nella realtà la gran parte è vuota.
 // ============================================================================
 
+// L'elenco originale (9 valori "puliti") non corrispondeva quasi per niente
+// ai dati reali importati da Zoho: solo "Attesa cliente" combaciava. Sostituito
+// con i valori VERI della tendina Stato su Zoho (screenshot Nando, 04/09),
+// stessa grafia esatta incluso "In Esecuzione" (maiuscola) e la barra in
+// "Necessario sopralluogo/intervento". Ordine alfabetico, come su Zoho.
 export type StatoCliente =
-  | "Nuovo contratto digitale"
-  | "Fin da firmare"
-  | "Attesa cliente"
-  // Fase 3.1 — la pratica resta ferma finche' non si fa il sopralluogo, quindi
-  // sta dopo il blocco contrattuale della Fase 2 e prima dell'iter: e' l'ordine
-  // reale del passaggio Fase 2 → 3. L'ordine di questo type e' quello con cui
-  // gli stati compaiono in filtri, select e menu (vedi STATO_CLIENTE_VALUES).
-  | "Necessario sopralluogo intervento"
-  | "Iter in corso"
-  | "In esecuzione"
-  | "Installazione completata"
-  | "Emessa fattura"
-  | "Chiuso"
+  | "Concluso"
+  | "Da installare"
+  | "Da sollecitare"
+  | "In Esecuzione"
+  | "In stand-by"
+  | "Installato"
+  | "Logistica"
+  | "Necessario sopralluogo/intervento"
+  | "Negativo"
+  | "Sollecitato"
+  | "Validato"
 
 export interface ClienteRecord {
   id: string
@@ -2182,33 +2185,37 @@ export const DEFAULT_CLIENTE_COLUMNS: ClienteColumnId[] = [
 ]
 
 export const STATO_CLIENTE_VALUES: StatoCliente[] = [
-  "Nuovo contratto digitale",
-  "Fin da firmare",
-  "Attesa cliente",
-  "Necessario sopralluogo intervento",
-  "Iter in corso",
-  "In esecuzione",
-  "Installazione completata",
-  "Emessa fattura",
-  "Chiuso",
+  "Concluso",
+  "Da installare",
+  "Da sollecitare",
+  "In Esecuzione",
+  "In stand-by",
+  "Installato",
+  "Logistica",
+  "Necessario sopralluogo/intervento",
+  "Negativo",
+  "Sollecitato",
+  "Validato",
 ]
 
+// Colori indicativi in base al significato di ciascuno stato — da rivedere
+// con Vito se non rispecchiano la logica interna reale (es. se "Sollecitato"
+// deve leggere come piu' urgente di "Da sollecitare", o viceversa).
 export const STATO_CLIENTE_TONE: Record<
   StatoCliente,
   "muted" | "success" | "warning" | "info" | "teal" | "destructive"
 > = {
-  "Nuovo contratto digitale": "info",
-  "Fin da firmare": "warning",
-  "Attesa cliente": "muted",
-  // "warning" come gli altri stati che aspettano un'azione nostra (Fin da
-  // firmare, Iter in corso). Non "destructive": il sopralluogo da fare e' un
-  // passo previsto della pratica, non un problema.
-  "Necessario sopralluogo intervento": "warning",
-  "Iter in corso": "warning",
-  "In esecuzione": "teal",
-  "Installazione completata": "success",
-  "Emessa fattura": "success",
-  Chiuso: "muted",
+  Concluso: "success",
+  "Da installare": "warning",
+  "Da sollecitare": "destructive",
+  "In Esecuzione": "teal",
+  "In stand-by": "muted",
+  Installato: "success",
+  Logistica: "info",
+  "Necessario sopralluogo/intervento": "warning",
+  Negativo: "destructive",
+  Sollecitato: "warning",
+  Validato: "info",
 }
 
 export const CLIENTI_TOTAL = 1842

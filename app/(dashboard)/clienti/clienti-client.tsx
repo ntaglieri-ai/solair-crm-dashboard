@@ -698,6 +698,7 @@ export function ClientiClient({
               onSort={handleSort}
               density={density}
               columnWidths={columnWidths}
+              onOpenSettings={() => openSettings("colonne")}
               onColumnWidthChange={(column, width) =>
                 setColumnWidths((current) => ({ ...current, [column]: width }))
               }

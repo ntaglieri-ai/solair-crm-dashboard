@@ -116,18 +116,29 @@ function ClienteHeaderLabel({ column }: { column: ClienteColumn }) {
   )
 }
 
-function ActionsHeaderLabel() {
+function ActionsHeaderLabel({ onOpenSettings }: { onOpenSettings: () => void }) {
+  // Prima era solo un'etichetta decorativa (span con tooltip, nessun
+  // onClick): sembrava un pulsante — tre puntini in un'intestazione di
+  // tabella sono un pattern UI riconoscibile — ma non lo era. Segnalato
+  // due volte da Nando pensando fosse lo stesso bug del menu ⋯ nella
+  // toolbar sopra (quello era un bug diverso, gia' corretto): questo e'
+  // un secondo "tre puntini morti" separato, nello stesso punto della
+  // pagina in cui e' facile confonderli.
   return (
     <Tooltip>
       <TooltipTrigger
         render={
-          <span className="inline-flex items-center justify-center">
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="inline-flex items-center justify-center rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Gestisci colonne"
+          >
             <MoreHorizontal className="size-4" aria-hidden="true" />
-            <span className="sr-only">Azioni</span>
-          </span>
+          </button>
         }
       />
-      <TooltipContent>Azioni</TooltipContent>
+      <TooltipContent>Gestisci colonne</TooltipContent>
     </Tooltip>
   )
 }
@@ -295,6 +306,7 @@ export function ClienteTable({
   columnWidths = {},
   onColumnWidthChange,
   onColumnReorder,
+  onOpenSettings,
 }: {
   clienti: ClienteRecord[]
   columns: ClienteColumn[]
@@ -312,6 +324,7 @@ export function ClienteTable({
   columnWidths?: Partial<Record<ClienteColumnId, number>>
   onColumnWidthChange?: (column: ClienteColumnId, width: number) => void
   onColumnReorder?: (source: ClienteColumnId, target: ClienteColumnId) => void
+  onOpenSettings: () => void
 }) {
   const router = useRouter()
   const [stuck, setStuck] = useState(false)
@@ -507,7 +520,7 @@ export function ClienteTable({
                 maxWidth: CLIENTE_ACTIONS_COLUMN_WIDTH,
               }}
             >
-              <ActionsHeaderLabel />
+              <ActionsHeaderLabel onOpenSettings={onOpenSettings} />
             </TableHead>
           </TableRow>
       </TableHeader>

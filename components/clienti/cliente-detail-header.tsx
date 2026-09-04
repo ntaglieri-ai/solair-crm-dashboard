@@ -41,6 +41,7 @@ import { usePermissions } from "@/lib/permissions/provider"
 import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
 import { ClienteTagBadges, ClienteTagAssignPopover } from "./cliente-tag-controls"
 import { useClienteTags } from "@/lib/cliente-tag-store"
+import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
 import { displayClienteOwner } from "@/lib/clienti/owner-display"
 
 function val(v: string | number | null | undefined): string {
@@ -57,6 +58,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
   const [editOpen, setEditOpen] = useState(false)
   const nome = cliente["Nome Clienti"]
   const { ownerNames, installers } = useClienteTags()
+  const { data: statoOptions } = useStatoClienteQuery()
   const ownerName = displayClienteOwner(cliente, ownerNames, "Non assegnato")
 
   return (
@@ -244,7 +246,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
         onOpenChange={setEditOpen}
         title="Modifica cliente"
         endpoint={`/api/clienti/${cliente.id}`}
-        fields={buildClienteEditFields(cliente, permissions, installers)}
+        fields={buildClienteEditFields(cliente, permissions, installers, (statoOptions ?? []).map((s) => s.valore))}
       />
     </div>
   )

@@ -22,13 +22,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  STATO_CLIENTE_VALUES,
   SEDE_LABELS,
   type ClienteRecord,
   type StatoCliente,
   type SedeLabel,
 } from "@/lib/mock-data"
 import { useClienteTags } from "@/lib/cliente-tag-store"
+import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
 
 interface NewClienteDialogProps {
   open: boolean
@@ -36,7 +36,6 @@ interface NewClienteDialogProps {
   onCreate: (cliente: ClienteRecord) => Promise<void>
 }
 
-const STATO_ITEMS = Object.fromEntries(STATO_CLIENTE_VALUES.map((s) => [s, s]))
 const SEDE_ITEMS = Object.fromEntries(SEDE_LABELS.map((s) => [s, s]))
 
 interface FormState {
@@ -83,6 +82,9 @@ export function NewClienteDialog({
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const { owners, installers, loading } = useClienteTags()
+  const { data: statoOptions } = useStatoClienteQuery()
+  const statoValues = (statoOptions ?? []).map((s) => s.valore)
+  const STATO_ITEMS = Object.fromEntries(statoValues.map((s) => [s, s]))
   const ownerItems = Object.fromEntries(owners.map((owner) => [owner.id, owner.nome]))
   const installerItems = Object.fromEntries(installers.map((installer) => [installer.id, installer.nome]))
 
@@ -189,7 +191,7 @@ export function NewClienteDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {STATO_CLIENTE_VALUES.map((s) => (
+                  {statoValues.map((s) => (
                     <SelectItem key={s} value={s}>
                       {s}
                     </SelectItem>

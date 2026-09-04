@@ -1,0 +1,337 @@
+diff --git a/components/clienti/cliente-actions-menu.tsx b/components/clienti/cliente-actions-menu.tsx
+index 8879ae4..7d3d379 100644
+--- a/components/clienti/cliente-actions-menu.tsx
++++ b/components/clienti/cliente-actions-menu.tsx
+@@ -53,9 +53,9 @@ import { cn } from "@/lib/utils"
+ import { toast } from "sonner"
+ import {
+   type ClienteRecord,
+-  STATO_CLIENTE_VALUES,
+   SEDE_LABELS,
+ } from "@/lib/mock-data"
++import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
+ import { BulkEmailMenuItem } from "@/components/shared/bulk-email-triggers"
+ import type { ClienteSettingsSectionId } from "./cliente-settings-sheet"
+ import { useClienteTags } from "@/lib/cliente-tag-store"
+@@ -130,6 +130,7 @@ export function ClienteActionsMenu({
+   const [dialog, setDialog] = useState<Dialogs>("none")
+   const permissions = usePermissions()
+   const { owners, ownerNames } = useClienteTags()
++  const { data: statoOptions } = useStatoClienteQuery()
+   const hasSelection = selectedCount > 0
+ 
+   const [owner, setOwner] = useState("")
+@@ -141,7 +142,7 @@ export function ClienteActionsMenu({
+ 
+   const updValueOptions =
+     updField === "Stato"
+-      ? (STATO_CLIENTE_VALUES as string[])
++      ? (statoOptions ?? []).map((s) => s.valore)
+       : updField === "Sede"
+         ? (SEDE_LABELS as string[])
+         : tags
+diff --git a/components/clienti/cliente-detail-header.tsx b/components/clienti/cliente-detail-header.tsx
+index 5d32aaa..5ec8ab1 100644
+--- a/components/clienti/cliente-detail-header.tsx
++++ b/components/clienti/cliente-detail-header.tsx
+@@ -41,6 +41,7 @@ import { usePermissions } from "@/lib/permissions/provider"
+ import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
+ import { ClienteTagBadges, ClienteTagAssignPopover } from "./cliente-tag-controls"
+ import { useClienteTags } from "@/lib/cliente-tag-store"
++import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
+ import { displayClienteOwner } from "@/lib/clienti/owner-display"
+ 
+ function val(v: string | number | null | undefined): string {
+@@ -57,6 +58,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
+   const [editOpen, setEditOpen] = useState(false)
+   const nome = cliente["Nome Clienti"]
+   const { ownerNames, installers } = useClienteTags()
++  const { data: statoOptions } = useStatoClienteQuery()
+   const ownerName = displayClienteOwner(cliente, ownerNames, "Non assegnato")
+ 
+   return (
+@@ -244,7 +246,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
+         onOpenChange={setEditOpen}
+         title="Modifica cliente"
+         endpoint={`/api/clienti/${cliente.id}`}
+-        fields={buildClienteEditFields(cliente, permissions, installers)}
++        fields={buildClienteEditFields(cliente, permissions, installers, (statoOptions ?? []).map((s) => s.valore))}
+       />
+     </div>
+   )
+diff --git a/components/clienti/cliente-filters.tsx b/components/clienti/cliente-filters.tsx
+index 7f5be39..a9d2047 100644
+--- a/components/clienti/cliente-filters.tsx
++++ b/components/clienti/cliente-filters.tsx
+@@ -1,6 +1,7 @@
+ "use client"
+ 
+-import { Search, X } from "lucide-react"
++import { useState } from "react"
++import { Search, X, Plus, Loader2 } from "lucide-react"
+ import {
+   Select,
+   SelectContent,
+@@ -9,13 +10,15 @@ import {
+   SelectTrigger,
+   SelectValue,
+ } from "@/components/ui/select"
++import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+ import { Input } from "@/components/ui/input"
+ import { Button } from "@/components/ui/button"
++import { toast } from "sonner"
+ import {
+-  STATO_CLIENTE_VALUES,
+   SEDE_LABELS,
+ } from "@/lib/mock-data"
+ import { useClienteTags } from "@/lib/cliente-tag-store"
++import { useStatoClienteQuery, useCreateStatoCliente } from "@/lib/clienti/stato-cliente-store"
+ 
+ export interface ClienteFilterState {
+   search: string
+@@ -86,6 +89,73 @@ function FilterSelect({
+   )
+ }
+ 
++/**
++ * Report Vito (5) + richiesta Nando 04/09: "solo quelli Zoho e la
++ * possibilita' di crearne". Non nel dialog di modifica/creazione cliente
++ * (troppi punti da duplicare) — qui nel filtro, un solo posto visibile,
++ * riservato a chi gestisce lo schema (stessa soglia dei Campi personalizzati).
++ */
++function AggiungiStatoPopover() {
++  const [open, setOpen] = useState(false)
++  const [valore, setValore] = useState("")
++  const createStato = useCreateStatoCliente()
++
++  const submit = () => {
++    const trimmed = valore.trim()
++    if (!trimmed) return
++    createStato.mutate(trimmed, {
++      onSuccess: () => {
++        toast.success(`Stato "${trimmed}" creato`)
++        setValore("")
++        setOpen(false)
++      },
++      onError: (error) => {
++        toast.error(error instanceof Error ? error.message : "Creazione non riuscita")
++      },
++    })
++  }
++
++  return (
++    <Popover open={open} onOpenChange={setOpen}>
++      <PopoverTrigger
++        render={
++          <Button
++            type="button"
++            variant="outline"
++            size="icon"
++            className="size-9 shrink-0 border-dashed"
++            aria-label="Aggiungi nuovo stato"
++          />
++        }
++      >
++        <Plus className="size-4" />
++      </PopoverTrigger>
++      <PopoverContent align="start" className="w-64 p-3">
++        <p className="mb-2 text-xs font-medium text-muted-foreground">Nuovo stato cliente</p>
++        <div className="flex items-center gap-1.5">
++          <Input
++            autoFocus
++            value={valore}
++            onChange={(e) => setValore(e.target.value)}
++            onKeyDown={(e) => e.key === "Enter" && submit()}
++            placeholder="Nome stato"
++            className="h-8"
++          />
++          <Button
++            type="button"
++            size="icon"
++            className="size-8 shrink-0"
++            disabled={!valore.trim() || createStato.isPending}
++            onClick={submit}
++          >
++            {createStato.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
++          </Button>
++        </div>
++      </PopoverContent>
++    </Popover>
++  )
++}
++
+ export function countActiveClienteFilters(filters: ClienteFilterState): number {
+   return (
+     (filters.stato !== "all" ? 1 : 0) +
+@@ -136,21 +206,25 @@ export function ClienteQuickFilterFields({
+ 
+   const hasActiveFilters = countActiveClienteFilters(filters) > 0
+   const { owners, installerNames, tags } = useClienteTags()
++  const { data: statoOptions } = useStatoClienteQuery()
+ 
+   return (
+     <div className="flex min-w-0 flex-col gap-4">
+       <div className="grid gap-4 sm:grid-cols-2">
+-        <FilterSelect
+-          ariaLabel="Filtra per Stato"
+-          className="w-full bg-card"
+-          value={filters.stato}
+-          onValueChange={(v) => set("stato", v)}
+-          placeholder="Stato"
+-          options={[
+-            ["all", "Tutti gli stati"],
+-            ...STATO_CLIENTE_VALUES.map((s) => [s, s] as [string, string]),
+-          ]}
+-        />
++        <div className="flex items-center gap-1.5">
++          <FilterSelect
++            ariaLabel="Filtra per Stato"
++            className="w-full bg-card"
++            value={filters.stato}
++            onValueChange={(v) => set("stato", v)}
++            placeholder="Stato"
++            options={[
++              ["all", "Tutti gli stati"],
++              ...(statoOptions ?? []).map((s) => [s.valore, s.valore] as [string, string]),
++            ]}
++          />
++          <AggiungiStatoPopover />
++        </div>
+ 
+         <FilterSelect
+           ariaLabel="Filtra per Sede"
+diff --git a/components/clienti/cliente-row-context-menu.tsx b/components/clienti/cliente-row-context-menu.tsx
+index cce780a..2ad98e6 100644
+--- a/components/clienti/cliente-row-context-menu.tsx
++++ b/components/clienti/cliente-row-context-menu.tsx
+@@ -45,12 +45,12 @@ import { Label } from "@/components/ui/label"
+ import { Input } from "@/components/ui/input"
+ import { formatDMY } from "@/components/compiti/new-compito-dialog"
+ import {
+-  STATO_CLIENTE_VALUES,
+   type ClienteRecord,
+   type StatoCliente,
+ } from "@/lib/mock-data"
+ import { ClienteTagPicker } from "./cliente-tag-controls"
+ import { useClienteTags } from "@/lib/cliente-tag-store"
++import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
+ import { usePermissions } from "@/lib/permissions/provider"
+ import { EditRecordDialog, buildClienteEditFields } from "@/components/shared/edit-record-dialog"
+ import { telHref } from "@/components/shared/quick-contact-icons"
+@@ -60,10 +60,9 @@ import { telHref } from "@/components/shared/quick-contact-icons"
+ // generico per qualunque tipo, "Cliente" incluso, nessuna modifica serviva
+ // li').
+ 
+-// Elenco stati preso da STATO_CLIENTE_VALUES invece di riscriverlo: era una
+-// copia identica, e una copia di un enum e' un posto in cui dimenticarsi di
+-// aggiungere il valore nuovo (successo aggiungendo "Necessario sopralluogo
+-// intervento", Fase 3.1). Filtri e dialog nuovo cliente leggono gia' da li'.
++// "Cambia stato" nel menu contestuale legge dalla lista configurabile
++// (crm_stato_cliente), non piu' da un enum fisso nel codice — vedi
++// lib/clienti/stato-cliente-store.tsx.
+ 
+ export function ClienteRowContextMenu({
+   cliente,
+@@ -79,6 +78,7 @@ export function ClienteRowContextMenu({
+   onRefresh: () => void
+ }) {
+   const { owners, installers } = useClienteTags()
++  const { data: statoOptions } = useStatoClienteQuery()
+   const permissions = usePermissions()
+   const router = useRouter()
+   const [tagOpen, setTagOpen] = useState(false)
+@@ -285,7 +285,7 @@ export function ClienteRowContextMenu({
+                 Cambia stato
+               </ContextMenuSubTrigger>
+               <ContextMenuSubContent>
+-                {STATO_CLIENTE_VALUES.map((s) => (
++                {(statoOptions ?? []).map((opt) => opt.valore).map((s) => (
+                   <ContextMenuItem
+                     key={s}
+                     onClick={() => {
+@@ -347,7 +347,7 @@ export function ClienteRowContextMenu({
+         onOpenChange={setEditOpen}
+         title="Modifica cliente"
+         endpoint={`/api/clienti/${cliente.id}`}
+-        fields={buildClienteEditFields(cliente, permissions, installers)}
++        fields={buildClienteEditFields(cliente, permissions, installers, (statoOptions ?? []).map((s) => s.valore))}
+         onSaved={onRefresh}
+       />
+ 
+diff --git a/components/clienti/new-cliente-dialog.tsx b/components/clienti/new-cliente-dialog.tsx
+index 1de3bf2..51956bd 100644
+--- a/components/clienti/new-cliente-dialog.tsx
++++ b/components/clienti/new-cliente-dialog.tsx
+@@ -22,13 +22,13 @@ import {
+   SelectValue,
+ } from "@/components/ui/select"
+ import {
+-  STATO_CLIENTE_VALUES,
+   SEDE_LABELS,
+   type ClienteRecord,
+   type StatoCliente,
+   type SedeLabel,
+ } from "@/lib/mock-data"
+ import { useClienteTags } from "@/lib/cliente-tag-store"
++import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
+ 
+ interface NewClienteDialogProps {
+   open: boolean
+@@ -36,7 +36,6 @@ interface NewClienteDialogProps {
+   onCreate: (cliente: ClienteRecord) => Promise<void>
+ }
+ 
+-const STATO_ITEMS = Object.fromEntries(STATO_CLIENTE_VALUES.map((s) => [s, s]))
+ const SEDE_ITEMS = Object.fromEntries(SEDE_LABELS.map((s) => [s, s]))
+ 
+ interface FormState {
+@@ -83,6 +82,9 @@ export function NewClienteDialog({
+   const [form, setForm] = useState<FormState>(EMPTY_FORM)
+   const [saving, setSaving] = useState(false)
+   const { owners, installers, loading } = useClienteTags()
++  const { data: statoOptions } = useStatoClienteQuery()
++  const statoValues = (statoOptions ?? []).map((s) => s.valore)
++  const STATO_ITEMS = Object.fromEntries(statoValues.map((s) => [s, s]))
+   const ownerItems = Object.fromEntries(owners.map((owner) => [owner.id, owner.nome]))
+   const installerItems = Object.fromEntries(installers.map((installer) => [installer.id, installer.nome]))
+ 
+@@ -189,7 +191,7 @@ export function NewClienteDialog({
+               </SelectTrigger>
+               <SelectContent>
+                 <SelectGroup>
+-                  {STATO_CLIENTE_VALUES.map((s) => (
++                  {statoValues.map((s) => (
+                     <SelectItem key={s} value={s}>
+                       {s}
+                     </SelectItem>
+diff --git a/components/shared/edit-record-dialog.tsx b/components/shared/edit-record-dialog.tsx
+index 6e28bd0..ec51190 100644
+--- a/components/shared/edit-record-dialog.tsx
++++ b/components/shared/edit-record-dialog.tsx
+@@ -18,7 +18,6 @@ import { Textarea } from "@/components/ui/textarea"
+ import { CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
+ import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
+ import type { Lead, ClienteRecord } from "@/lib/mock-data"
+-import { STATO_CLIENTE_VALUES } from "@/lib/mock-data"
+ import { CUSTOM_FIELD_PREFIX, validateCustomValue } from "@/lib/clienti/custom-fields"
+ import type { CustomFieldValue } from "@/lib/mock-data"
+ import type { ClienteReferenceOption } from "@/lib/cliente-tag-store"
+@@ -138,6 +137,9 @@ export function buildClienteEditFields(
+   // Stato usa i valori canonici; Installatore usa UUID e nomi dell'anagrafica
+   // reale, senza confondere l'elenco di assegnazione con i filtri storici.
+   installers: ClienteReferenceOption[],
++  // Lista configurabile (crm_stato_cliente), non piu' STATO_CLIENTE_VALUES
++  // fisso nel codice — vedi lib/clienti/stato-cliente-store.tsx.
++  statoOptions: string[],
+ ): EditField[] {
+   const fields: EditField[] = CLIENTI_RECORD_FIELDS
+     .filter((field) => !["Ora modifica", "Ora creazione"].includes(field.appField))
+@@ -150,7 +152,7 @@ export function buildClienteEditFields(
+           label: field.appField,
+           value: cliente[field.appField as keyof ClienteRecord],
+           type: "select" as const,
+-          options: STATO_CLIENTE_VALUES,
++          options: statoOptions,
+         }
+       }
+       if (field.appField === "Installatore") {

@@ -45,12 +45,12 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { formatDMY } from "@/components/compiti/new-compito-dialog"
 import {
-  STATO_CLIENTE_VALUES,
   type ClienteRecord,
   type StatoCliente,
 } from "@/lib/mock-data"
 import { ClienteTagPicker } from "./cliente-tag-controls"
 import { useClienteTags } from "@/lib/cliente-tag-store"
+import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
 import { usePermissions } from "@/lib/permissions/provider"
 import { EditRecordDialog, buildClienteEditFields } from "@/components/shared/edit-record-dialog"
 import { telHref } from "@/components/shared/quick-contact-icons"
@@ -60,10 +60,9 @@ import { telHref } from "@/components/shared/quick-contact-icons"
 // generico per qualunque tipo, "Cliente" incluso, nessuna modifica serviva
 // li').
 
-// Elenco stati preso da STATO_CLIENTE_VALUES invece di riscriverlo: era una
-// copia identica, e una copia di un enum e' un posto in cui dimenticarsi di
-// aggiungere il valore nuovo (successo aggiungendo "Necessario sopralluogo
-// intervento", Fase 3.1). Filtri e dialog nuovo cliente leggono gia' da li'.
+// "Cambia stato" nel menu contestuale legge dalla lista configurabile
+// (crm_stato_cliente), non piu' da un enum fisso nel codice — vedi
+// lib/clienti/stato-cliente-store.tsx.
 
 export function ClienteRowContextMenu({
   cliente,
@@ -79,6 +78,7 @@ export function ClienteRowContextMenu({
   onRefresh: () => void
 }) {
   const { owners, installers } = useClienteTags()
+  const { data: statoOptions } = useStatoClienteQuery()
   const permissions = usePermissions()
   const router = useRouter()
   const [tagOpen, setTagOpen] = useState(false)
@@ -285,7 +285,7 @@ export function ClienteRowContextMenu({
                 Cambia stato
               </ContextMenuSubTrigger>
               <ContextMenuSubContent>
-                {STATO_CLIENTE_VALUES.map((s) => (
+                {(statoOptions ?? []).map((opt) => opt.valore).map((s) => (
                   <ContextMenuItem
                     key={s}
                     onClick={() => {
@@ -347,7 +347,7 @@ export function ClienteRowContextMenu({
         onOpenChange={setEditOpen}
         title="Modifica cliente"
         endpoint={`/api/clienti/${cliente.id}`}
-        fields={buildClienteEditFields(cliente, permissions, installers)}
+        fields={buildClienteEditFields(cliente, permissions, installers, (statoOptions ?? []).map((s) => s.valore))}
         onSaved={onRefresh}
       />
 

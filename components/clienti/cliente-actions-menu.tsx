@@ -53,9 +53,9 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
   type ClienteRecord,
-  STATO_CLIENTE_VALUES,
   SEDE_LABELS,
 } from "@/lib/mock-data"
+import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
 import { BulkEmailMenuItem } from "@/components/shared/bulk-email-triggers"
 import type { ClienteSettingsSectionId } from "./cliente-settings-sheet"
 import { useClienteTags } from "@/lib/cliente-tag-store"
@@ -130,6 +130,7 @@ export function ClienteActionsMenu({
   const [dialog, setDialog] = useState<Dialogs>("none")
   const permissions = usePermissions()
   const { owners, ownerNames } = useClienteTags()
+  const { data: statoOptions } = useStatoClienteQuery()
   const hasSelection = selectedCount > 0
 
   const [owner, setOwner] = useState("")
@@ -141,7 +142,7 @@ export function ClienteActionsMenu({
 
   const updValueOptions =
     updField === "Stato"
-      ? (STATO_CLIENTE_VALUES as string[])
+      ? (statoOptions ?? []).map((s) => s.valore)
       : updField === "Sede"
         ? (SEDE_LABELS as string[])
         : tags

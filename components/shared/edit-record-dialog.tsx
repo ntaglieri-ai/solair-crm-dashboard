@@ -18,7 +18,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
 import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
 import type { Lead, ClienteRecord } from "@/lib/mock-data"
-import { STATO_CLIENTE_VALUES } from "@/lib/mock-data"
 import { CUSTOM_FIELD_PREFIX, validateCustomValue } from "@/lib/clienti/custom-fields"
 import type { CustomFieldValue } from "@/lib/mock-data"
 import type { ClienteReferenceOption } from "@/lib/cliente-tag-store"
@@ -138,6 +137,9 @@ export function buildClienteEditFields(
   // Stato usa i valori canonici; Installatore usa UUID e nomi dell'anagrafica
   // reale, senza confondere l'elenco di assegnazione con i filtri storici.
   installers: ClienteReferenceOption[],
+  // Lista configurabile (crm_stato_cliente), non piu' STATO_CLIENTE_VALUES
+  // fisso nel codice — vedi lib/clienti/stato-cliente-store.tsx.
+  statoOptions: string[],
 ): EditField[] {
   const fields: EditField[] = CLIENTI_RECORD_FIELDS
     .filter((field) => !["Ora modifica", "Ora creazione"].includes(field.appField))
@@ -150,7 +152,7 @@ export function buildClienteEditFields(
           label: field.appField,
           value: cliente[field.appField as keyof ClienteRecord],
           type: "select" as const,
-          options: STATO_CLIENTE_VALUES,
+          options: statoOptions,
         }
       }
       if (field.appField === "Installatore") {

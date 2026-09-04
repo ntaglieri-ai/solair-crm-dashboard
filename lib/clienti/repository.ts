@@ -315,6 +315,44 @@ async function loadCompitiCorrelati(id: string): Promise<ClienteCompito[]> {
   }))
 }
 
+/**
+ * Legge i campi custom visibili per il modulo Clienti (crm_custom_fields,
+ * colonna reale aggiunta via ALTER TABLE da CRM Settings → Attributi) e i
+ * loro valori per QUESTO cliente. Sempre a prova di errore: se la tabella
+ * metadata non esiste ancora o la query fallisce, ritorna array vuoto
+ * invece di far fallire l'intera pagina cliente per un pezzo accessorio.
+ */
+async function loadClienteCustomFieldValues(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  clienteId: string,
+): Promise<ClienteRecord["customFields"]> {
+  const { data: fields, error: fieldsError } = await supabase
+    .from("crm_custom_fields")
+    .select("field_key, label, tipo, column_name")
+    .eq("table_name", "clienti")
+    .eq("visible", true)
+    .is("deleted_at", null)
+    .order("ordinamento", { ascending: true })
+
+  if (fieldsError || !fields || fields.length === 0) return []
+
+  const columns = fields.map((f) => f.column_name as string)
+  const { data: row, error: valuesError } = await supabase
+    .from("clienti")
+    .select(columns.join(","))
+    .eq("id", clienteId)
+    .maybeSingle()
+
+  if (valuesError || !row) return []
+
+  return fields.map((f) => ({
+    key: f.field_key as string,
+    label: f.label as string,
+    tipo: f.tipo as string,
+    value: (row as Record<string, unknown>)[f.column_name as string] ?? null,
+  }))
+}
+
 export async function getClienteById(
   id: string,
 ): Promise<ClienteRecord | null> {
@@ -331,6 +369,7 @@ export async function getClienteById(
   if (!detailResult.error && detailResult.data) {
     const cliente = mapRow(detailResult.data as unknown as Record<string, unknown>)
     cliente.compiti = compiti
+    cliente.customFields = await loadClienteCustomFieldValues(supabase, id)
     return cliente
   }
 
@@ -341,6 +380,7 @@ export async function getClienteById(
   const { data, error } = await fallbackQ.single()
   if (error || !data) return null
   const cliente = mapRow(data as unknown as Record<string, unknown>)
+  cliente.customFields = await loadClienteCustomFieldValues(supabase, id)
   cliente.compiti = compiti
   return cliente
 }

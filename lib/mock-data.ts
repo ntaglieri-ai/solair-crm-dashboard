@@ -1890,6 +1890,21 @@ export interface ClienteRecord {
 
   /** Id dei tag assegnati (cliente_tags), popolato dal server. */
   tagIds?: string[]
+
+  /**
+   * Campi aggiunti da CRM Settings → Attributi (crm_custom_fields + colonna
+   * reale via ALTER TABLE). Prima di questo, un campo creato li' esisteva
+   * nel database ma non compariva mai in nessuna scheda: mancava proprio
+   * questa lettura. Popolato server-side da getClienteById.
+   */
+  customFields?: CustomFieldValue[]
+}
+
+export interface CustomFieldValue {
+  key: string
+  label: string
+  tipo: string
+  value: unknown
 }
 
 export interface ClienteCompito {

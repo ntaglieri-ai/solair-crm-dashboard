@@ -29,6 +29,7 @@ import {
   IconCalendarEvent,
   IconPlus,
   IconLock,
+  IconAdjustmentsAlt,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -58,6 +59,43 @@ function val(v: string | number | boolean | null | undefined): string {
 
 function hasValue(v: unknown): boolean {
   return v !== null && v !== undefined && v !== ""
+}
+
+/**
+ * Stesso trattamento visivo di val()/DataField, esteso ai tipi che i campi
+ * custom possono avere (date/timestamptz formattate, non ISO grezzo).
+ */
+function valCustomField(tipo: string, v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—"
+  if (tipo === "boolean") return v ? "Sì" : "No"
+  if (tipo === "date" || tipo === "timestamptz") {
+    const d = new Date(String(v))
+    if (Number.isNaN(d.getTime())) return String(v)
+    return new Intl.DateTimeFormat("it-IT", { dateStyle: "medium" }).format(d)
+  }
+  return String(v)
+}
+
+/**
+ * Campi aggiunti da CRM Settings → Attributi (report Vito, punto 6): prima
+ * la colonna veniva creata davvero nel database ma non compariva in nessuna
+ * scheda — mancava proprio questa lettura/rendering. Stessa identica resa
+ * grafica di DataField, cosi' un campo custom e' indistinguibile da uno
+ * nativo. Sezione nascosta del tutto se non e' stato aggiunto nulla (il
+ * caso comune oggi), per non introdurre disordine visivo gratuito.
+ */
+function CampiPersonalizzati({ cliente }: { cliente: ClienteRecord }) {
+  const campi = cliente.customFields ?? []
+  if (campi.length === 0) return null
+  return (
+    <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+      {campi.map((c) => (
+        <DataField key={c.key} label={c.label}>
+          {valCustomField(c.tipo, c.value)}
+        </DataField>
+      ))}
+    </div>
+  )
 }
 
 /* ---------- Sezione collassabile ---------- */
@@ -192,6 +230,7 @@ function BoolChip({ label, on }: { label: string; on: boolean | undefined }) {
 
 const NAV_ITEMS = [
   { id: "section-anagrafica", label: "Anagrafica" },
+  { id: "section-campi-personalizzati", label: "Campi personalizzati" },
   { id: "section-documenti", label: "Documenti" },
   { id: "section-iter", label: "Iter burocratico" },
   { id: "section-impianto", label: "Impianto" },
@@ -204,14 +243,23 @@ const NAV_ITEMS = [
   { id: "section-attivita", label: "Attività" },
 ] as const
 
-function RelatedNav({ vediNoteInterne }: { vediNoteInterne: boolean }) {
+function RelatedNav({
+  vediNoteInterne,
+  hasCustomFields,
+}: {
+  vediNoteInterne: boolean
+  hasCustomFields: boolean
+}) {
   const go = (id: string) =>
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })
   // La voce "Note interne" sparisce con la sezione: lasciarla porterebbe
   // a uno scroll verso un'ancora inesistente, e soprattutto rivelerebbe
-  // che quella sezione esiste per qualcun altro.
+  // che quella sezione esiste per qualcun altro. Stesso motivo per "Campi
+  // personalizzati": non ha senso in nav se non e' stato aggiunto nulla.
   const items = NAV_ITEMS.filter(
-    (item) => vediNoteInterne || item.id !== "section-note-interne",
+    (item) =>
+      (vediNoteInterne || item.id !== "section-note-interne") &&
+      (hasCustomFields || item.id !== "section-campi-personalizzati"),
   )
   return (
     <nav className="flex flex-wrap items-center gap-1 border-b border-border pb-3">
@@ -1416,11 +1464,17 @@ export function ClienteDetailContent({ cliente }: { cliente: ClienteRecord }) {
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1">
-      <RelatedNav vediNoteInterne={vediNoteInterne} />
+      <RelatedNav vediNoteInterne={vediNoteInterne} hasCustomFields={(cliente.customFields?.length ?? 0) > 0} />
 
       <Section id="section-anagrafica" title="Anagrafica" icon={IconUser}>
         <Anagrafica cliente={cliente} />
       </Section>
+
+      {(cliente.customFields?.length ?? 0) > 0 ? (
+        <Section id="section-campi-personalizzati" title="Campi personalizzati" icon={IconAdjustmentsAlt}>
+          <CampiPersonalizzati cliente={cliente} />
+        </Section>
+      ) : null}
 
       {/* Documenti e Iter spostati subito dopo Anagrafica (report Vito, punti
           1/10): verifica documentale/layout e sopralluogo sono tra le prime

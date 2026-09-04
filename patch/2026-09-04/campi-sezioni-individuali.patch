@@ -1,0 +1,124 @@
+diff --git a/components/clienti/cliente-detail-content.tsx b/components/clienti/cliente-detail-content.tsx
+index be35d3e..edc4481 100644
+--- a/components/clienti/cliente-detail-content.tsx
++++ b/components/clienti/cliente-detail-content.tsx
+@@ -42,7 +42,7 @@ import { ConsensoEmailToggle } from "@/components/shared/consenso-email-toggle"
+ import { CampoProtetto, useCampoVisibile } from "@/components/shared/campo-protetto"
+ import { Checkbox } from "@/components/ui/checkbox"
+ import { cn } from "@/lib/utils"
+-import { type ClienteRecord, type Compito, OPEN_TASK_STATI } from "@/lib/mock-data"
++import { type ClienteRecord, type Compito, type CustomFieldValue, OPEN_TASK_STATI } from "@/lib/mock-data"
+ import { ClienteAvatar } from "./cliente-utils"
+ import { InstallatoreAssegnatoSelect } from "./installatore-assegnato-select"
+ import { QuickCompitoDialog } from "@/components/compiti/quick-compito-dialog"
+@@ -83,31 +83,21 @@ function valCustomField(tipo: string, v: unknown): string {
+  * grafica di DataField, cosi' un campo custom e' indistinguibile da uno
+  * nativo. Sezione nascosta del tutto se non e' stato aggiunto nulla (il
+  * caso comune oggi), per non introdurre disordine visivo gratuito.
++ *
++ * Non raggruppati sotto un'unica sezione "Campi personalizzati": ogni campo
++ * e' la SUA sezione, con il suo nome vero in nav — Nando ha chiesto
++ * esplicitamente di vedere "Verifica", non "Campi personalizzati" (03/09).
+  */
+-function CampiPersonalizzati({ cliente }: { cliente: ClienteRecord }) {
+-  const campi = cliente.customFields ?? []
+-  if (campi.length === 0) return null
++function CampoPersonalizzato({ campo }: { campo: CustomFieldValue }) {
+   return (
+-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+-      {campi.map((c) => (
+-        <div
+-          key={c.key}
+-          className="flex flex-col gap-1 rounded-lg border border-dashed border-violet-300 bg-violet-50/40 p-3"
+-        >
+-          <div className="flex items-center gap-2">
+-            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+-              {c.label}
+-            </span>
+-            <Badge
+-              variant="outline"
+-              className="h-4 border-violet-300 bg-violet-100 px-1.5 text-[9px] font-semibold uppercase tracking-wide text-violet-700"
+-            >
+-              Personalizzato
+-            </Badge>
+-          </div>
+-          <div className="text-[13px] text-foreground">{valCustomField(c.tipo, c.value)}</div>
+-        </div>
+-      ))}
++    <div className="flex flex-col gap-1.5 rounded-lg border border-dashed border-violet-300 bg-violet-50/40 p-3">
++      <Badge
++        variant="outline"
++        className="h-4 w-fit border-violet-300 bg-violet-100 px-1.5 text-[9px] font-semibold uppercase tracking-wide text-violet-700"
++      >
++        Personalizzato
++      </Badge>
++      <div className="text-[13px] text-foreground">{valCustomField(campo.tipo, campo.value)}</div>
+     </div>
+   )
+ }
+@@ -244,7 +234,6 @@ function BoolChip({ label, on }: { label: string; on: boolean | undefined }) {
+ 
+ const NAV_ITEMS = [
+   { id: "section-anagrafica", label: "Anagrafica" },
+-  { id: "section-campi-personalizzati", label: "Campi personalizzati" },
+   { id: "section-documenti", label: "Documenti" },
+   { id: "section-iter", label: "Iter burocratico" },
+   { id: "section-impianto", label: "Impianto" },
+@@ -259,22 +248,26 @@ const NAV_ITEMS = [
+ 
+ function RelatedNav({
+   vediNoteInterne,
+-  hasCustomFields,
++  customFields,
+ }: {
+   vediNoteInterne: boolean
+-  hasCustomFields: boolean
++  customFields: CustomFieldValue[]
+ }) {
+   const go = (id: string) =>
+     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+   // La voce "Note interne" sparisce con la sezione: lasciarla porterebbe
+   // a uno scroll verso un'ancora inesistente, e soprattutto rivelerebbe
+-  // che quella sezione esiste per qualcun altro. Stesso motivo per "Campi
+-  // personalizzati": non ha senso in nav se non e' stato aggiunto nulla.
+-  const items = NAV_ITEMS.filter(
+-    (item) =>
+-      (vediNoteInterne || item.id !== "section-note-interne") &&
+-      (hasCustomFields || item.id !== "section-campi-personalizzati"),
++  // che quella sezione esiste per qualcun altro. I campi personalizzati non
++  // sono raggruppati sotto un'unica voce "Campi personalizzati": ognuno ha
++  // la sua, col suo nome vero, inserita subito dopo Anagrafica.
++  const base = NAV_ITEMS.filter(
++    (item) => vediNoteInterne || item.id !== "section-note-interne",
+   )
++  const items: { id: string; label: string }[] = [
++    base[0],
++    ...customFields.map((c) => ({ id: `section-campo-${c.key}`, label: c.label })),
++    ...base.slice(1),
++  ]
+   return (
+     <nav className="flex flex-wrap items-center gap-1 border-b border-border pb-3">
+       {items.map((item) => (
+@@ -1478,17 +1471,17 @@ export function ClienteDetailContent({ cliente }: { cliente: ClienteRecord }) {
+ 
+   return (
+     <div className="flex min-w-0 flex-1 flex-col gap-1">
+-      <RelatedNav vediNoteInterne={vediNoteInterne} hasCustomFields={(cliente.customFields?.length ?? 0) > 0} />
++      <RelatedNav vediNoteInterne={vediNoteInterne} customFields={cliente.customFields ?? []} />
+ 
+       <Section id="section-anagrafica" title="Anagrafica" icon={IconUser}>
+         <Anagrafica cliente={cliente} />
+       </Section>
+ 
+-      {(cliente.customFields?.length ?? 0) > 0 ? (
+-        <Section id="section-campi-personalizzati" title="Campi personalizzati" icon={IconAdjustmentsAlt}>
+-          <CampiPersonalizzati cliente={cliente} />
++      {(cliente.customFields ?? []).map((c) => (
++        <Section key={c.key} id={`section-campo-${c.key}`} title={c.label} icon={IconAdjustmentsAlt}>
++          <CampoPersonalizzato campo={c} />
+         </Section>
+-      ) : null}
++      ))}
+ 
+       {/* Documenti e Iter spostati subito dopo Anagrafica (report Vito, punti
+           1/10): verifica documentale/layout e sopralluogo sono tra le prime

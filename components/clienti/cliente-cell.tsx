@@ -1,10 +1,10 @@
 "use client"
 
-import { Bell, StickyNote } from "lucide-react"
+import { Bell, StickyNote, Plus } from "lucide-react"
 import { type ClienteRecord, type ClienteColumnId } from "@/lib/mock-data"
 import { BoolDot } from "@/components/leads/lead-utils"
 import { useClienteTags } from "@/lib/cliente-tag-store"
-import { ClienteTagBadges } from "./cliente-tag-controls"
+import { ClienteTagBadges, ClienteTagAssignPopover } from "./cliente-tag-controls"
 import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
 import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
 import { displayClienteOwner } from "@/lib/clienti/owner-display"
@@ -100,8 +100,23 @@ export function ClienteCell({
 
     case "Tag":
       return (
-        <span className="flex max-w-[460px] flex-wrap items-center justify-center gap-1.5">
+        <span
+          className="flex max-w-[460px] flex-wrap items-center justify-center gap-1.5"
+          onClick={(event) => event.stopPropagation()}
+        >
           <ClienteTagBadges clienteId={cliente.id} max={3} />
+          <ClienteTagAssignPopover
+            clienteId={cliente.id}
+            trigger={
+              <button
+                type="button"
+                aria-label="Aggiungi tag"
+                className="flex size-4 shrink-0 items-center justify-center rounded border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
+              >
+                <Plus size={10} strokeWidth={2} />
+              </button>
+            }
+          />
         </span>
       )
 

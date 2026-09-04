@@ -14,6 +14,7 @@ import {
   UserCircle,
   Wrench,
   CalendarDays,
+  Plus,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -38,7 +39,7 @@ import { EditRecordDialog, buildClienteEditFields } from "@/components/shared/ed
 import { useDeleteCliente } from "@/lib/clienti/hooks"
 import { usePermissions } from "@/lib/permissions/provider"
 import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
-import { ClienteTagBadges } from "./cliente-tag-controls"
+import { ClienteTagBadges, ClienteTagAssignPopover } from "./cliente-tag-controls"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { displayClienteOwner } from "@/lib/clienti/owner-display"
 
@@ -81,7 +82,21 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
             </h1>
             <div className="flex flex-wrap items-center gap-2">
               <StatoClienteBadge stato={cliente.Stato} />
-              <ClienteTagBadges clienteId={cliente.id} empty="" animate />
+              <div className="flex flex-wrap items-center gap-1.5">
+                <ClienteTagBadges clienteId={cliente.id} empty="" animate />
+                <ClienteTagAssignPopover
+                  clienteId={cliente.id}
+                  trigger={
+                    <button
+                      type="button"
+                      aria-label="Aggiungi tag"
+                      className="flex size-5 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
+                    >
+                      <Plus size={14} strokeWidth={2} />
+                    </button>
+                  }
+                />
+              </div>
             </div>
           </div>
         </div>

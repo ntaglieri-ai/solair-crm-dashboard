@@ -1,0 +1,132 @@
+diff --git a/components/clienti/cliente-cell.tsx b/components/clienti/cliente-cell.tsx
+index a9eb137..99ccef9 100644
+--- a/components/clienti/cliente-cell.tsx
++++ b/components/clienti/cliente-cell.tsx
+@@ -1,10 +1,10 @@
+ "use client"
+ 
+-import { Bell, StickyNote } from "lucide-react"
++import { Bell, StickyNote, Plus } from "lucide-react"
+ import { type ClienteRecord, type ClienteColumnId } from "@/lib/mock-data"
+ import { BoolDot } from "@/components/leads/lead-utils"
+ import { useClienteTags } from "@/lib/cliente-tag-store"
+-import { ClienteTagBadges } from "./cliente-tag-controls"
++import { ClienteTagBadges, ClienteTagAssignPopover } from "./cliente-tag-controls"
+ import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
+ import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
+ import { displayClienteOwner } from "@/lib/clienti/owner-display"
+@@ -100,8 +100,23 @@ export function ClienteCell({
+ 
+     case "Tag":
+       return (
+-        <span className="flex max-w-[460px] flex-wrap items-center justify-center gap-1.5">
++        <span
++          className="flex max-w-[460px] flex-wrap items-center justify-center gap-1.5"
++          onClick={(event) => event.stopPropagation()}
++        >
+           <ClienteTagBadges clienteId={cliente.id} max={3} />
++          <ClienteTagAssignPopover
++            clienteId={cliente.id}
++            trigger={
++              <button
++                type="button"
++                aria-label="Aggiungi tag"
++                className="flex size-4 shrink-0 items-center justify-center rounded border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
++              >
++                <Plus size={10} strokeWidth={2} />
++              </button>
++            }
++          />
+         </span>
+       )
+ 
+diff --git a/components/clienti/cliente-detail-header.tsx b/components/clienti/cliente-detail-header.tsx
+index 754a97d..81288fd 100644
+--- a/components/clienti/cliente-detail-header.tsx
++++ b/components/clienti/cliente-detail-header.tsx
+@@ -14,6 +14,7 @@ import {
+   UserCircle,
+   Wrench,
+   CalendarDays,
++  Plus,
+ } from "lucide-react"
+ import { Button } from "@/components/ui/button"
+ import {
+@@ -38,7 +39,7 @@ import { EditRecordDialog, buildClienteEditFields } from "@/components/shared/ed
+ import { useDeleteCliente } from "@/lib/clienti/hooks"
+ import { usePermissions } from "@/lib/permissions/provider"
+ import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
+-import { ClienteTagBadges } from "./cliente-tag-controls"
++import { ClienteTagBadges, ClienteTagAssignPopover } from "./cliente-tag-controls"
+ import { useClienteTags } from "@/lib/cliente-tag-store"
+ import { displayClienteOwner } from "@/lib/clienti/owner-display"
+ 
+@@ -81,7 +82,21 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
+             </h1>
+             <div className="flex flex-wrap items-center gap-2">
+               <StatoClienteBadge stato={cliente.Stato} />
+-              <ClienteTagBadges clienteId={cliente.id} empty="" animate />
++              <div className="flex flex-wrap items-center gap-1.5">
++                <ClienteTagBadges clienteId={cliente.id} empty="" animate />
++                <ClienteTagAssignPopover
++                  clienteId={cliente.id}
++                  trigger={
++                    <button
++                      type="button"
++                      aria-label="Aggiungi tag"
++                      className="flex size-5 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
++                    >
++                      <Plus size={14} strokeWidth={2} />
++                    </button>
++                  }
++                />
++              </div>
+             </div>
+           </div>
+         </div>
+diff --git a/components/clienti/cliente-table.tsx b/components/clienti/cliente-table.tsx
+index 495c5a1..494a4fc 100644
+--- a/components/clienti/cliente-table.tsx
++++ b/components/clienti/cliente-table.tsx
+@@ -13,6 +13,7 @@ import {
+   Wrench,
+   Bell,
+   StickyNote,
++  Plus,
+ } from "lucide-react"
+ import { IconArrowUp } from "@tabler/icons-react"
+ import { cn } from "@/lib/utils"
+@@ -54,7 +55,7 @@ import {
+ import { ClienteCell } from "./cliente-cell"
+ import { useClienteTags } from "@/lib/cliente-tag-store"
+ import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
+-import { ClienteTagBadges } from "./cliente-tag-controls"
++import { ClienteTagBadges, ClienteTagAssignPopover } from "./cliente-tag-controls"
+ import { displayClienteOwner } from "@/lib/clienti/owner-display"
+ 
+ export type SortDir = "asc" | "desc"
+@@ -211,8 +212,23 @@ function ClienteMobileList({
+                   <MapPin className="size-3.5 shrink-0" />
+                   <span className="truncate">{cliente.Sede}</span>
+                 </span>
+-                <div className="min-w-0 flex-1 overflow-hidden">
++                <div
++                  className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden"
++                  onClick={(event) => event.stopPropagation()}
++                >
+                   <ClienteTagBadges clienteId={cliente.id} max={1} />
++                  <ClienteTagAssignPopover
++                    clienteId={cliente.id}
++                    trigger={
++                      <button
++                        type="button"
++                        aria-label="Aggiungi tag"
++                        className="flex size-4 shrink-0 items-center justify-center rounded border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
++                      >
++                        <Plus size={10} strokeWidth={2} />
++                      </button>
++                    }
++                  />
+                 </div>
+               </div>
+             </div>

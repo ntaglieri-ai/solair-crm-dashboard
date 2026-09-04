@@ -13,6 +13,7 @@ import {
   Wrench,
   Bell,
   StickyNote,
+  Plus,
 } from "lucide-react"
 import { IconArrowUp } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
@@ -54,7 +55,7 @@ import {
 import { ClienteCell } from "./cliente-cell"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
-import { ClienteTagBadges } from "./cliente-tag-controls"
+import { ClienteTagBadges, ClienteTagAssignPopover } from "./cliente-tag-controls"
 import { displayClienteOwner } from "@/lib/clienti/owner-display"
 
 export type SortDir = "asc" | "desc"
@@ -211,8 +212,23 @@ function ClienteMobileList({
                   <MapPin className="size-3.5 shrink-0" />
                   <span className="truncate">{cliente.Sede}</span>
                 </span>
-                <div className="min-w-0 flex-1 overflow-hidden">
+                <div
+                  className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden"
+                  onClick={(event) => event.stopPropagation()}
+                >
                   <ClienteTagBadges clienteId={cliente.id} max={1} />
+                  <ClienteTagAssignPopover
+                    clienteId={cliente.id}
+                    trigger={
+                      <button
+                        type="button"
+                        aria-label="Aggiungi tag"
+                        className="flex size-4 shrink-0 items-center justify-center rounded border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
+                      >
+                        <Plus size={10} strokeWidth={2} />
+                      </button>
+                    }
+                  />
                 </div>
               </div>
             </div>

@@ -54,7 +54,10 @@ const EMPTY_FORM: FormState = {
   cognome: "",
   email: "",
   cellulare: "",
-  stato: "Nuovo contratto digitale",
+  // "Nuovo contratto digitale" non esiste piu' (valori Stato allineati a
+  // Zoho, 04/09) — nessuno dei valori reali corrisponde chiaramente a
+  // "appena creato": scelta provvisoria, da confermare con Vito/Nando.
+  stato: "Da sollecitare",
   sede: SEDE_LABELS[0],
   proprietario: "",
   installatore: "",

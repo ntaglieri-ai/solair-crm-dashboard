@@ -289,8 +289,13 @@ export function ClienteRowContextMenu({
                   <ContextMenuItem
                     key={s}
                     onClick={() => {
-                      setStato(s)
-                      onUpdate(cliente, { Stato: s })
+                      // Cast necessario: prima STATO_CLIENTE_VALUES era
+                      // tipizzato StatoCliente[] (unione fissa), ora la
+                      // lista e' dinamica (crm_stato_cliente) quindi TS
+                      // vede solo string — il valore resta comunque uno
+                      // dei valori reali configurati, non arbitrario.
+                      setStato(s as StatoCliente)
+                      onUpdate(cliente, { Stato: s as StatoCliente })
                       toast.success("Stato aggiornato", {
                         description: `${cliente["Nome Clienti"]} → ${s}`,
                       })

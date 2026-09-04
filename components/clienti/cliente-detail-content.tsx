@@ -88,12 +88,25 @@ function CampiPersonalizzati({ cliente }: { cliente: ClienteRecord }) {
   const campi = cliente.customFields ?? []
   if (campi.length === 0) return null
   return (
-    <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-      {campi.map((c) => (
-        <DataField key={c.key} label={c.label}>
-          {valCustomField(c.tipo, c.value)}
-        </DataField>
-      ))}
+    <div className="rounded-xl border border-dashed border-violet-300 bg-violet-50/40 p-4">
+      <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+        {campi.map((c) => (
+          <div key={c.key} className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {c.label}
+              </span>
+              <Badge
+                variant="outline"
+                className="h-4 border-violet-300 bg-violet-100 px-1.5 text-[9px] font-semibold uppercase tracking-wide text-violet-700"
+              >
+                Personalizzato
+              </Badge>
+            </div>
+            <div className="text-[13px] text-foreground">{valCustomField(c.tipo, c.value)}</div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

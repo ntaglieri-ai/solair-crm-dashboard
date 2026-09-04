@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 const { admin, notify } = vi.hoisted(() => ({ admin: vi.fn(), notify: vi.fn() }))
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: admin }))
-vi.mock("@/lib/notes/mentions-server", () => ({ notifyMentionedUsers: notify, absoluteCrmUrl: (_r: Request, path: string) => `https://crm.example${path}` }))
+vi.mock("@/lib/email/mailer", () => ({ sendDirectEmail: notify }))
 import { canMentionInternalUser, internalMentionUsers, resolveInternalMentions, notifyInternalMentions } from "../note-interne-mentions-server"
 import { notaInternaInput } from "../note-interne-input"
 
@@ -17,7 +17,7 @@ function database(overrides: Record<string, unknown> = {}) {
     return query
   } })
 }
-beforeEach(() => { vi.clearAllMocks(); database(); notify.mockResolvedValue(0) })
+beforeEach(() => { vi.clearAllMocks(); database(); notify.mockResolvedValue({ ok: true, error: null }) })
 
 describe("internal mentions recipient permissions", () => {
   it("allows admin and superadmin with access", () => {
@@ -77,13 +77,15 @@ describe("internal mention validation and notifications", () => {
     admin.mockReturnValue(null)
     expect(await resolveInternalMentions("cliente", "nota", [])).toEqual([])
   })
-  const notification = { request: new Request("https://crm.example"), clienteId: "cliente", mentions: [mention], authorId: "author", authorName: "Autore" }
-  it("sends only a generic notice and deduplicates mentions", async () => {
+  const notification = { text: "  @Mario Rossi\nControlla il pagamento <riservato>.", clienteId: "cliente", mentions: [mention], authorId: "author", authorName: "Autore" }
+  it("sends exactly the written text without automatic links and deduplicates mentions", async () => {
     expect(await notifyInternalMentions({ ...notification, mentions: [mention, mention] })).toBe(0)
     expect(notify).toHaveBeenCalledTimes(1)
-    expect(notify.mock.calls[0][0].recipients).toHaveLength(1)
-    expect(notify.mock.calls[0][0].text).not.toContain("Mario Rossi")
-    expect(notify.mock.calls[0][0].recordUrl).toContain("#section-note-interne")
+    expect(notify).toHaveBeenCalledWith({
+      to: user.email,
+      subject: "Autore ti ha menzionato in una nota interna",
+      body: notification.text,
+    })
   })
   it("does not re-notify existing mentions or the author", async () => {
     expect(await notifyInternalMentions({ ...notification, previous: [mention] })).toBe(0)
@@ -93,7 +95,11 @@ describe("internal mention validation and notifications", () => {
   it("rechecks access before email and warns if revoked", async () => {
     database({ utenti: [{ ...user, attivo: false }] })
     expect(await notifyInternalMentions(notification)).toBe(1)
-    expect(notify.mock.calls[0][0].recipients).toEqual([])
+    expect(notify).not.toHaveBeenCalled()
+  })
+  it("counts a reported SMTP failure without failing the saved note", async () => {
+    notify.mockResolvedValue({ ok: false, error: "SMTP unavailable" })
+    expect(await notifyInternalMentions(notification)).toBe(1)
   })
   it("reports email failures without failing a saved note", async () => {
     notify.mockRejectedValue(new Error("SMTP"))

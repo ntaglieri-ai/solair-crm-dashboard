@@ -49,7 +49,7 @@ export async function PATCH(request: Request, { params }: Params) {
   if (!data) return NextResponse.json({ error: "Nota modificata o non più disponibile. Ricarica le note prima di riprovare." }, { status: 409 })
 
   const notificationFailures = await notifyInternalMentions({
-    request, clienteId: id, mentions: menzioni, previous: previous.menzioni ?? [],
+    text: contenuto, clienteId: id, mentions: menzioni, previous: previous.menzioni ?? [],
     authorId: guard.permissions.snapshot.subject.userId,
     authorName: guard.permissions.snapshot.subject.nome ?? "Utente CRM",
   })

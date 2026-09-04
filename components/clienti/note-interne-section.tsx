@@ -247,7 +247,7 @@ export function NoteInterneSection({ clienteId }: { clienteId: string }) {
       <p className="flex items-center gap-1.5 rounded-lg bg-warning/10 px-3 py-2 text-[12px] text-warning">
         <IconLock size={14} className="shrink-0" />
         Visibili solo a Superadmin, Amministratori e Direttori. Non compaiono nelle
-        note cliente. Con @ puoi menzionare chi ha accesso a questa scheda; l’email contiene solo un avviso, non il testo riservato.
+        note cliente. Con @ puoi menzionare chi ha accesso a questa scheda: al salvataggio il testo della nota viene inviato via email ai nuovi destinatari menzionati.
       </p>
 
       {loading ? (

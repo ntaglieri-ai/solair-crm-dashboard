@@ -104,7 +104,7 @@ export async function POST(
   const rows = [data as NotaRow]
   const [nota] = withAutori(rows, await autoriNomi(supabase, rows))
   const notificationFailures = await notifyInternalMentions({
-    request, clienteId: id, mentions: menzioni, authorId: autoreId,
+    text: contenuto, clienteId: id, mentions: menzioni, authorId: autoreId,
     authorName: guard.permissions.snapshot.subject.nome ?? "Utente CRM",
   })
   return NextResponse.json({ ...nota, notificationFailures }, { status: 201 })

@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({ sendMail: vi.fn() }))
 vi.mock("nodemailer", () => ({ default: { createTransport: vi.fn(() => ({ sendMail: mocks.sendMail })) } }))
-import { sendWelcomeEmail, sendPasswordResetEmail, sendMentionNotificationEmail } from "../mailer"
+import { sendWelcomeEmail, sendPasswordResetEmail, sendMentionNotificationEmail, sendDirectEmail } from "../mailer"
 import { notifyMentionedUsers } from "@/lib/notes/mentions-server"
 
 beforeEach(() => {
@@ -16,6 +16,16 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs())
 
 describe("existing transactional emails (no network)", () => {
+  it("sends the written internal-note body unchanged, safely escaped and without a CRM link", async () => {
+    const body = "  @Mario Rossi\nControlla <script>test</script> & conferma.  "
+    expect((await sendDirectEmail({ to: "recipient@example.test", subject: "Menzione interna", body })).ok).toBe(true)
+    const mail = mocks.sendMail.mock.calls[0][0]
+    expect(mail.text).toBe(body)
+    expect(mail.html).toContain("&lt;script&gt;test&lt;/script&gt;")
+    expect(mail.html).toContain("<br/>")
+    expect(mail.html).not.toContain("<a ")
+    expect(mail.text).not.toContain("Apri la scheda")
+  })
   it.each([sendWelcomeEmail, sendPasswordResetEmail])("sends the existing template to the intended recipient", async (send) => {
     expect(await send({ to: "recipient@example.test", nome: "<Mario>", tempPassword: "test-only" })).toEqual({ ok: true, error: null })
     const mail = mocks.sendMail.mock.calls[0][0]

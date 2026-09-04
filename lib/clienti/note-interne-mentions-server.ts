@@ -4,7 +4,7 @@ import { createPermissionEngine } from "@/lib/permissions/engine"
 import { applyUiPermission } from "@/lib/permissions/load-permissions"
 import { NOTE_INTERNE_ROLES } from "./note-interne"
 import { sanitizeNoteMentions, type NoteMention, type NoteMentionDraft } from "@/lib/notes/mentions"
-import { absoluteCrmUrl, notifyMentionedUsers } from "@/lib/notes/mentions-server"
+import { sendDirectEmail } from "@/lib/email/mailer"
 
 type UiPermission = { chiave: string; abilitato: boolean | null }
 type Candidate = {
@@ -112,22 +112,23 @@ export async function resolveInternalMentions(clienteId: string, text: string, d
 }
 
 export async function notifyInternalMentions(params: {
-  request: Request; clienteId: string; mentions: NoteMention[]; previous?: NoteMention[]
+  text: string; clienteId: string; mentions: NoteMention[]; previous?: NoteMention[]
   authorId: string | null; authorName: string
 }) {
   const previousIds = new Set((params.previous ?? []).map((mention) => mention.userId))
   const ids = new Set(params.mentions.map((mention) => mention.userId).filter((id) => id !== params.authorId && !previousIds.has(id)))
   if (!ids.size) return 0
   try {
-    // Ricontrollo dopo la scrittura. Mai inviare testo riservato via email.
+    // Il testo scritto viene inviato solo dopo il salvataggio e un nuovo
+    // controllo dei destinatari. Nessun avviso sostitutivo o link automatico.
     const users = await internalMentionUsers(params.clienteId)
     const recipients = users.flatMap((user) => ids.has(user.id) && user.email ? [{ ...user, email: user.email }] : [])
-    const failures = await notifyMentionedUsers({
-      recipients, authorId: params.authorId, authorName: params.authorName,
-      text: "Sei stato menzionato in una nota interna. Accedi al CRM per leggerla con i tuoi permessi.",
-      recordLabel: "Nota interna cliente",
-      recordUrl: absoluteCrmUrl(params.request, `/clienti/${params.clienteId}#section-note-interne`),
-    })
+    const results = await Promise.allSettled(recipients.map((recipient) => sendDirectEmail({
+      to: recipient.email,
+      subject: `${params.authorName} ti ha menzionato in una nota interna`,
+      body: params.text,
+    })))
+    const failures = results.filter((result) => result.status === "rejected" || !result.value.ok).length
     return failures + ids.size - recipients.length
   } catch {
     // La nota è già salvata: un errore email non deve provocare reinserimenti.

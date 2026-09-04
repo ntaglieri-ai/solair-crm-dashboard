@@ -48,6 +48,7 @@ describe("internal notes routes", () => {
     expect(operations).toContainEqual(["insert", { cliente_id: "cliente", contenuto: "@Mario Rossi", menzioni: [mention], creato_da: "author" }])
     expect(operations).not.toContainEqual(["from", "attivita"])
     expect(mocks.notify).toHaveBeenCalledTimes(1)
+    expect(mocks.notify.mock.calls[0][0].text).toBe(saved.contenuto)
   })
   it("does not notify when writing fails", async () => {
     database([{ data: null, error: { message: "failed" } }])
@@ -75,6 +76,7 @@ describe("internal notes routes", () => {
     expect(response.status).toBe(200)
     expect(operations).toContainEqual(["modificato_il", null])
     expect(mocks.notify.mock.calls[0][0].previous).toEqual([mention])
+    expect(mocks.notify.mock.calls[0][0].text).toBe(saved.contenuto)
   })
   it("does not send or claim success on a concurrent/deleted note", async () => {
     database([{ data: saved, error: null }, { data: null, error: null }])

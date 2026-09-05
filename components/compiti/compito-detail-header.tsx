@@ -35,6 +35,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { CompitoFormDialog } from "./new-compito-dialog"
+import { option, withCurrentColumnOption } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 
 export function CompitoDetailHeader({ compito }: { compito: Compito }) {
   const router = useRouter()
@@ -45,6 +47,16 @@ export function CompitoDetailHeader({ compito }: { compito: Compito }) {
   const [deleting, setDeleting] = useState(false)
   const deleteCompito = useDeleteCompito()
   const permissions = usePermissions()
+  const configuredStatoOptions = useColumnValueOptions(
+    "Compiti",
+    "stato",
+    STATO_COMPITO_ORDER.map((s) => option(s)),
+    { includeFallback: true },
+  ).options
+  const statoOptions = withCurrentColumnOption(
+    configuredStatoOptions,
+    stato,
+  )
 
   // Dopo una modifica salvata router.refresh() riconsegna il compito
   // aggiornato: riallinea il badge di stato locale al valore del server.
@@ -190,12 +202,12 @@ export function CompitoDetailHeader({ compito }: { compito: Compito }) {
               }
             />
             <DropdownMenuContent align="end" className="w-48">
-              {STATO_COMPITO_ORDER.map((s) => (
+              {statoOptions.map(({ value: s, label }) => (
                 <DropdownMenuItem key={s} onClick={() => changeStato(s)}>
                   <span className="flex w-4 items-center">
                     {s === stato && <IconCheck size={15} stroke={2} />}
                   </span>
-                  {s}
+                  {label}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>

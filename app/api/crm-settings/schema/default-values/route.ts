@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { requireApiAction } from "@/lib/permissions/server"
+import { requireApiAction, requireApiRecord } from "@/lib/permissions/server"
 import {
   isValidColumnName,
+  permissionModuleForCrmModule,
   tableForCrmModule,
   valueKeyFromLabel,
 } from "@/lib/crm-settings/schema-admin"
@@ -29,16 +30,18 @@ function schemaErrorMessage(error: { message?: string; code?: string }) {
 }
 
 export async function GET(request: Request) {
-  const guard = await requireApiAction("crm_settings.system.default_values.manage")
-  if (guard.response) return guard.response
-
   const { searchParams } = new URL(request.url)
-  const tableName = tableForCrmModule(searchParams.get("module") ?? "")
+  const moduleName = searchParams.get("module") ?? ""
+  const tableName = tableForCrmModule(moduleName)
+  const permissionModule = permissionModuleForCrmModule(moduleName)
   const fieldName = searchParams.get("field")?.trim() ?? ""
 
-  if (!tableName || (fieldName && !isValidColumnName(fieldName))) {
+  if (!tableName || !permissionModule || (fieldName && !isValidColumnName(fieldName))) {
     return NextResponse.json({ error: "Campo CRM non valido" }, { status: 400 })
   }
+
+  const guard = await requireApiRecord(permissionModule, "view")
+  if (guard.response) return guard.response
 
   const supabase = await createClient()
   let query = supabase

@@ -490,29 +490,11 @@ export function getHotLeads(sede: SedeId): HotLead[] {
 // verità del modulo lead (lista + scheda).
 // ============================================================================
 
-export type StatoLead =
-  | "Non contattato"
-  | "Contattato"
-  | "Tentato di contattare"
-  | "Inviato Preventivo"
-  | "Convertito"
-  | "Perso"
+export type StatoLead = string
 
-export type OrigineLead =
-  | "Facebook"
-  | "Pubblicità"
-  | "Sito web"
-  | "Chat"
-  | "Configuratore WebSite"
-  | "Manuale"
-  | "Utenza di servizio"
+export type OrigineLead = string
 
-export type SedeLabel =
-  | "Catania"
-  | "Giarre (CT)"
-  | "Treviso"
-  | "Torino"
-  | "Porto Sant'Elpidio"
+export type SedeLabel = string
 
 export type StatoEmail = "Recapitata" | "Aperta" | "Non recapitata" | "—"
 
@@ -710,6 +692,8 @@ export const ORIGINE_LEAD_VALUES: OrigineLead[] = [
   "Facebook",
   "Pubblicità",
   "Sito web",
+  "Chat",
+  "Configuratore WebSite",
   "Manuale",
   "Utenza di servizio",
 ]
@@ -1661,18 +1645,7 @@ export function leadInitials(nomeLead: string): string {
 // con i valori VERI della tendina Stato su Zoho (screenshot Nando, 04/09),
 // stessa grafia esatta incluso "In Esecuzione" (maiuscola) e la barra in
 // "Necessario sopralluogo/intervento". Ordine alfabetico, come su Zoho.
-export type StatoCliente =
-  | "Concluso"
-  | "Da installare"
-  | "Da sollecitare"
-  | "In Esecuzione"
-  | "In stand-by"
-  | "Installato"
-  | "Logistica"
-  | "Necessario sopralluogo/intervento"
-  | "Negativo"
-  | "Sollecitato"
-  | "Validato"
+export type StatoCliente = string
 
 export interface ClienteRecord {
   id: string
@@ -2223,16 +2196,9 @@ export const CLIENTI_TOTAL = 1842
 // MODULO COMPITI (Tasks)
 // ============================================================================
 
-export type StatoCompito =
-  | "Non iniziato"
-  | "In corso"
-  | "Rinviato"
-  | "Completato"
-  | "In attesa di input"
-  | "Da fare"
-  | "In attesa"
+export type StatoCompito = string
 
-export type PrioritaCompito = "Alto" | "Medio" | "Basso"
+export type PrioritaCompito = string
 
 export interface CompitoNota {
   id: string

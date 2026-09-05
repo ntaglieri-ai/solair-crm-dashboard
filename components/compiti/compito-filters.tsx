@@ -12,6 +12,8 @@ import {
 import { useCompitiReferenceData } from "@/lib/compiti/hooks"
 import { MultiFilterSelect } from "@/components/shared/multi-filter-select"
 import { hasFilterValues } from "@/lib/shared/filter-values"
+import { option } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 
 export interface CompitoFilterState {
   search: string
@@ -83,6 +85,24 @@ export function CompitoQuickFilterFields({
 }) {
   const { data: referenceData } = useCompitiReferenceData()
   const proprietari = referenceData?.proprietari ?? []
+  const statoOptions = useColumnValueOptions(
+    "Compiti",
+    "stato",
+    STATO_COMPITO_ORDER.map((s) => option(s)),
+    { includeFallback: true },
+  ).options
+  const prioritaOptions = useColumnValueOptions(
+    "Compiti",
+    "priorita",
+    PRIORITA_COMPITO_ORDER.map((p) => option(p)),
+    { includeFallback: true },
+  ).options
+  const sedeOptions = useColumnValueOptions(
+    "Compiti",
+    "sede",
+    SEDE_LABELS.map((s) => option(s)),
+    { includeFallback: true },
+  ).options
 
   const set = <K extends keyof CompitoFilterState>(
     key: K,
@@ -100,7 +120,7 @@ export function CompitoQuickFilterFields({
           value={filters.stati}
           onValueChange={(v) => set("stati", v as StatoCompito[])}
           allLabel="Tutti gli stati"
-          options={STATO_COMPITO_ORDER.map((s) => ({ value: s, label: s }))}
+          options={statoOptions}
         />
 
         <MultiFilterSelect
@@ -109,7 +129,7 @@ export function CompitoQuickFilterFields({
           value={filters.priorita}
           onValueChange={(v) => set("priorita", v)}
           allLabel="Tutte le priorità"
-          options={PRIORITA_COMPITO_ORDER.map((p) => ({ value: p, label: p }))}
+          options={prioritaOptions}
         />
 
         <MultiFilterSelect
@@ -127,7 +147,7 @@ export function CompitoQuickFilterFields({
           value={filters.sede}
           onValueChange={(v) => set("sede", v)}
           allLabel="Tutte le sedi"
-          options={SEDE_LABELS.map((s) => ({ value: s, label: s }))}
+          options={sedeOptions}
         />
       </div>
 

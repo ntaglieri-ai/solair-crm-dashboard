@@ -45,6 +45,8 @@ import {
   useCompitiReferenceData,
   type CompitoProprietario,
 } from "@/lib/compiti/hooks"
+import { option } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 
 export function CompitoActionsMenu({
   selectedCount,
@@ -67,6 +69,12 @@ export function CompitoActionsMenu({
   const permissions = usePermissions()
   const { data: referenceData } = useCompitiReferenceData()
   const proprietari = referenceData?.proprietari ?? []
+  const statoOptions = useColumnValueOptions(
+    "Compiti",
+    "stato",
+    STATO_COMPITO_ORDER.map((s) => option(s)),
+    { includeFallback: true },
+  ).options
   const [ownerId, setOwnerId] = useState("")
   const selectedOwner =
     proprietari.find((p) => p.id === ownerId) ?? proprietari[0] ?? null
@@ -109,9 +117,9 @@ export function CompitoActionsMenu({
                     Cambia stato
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-52">
-                    {STATO_COMPITO_ORDER.map((s) => (
-                      <DropdownMenuItem key={s} onClick={() => onBulkStato(s)}>
-                        {s}
+                    {statoOptions.map(({ value, label }) => (
+                      <DropdownMenuItem key={value} onClick={() => onBulkStato(value)}>
+                        {label}
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuSubContent>

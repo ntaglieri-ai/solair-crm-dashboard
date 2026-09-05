@@ -21,11 +21,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { type Compito, type PrioritaCompito, PRIORITA_COMPITO_ORDER } from "@/lib/mock-data"
+import { type Compito, type PrioritaCompito, PRIORITA_COMPITO_ORDER, STATO_COMPITO_ORDER } from "@/lib/mock-data"
 import { useCompitiReferenceData, useCreateCompito } from "@/lib/compiti/hooks"
 import { CorrelatoPicker, type CorrelatoValue } from "@/components/shared/correlato-picker"
 import { correlatoTipoLabel } from "./compito-utils"
 import { formatDMY } from "./new-compito-dialog"
+import { option } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 
 /**
  * Dialog di creazione rapida condiviso da Lead, Cliente e Scadenza: stesso
@@ -46,6 +48,18 @@ export function QuickCompitoDialog({
 }) {
   const { data: referenceData } = useCompitiReferenceData()
   const proprietari = referenceData?.proprietari ?? []
+  const statoOptions = useColumnValueOptions(
+    "Compiti",
+    "stato",
+    STATO_COMPITO_ORDER.map((s) => option(s)),
+    { includeFallback: true },
+  ).options
+  const prioritaOptions = useColumnValueOptions(
+    "Compiti",
+    "priorita",
+    PRIORITA_COMPITO_ORDER.map((p) => option(p)),
+    { includeFallback: true },
+  ).options
   const createCompito = useCreateCompito()
 
   const [oggetto, setOggetto] = useState("")
@@ -67,7 +81,7 @@ export function QuickCompitoDialog({
     if (!oggetto.trim() || !scadenza || !proprietario) return
     const compito: Partial<Compito> = {
       Oggetto: oggetto.trim(),
-      Stato: "Non iniziato",
+      Stato: statoOptions[0]?.value ?? "Non iniziato",
       Priorità: priorita,
       "Data di scadenza": formatDMY(scadenza),
       "Proprietario del compito": proprietario.nome,
@@ -144,9 +158,9 @@ export function QuickCompitoDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    {PRIORITA_COMPITO_ORDER.map((p) => (
-                      <SelectItem key={p} value={p}>
-                        {p}
+                    {prioritaOptions.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        {p.label}
                       </SelectItem>
                     ))}
                   </SelectGroup>

@@ -212,7 +212,7 @@ export function ClientiClient({
     reorderColumns,
     preferencesLoaded,
   } = useColumnPreferences<ClienteColumnId>({
-    storageKey: `solair:clienti:view:${preferenceOwner}:v1`,
+    storageKey: `solair:clienti:view:${preferenceOwner}:v2`,
     validIds: new Set(CLIENTE_COLUMNS.map((c) => c.id)),
     defaultVisibleCols: DEFAULT_CLIENTE_COLUMNS,
     initialPreferences,
@@ -234,7 +234,7 @@ export function ClientiClient({
   useEffect(() => {
     if (!preferencesLoaded) return
     const preferences: ClienteViewPreferences = {
-      version: 1,
+      version: 2,
       owner: preferenceOwner,
       visibleCols,
       columnWidths,

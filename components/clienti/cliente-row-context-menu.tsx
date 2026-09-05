@@ -44,13 +44,15 @@ import type { NoteMentionDraft } from "@/lib/notes/mentions"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { formatDMY } from "@/components/compiti/new-compito-dialog"
-import { type ClienteRecord } from "@/lib/mock-data"
+import { SEDE_LABELS, type ClienteRecord } from "@/lib/mock-data"
 import { ClienteTagPicker } from "./cliente-tag-controls"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
 import { usePermissions } from "@/lib/permissions/provider"
 import { EditRecordDialog, buildClienteEditFields } from "@/components/shared/edit-record-dialog"
 import { telHref } from "@/components/shared/quick-contact-icons"
+import { option } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 
 // "Crea nota"/"Crea attività" — costruiti il 25/07 (endpoint note dedicato
 // app/api/clienti/[id]/notes, i compiti gia' accettavano "Correlato a"
@@ -76,6 +78,12 @@ export function ClienteRowContextMenu({
 }) {
   const { owners, installers } = useClienteTags()
   const { data: statoOptions } = useStatoClienteQuery()
+  const sedeOptions = useColumnValueOptions(
+    "Clienti",
+    "sede",
+    SEDE_LABELS.map((value) => option(value)),
+    { includeFallback: true },
+  ).options
   const permissions = usePermissions()
   const router = useRouter()
   const [tagOpen, setTagOpen] = useState(false)
@@ -344,7 +352,13 @@ export function ClienteRowContextMenu({
         onOpenChange={setEditOpen}
         title="Modifica cliente"
         endpoint={`/api/clienti/${cliente.id}`}
-        fields={buildClienteEditFields(cliente, permissions, installers, (statoOptions ?? []).map((s) => s.valore))}
+        fields={buildClienteEditFields(
+          cliente,
+          permissions,
+          installers,
+          (statoOptions ?? []).map((s) => s.valore),
+          { sedi: sedeOptions.map((s) => s.value) },
+        )}
         onSaved={onRefresh}
       />
 

@@ -33,16 +33,14 @@ import {
   type SedeLabel,
 } from "@/lib/mock-data"
 import { useTags } from "@/lib/tag-store"
+import { option } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 
 interface NewLeadDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreate: (lead: Lead) => void
 }
-
-const STATO_ITEMS = Object.fromEntries(STATO_LEAD_ORDER.map((s) => [s, s]))
-const ORIGINE_ITEMS = Object.fromEntries(ORIGINE_LEAD_VALUES.map((o) => [o, o]))
-const SEDE_ITEMS = Object.fromEntries(SEDE_LABELS.map((s) => [s, s]))
 
 interface FormState {
   nome: string
@@ -56,20 +54,6 @@ interface FormState {
   sede: SedeLabel
   proprietario: string
   descrizione: string
-}
-
-const EMPTY_FORM: FormState = {
-  nome: "",
-  cognome: "",
-  email: "",
-  telefono: "",
-  citta: "",
-  provincia: "",
-  stato: "Non contattato",
-  origine: "Manuale",
-  sede: SEDE_LABELS[0],
-  proprietario: "",
-  descrizione: "",
 }
 
 // Genera un timestamp in formato ISO (es. "2026-07-25T12:20:00.000Z"), non
@@ -102,7 +86,56 @@ export function NewLeadDialog({
     () => Object.fromEntries(owners.map((owner) => [owner.id, owner.nome])),
     [owners],
   )
-  const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  const statoOptions = useColumnValueOptions(
+    "Lead",
+    "stato_lead",
+    STATO_LEAD_ORDER.map((s) => option(s)),
+    { includeFallback: true },
+  ).options
+  const origineOptions = useColumnValueOptions(
+    "Lead",
+    "origine_lead",
+    ORIGINE_LEAD_VALUES.map((o) => option(o)),
+    { includeFallback: true },
+  ).options
+  const sedeOptions = useColumnValueOptions(
+    "Lead",
+    "sede",
+    SEDE_LABELS.map((s) => option(s)),
+    { includeFallback: true },
+  ).options
+  const statoItems = useMemo(
+    () => Object.fromEntries(statoOptions.map((s) => [s.value, s.label])),
+    [statoOptions],
+  )
+  const origineItems = useMemo(
+    () => Object.fromEntries(origineOptions.map((o) => [o.value, o.label])),
+    [origineOptions],
+  )
+  const sedeItems = useMemo(
+    () => Object.fromEntries(sedeOptions.map((s) => [s.value, s.label])),
+    [sedeOptions],
+  )
+  const defaultForm = useMemo<FormState>(
+    () => ({
+      nome: "",
+      cognome: "",
+      email: "",
+      telefono: "",
+      citta: "",
+      provincia: "",
+      stato: statoOptions[0]?.value ?? "Non contattato",
+      origine:
+        origineOptions.find((item) => item.value === "Manuale")?.value ??
+        origineOptions[0]?.value ??
+        "Manuale",
+      sede: sedeOptions[0]?.value ?? SEDE_LABELS[0],
+      proprietario: "",
+      descrizione: "",
+    }),
+    [origineOptions, sedeOptions, statoOptions],
+  )
+  const [form, setForm] = useState<FormState>(() => defaultForm)
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -169,12 +202,12 @@ export function NewLeadDialog({
     }
 
     onCreate(lead)
-    setForm(EMPTY_FORM)
+    setForm(defaultForm)
     onOpenChange(false)
   }
 
   const handleOpenChange = (next: boolean) => {
-    if (!next) setForm(EMPTY_FORM)
+    if (!next) setForm(defaultForm)
     onOpenChange(next)
   }
 
@@ -248,7 +281,7 @@ export function NewLeadDialog({
           <div className="flex flex-col gap-1.5">
             <Label>Stato lead</Label>
             <Select
-              items={STATO_ITEMS}
+              items={statoItems}
               value={form.stato}
               onValueChange={(v) => set("stato", v as StatoLead)}
             >
@@ -257,9 +290,9 @@ export function NewLeadDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {STATO_LEAD_ORDER.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
+                  {statoOptions.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label}
                     </SelectItem>
                   ))}
                 </SelectGroup>
@@ -269,7 +302,7 @@ export function NewLeadDialog({
           <div className="flex flex-col gap-1.5">
             <Label>Origine</Label>
             <Select
-              items={ORIGINE_ITEMS}
+              items={origineItems}
               value={form.origine}
               onValueChange={(v) => set("origine", v as OrigineLead)}
             >
@@ -278,9 +311,9 @@ export function NewLeadDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {ORIGINE_LEAD_VALUES.map((o) => (
-                    <SelectItem key={o} value={o}>
-                      {o}
+                  {origineOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
                     </SelectItem>
                   ))}
                 </SelectGroup>
@@ -290,7 +323,7 @@ export function NewLeadDialog({
           <div className="flex flex-col gap-1.5">
             <Label>Sede</Label>
             <Select
-              items={SEDE_ITEMS}
+              items={sedeItems}
               value={form.sede}
               onValueChange={(v) => set("sede", v as SedeLabel)}
             >
@@ -299,9 +332,9 @@ export function NewLeadDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {SEDE_LABELS.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
+                  {sedeOptions.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label}
                     </SelectItem>
                   ))}
                 </SelectGroup>

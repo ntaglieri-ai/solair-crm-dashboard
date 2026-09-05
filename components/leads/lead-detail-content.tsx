@@ -57,6 +57,8 @@ import {
   type Compito,
   STATO_LEAD_ORDER,
 } from "@/lib/mock-data"
+import { option, withCurrentColumnOption } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 import type { EmailLogEntry } from "@/lib/email/email-log"
 import { formatEmailLogDate } from "./email-log-format"
 import { LeadAvatar } from "./lead-utils"
@@ -250,7 +252,16 @@ function InfoPrincipali({ lead }: { lead: Lead }) {
   const [stato, setStato] = useState(lead["Stato Lead"])
   const [savingStato, setSavingStato] = useState(false)
   const [showMore, setShowMore] = useState(false)
-  const statoItems = Object.fromEntries(STATO_LEAD_ORDER.map((s) => [s, s]))
+  const configuredStatoOptions = useColumnValueOptions(
+    "Lead",
+    "stato_lead",
+    STATO_LEAD_ORDER.map((value) => option(value)),
+    { includeFallback: true },
+  ).options
+  const statoOptions = withCurrentColumnOption(configuredStatoOptions, stato)
+  const statoItems = Object.fromEntries(
+    statoOptions.map((item) => [item.value, item.label]),
+  )
 
   async function handleStatoChange(v: string | null) {
     if (v === null) return
@@ -317,9 +328,9 @@ function InfoPrincipali({ lead }: { lead: Lead }) {
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {STATO_LEAD_ORDER.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
+                  {statoOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
                     </SelectItem>
                   ))}
                 </SelectGroup>

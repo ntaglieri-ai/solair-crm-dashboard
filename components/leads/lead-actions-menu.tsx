@@ -59,6 +59,8 @@ import {
   SEDE_LABELS,
 } from "@/lib/mock-data"
 import { useTags } from "@/lib/tag-store"
+import { option } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 import { BulkEmailMenuItem } from "@/components/shared/bulk-email-triggers"
 import type { SettingsSectionId } from "./lead-settings-sheet"
 import { LeadTagSection } from "./lead-tag-section"
@@ -85,10 +87,7 @@ export function LeadActionsMenu({
   filtered,
   selectedRows,
   tags,
-  onOpenSettings,
   onCheckDuplicates,
-  onImport,
-  onExportFiltered,
   onExportSelection,
   onBulkTransfer,
   onBulkUpdate,
@@ -121,6 +120,18 @@ export function LeadActionsMenu({
 }) {
   const { owners } = useTags()
   const permissions = usePermissions()
+  const statoLeadOptions = useColumnValueOptions(
+    "Lead",
+    "stato_lead",
+    STATO_LEAD_ORDER.map((value) => option(value)),
+    { includeFallback: true },
+  ).options
+  const sedeOptions = useColumnValueOptions(
+    "Lead",
+    "sede",
+    SEDE_LABELS.map((value) => option(value)),
+    { includeFallback: true },
+  ).options
   const [dialog, setDialog] = useState<Dialogs>("none")
   const hasSelection = selectedCount > 0
 
@@ -179,10 +190,10 @@ export function LeadActionsMenu({
 
   const updValueOptions =
     updField === "Stato Lead"
-      ? (STATO_LEAD_ORDER as string[])
+      ? statoLeadOptions
       : updField === "Sede"
-        ? (SEDE_LABELS as string[])
-        : tags
+        ? sedeOptions
+        : tags.map((value) => ({ value, label: value }))
 
   // Coppie/gruppi duplicati tra i lead selezionati (per email o telefono)
   const dupGroups = useMemo(() => {
@@ -611,9 +622,9 @@ export function LeadActionsMenu({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    {updValueOptions.map((v) => (
-                      <SelectItem key={v} value={v}>
-                        {v}
+                    {updValueOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
                       </SelectItem>
                     ))}
                   </SelectGroup>

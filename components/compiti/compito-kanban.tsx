@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils"
 import {
   type Compito,
   type StatoCompito,
-  STATO_COMPITO_ORDER,
   isCompitoScaduto,
 } from "@/lib/mock-data"
 import { PrioritaBadge, CompitoAvatar } from "./compito-utils"
@@ -75,9 +74,11 @@ function CompitoCard({
 
 export function CompitoKanban({
   compiti,
+  stati,
   onMove,
 }: {
   compiti: Compito[]
+  stati: StatoCompito[]
   onMove: (id: string, stato: StatoCompito) => void
 }) {
   const [dragId, setDragId] = useState<string | null>(null)
@@ -91,7 +92,7 @@ export function CompitoKanban({
 
   return (
     <div className="flex gap-4 overflow-x-auto pb-3 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-2.5">
-      {STATO_COMPITO_ORDER.map((stato) => {
+      {stati.map((stato) => {
         const cards = compiti.filter((c) => c.Stato === stato)
         return (
           <section

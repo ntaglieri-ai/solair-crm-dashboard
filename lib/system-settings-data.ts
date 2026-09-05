@@ -124,71 +124,102 @@ export interface CampoValori {
   valori: ValoreConfig[]
 }
 
-export const MODULI_VALORI = ["Lead", "Clienti", "Compiti", "Scadenze"] as const
+export const MODULI_VALORI = ["Lead", "Clienti", "Compiti", "Scadenze", "Installatori"] as const
 export type ModuloValori = (typeof MODULI_VALORI)[number]
 
 export const valoriPerModulo: Record<ModuloValori, CampoValori[]> = {
   Lead: [
     {
-      campo: "stato",
+      campo: "stato_lead",
       etichetta: "Stato lead",
       valori: [
-        { id: "st_1", etichetta: "Nuovo", colore: "#3b82f6" },
-        { id: "st_2", etichetta: "Contattato", colore: "#3b82f6" },
-        { id: "st_3", etichetta: "In trattativa", colore: "#f59e0b" },
-        { id: "st_4", etichetta: "Chiuso vinto", colore: "#16a34a" },
-        { id: "st_5", etichetta: "Chiuso perso", colore: "#dc2626" },
+        { id: "st_1", etichetta: "Non contattato", colore: "#94a3b8" },
+        { id: "st_2", etichetta: "Tentato di contattare", colore: "#f59e0b" },
+        { id: "st_3", etichetta: "Contattato", colore: "#16a34a" },
+        { id: "st_4", etichetta: "Inviato Preventivo", colore: "#3b82f6" },
+        { id: "st_5", etichetta: "Convertito", colore: "#2e8b72" },
+        { id: "st_6", etichetta: "Perso", colore: "#dc2626" },
       ],
     },
     {
-      campo: "fonte",
-      etichetta: "Fonte",
+      campo: "origine_lead",
+      etichetta: "Origine lead",
       valori: [
-        { id: "fo_1", etichetta: "Meta Ads", colore: "#3b82f6" },
-        { id: "fo_2", etichetta: "Sito Web", colore: "#2e8b72" },
-        { id: "fo_3", etichetta: "Passaparola", colore: "#8b5cf6" },
-        { id: "fo_4", etichetta: "Altro", colore: "#94a3b8" },
+        { id: "fo_1", etichetta: "Facebook", colore: "#3b82f6" },
+        { id: "fo_2", etichetta: "Pubblicità", colore: "#f59e0b" },
+        { id: "fo_3", etichetta: "Sito web", colore: "#2e8b72" },
+        { id: "fo_4", etichetta: "Chat", colore: "#3b82f6" },
+        { id: "fo_5", etichetta: "Configuratore WebSite", colore: "#2e8b72" },
+        { id: "fo_6", etichetta: "Manuale", colore: "#94a3b8" },
+        { id: "fo_7", etichetta: "Utenza di servizio", colore: "#1e3a5f" },
       ],
     },
     {
-      campo: "priorita",
-      etichetta: "Priorità",
+      campo: "sede",
+      etichetta: "Sede",
       valori: [
-        { id: "pr_1", etichetta: "Alta", colore: "#dc2626" },
-        { id: "pr_2", etichetta: "Media", colore: "#f59e0b" },
-        { id: "pr_3", etichetta: "Bassa", colore: "#94a3b8" },
+        { id: "se_1", etichetta: "Catania", colore: "#3b82f6" },
+        { id: "se_2", etichetta: "Giarre (CT)", colore: "#2e8b72" },
+        { id: "se_3", etichetta: "Treviso", colore: "#8b5cf6" },
+        { id: "se_4", etichetta: "Torino", colore: "#f59e0b" },
+        { id: "se_5", etichetta: "Porto Sant'Elpidio", colore: "#94a3b8" },
       ],
     },
   ],
   Clienti: [
     {
-      campo: "tipo",
-      etichetta: "Tipo cliente",
+      campo: "sede",
+      etichetta: "Sede",
       valori: [
-        { id: "tc_1", etichetta: "Privato", colore: "#3b82f6" },
-        { id: "tc_2", etichetta: "Azienda", colore: "#2e8b72" },
+        { id: "cl_se_1", etichetta: "Catania", colore: "#3b82f6" },
+        { id: "cl_se_2", etichetta: "Giarre (CT)", colore: "#2e8b72" },
+        { id: "cl_se_3", etichetta: "Treviso", colore: "#8b5cf6" },
+        { id: "cl_se_4", etichetta: "Torino", colore: "#f59e0b" },
+        { id: "cl_se_5", etichetta: "Porto Sant'Elpidio", colore: "#94a3b8" },
       ],
     },
   ],
   Compiti: [
     {
+      campo: "stato",
+      etichetta: "Stato",
+      valori: [
+        { id: "cs_1", etichetta: "Non iniziato", colore: "#94a3b8" },
+        { id: "cs_2", etichetta: "In corso", colore: "#3b82f6" },
+        { id: "cs_3", etichetta: "Rinviato", colore: "#f59e0b" },
+        { id: "cs_4", etichetta: "In attesa di input", colore: "#f59e0b" },
+        { id: "cs_5", etichetta: "Completato", colore: "#16a34a" },
+      ],
+    },
+    {
       campo: "priorita",
       etichetta: "Priorità",
       valori: [
-        { id: "cp_1", etichetta: "Alta", colore: "#dc2626" },
-        { id: "cp_2", etichetta: "Media", colore: "#f59e0b" },
-        { id: "cp_3", etichetta: "Bassa", colore: "#94a3b8" },
+        { id: "cp_1", etichetta: "Alto", colore: "#dc2626" },
+        { id: "cp_2", etichetta: "Medio", colore: "#f59e0b" },
+        { id: "cp_3", etichetta: "Basso", colore: "#94a3b8" },
+      ],
+    },
+    {
+      campo: "sede",
+      etichetta: "Sede",
+      valori: [
+        { id: "cse_1", etichetta: "Catania", colore: "#3b82f6" },
+        { id: "cse_2", etichetta: "Giarre (CT)", colore: "#2e8b72" },
+        { id: "cse_3", etichetta: "Treviso", colore: "#8b5cf6" },
+        { id: "cse_4", etichetta: "Torino", colore: "#f59e0b" },
+        { id: "cse_5", etichetta: "Porto Sant'Elpidio", colore: "#94a3b8" },
       ],
     },
   ],
-  Scadenze: [
+  Scadenze: [],
+  Installatori: [
     {
-      campo: "tipo",
-      etichetta: "Tipo scadenza",
+      campo: "canale_preferito",
+      etichetta: "Canale preferito",
       valori: [
-        { id: "sc_1", etichetta: "Pagamento", colore: "#16a34a" },
-        { id: "sc_2", etichetta: "Documentale", colore: "#3b82f6" },
-        { id: "sc_3", etichetta: "Manutenzione", colore: "#f59e0b" },
+        { id: "ic_1", etichetta: "Email", colore: "#3b82f6" },
+        { id: "ic_2", etichetta: "WhatsApp", colore: "#16a34a" },
       ],
     },
   ],

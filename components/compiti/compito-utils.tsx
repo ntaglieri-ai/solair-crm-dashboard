@@ -51,7 +51,7 @@ export function StatoBadge({
     <span
       className={cn(
         "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-        STATO_COMPITO_TONE[stato],
+        STATO_COMPITO_TONE[stato] ?? "bg-muted text-muted-foreground",
         className,
       )}
     >
@@ -78,7 +78,7 @@ export function PrioritaBadge({
     <span
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium",
-        PRIORITA_COMPITO_TONE[priorita],
+        PRIORITA_COMPITO_TONE[priorita] ?? "bg-secondary text-muted-foreground",
         className,
       )}
     >

@@ -20,6 +20,8 @@ import {
   STATO_COMPITO_TONE,
   PRIORITA_COMPITO_TONE,
 } from "@/lib/mock-data"
+import { option } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 import { ModuleGovernanceSection } from "@/components/crm-settings/module-governance-section"
 
 export type CompitoSettingsSectionId =
@@ -53,23 +55,28 @@ const SECTIONS: {
   },
 ]
 
-// Elenchi di riferimento in sola lettura: stati e priorità sono valori
-// canonici sincronizzati da Zoho, non modificabili da qui.
 function StatiSection() {
+  const statoOptions = useColumnValueOptions(
+    "Compiti",
+    "stato",
+    STATO_COMPITO_ORDER.map((value) => option(value)),
+    { includeFallback: true },
+  ).options
+
   return (
     <div className="flex flex-col gap-2">
-      {STATO_COMPITO_ORDER.map((s) => (
+      {statoOptions.map((stato) => (
         <div
-          key={s}
+          key={stato.value}
           className="flex items-center rounded-lg border border-border bg-card px-3 py-2.5"
         >
           <span
             className={cn(
               "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-              STATO_COMPITO_TONE[s],
+              STATO_COMPITO_TONE[stato.value] ?? "bg-muted text-muted-foreground",
             )}
           >
-            {s}
+            {stato.label}
           </span>
         </div>
       ))}
@@ -78,20 +85,27 @@ function StatiSection() {
 }
 
 function PrioritaSection() {
+  const prioritaOptions = useColumnValueOptions(
+    "Compiti",
+    "priorita",
+    PRIORITA_COMPITO_ORDER.map((value) => option(value)),
+    { includeFallback: true },
+  ).options
+
   return (
     <div className="flex flex-col gap-2">
-      {PRIORITA_COMPITO_ORDER.map((p) => (
+      {prioritaOptions.map((priorita) => (
         <div
-          key={p}
+          key={priorita.value}
           className="flex items-center rounded-lg border border-border bg-card px-3 py-2.5"
         >
           <span
             className={cn(
               "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-              PRIORITA_COMPITO_TONE[p],
+              PRIORITA_COMPITO_TONE[priorita.value] ?? "bg-secondary text-muted-foreground",
             )}
           >
-            {p}
+            {priorita.label}
           </span>
         </div>
       ))}

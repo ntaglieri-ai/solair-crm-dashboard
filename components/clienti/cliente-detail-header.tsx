@@ -34,7 +34,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
-import { type ClienteRecord } from "@/lib/mock-data"
+import { SEDE_LABELS, type ClienteRecord } from "@/lib/mock-data"
 import { EditRecordDialog, buildClienteEditFields } from "@/components/shared/edit-record-dialog"
 import { useDeleteCliente } from "@/lib/clienti/hooks"
 import { usePermissions } from "@/lib/permissions/provider"
@@ -43,6 +43,8 @@ import { ClienteTagBadges, ClienteTagAssignPopover } from "./cliente-tag-control
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
 import { displayClienteOwner } from "@/lib/clienti/owner-display"
+import { option } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 
 function val(v: string | number | null | undefined): string {
   if (v === null || v === undefined || v === "") return "—"
@@ -59,6 +61,12 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
   const nome = cliente["Nome Clienti"]
   const { ownerNames, installers } = useClienteTags()
   const { data: statoOptions } = useStatoClienteQuery()
+  const sedeOptions = useColumnValueOptions(
+    "Clienti",
+    "sede",
+    SEDE_LABELS.map((value) => option(value)),
+    { includeFallback: true },
+  ).options
   const ownerName = displayClienteOwner(cliente, ownerNames, "Non assegnato")
 
   return (
@@ -246,7 +254,13 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
         onOpenChange={setEditOpen}
         title="Modifica cliente"
         endpoint={`/api/clienti/${cliente.id}`}
-        fields={buildClienteEditFields(cliente, permissions, installers, (statoOptions ?? []).map((s) => s.valore))}
+        fields={buildClienteEditFields(
+          cliente,
+          permissions,
+          installers,
+          (statoOptions ?? []).map((s) => s.valore),
+          { sedi: sedeOptions.map((s) => s.value) },
+        )}
       />
     </div>
   )

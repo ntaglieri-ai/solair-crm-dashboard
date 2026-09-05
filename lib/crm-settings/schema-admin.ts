@@ -48,6 +48,14 @@ export const CRM_MODULE_TABLES = Object.fromEntries(
 
 export type CrmFieldTarget = (typeof CRM_FIELD_TARGETS)[number]
 
+export const CRM_MODULE_PERMISSION_KEYS = {
+  Lead: "lead",
+  Clienti: "clienti",
+  Compiti: "compiti",
+  Scadenze: "scadenze",
+  Installatori: "installatori",
+} as const satisfies Record<ModuloAttributi | ModuloValori, string>
+
 export const CRM_FIELD_DB_TYPES: Record<CampoTipo, string> = {
   text: "text",
   textarea: "text",
@@ -65,6 +73,10 @@ export const CRM_FIELD_DB_TYPES: Record<CampoTipo, string> = {
 
 export function tableForCrmModule(moduleName: string) {
   return CRM_MODULE_TABLES[moduleName as ModuloAttributi | ModuloValori] ?? null
+}
+
+export function permissionModuleForCrmModule(moduleName: string) {
+  return CRM_MODULE_PERMISSION_KEYS[moduleName as ModuloAttributi | ModuloValori] ?? null
 }
 
 export function dbTypeForFieldType(fieldType: CampoTipo) {

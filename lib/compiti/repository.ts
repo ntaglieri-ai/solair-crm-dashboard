@@ -85,14 +85,6 @@ const LEGACY_SORT_COLUMN: Record<string, string> = {
   "Proprietario del compito": "proprietario_id",
 }
 
-const DB_STATI: StatoCompito[] = [
-  "Non iniziato",
-  "In corso",
-  "Rinviato",
-  "Completato",
-  "In attesa di input",
-]
-
 const OPEN_STATI: StatoCompito[] = OPEN_TASK_STATI
 
 /** ISO (o YYYY-MM-DD) → DD/MM/YYYY. Restituisce "" se non valido. */
@@ -217,10 +209,9 @@ export async function queryCompiti(
       scadutiQ = scadutiQ.or(f)
     }
     if (params.stati.length > 0) {
-      const dbStati = params.stati.filter((stato) => DB_STATI.includes(stato))
-      listQ = listQ.in("stato", dbStati)
-      countQ = countQ.in("stato", dbStati)
-      scadutiQ = scadutiQ.in("stato", dbStati)
+      listQ = listQ.in("stato", params.stati)
+      countQ = countQ.in("stato", params.stati)
+      scadutiQ = scadutiQ.in("stato", params.stati)
     }
     const prioritaValues = activeFilterValues(params.priorita)
     if (prioritaValues.length > 0) {

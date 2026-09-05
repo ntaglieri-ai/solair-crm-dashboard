@@ -3,7 +3,7 @@ import type { ClienteColumnId } from "@/lib/mock-data"
 type ClienteDensity = "comoda" | "normale" | "densa"
 
 export type ClienteViewPreferences = {
-  version: 1
+  version: 2
   owner: string
   visibleCols: ClienteColumnId[]
   columnWidths: Partial<Record<ClienteColumnId, number>>
@@ -42,7 +42,7 @@ export function parseClienteViewPreferences(
   if (!raw) return null
   try {
     const parsed = JSON.parse(decodeURIComponent(raw)) as Partial<ClienteViewPreferences>
-    if (parsed.version !== 1) return null
+    if (parsed.version !== 2) return null
     if (parsed.owner !== owner) return null
 
     const visibleCols = (parsed.visibleCols ?? []).filter((id) =>

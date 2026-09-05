@@ -13,6 +13,8 @@ import { useClienteTags } from "@/lib/cliente-tag-store"
 import { useStatoClienteQuery, useCreateStatoCliente } from "@/lib/clienti/stato-cliente-store"
 import { MultiFilterSelect } from "@/components/shared/multi-filter-select"
 import { EMPTY_FILTER_VALUE, hasFilterValues } from "@/lib/shared/filter-values"
+import { option } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 
 export interface ClienteFilterState {
   search: string
@@ -150,6 +152,12 @@ export function ClienteQuickFilterFields({
   const hasActiveFilters = countActiveClienteFilters(filters) > 0
   const { owners, installerNames, tags } = useClienteTags()
   const { data: statoOptions } = useStatoClienteQuery()
+  const sedeOptions = useColumnValueOptions(
+    "Clienti",
+    "sede",
+    SEDE_LABELS.map((s) => option(s)),
+    { includeFallback: true },
+  ).options
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -175,7 +183,7 @@ export function ClienteQuickFilterFields({
           value={filters.sede}
           onValueChange={(v) => set("sede", v)}
           allLabel="Tutte le sedi"
-          options={SEDE_LABELS.map((s) => ({ value: s, label: s }))}
+          options={sedeOptions}
         />
 
         <MultiFilterSelect

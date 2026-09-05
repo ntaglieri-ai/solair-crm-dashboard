@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { hasFilterValues } from "@/lib/shared/filter-values"
-import { type Compito, type StatoCompito, OPEN_TASK_STATI } from "@/lib/mock-data"
+import { type Compito, type StatoCompito, OPEN_TASK_STATI, STATO_COMPITO_ORDER } from "@/lib/mock-data"
 import {
   buildKanbanDoneParams,
   buildKanbanOpenParams,
@@ -78,6 +78,8 @@ import {
   BulkOperationError,
   type CompitoProprietario,
 } from "@/lib/compiti/hooks"
+import { option } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 
 const ROWS_ITEMS: Record<string, string> = {
   "10": "10 righe",
@@ -190,6 +192,23 @@ export function CompitiClient({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] =
     useState<CompitoSettingsSectionId>("stati")
+  const statoOptions = useColumnValueOptions(
+    "Compiti",
+    "stato",
+    STATO_COMPITO_ORDER.map((s) => option(s)),
+    { includeFallback: true },
+  ).options
+  const kanbanStati = useMemo(
+    () => statoOptions.map((item) => item.value),
+    [statoOptions],
+  )
+  const openTaskStati = useMemo(
+    () => {
+      const values = kanbanStati.filter((stato) => stato !== "Completato")
+      return values.length > 0 ? values : OPEN_TASK_STATI
+    },
+    [kanbanStati],
+  )
 
   // --- Build server-side query params ---
   const debouncedSearch = useDebouncedValue(filters.search, 300)
@@ -219,7 +238,8 @@ export function CompitiClient({
   // --- Query dedicate alla kanban, indipendenti dalla paginazione della lista.
   // La board mostra sempre i compiti aperti più urgenti (fino a 200) e le
   // chiusure più recenti, applicando i filtri della barra (ricerca, priorità,
-  // proprietario, sede, date). Gli stati sono fissati per colonna.
+  // proprietario, sede, date). Gli stati arrivano dai valori configurati,
+  // con fallback sui valori storici se la configurazione e' vuota.
   const kanbanFilters = useMemo(
     () => ({
       search: debouncedSearch,
@@ -233,8 +253,8 @@ export function CompitiClient({
     [debouncedSearch, filters],
   )
   const kanbanOpenParams = useMemo(
-    () => buildKanbanOpenParams(kanbanFilters, [...OPEN_TASK_STATI]),
-    [kanbanFilters],
+    () => buildKanbanOpenParams(kanbanFilters, [...openTaskStati]),
+    [kanbanFilters, openTaskStati],
   )
   const kanbanDoneParams = useMemo(
     () => buildKanbanDoneParams(kanbanFilters),
@@ -269,8 +289,8 @@ export function CompitiClient({
   const rangeStart = total === 0 ? 0 : (page - 1) * rowsPerPage + 1
   const rangeEnd = Math.min(page * rowsPerPage, total)
   const hasOpenStateFilter =
-    filters.stati.length === OPEN_TASK_STATI.length &&
-    OPEN_TASK_STATI.every((stato) => filters.stati.includes(stato))
+    filters.stati.length === openTaskStati.length &&
+    openTaskStati.every((stato) => filters.stati.includes(stato))
   const isOverdueFilterActive = hasOpenStateFilter && filters.overdue
   const isHighPriorityFilterActive =
     filters.priorita.length === 1 && filters.priorita.includes("Alto")
@@ -312,7 +332,7 @@ export function CompitiClient({
 
   const showOverdueTasks = () => {
     applyQuickFilter({
-      stati: OPEN_TASK_STATI,
+      stati: openTaskStati,
       overdue: true,
     })
   }
@@ -325,7 +345,7 @@ export function CompitiClient({
 
   const showOpenTasks = () => {
     applyQuickFilter({
-      stati: OPEN_TASK_STATI,
+      stati: openTaskStati,
     })
   }
 
@@ -784,7 +804,7 @@ export function CompitiClient({
               i filtri per vedere tutto.
             </div>
           )}
-          <CompitoKanban compiti={kanbanRows} onMove={handleMove} />
+          <CompitoKanban compiti={kanbanRows} stati={kanbanStati} onMove={handleMove} />
         </>
       ) : null}
 

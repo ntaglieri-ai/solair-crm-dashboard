@@ -37,6 +37,8 @@ import {
   countActiveLeadFilters,
   type LeadFilterState,
 } from "@/components/leads/lead-filters"
+import { option } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 
 // ----------------------------------------------------------------------------
 // Tipi filtro — logica pura condivisa con il repository server-side
@@ -66,6 +68,12 @@ interface FieldDef {
   options?: Array<{ value: string; label: string }>
 }
 
+interface LeadAdvancedValueOptions {
+  statoLead: Array<{ value: string; label: string }>
+  origineLead: Array<{ value: string; label: string }>
+  sedi: Array<{ value: string; label: string }>
+}
+
 const STATO_EMAIL_VALUES = ["Recapitata", "Aperta", "Non recapitata", "—"]
 const MOBILE_FISSO_VALUES = ["Mobile", "Fisso"]
 
@@ -77,6 +85,7 @@ function buildFields(
   tags: string[],
   owners: Array<{ id: string; nome: string }>,
   installers: Array<{ id: string; nome: string }>,
+  leadValueOptions: LeadAdvancedValueOptions,
 ): FieldDef[] {
   return [
     { id: "Account convertito", label: "Account convertito", type: "text" },
@@ -131,7 +140,7 @@ function buildFields(
       id: "Origine Lead",
       label: "Origine Lead",
       type: "enum",
-      options: options(ORIGINE_LEAD_VALUES),
+      options: leadValueOptions.origineLead,
     },
     { id: "Paese", label: "Paese", type: "text" },
     { id: "Provincia", label: "Provincia", type: "text" },
@@ -140,7 +149,7 @@ function buildFields(
       label: "Residente in Sicilia",
       type: "boolean",
     },
-    { id: "Sede", label: "Sede", type: "enum", options: options(SEDE_LABELS) },
+    { id: "Sede", label: "Sede", type: "enum", options: leadValueOptions.sedi },
     { id: "Social Lead ID", label: "Social Lead ID", type: "text" },
     {
       id: "Stato",
@@ -152,7 +161,7 @@ function buildFields(
       id: "Stato Lead",
       label: "Stato Lead",
       type: "enum",
-      options: options(STATO_LEAD_ORDER),
+      options: leadValueOptions.statoLead,
     },
     { id: "Tag", label: "Tag", type: "enum", options: options(tags) },
     { id: "Telefono", label: "Telefono", type: "text" },
@@ -230,14 +239,37 @@ export function AdvancedFilters({
   trigger?: (ctx: { onClick: () => void; count: number }) => ReactNode
 }) {
   const { owners, installers } = useTags()
+  const statoLeadOptions = useColumnValueOptions(
+    "Lead",
+    "stato_lead",
+    STATO_LEAD_ORDER.map((value) => option(value)),
+    { includeFallback: true },
+  ).options
+  const origineLeadOptions = useColumnValueOptions(
+    "Lead",
+    "origine_lead",
+    ORIGINE_LEAD_VALUES.map((value) => option(value)),
+    { includeFallback: true },
+  ).options
+  const sedeOptions = useColumnValueOptions(
+    "Lead",
+    "sede",
+    SEDE_LABELS.map((value) => option(value)),
+    { includeFallback: true },
+  ).options
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<AdvancedFilterState>(applied)
   const [fieldQuery, setFieldQuery] = useState("")
   const [expanded, setExpanded] = useState<string | null>(null)
 
   const allFields = useMemo(
-    () => buildFields(tags, owners, installers),
-    [installers, owners, tags],
+    () =>
+      buildFields(tags, owners, installers, {
+        statoLead: statoLeadOptions,
+        origineLead: origineLeadOptions,
+        sedi: sedeOptions,
+      }),
+    [installers, origineLeadOptions, owners, sedeOptions, statoLeadOptions, tags],
   )
   const fieldsById = useMemo(
     () => new Map(allFields.map((f) => [f.id as string, f])),

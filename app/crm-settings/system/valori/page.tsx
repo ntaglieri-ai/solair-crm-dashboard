@@ -212,7 +212,7 @@ export default function ValoriPage() {
     if (selected) queueMicrotask(() => setModulo(selected))
   }, [])
 
-  const campi = tutti[modulo]
+  const campi = tutti[modulo] ?? valoriPerModulo[modulo] ?? []
   const selectedField = campi.find((campo) => campo.campo === newValueField)
   const canManageDefaultValues = permissions.canAction(
     "crm_settings.system.default_values.manage",
@@ -363,18 +363,24 @@ export default function ValoriPage() {
       </div>
 
       <div className="rounded-xl border border-border bg-card px-4">
-        <Accordion key={modulo} defaultValue={[campi[0]?.campo]}>
-          {campi.map((campo) => (
-            <CampoAccordion
-              key={campo.campo}
-              campo={campo}
-              onReorder={reorder}
-              onAdd={addValore}
-              onDelete={deleteValore}
-              disabled={!canManageDefaultValues || pending}
-            />
-          ))}
-        </Accordion>
+        {campi.length > 0 ? (
+          <Accordion key={modulo} defaultValue={[campi[0]?.campo]}>
+            {campi.map((campo) => (
+              <CampoAccordion
+                key={campo.campo}
+                campo={campo}
+                onReorder={reorder}
+                onAdd={addValore}
+                onDelete={deleteValore}
+                disabled={!canManageDefaultValues || pending}
+              />
+            ))}
+          </Accordion>
+        ) : (
+          <p className="px-1 py-8 text-sm text-muted-foreground">
+            Nessun valore configurabile per questo modulo.
+          </p>
+        )}
       </div>
 
       <Dialog

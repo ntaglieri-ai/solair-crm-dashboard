@@ -55,6 +55,8 @@ import {
   type ClienteRecord,
   SEDE_LABELS,
 } from "@/lib/mock-data"
+import { option } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
 import { BulkEmailMenuItem } from "@/components/shared/bulk-email-triggers"
 import type { ClienteSettingsSectionId } from "./cliente-settings-sheet"
@@ -131,6 +133,12 @@ export function ClienteActionsMenu({
   const permissions = usePermissions()
   const { owners, ownerNames } = useClienteTags()
   const { data: statoOptions } = useStatoClienteQuery()
+  const sedeOptions = useColumnValueOptions(
+    "Clienti",
+    "sede",
+    SEDE_LABELS.map((value) => option(value)),
+    { includeFallback: true },
+  ).options
   const hasSelection = selectedCount > 0
 
   const [owner, setOwner] = useState("")
@@ -142,10 +150,10 @@ export function ClienteActionsMenu({
 
   const updValueOptions =
     updField === "Stato"
-      ? (statoOptions ?? []).map((s) => s.valore)
+      ? (statoOptions ?? []).map((s) => ({ value: s.valore, label: s.valore }))
       : updField === "Sede"
-        ? (SEDE_LABELS as string[])
-        : tags
+        ? sedeOptions
+        : tags.map((value) => ({ value, label: value }))
 
   // Gruppi duplicati tra i clienti selezionati (per email o cellulare)
   const dupGroups = useMemo(() => {
@@ -623,9 +631,9 @@ export function ClienteActionsMenu({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    {updValueOptions.map((v) => (
-                      <SelectItem key={v} value={v}>
-                        {v}
+                    {updValueOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
                       </SelectItem>
                     ))}
                   </SelectGroup>

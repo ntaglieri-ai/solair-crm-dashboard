@@ -11,6 +11,8 @@ import {
 import { useTags } from "@/lib/tag-store"
 import { MultiFilterSelect, type MultiFilterOption } from "@/components/shared/multi-filter-select"
 import { hasFilterValues } from "@/lib/shared/filter-values"
+import { option } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 
 export type ScoreFilter = "all" | "caldo" | "medio" | "freddo"
 type ScoreFilterValue = Exclude<ScoreFilter, "all">
@@ -110,16 +112,34 @@ export function LeadQuickFilterFields({
   onReset: () => void
 }) {
   const { owners, tags } = useTags()
+  const statoOptions = useColumnValueOptions(
+    "Lead",
+    "stato_lead",
+    STATO_LEAD_ORDER.map((value) => option(value)),
+    { includeFallback: true },
+  ).options
+  const sedeOptions = useColumnValueOptions(
+    "Lead",
+    "sede",
+    SEDE_LABELS.map((value) => option(value)),
+    { includeFallback: true },
+  ).options
+  const origineOptions = useColumnValueOptions(
+    "Lead",
+    "origine_lead",
+    ORIGINE_LEAD_VALUES.map((value) => option(value)),
+    { includeFallback: true },
+  ).options
   const set = <K extends keyof LeadFilterState>(
     key: K,
     value: LeadFilterState[K],
   ) => onChange({ ...filters, [key]: value })
 
   const optionsByKey = {
-    stato: STATO_LEAD_ORDER.map((value) => ({ value, label: value })),
-    sede: SEDE_LABELS.map((value) => ({ value, label: value })),
+    stato: statoOptions,
+    sede: sedeOptions,
     commerciale: owners.map((owner) => ({ value: owner.id, label: owner.nome })),
-    origine: ORIGINE_LEAD_VALUES.map((value) => ({ value, label: value })),
+    origine: origineOptions,
     tag: tags.map((tag) => ({ value: tag.id, label: tag.name })),
     score: [
       { value: "caldo", label: "Caldo (>80)" },

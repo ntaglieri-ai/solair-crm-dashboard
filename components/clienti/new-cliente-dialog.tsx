@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -29,14 +29,8 @@ import {
 } from "@/lib/mock-data"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
-
-interface NewClienteDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onCreate: (cliente: ClienteRecord) => Promise<void>
-}
-
-const SEDE_ITEMS = Object.fromEntries(SEDE_LABELS.map((s) => [s, s]))
+import { option } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 
 interface FormState {
   nome: string
@@ -49,18 +43,10 @@ interface FormState {
   installatore: string
 }
 
-const EMPTY_FORM: FormState = {
-  nome: "",
-  cognome: "",
-  email: "",
-  cellulare: "",
-  // "Nuovo contratto digitale" non esiste piu' (valori Stato allineati a
-  // Zoho, 04/09) — nessuno dei valori reali corrisponde chiaramente a
-  // "appena creato": scelta provvisoria, da confermare con Vito/Nando.
-  stato: "Da sollecitare",
-  sede: SEDE_LABELS[0],
-  proprietario: "",
-  installatore: "",
+interface NewClienteDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onCreate: (cliente: ClienteRecord) => Promise<void>
 }
 
 function nowStamp() {
@@ -82,14 +68,34 @@ export function NewClienteDialog({
   onOpenChange,
   onCreate,
 }: NewClienteDialogProps) {
-  const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const { owners, installers, loading } = useClienteTags()
   const { data: statoOptions } = useStatoClienteQuery()
+  const sedeOptions = useColumnValueOptions(
+    "Clienti",
+    "sede",
+    SEDE_LABELS.map((s) => option(s)),
+    { includeFallback: true },
+  ).options
   const statoValues = (statoOptions ?? []).map((s) => s.valore)
   const STATO_ITEMS = Object.fromEntries(statoValues.map((s) => [s, s]))
+  const SEDE_ITEMS = Object.fromEntries(sedeOptions.map((s) => [s.value, s.label]))
   const ownerItems = Object.fromEntries(owners.map((owner) => [owner.id, owner.nome]))
   const installerItems = Object.fromEntries(installers.map((installer) => [installer.id, installer.nome]))
+  const defaultForm = useMemo<FormState>(
+    () => ({
+      nome: "",
+      cognome: "",
+      email: "",
+      cellulare: "",
+      stato: statoValues[0] ?? "Da sollecitare",
+      sede: sedeOptions[0]?.value ?? SEDE_LABELS[0],
+      proprietario: "",
+      installatore: "",
+    }),
+    [sedeOptions, statoValues],
+  )
+  const [form, setForm] = useState<FormState>(() => defaultForm)
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -123,7 +129,7 @@ export function NewClienteDialog({
     try {
       await onCreate(cliente)
       toast.success("Cliente creato", { description: `${nomeCompleto} è stato aggiunto all'elenco.` })
-      setForm(EMPTY_FORM)
+      setForm(defaultForm)
       onOpenChange(false)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Creazione non riuscita")
@@ -215,9 +221,9 @@ export function NewClienteDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {SEDE_LABELS.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
+                  {sedeOptions.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label}
                     </SelectItem>
                   ))}
                 </SelectGroup>

@@ -39,6 +39,8 @@ import {
   type CorrelatoValue,
 } from "@/components/shared/correlato-picker"
 import { correlatoTipoLabel } from "./compito-utils"
+import { option, withCurrentColumnOption } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 
 function correlatoValueFromCompito(compito?: Compito): CorrelatoValue | null {
   const correlato = compito?.["Correlato a"]
@@ -92,15 +94,42 @@ export function CompitoFormDialog({
     () => referenceData?.proprietari ?? [],
     [referenceData],
   )
+  const configuredStatoOptions = useColumnValueOptions(
+    "Compiti",
+    "stato",
+    STATO_COMPITO_ORDER.map((s) => option(s)),
+    { includeFallback: true },
+  ).options
+  const configuredPrioritaOptions = useColumnValueOptions(
+    "Compiti",
+    "priorita",
+    PRIORITA_COMPITO_ORDER.map((p) => option(p)),
+    { includeFallback: true },
+  ).options
+  const configuredSedeOptions = useColumnValueOptions(
+    "Compiti",
+    "sede",
+    SEDE_LABELS.map((s) => option(s)),
+    { includeFallback: true },
+  ).options
   const updateCompito = useUpdateCompito()
   const isEdit = !!compito
+  const statoOptions = withCurrentColumnOption(configuredStatoOptions, compito?.Stato)
+  const prioritaOptions = withCurrentColumnOption(configuredPrioritaOptions, compito?.Priorità)
+  const sedeOptions = withCurrentColumnOption(configuredSedeOptions, compito?.Sede)
+  const defaultStato = configuredStatoOptions[0]?.value ?? "Non iniziato"
+  const defaultPriorita =
+    configuredPrioritaOptions.find((item) => item.value === "Medio")?.value ??
+    configuredPrioritaOptions[0]?.value ??
+    "Medio"
+  const defaultSede = configuredSedeOptions[0]?.value ?? SEDE_LABELS[0]
 
   const [oggetto, setOggetto] = useState("")
-  const [stato, setStato] = useState<StatoCompito>("Non iniziato")
-  const [priorita, setPriorita] = useState<PrioritaCompito>("Medio")
+  const [stato, setStato] = useState<StatoCompito>(defaultStato)
+  const [priorita, setPriorita] = useState<PrioritaCompito>(defaultPriorita)
   const [scadenza, setScadenza] = useState("")
   const [proprietarioId, setProprietarioId] = useState("")
-  const [sede, setSede] = useState<SedeLabel>(SEDE_LABELS[0])
+  const [sede, setSede] = useState<SedeLabel>(defaultSede)
   const [descrizione, setDescrizione] = useState("")
   const [correlato, setCorrelato] = useState<CorrelatoValue | null>(null)
 
@@ -117,11 +146,11 @@ export function CompitoFormDialog({
 
   const reset = () => {
     setOggetto("")
-    setStato("Non iniziato")
-    setPriorita("Medio")
+    setStato(defaultStato)
+    setPriorita(defaultPriorita)
     setScadenza("")
     setProprietarioId("")
-    setSede(SEDE_LABELS[0])
+    setSede(defaultSede)
     setDescrizione("")
     setCorrelato(null)
   }
@@ -267,9 +296,9 @@ export function CompitoFormDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    {STATO_COMPITO_ORDER.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
+                    {statoOptions.map((s) => (
+                      <SelectItem key={s.value} value={s.value}>
+                        {s.label}
                       </SelectItem>
                     ))}
                   </SelectGroup>
@@ -287,9 +316,9 @@ export function CompitoFormDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    {PRIORITA_COMPITO_ORDER.map((p) => (
-                      <SelectItem key={p} value={p}>
-                        {p}
+                    {prioritaOptions.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        {p.label}
                       </SelectItem>
                     ))}
                   </SelectGroup>
@@ -316,9 +345,9 @@ export function CompitoFormDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    {SEDE_LABELS.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
+                    {sedeOptions.map((s) => (
+                      <SelectItem key={s.value} value={s.value}>
+                        {s.label}
                       </SelectItem>
                     ))}
                   </SelectGroup>

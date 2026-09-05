@@ -56,7 +56,7 @@ export function LeadAvatar({
 }
 
 export function StatoLeadBadge({ stato }: { stato: StatoLead }) {
-  return <StatoPill tone={STATO_LEAD_TONE[stato]}>{stato}</StatoPill>
+  return <StatoPill tone={STATO_LEAD_TONE[stato] ?? "muted"}>{stato}</StatoPill>
 }
 
 export function TagList({ tags }: { tags: string[] }) {
@@ -95,7 +95,7 @@ export function OrigineBadge({ origine }: { origine: OrigineLead }) {
     <Badge
       className={cn(
         "rounded-md px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap",
-        ORIGINE_STYLES[origine],
+        ORIGINE_STYLES[origine] ?? "bg-muted text-muted-foreground",
       )}
     >
       {origine}

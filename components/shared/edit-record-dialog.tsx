@@ -41,6 +41,12 @@ export type EditField = {
   custom?: CustomFieldValue
 }
 
+export type LeadEditValueOptions = {
+  statoLead?: string[]
+  origineLead?: string[]
+  sedi?: string[]
+}
+
 type EditValue = string | boolean
 
 function fieldType(type: "text" | "numeric" | "boolean" | "timestamp") {
@@ -115,20 +121,56 @@ function isEditableRuntimeValue(value: unknown) {
   )
 }
 
+function withCurrentOption(options: string[], current: unknown) {
+  const value = typeof current === "string" ? current.trim() : ""
+  if (!value || options.includes(value)) return options
+  return [value, ...options]
+}
+
 export function buildLeadEditFields(
   lead: Lead,
   permissions: PermissionEngine,
+  options: LeadEditValueOptions = {},
 ): EditField[] {
   return LEAD_RECORD_FIELDS
     .filter((field) => permissions.canField("lead", field.column, "edit"))
-    .map((field) => ({
-      key: String(field.appField),
-      label: String(field.appField),
-      value: lead[field.appField],
-      type: isLongField(String(field.appField))
-        ? "textarea"
-        : fieldType(field.type),
-    }))
+    .map((field) => {
+      if (field.appField === "Stato Lead") {
+        return {
+          key: String(field.appField),
+          label: String(field.appField),
+          value: lead[field.appField],
+          type: "select" as const,
+          options: withCurrentOption(options.statoLead ?? [], lead[field.appField]),
+        }
+      }
+      if (field.appField === "Origine Lead") {
+        return {
+          key: String(field.appField),
+          label: String(field.appField),
+          value: lead[field.appField],
+          type: "select" as const,
+          options: withCurrentOption(options.origineLead ?? [], lead[field.appField]),
+        }
+      }
+      if (field.appField === "Sede") {
+        return {
+          key: String(field.appField),
+          label: String(field.appField),
+          value: lead[field.appField],
+          type: "select" as const,
+          options: withCurrentOption(options.sedi ?? [], lead[field.appField]),
+        }
+      }
+      return {
+        key: String(field.appField),
+        label: String(field.appField),
+        value: lead[field.appField],
+        type: isLongField(String(field.appField))
+          ? "textarea"
+          : fieldType(field.type),
+      }
+    })
 }
 
 export function buildClienteEditFields(
@@ -140,6 +182,7 @@ export function buildClienteEditFields(
   // Lista configurabile (crm_stato_cliente), non piu' STATO_CLIENTE_VALUES
   // fisso nel codice — vedi lib/clienti/stato-cliente-store.tsx.
   statoOptions: string[],
+  options: { sedi?: string[] } = {},
 ): EditField[] {
   const fields: EditField[] = CLIENTI_RECORD_FIELDS
     .filter((field) => !["Ora modifica", "Ora creazione"].includes(field.appField))
@@ -152,7 +195,16 @@ export function buildClienteEditFields(
           label: field.appField,
           value: cliente[field.appField as keyof ClienteRecord],
           type: "select" as const,
-          options: statoOptions,
+          options: withCurrentOption(statoOptions, cliente[field.appField as keyof ClienteRecord]),
+        }
+      }
+      if (field.appField === "Sede") {
+        return {
+          key: field.appField,
+          label: field.appField,
+          value: cliente[field.appField as keyof ClienteRecord],
+          type: "select" as const,
+          options: withCurrentOption(options.sedi ?? [], cliente[field.appField as keyof ClienteRecord]),
         }
       }
       if (field.appField === "Installatore") {

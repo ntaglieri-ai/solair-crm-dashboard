@@ -5,11 +5,29 @@ import { parseClienteViewPreferences } from "@/lib/clienti/view-preferences"
 const validColumnIds = new Set(CLIENTE_COLUMNS.map((column) => column.id))
 
 describe("parseClienteViewPreferences", () => {
-  it("ignora cookie di un altro utente", () => {
+  it("ignora le preferenze vecchie v1 cosi' la vista clienti riparte dal default senza Sede", () => {
     const prefs = parseClienteViewPreferences(
       encodeURIComponent(
         JSON.stringify({
           version: 1,
+          owner: "user-1",
+          visibleCols: ["Nome Clienti", "Sede", "Tag"],
+          columnWidths: {},
+          density: "normale",
+        }),
+      ),
+      "user-1",
+      validColumnIds,
+    )
+
+    expect(prefs).toBeNull()
+  })
+
+  it("ignora cookie di un altro utente", () => {
+    const prefs = parseClienteViewPreferences(
+      encodeURIComponent(
+        JSON.stringify({
+          version: 2,
           owner: "user-1",
           visibleCols: ["Nome Clienti", "Tag"],
           columnWidths: {},
@@ -27,7 +45,7 @@ describe("parseClienteViewPreferences", () => {
     const prefs = parseClienteViewPreferences(
       encodeURIComponent(
         JSON.stringify({
-          version: 1,
+          version: 2,
           owner: "user-1",
           visibleCols: ["Nome Clienti", "campo inesistente", "Tag"],
           columnWidths: {

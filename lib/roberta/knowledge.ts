@@ -240,6 +240,24 @@ function mediaTypeFromName(nome: string) {
   }
 }
 
+function mediaTypeFromBytes(buffer: Uint8Array) {
+  const startsWith = (bytes: number[]) => bytes.every((byte, index) => buffer[index] === byte)
+  if (startsWith([0x25, 0x50, 0x44, 0x46])) return "application/pdf"
+  if (startsWith([0xff, 0xd8, 0xff])) return "image/jpeg"
+  if (startsWith([0x89, 0x50, 0x4e, 0x47])) return "image/png"
+  if (startsWith([0x47, 0x49, 0x46])) return "image/gif"
+  if (
+    startsWith([0x52, 0x49, 0x46, 0x46]) &&
+    buffer[8] === 0x57 &&
+    buffer[9] === 0x45 &&
+    buffer[10] === 0x42 &&
+    buffer[11] === 0x50
+  ) {
+    return "image/webp"
+  }
+  return null
+}
+
 function isTextFile(nome: string, mediaType: string) {
   return mediaType.startsWith("text/") ||
     ["application/json", "application/xml"].includes(mediaType) ||
@@ -257,7 +275,10 @@ async function extractFileContent(path: string, nome: string) {
   }
 
   const buffer = new Uint8Array(await new Response(result.body).arrayBuffer())
-  const mediaType = normalizeMediaType(result.contentType) ?? mediaTypeFromName(nome)
+  const mediaType =
+    mediaTypeFromBytes(buffer) ??
+    normalizeMediaType(result.contentType) ??
+    mediaTypeFromName(nome)
 
   if (mediaType === "application/pdf") {
     const testo = await estraiTestoDaPdf(buffer)

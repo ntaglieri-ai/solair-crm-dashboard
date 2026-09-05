@@ -3,7 +3,7 @@ import {
   getInitialLeadsParams,
   buildLeadsSearchParams,
 } from "@/lib/leads/api-types"
-import { computeStats, queryLeads } from "@/lib/leads/repository"
+import { queryLeads } from "@/lib/leads/repository"
 import { LEAD_RECORD_APP_FIELD_TO_COLUMN } from "@/lib/leads/field-map"
 import type { Lead } from "@/lib/mock-data"
 import { LEAD_COLUMNS, DEFAULT_VISIBLE_COLUMNS } from "@/lib/mock-data"
@@ -46,31 +46,13 @@ export default async function LeadsPage() {
     fields: permittedInitialCols as unknown as string[],
   }
   const initialSp = buildLeadsSearchParams(initialParams).toString()
-  // Statistiche precaricate qui, non piu' chieste dal client dopo il mount.
-  // La chiave di React Query per le statistiche e' costante (leadsKeys.stats(),
-  // cioe' ["leads","stats"]): non dipende da initialSp, quindi non esiste il
-  // rischio di disallineamento che invece vincola la lista qui sopra.
-  // Le due letture sono indipendenti e vanno in parallelo: computeStats() non
-  // ripaga lo snapshot dei permessi (loadCurrentPermissionSnapshot e' avvolta
-  // in cache() di React e requirePage l'ha gia' risolto), quindi il costo che
-  // aggiunge alla pagina e' la sola RPC get_lead_stats.
-  // Le statistiche degradano da sole: se il calcolo fallisce la pagina esce
-  // comunque e il client le richiede come faceva prima, invece di rispondere
-  // 500 per dei contatori. La lista no: senza quella non c'e' pagina da
-  // mostrare, quindi queryLeads resta senza rete di sicurezza.
-  const [initialLeads, initialStats] = await Promise.all([
-    queryLeads(initialParams),
-    computeStats().catch((error) => {
-      console.error("[leads] statistiche non calcolate lato server:", error)
-      return null
-    }),
-  ])
+  const initialLeads = await queryLeads(initialParams)
 
   return (
     <LeadsClient
       initialSp={initialSp}
       initialLeads={initialLeads}
-      initialStats={initialStats}
+      initialStats={null}
       initialPreferences={initialPreferences}
     />
   )

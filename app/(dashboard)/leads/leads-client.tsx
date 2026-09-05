@@ -391,8 +391,11 @@ export function LeadsClient({
   )
   useEffect(() => {
     const assignments = Object.fromEntries(
-      pageRows.map((lead) => [lead.id, lead.tagIds ?? []]),
+      pageRows
+        .filter((lead) => Array.isArray(lead.tagIds))
+        .map((lead) => [lead.id, lead.tagIds ?? []]),
     )
+    if (Object.keys(assignments).length === 0) return
     hydrateLeadTagIds(assignments)
   }, [hydrateLeadTagIds, pageRows])
   const total = data?.total ?? 0

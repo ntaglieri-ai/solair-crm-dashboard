@@ -10,6 +10,15 @@ import {
 } from "@/lib/clienti/api-types"
 import { clientiKeys } from "@/lib/clienti/hooks"
 import {
+  buildCompitiSearchParams,
+  buildKanbanDoneParams,
+  buildKanbanOpenParams,
+  DEFAULT_COMPITI_PARAMS,
+  DEFAULT_KANBAN_FILTERS,
+  type CompitiListResponse,
+} from "@/lib/compiti/api-types"
+import { compitiKeys } from "@/lib/compiti/hooks"
+import {
   buildLeadsSearchParams,
   getInitialLeadsParams,
   type LeadListResponse,
@@ -21,6 +30,7 @@ import {
   DEFAULT_VISIBLE_COLUMNS,
   CLIENTE_COLUMNS,
   LEAD_COLUMNS,
+  OPEN_TASK_STATI,
 } from "@/lib/mock-data"
 import { usePermissions } from "@/lib/permissions/provider"
 import { warmLeadReferenceData } from "@/lib/tag-store"
@@ -142,6 +152,7 @@ export function CrmRouteWarmer() {
   const permissions = usePermissions()
   const canReadLeads = permissions.canPage("lead")
   const canReadClienti = permissions.canPage("clienti")
+  const canReadCompiti = permissions.canPage("compiti")
   const subject = permissions.snapshot.subject
   const preferenceOwner = subject.userId ?? subject.authUserId ?? "anonymous"
 
@@ -186,13 +197,39 @@ export function CrmRouteWarmer() {
           staleTime: 60_000,
         })
       }
+
+      if (canReadCompiti && !pathname.startsWith("/compiti")) {
+        router.prefetch("/compiti")
+        const compitiParams = DEFAULT_COMPITI_PARAMS
+        const kanbanOpenParams = buildKanbanOpenParams(DEFAULT_KANBAN_FILTERS, [
+          ...OPEN_TASK_STATI,
+        ])
+        const kanbanDoneParams = buildKanbanDoneParams(DEFAULT_KANBAN_FILTERS)
+        for (const params of [compitiParams, kanbanOpenParams, kanbanDoneParams]) {
+          const sp = buildCompitiSearchParams(params).toString()
+          void queryClient.prefetchQuery({
+            queryKey: compitiKeys.list(sp),
+            queryFn: ({ signal }) =>
+              readJson<CompitiListResponse>(`/api/compiti?${sp}`, signal),
+            staleTime: 60_000,
+          })
+        }
+      }
     })
 
     return () => {
       cancelled = true
       cancelIdle(handle)
     }
-  }, [canReadClienti, canReadLeads, pathname, preferenceOwner, queryClient, router])
+  }, [
+    canReadClienti,
+    canReadCompiti,
+    canReadLeads,
+    pathname,
+    preferenceOwner,
+    queryClient,
+    router,
+  ])
 
   return null
 }

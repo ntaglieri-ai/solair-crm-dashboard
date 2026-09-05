@@ -19,6 +19,13 @@ import {
 } from "@/lib/leads/server-store"
 import { createClient } from "@/lib/supabase/server"
 import { filterCurrentAccessibleRecordIds, resolveCurrentOwnerScope } from "@/lib/permissions/data-scope"
+import { activeFilterValues } from "@/lib/shared/filter-values"
+import {
+  leadListNeedsActivityBadge,
+  leadListNeedsInstallatoreSopralluogo,
+  leadListNeedsNoteBadge,
+  leadListNeedsTags,
+} from "@/lib/leads/list-columns"
 
 function ownerIdsForQuery(scope: Awaited<ReturnType<typeof resolveCurrentOwnerScope>>) {
   if (scope.kind === "all") return undefined
@@ -40,15 +47,16 @@ function project(lead: Lead, fields: string[]): LeadListItem {
   }
   out.noteItems = lead.noteItems ?? []
   out.taskItems = lead.taskItems ?? []
-  out.tagIds = lead.tagIds ?? []
+  if (lead.tagIds) out.tagIds = lead.tagIds
   return out as LeadListItem
 }
 
 export async function queryLeads(params: LeadListParams): Promise<LeadListResponse> {
   const visibleOwnerIds = ownerIdsForQuery(await resolveCurrentOwnerScope("lead"))
-  const includeInstallatoreSopralluogo =
-    params.fields.includes("*") ||
-    params.fields.includes("Installatore - Incaricato sopralluogo")
+  const advancedQuick = params.advanced.quick
+  const usesTagFilter =
+    activeFilterValues(params.tag).length > 0 ||
+    Boolean(params.advanced.fields.Tag)
   // Tutti i filtri sono applicati nella query Supabase PRIMA di range/paginazione,
   // così total e righe restano coerenti con la pagina richiesta.
   const filters = {
@@ -61,7 +69,12 @@ export async function queryLeads(params: LeadListParams): Promise<LeadListRespon
     search: params.search,
     advanced: params.advanced,
     visibleOwnerIds,
-    includeInstallatoreSopralluogo,
+    fields: params.fields,
+    includeInstallatoreSopralluogo: leadListNeedsInstallatoreSopralluogo(params.fields),
+    includeNoteBadge: leadListNeedsNoteBadge(params.fields) || advancedQuick.badgeNota,
+    includeActivityBadge:
+      leadListNeedsActivityBadge(params.fields) || advancedQuick.badgeAttivita,
+    includeTags: leadListNeedsTags(params.fields) || usesTagFilter,
   }
 
   const [base, total] = await Promise.all([

@@ -30,14 +30,16 @@ export const LIST_BASE_FIELDS: LeadColumnId[] = [
   "Nome Lead",
   "E-mail",
   "Telefono",
+  "Stato Lead",
+  "Origine Lead",
+  "Lead Proprietario",
+  "Città",
+  "Provincia",
+  "Sede",
   "campaign name",
   "Valutazione",
   "Descrizione",
-  "leadCaldo",
-  "possibileDuplicato",
-  "Badge dell'attività",
-  "Badge di nota",
-] as unknown as LeadColumnId[]
+]
 
 export interface LeadListParams {
   page: number

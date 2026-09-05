@@ -5,6 +5,13 @@ import { activeFilterValues, postgrestInList } from "@/lib/shared/filter-values"
 import type { Lead } from "@/lib/mock-data"
 import type { AdvancedFilterState } from "@/lib/leads/advanced-filter-logic"
 import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
+import {
+  leadListColumnsForFields,
+  leadListNeedsActivityBadge,
+  leadListNeedsInstallatoreSopralluogo,
+  leadListNeedsNoteBadge,
+  leadListNeedsTags,
+} from "@/lib/leads/list-columns"
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
 
@@ -125,15 +132,7 @@ function mapRow(row: Record<string, unknown>): Lead {
   }
 }
 
-const LIST_COLUMNS = [
-  "id",
-  ...LEAD_RECORD_FIELDS.map((field) => field.column),
-  "zoho_installatore_sopralluogo_id",
-  "zoho_installatore_sopralluogo_nome",
-  "ora_ultima_attivita",
-  "created_at",
-  "updated_at",
-].join(",")
+const LIST_COLUMNS = leadListColumnsForFields(["*"])
 
 // Whitelist sicura: id colonna UI -> colonna DB ordinabile. Qualsiasi valore
 // non presente qui ricade su "updated_at" (ultimo movimento interno del record).
@@ -264,16 +263,28 @@ export async function getAllLeads(filters?: {
   limit?: number
   offset?: number
   visibleOwnerIds?: string[]
+  fields?: string[]
   includeInstallatoreSopralluogo?: boolean
+  includeNoteBadge?: boolean
+  includeActivityBadge?: boolean
+  includeTags?: boolean
 }): Promise<Lead[]> {
   const supabase = await createClient()
 
   // Ordinamento reale lato query, applicato PRIMA di range/paginazione.
   const { column, ascending } = resolveSort(filters?.sortBy, filters?.sortDir)
+  const fields = filters?.fields ?? ["*"]
+  const includeInstallatoreSopralluogo =
+    filters?.includeInstallatoreSopralluogo ??
+    leadListNeedsInstallatoreSopralluogo(fields)
+  const includeNoteBadge = filters?.includeNoteBadge ?? leadListNeedsNoteBadge(fields)
+  const includeActivityBadge =
+    filters?.includeActivityBadge ?? leadListNeedsActivityBadge(fields)
+  const includeTags = filters?.includeTags ?? leadListNeedsTags(fields)
 
   let query = supabase
     .from("leads")
-    .select(LIST_COLUMNS)
+    .select(leadListColumnsForFields(fields, filters?.sortBy))
     .order(column, { ascending, nullsFirst: false })
 
   if (filters?.visibleOwnerIds) {
@@ -358,7 +369,7 @@ export async function getAllLeads(filters?: {
     throw new Error(`Lettura lead non riuscita: ${error.message}`)
   }
   const rawRows = data as unknown as Record<string, unknown>[]
-  const leadRows = filters?.includeInstallatoreSopralluogo
+  const leadRows = includeInstallatoreSopralluogo
     ? await attachInstallatoreSopralluogoNames(supabase, rawRows)
     : rawRows
   const rows = leadRows.map(mapRow)
@@ -366,22 +377,28 @@ export async function getAllLeads(filters?: {
   if (ids.length === 0) return rows
 
   const [activities, tasks, tagAssignments] = await Promise.all([
-    supabase
-      .from("attivita")
-      .select("record_id")
-      .eq("record_tipo", "lead")
-      .eq("tipo", "nota")
-      .in("record_id", ids),
-    supabase
-      .from("compiti")
-      .select("correlato_id")
-      .eq("correlato_tipo", "lead")
-      .in("correlato_id", ids)
-      .neq("stato", "Completato"),
-    supabase
-      .from("lead_tags")
-      .select("lead_id,tag_id")
-      .in("lead_id", ids),
+    includeNoteBadge
+      ? supabase
+          .from("attivita")
+          .select("record_id")
+          .eq("record_tipo", "lead")
+          .eq("tipo", "nota")
+          .in("record_id", ids)
+      : Promise.resolve({ data: [], error: null }),
+    includeActivityBadge
+      ? supabase
+          .from("compiti")
+          .select("correlato_id")
+          .eq("correlato_tipo", "lead")
+          .in("correlato_id", ids)
+          .neq("stato", "Completato")
+      : Promise.resolve({ data: [], error: null }),
+    includeTags
+      ? supabase
+          .from("lead_tags")
+          .select("lead_id,tag_id")
+          .in("lead_id", ids)
+      : Promise.resolve({ data: [], error: null }),
   ])
   if (activities.error) {
     console.error("[server-store] lead activities:", activities.error.message)
@@ -400,13 +417,17 @@ export async function getAllLeads(filters?: {
 
   return rows.map((row) => ({
     ...row,
-    "Badge di nota": noteIds.has(row.id),
-    "Badge dell'attività": taskIds.has(row.id),
-    noteItems: [],
-    taskItems: [],
-    tagIds: (tagAssignments.data ?? [])
-      .filter((item) => item.lead_id === row.id)
-      .map((item) => item.tag_id),
+    ...(includeNoteBadge ? { "Badge di nota": noteIds.has(row.id), noteItems: [] } : {}),
+    ...(includeActivityBadge
+      ? { "Badge dell'attività": taskIds.has(row.id), taskItems: [] }
+      : {}),
+    ...(includeTags
+      ? {
+          tagIds: (tagAssignments.data ?? [])
+            .filter((item) => item.lead_id === row.id)
+            .map((item) => item.tag_id),
+        }
+      : {}),
   }))
 }
 

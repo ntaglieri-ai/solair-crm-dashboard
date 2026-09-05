@@ -14,11 +14,16 @@ export async function GET(request: Request) {
   const started = Date.now()
   try {
     const result = await runRobertaKnowledgeSync()
-    return NextResponse.json({
-      ok: true,
-      latencyMs: Date.now() - started,
-      ...result,
-    })
+    const ok = result.errors.length === 0
+    return NextResponse.json(
+      {
+        ok,
+        latencyMs: Date.now() - started,
+        error: result.errors[0] ?? null,
+        ...result,
+      },
+      { status: ok ? 200 : 500 },
+    )
   } catch (error) {
     const message = error instanceof Error ? error.message : "Errore sync RobertaBot"
     console.error("[cron/roberta-sync]", message)

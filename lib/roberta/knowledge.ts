@@ -655,6 +655,69 @@ function scoreText(queryTokens: string[], value: string, keywords: string[] = []
   }, 0)
 }
 
+const BROAD_SOURCE_TERMS = new Set([
+  "brand",
+  "dimmi",
+  "elenca",
+  "linee",
+  "marca",
+  "marche",
+  "prodotti",
+  "proponete",
+  "quali",
+  "soluzioni",
+  "tutti",
+  "trattate",
+])
+
+const PRODUCT_SOURCE_TERMS = new Set([
+  "accumuli",
+  "accumulo",
+  "batteria",
+  "batterie",
+  "inverter",
+  "moduli",
+  "modulo",
+  "pannelli",
+  "pannello",
+])
+
+function shouldDiversifySources(queryTokens: string[]) {
+  return queryTokens.some((token) => BROAD_SOURCE_TERMS.has(token)) &&
+    queryTokens.some((token) => PRODUCT_SOURCE_TERMS.has(token))
+}
+
+export function prioritizeRobertaChunksForQuery<T extends { source: string; score: number }>(
+  rows: T[],
+  queryTokens: string[],
+  limit: number,
+) {
+  const sorted = [...rows].sort((a, b) => b.score - a.score)
+  if (!shouldDiversifySources(queryTokens)) return sorted.slice(0, limit)
+
+  const groups = new Map<string, T[]>()
+  for (const row of sorted) {
+    const group = groups.get(row.source)
+    if (group) group.push(row)
+    else groups.set(row.source, [row])
+  }
+
+  const diversified: T[] = []
+  while (diversified.length < limit) {
+    let added = false
+    for (const group of groups.values()) {
+      const next = group.shift()
+      if (!next) continue
+      diversified.push(next)
+      added = true
+      if (diversified.length >= limit) break
+    }
+    if (!added) break
+  }
+
+  return diversified
+}
+
 export async function searchRobertaKnowledge(
   supabase: SupabaseClient,
   query: string,
@@ -697,8 +760,8 @@ export async function searchRobertaKnowledge(
       score: queryTokens.length ? scoreText(queryTokens, `${row.titolo}\n${row.contenuto}`, row.keywords) : 1,
     }))
     .filter((row) => row.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
+
+  const prioritizedChunks = prioritizeRobertaChunksForQuery(chunks, queryTokens, limit)
 
   const catalogo = ((catalogData as {
     source_key: string
@@ -725,5 +788,5 @@ export async function searchRobertaKnowledge(
     .sort((a, b) => b.score - a.score)
     .slice(0, Math.max(3, Math.floor(limit / 2)))
 
-  return { query, chunks, catalogo }
+  return { query, chunks: prioritizedChunks, catalogo }
 }

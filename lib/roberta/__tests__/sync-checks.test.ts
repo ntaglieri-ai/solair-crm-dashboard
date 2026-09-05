@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   applyRobertaSyncChecks,
+  prioritizeRobertaChunksForQuery,
   type RobertaSyncResult,
 } from "@/lib/roberta/knowledge"
 
@@ -59,5 +60,46 @@ describe("applyRobertaSyncChecks", () => {
     expect(checked.warnings).toContain(
       "1 documento/i RobertaBot non più presenti nelle fonti configurate: rimossi dall'indice",
     )
+  })
+})
+
+describe("prioritizeRobertaChunksForQuery", () => {
+  it("diversifica le fonti quando la domanda chiede l'elenco dei pannelli", () => {
+    const rows = [
+      { source: "Pannelli/Trina.pdf", score: 5 },
+      { source: "Pannelli/Trina.pdf", score: 5 },
+      { source: "Pannelli/Trina.pdf", score: 5 },
+      { source: "Pannelli/AIKO.pdf", score: 4 },
+      { source: "Pannelli/JINKO.pdf", score: 4 },
+      { source: "Pannelli/LONGi.pdf", score: 4 },
+    ]
+
+    const prioritized = prioritizeRobertaChunksForQuery(
+      rows,
+      ["marche", "pannelli", "proponete"],
+      4,
+    )
+
+    expect(prioritized.map((row) => row.source)).toEqual([
+      "Pannelli/Trina.pdf",
+      "Pannelli/AIKO.pdf",
+      "Pannelli/JINKO.pdf",
+      "Pannelli/LONGi.pdf",
+    ])
+  })
+
+  it("mantiene l'ordinamento per score sulle domande puntuali", () => {
+    const rows = [
+      { source: "Pannelli/AIKO.pdf", score: 2 },
+      { source: "Pannelli/Trina.pdf", score: 5 },
+      { source: "Pannelli/JINKO.pdf", score: 3 },
+    ]
+
+    const prioritized = prioritizeRobertaChunksForQuery(rows, ["garanzia", "trina"], 2)
+
+    expect(prioritized.map((row) => row.source)).toEqual([
+      "Pannelli/Trina.pdf",
+      "Pannelli/JINKO.pdf",
+    ])
   })
 })

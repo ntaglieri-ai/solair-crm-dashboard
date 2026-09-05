@@ -46,6 +46,9 @@ function project(lead: Lead, fields: string[]): LeadListItem {
 
 export async function queryLeads(params: LeadListParams): Promise<LeadListResponse> {
   const visibleOwnerIds = ownerIdsForQuery(await resolveCurrentOwnerScope("lead"))
+  const includeInstallatoreSopralluogo =
+    params.fields.includes("*") ||
+    params.fields.includes("Installatore - Incaricato sopralluogo")
   // Tutti i filtri sono applicati nella query Supabase PRIMA di range/paginazione,
   // così total e righe restano coerenti con la pagina richiesta.
   const filters = {
@@ -58,6 +61,7 @@ export async function queryLeads(params: LeadListParams): Promise<LeadListRespon
     search: params.search,
     advanced: params.advanced,
     visibleOwnerIds,
+    includeInstallatoreSopralluogo,
   }
 
   const [base, total] = await Promise.all([

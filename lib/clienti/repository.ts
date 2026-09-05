@@ -7,6 +7,7 @@ import type {
   SedeLabel,
   StatoCompito,
 } from "@/lib/mock-data"
+import { DEFAULT_CLIENTE_COLUMNS } from "@/lib/mock-data"
 import type {
   ClientiListItem,
   ClientiListParams,
@@ -29,7 +30,45 @@ import {
 // Colonne proiettate in lettura — mai SELECT * dal client. La lista deve pero'
 // caricare tutti i campi Cliente selezionabili, altrimenti una colonna visibile
 // come "Importo Contrattuale" risulta vuota pur essendo popolata in DB.
-const LIST_COLUMNS = CLIENTI_LIST_COLUMN_NAMES.join(",")
+const ALL_LIST_COLUMNS = CLIENTI_LIST_COLUMN_NAMES.join(",")
+const CLIENTI_APP_FIELD_TO_COLUMN = new Map(
+  CLIENTI_RECORD_FIELDS.map((field) => [field.appField, field.column]),
+)
+const LIST_TECHNICAL_COLUMNS = [
+  "id",
+  "created_at",
+  "updated_at",
+  "sede",
+  "clienti_proprietario_id",
+  "installatore_id",
+]
+
+function listColumnsForFields(fields: string[], sortCol: string) {
+  const requestedFields = fields.includes("*")
+    ? CLIENTI_RECORD_FIELDS.map((field) => field.appField)
+    : fields.length > 0
+      ? fields
+      : (DEFAULT_CLIENTE_COLUMNS as unknown as string[])
+  const columns = new Set<string>(LIST_TECHNICAL_COLUMNS)
+
+  if (sortCol) columns.add(sortCol)
+  for (const field of requestedFields) {
+    if (field === "Badge dell'attività" || field === "Badge di nota") continue
+    if (field === "Sede") columns.add("sede")
+    if (field === "Clienti Proprietario") {
+      columns.add("clienti_proprietario_id")
+      columns.add("clienti_proprietario")
+    }
+    if (field === "Installatore") {
+      columns.add("installatore_id")
+      columns.add("installatore")
+    }
+    const column = CLIENTI_APP_FIELD_TO_COLUMN.get(field)
+    if (column) columns.add(column)
+  }
+
+  return [...columns].join(",")
+}
 
 const DETAIL_COLUMNS = [
   // installatore_id (FK uuid verso installatori) non e' tra le colonne Zoho:
@@ -152,7 +191,7 @@ export async function queryClienti(
   // Construisce entrambe le query con gli stessi filtri per consistenza.
   let listQ = supabase
     .from("clienti_report_list")
-    .select(LIST_COLUMNS)
+    .select(listColumnsForFields(params.fields, sortCol))
     .order(sortCol, { ascending, nullsFirst: false })
     .order("id", { ascending: true })
     .range(from, to)
@@ -391,7 +430,7 @@ export async function getClienteById(
 
   const fallbackQ = applyOwnerScope(supabase
     .from("clienti")
-    .select(LIST_COLUMNS)
+    .select(ALL_LIST_COLUMNS)
     .eq("id", id), "clienti_proprietario_id", ownerScope)
   const { data, error } = await fallbackQ.single()
   if (error || !data) return null
@@ -430,7 +469,7 @@ export async function createClienteRecord(
       provincia_indirizzo_postale: body["Provincia indirizzo postale"] || null,
       lead_id: leadId ?? null,
     })
-    .select(LIST_COLUMNS)
+    .select(ALL_LIST_COLUMNS)
     .single()
   if (error) throw new Error(`createClienteRecord: ${error.message}`)
   const cliente = mapRow(data as unknown as Record<string, unknown>)
@@ -523,7 +562,7 @@ export async function updateClienteRecord(
     .from("clienti")
     .update(row)
     .eq("id", id)
-    .select(LIST_COLUMNS)
+    .select(ALL_LIST_COLUMNS)
     .single()
   if (error) {
     onError?.(error.message)
@@ -585,7 +624,7 @@ export async function queryClientiForExport(
   let total = 0
 
   for (let page = 1; ; page += 1) {
-    const res = await queryClienti({ ...params, page, pageSize: EXPORT_CHUNK })
+    const res = await queryClienti({ ...params, fields: ["*"], page, pageSize: EXPORT_CHUNK })
     total = res.total
     rows.push(...res.rows)
     if (res.rows.length < EXPORT_CHUNK) break
@@ -613,7 +652,7 @@ export async function queryClientiByIdsForExport(
   // non superarne la lunghezza massima.
   for (let i = 0; i < unique.length; i += 200) {
     const res = await queryClienti(
-      { ...DEFAULT_CLIENTI_PARAMS, page: 1, pageSize: EXPORT_CHUNK },
+      { ...DEFAULT_CLIENTI_PARAMS, fields: ["*"], page: 1, pageSize: EXPORT_CHUNK },
       { ids: unique.slice(i, i + 200) },
     )
     rows.push(...res.rows)

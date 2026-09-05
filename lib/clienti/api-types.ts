@@ -1,4 +1,5 @@
 import type { ClienteRecord, ClienteColumnId } from "@/lib/mock-data"
+import { DEFAULT_CLIENTE_COLUMNS } from "@/lib/mock-data"
 import {
   appendFilterValues,
   parseFilterValues,
@@ -23,6 +24,8 @@ export interface ClientiListParams {
   // gestione) ma nessun modo di filtrare la lista per tag — mancava
   // interamente da qui in giu', tendina UI disabilitata inclusa.
   tag: string[]
+  /** Colonne richieste oltre alla base; [] => default visibili. "*" => tutte. */
+  fields: string[]
 }
 
 export interface ClientiListResponse {
@@ -45,6 +48,7 @@ export const DEFAULT_CLIENTI_PARAMS: ClientiListParams = {
   proprietario: [],
   installatore: [],
   tag: [],
+  fields: [],
 }
 
 export function buildClientiSearchParams(p: ClientiListParams): URLSearchParams {
@@ -59,6 +63,7 @@ export function buildClientiSearchParams(p: ClientiListParams): URLSearchParams 
   appendFilterValues(sp, "proprietario", p.proprietario)
   appendFilterValues(sp, "installatore", p.installatore)
   appendFilterValues(sp, "tag", p.tag)
+  if (p.fields.length > 0) sp.set("fields", p.fields.join(","))
   return sp
 }
 
@@ -74,5 +79,7 @@ export function parseClientiSearchParams(sp: URLSearchParams): ClientiListParams
     proprietario: parseFilterValues(sp, "proprietario"),
     installatore: parseFilterValues(sp, "installatore"),
     tag: parseFilterValues(sp, "tag"),
+    fields: sp.get("fields")?.split(",").filter(Boolean) ??
+      (DEFAULT_CLIENTE_COLUMNS as unknown as string[]),
   }
 }

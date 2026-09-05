@@ -269,8 +269,9 @@ export function ClientiClient({
       proprietario: filters.proprietario,
       installatore: filters.installatore,
       tag: filters.tag,
+      fields: visibleCols as unknown as string[],
     }),
-    [page, rowsPerPage, sortBy, sortDir, filters],
+    [page, rowsPerPage, sortBy, sortDir, filters, visibleCols],
   )
 
   const { data, isFetching } = useClientiQuery(params, {

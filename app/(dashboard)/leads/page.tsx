@@ -3,6 +3,7 @@ import {
   getInitialLeadsParams,
   buildLeadsSearchParams,
 } from "@/lib/leads/api-types"
+import { queryLeads } from "@/lib/leads/repository"
 import { LEAD_COLUMNS, DEFAULT_VISIBLE_COLUMNS } from "@/lib/mock-data"
 import {
   LEADS_VIEW_COOKIE,
@@ -39,11 +40,12 @@ export default async function LeadsPage() {
       DEFAULT_VISIBLE_COLUMNS) as unknown as string[],
   }
   const initialSp = buildLeadsSearchParams(initialParams).toString()
+  const initialLeads = await queryLeads(initialParams)
 
   return (
     <LeadsClient
       initialSp={initialSp}
-      initialLeads={null}
+      initialLeads={initialLeads}
       initialStats={null}
       initialPreferences={initialPreferences}
     />

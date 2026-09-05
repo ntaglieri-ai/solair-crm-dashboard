@@ -6,7 +6,7 @@ import {
   buildClientiSearchParams,
 } from "@/lib/clienti/api-types"
 import { queryClienti } from "@/lib/clienti/repository"
-import { CLIENTE_COLUMNS } from "@/lib/mock-data"
+import { CLIENTE_COLUMNS, DEFAULT_CLIENTE_COLUMNS } from "@/lib/mock-data"
 import {
   CLIENTI_VIEW_COOKIE,
   parseClienteViewPreferences,
@@ -28,7 +28,11 @@ export default async function ClientiPage() {
     new Set(CLIENTE_COLUMNS.map((column) => column.id)),
   )
 
-  const initialParams = DEFAULT_CLIENTI_PARAMS
+  const initialParams = {
+    ...DEFAULT_CLIENTI_PARAMS,
+    fields: (initialPreferences?.visibleCols ??
+      DEFAULT_CLIENTE_COLUMNS) as unknown as string[],
+  }
   const initialSp = buildClientiSearchParams(initialParams).toString()
   const initialData = await queryClienti(initialParams)
 

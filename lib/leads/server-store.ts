@@ -265,6 +265,7 @@ export async function getAllLeads(filters?: {
   limit?: number
   offset?: number
   visibleOwnerIds?: string[]
+  includeInstallatoreSopralluogo?: boolean
 }): Promise<Lead[]> {
   const supabase = await createClient()
 
@@ -357,10 +358,10 @@ export async function getAllLeads(filters?: {
     console.error("[server-store] getAllLeads error:", error.message)
     throw new Error(`Lettura lead non riuscita: ${error.message}`)
   }
-  const leadRows = await attachInstallatoreSopralluogoNames(
-    supabase,
-    data as unknown as Record<string, unknown>[],
-  )
+  const rawRows = data as unknown as Record<string, unknown>[]
+  const leadRows = filters?.includeInstallatoreSopralluogo
+    ? await attachInstallatoreSopralluogoNames(supabase, rawRows)
+    : rawRows
   const rows = leadRows.map(mapRow)
   const ids = rows.map((row) => row.id)
   if (ids.length === 0) return rows

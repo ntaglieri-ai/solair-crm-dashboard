@@ -152,6 +152,15 @@ function signature(row) {
   )
 }
 
+function origineLeadValue(row) {
+  const value = nullable(row["Origine Lead"])
+  if (!value) return null
+  if (Number.isFinite(Date.parse(value))) {
+    return nullable(row["campaign name"]) ? "Pubblicità" : null
+  }
+  return value
+}
+
 function sourceToLead(row, ownerIds, seenAt) {
   const zohoOwnerId = normalizeZohoId(row["Lead Proprietario.id"])
   const modifiedAt = timestampValue(row["Orario del registro delle modifiche"])
@@ -187,7 +196,7 @@ function sourceToLead(row, ownerIds, seenAt) {
     stato_email: nullable(row.Stato),
     valutazione: numberValue(row.Valutazione),
     lead_proprietario_id: ownerIds.get(zohoOwnerId) ?? null,
-    origine_lead: nullable(row["Origine Lead"]),
+    origine_lead: origineLeadValue(row),
     campaign_name: nullable(row["campaign name"]),
     descrizione: nullable(row.Descrizione),
     saluti: nullable(row.Saluti),

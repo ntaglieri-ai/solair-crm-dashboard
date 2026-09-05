@@ -964,6 +964,7 @@ type ExistingLead = {
   codice_postale: string | null
   social_lead_id: string | null
   campaign_name: string | null
+  creato_da: string | null
   data_click: string | null
   descrizione: string | null
   lead_proprietario_id: string | null
@@ -992,6 +993,7 @@ const EXISTING_LEAD_SELECT = [
   "codice_postale",
   "social_lead_id",
   "campaign_name",
+  "creato_da",
   "data_click",
   "descrizione",
   "lead_proprietario_id",
@@ -1042,6 +1044,22 @@ async function findExistingLeadByEmail(
 
   if (error) throw new Error(`findExistingLead email: ${error.message}`)
   return data as ExistingLead | null
+}
+
+function leadCreatedBy(payload: LeadIntakePayload, sourceInfo: ReturnType<typeof intakeSource>) {
+  if (payload.origine === "chatbot") return normalizeText(payload.source) ?? "Chatbot SolairGroup"
+  if (payload.origine === "meta_ads") return META_DEFAULT_OWNER_NAME
+  if (payload.origine === "configuratore") return "Configuratore WebSite"
+  return normalizeText(payload.source) ?? sourceInfo.source
+}
+
+function leadCampaignName(payload: LeadIntakePayload) {
+  const campaign = normalizeText(payload.campaignName)
+  if (!campaign) return null
+  if (payload.origine === "chatbot" && normalizeIntakeFieldName(campaign).includes("chatbot")) {
+    return null
+  }
+  return campaign
 }
 
 async function findExistingLeadBySimilarPhone(
@@ -1230,6 +1248,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
   const socialLeadId = normalizeText(payload.socialLeadId)
   const sourceCreatedAt = leadSourceCreatedAtIso(payload)
   const dataClick = leadDataClickIso(payload)
+  const campaignName = leadCampaignName(payload)
 
   const existing = await findExistingLead(telefonoNorm, emailNorm, socialLeadId)
 
@@ -1260,7 +1279,8 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
     assignTextField(updateRow, existing, changedFields, "citta", "Citta'", payload.citta)
     assignTextField(updateRow, existing, changedFields, "codice_postale", "Codice postale", payload.codicePostale)
     assignTextField(updateRow, existing, changedFields, "social_lead_id", "Social Lead ID", socialLeadId)
-    assignTextField(updateRow, existing, changedFields, "campaign_name", "campaign name", payload.campaignName)
+    assignTextField(updateRow, existing, changedFields, "campaign_name", "campaign name", campaignName)
+    assignTextField(updateRow, existing, changedFields, "creato_da", "Creato da", leadCreatedBy(payload, sourceInfo))
     if (dataClick && !sameTimestamp(existing.data_click, dataClick)) {
       updateRow.data_click = dataClick
       addChangedField(changedFields, "Data Click")
@@ -1381,7 +1401,8 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       stato_lead: "Non contattato",
       origine_lead: ORIGINE_LABELS[payload.origine],
       valutazione: calculatedScore,
-      campaign_name: payload.campaignName || null,
+      campaign_name: campaignName,
+      creato_da: leadCreatedBy(payload, sourceInfo),
       data_click: dataClick,
       kwp,
       kwh,

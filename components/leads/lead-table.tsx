@@ -20,7 +20,6 @@ import {
   Loader2,
   GripVertical,
   MapPin,
-  SlidersHorizontal,
   UserRound,
   Bell,
   StickyNote,
@@ -103,7 +102,6 @@ const LEAD_ROW_HEIGHT: Record<Density, number> = {
   densa: 38,
 }
 const LEAD_ACTIONS_COLUMN_WIDTH = 80
-const LEAD_ACTIONS_TOGGLE_WIDTH = 44
 const LEAD_LEFT_CONTROLS_WIDTH = 36 + 44
 
 function isCompactIconColumn(column: LeadColumnId) {
@@ -127,6 +125,26 @@ function LeadHeaderLabel({ column }: { column: LeadColumn }) {
         }
       />
       <TooltipContent>{column.label}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+function ActionsHeaderLabel({ onOpenSettings }: { onOpenSettings: () => void }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="inline-flex items-center justify-center rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Gestisci colonne"
+          >
+            <MoreHorizontal className="size-4" aria-hidden="true" />
+          </button>
+        }
+      />
+      <TooltipContent>Gestisci colonne</TooltipContent>
     </Tooltip>
   )
 }
@@ -300,6 +318,7 @@ export function LeadTable({
   onSort,
   density = "normale",
   loading = false,
+  onOpenSettings,
   scrollRef: externalScrollRef,
   onScrollerScroll,
 }: {
@@ -321,6 +340,7 @@ export function LeadTable({
   onSort: (col: LeadColumnId) => void
   density?: Density
   loading?: boolean
+  onOpenSettings: () => void
   /** Ref del contenitore scrollabile (per sincronizzare la scrollbar orizzontale esterna). */
   scrollRef?: RefObject<HTMLDivElement | null>
   /** Callback ad ogni scroll del contenitore, riceve l'elemento scrollabile. */
@@ -333,14 +353,11 @@ export function LeadTable({
   const [stuck, setStuck] = useState(false)
   const [draggingColumn, setDraggingColumn] = useState<LeadColumnId | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<LeadColumnId | null>(null)
-  const [actionsColumnOpen, setActionsColumnOpen] = useState(false)
   const internalScrollRef = useRef<HTMLDivElement>(null)
   const scrollRef = externalScrollRef ?? internalScrollRef
   const [scrollerWidth, setScrollerWidth] = useState(0)
   const allSelected = leads.length > 0 && leads.every((l) => selected.has(l.id))
-  const actionsColumnWidth = actionsColumnOpen
-    ? LEAD_ACTIONS_COLUMN_WIDTH
-    : LEAD_ACTIONS_TOGGLE_WIDTH
+  const actionsColumnWidth = LEAD_ACTIONS_COLUMN_WIDTH
   const fixedColumnsWidth = LEAD_LEFT_CONTROLS_WIDTH + actionsColumnWidth
   const colSpan = columns.length + 3
   const cellPad = LEAD_TABLE_DENSITY[density]
@@ -685,60 +702,58 @@ export function LeadTable({
 
           <TableCell
             onClick={(e) => e.stopPropagation()}
-            className={cn(LIGHTNING.cellActions, actionsColumnOpen ? cellPad : "p-0")}
+            className={cn(LIGHTNING.cellActions, cellPad)}
             style={{
               width: actionsColumnWidth,
               minWidth: actionsColumnWidth,
               maxWidth: actionsColumnWidth,
             }}
           >
-            {actionsColumnOpen ? (
-              <RowInlineActions>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Converti ${lead["Nome Lead"]} a cliente`}
-                  onClick={() => onConvert(lead)}
-                >
-                  <UserCheck className="size-3.5" />
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button variant="ghost" size="icon-sm" aria-label="Azioni">
-                        <MoreHorizontal className="size-3.5" />
-                      </Button>
-                    }
-                  />
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuGroup>
-                      <DropdownMenuItem
-                        onClick={() => router.push(`/leads/${lead.id}`)}
-                      >
-                        <ExternalLink data-icon="inline-start" />
-                        Apri
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onConvert(lead)}>
-                        <UserCheck data-icon="inline-start" />
-                        Converti a cliente
-                      </DropdownMenuItem>
-                      {canDelete ? (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onClick={() => onDelete(lead)}
-                          >
-                            <Trash2 data-icon="inline-start" />
-                            Elimina
-                          </DropdownMenuItem>
-                        </>
-                      ) : null}
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </RowInlineActions>
-            ) : null}
+            <RowInlineActions>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Converti ${lead["Nome Lead"]} a cliente`}
+                onClick={() => onConvert(lead)}
+              >
+                <UserCheck className="size-3.5" />
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button variant="ghost" size="icon-sm" aria-label="Azioni">
+                      <MoreHorizontal className="size-3.5" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end">
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem
+                      onClick={() => router.push(`/leads/${lead.id}`)}
+                    >
+                      <ExternalLink data-icon="inline-start" />
+                      Apri
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onConvert(lead)}>
+                      <UserCheck data-icon="inline-start" />
+                      Converti a cliente
+                    </DropdownMenuItem>
+                    {canDelete ? (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => onDelete(lead)}
+                        >
+                          <Trash2 data-icon="inline-start" />
+                          Elimina
+                        </DropdownMenuItem>
+                      </>
+                    ) : null}
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </RowInlineActions>
           </TableCell>
         </TableRow>
       </LeadRowContextMenu>
@@ -1011,19 +1026,7 @@ export function LeadTable({
                 maxWidth: actionsColumnWidth,
               }}
             >
-              <button
-                type="button"
-                aria-label={
-                  actionsColumnOpen ? "Nascondi colonna azioni" : "Mostra colonna azioni"
-                }
-                title={
-                  actionsColumnOpen ? "Nascondi colonna azioni" : "Mostra colonna azioni"
-                }
-                onClick={() => setActionsColumnOpen((open) => !open)}
-                className="flex h-10 w-full items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <SlidersHorizontal className="size-4" />
-              </button>
+              <ActionsHeaderLabel onOpenSettings={onOpenSettings} />
             </TableHead>
           </TableRow>
         </TableHeader>

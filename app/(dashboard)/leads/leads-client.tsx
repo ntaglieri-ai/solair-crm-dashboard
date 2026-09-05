@@ -938,6 +938,7 @@ export function LeadsClient({
           onSort={handleSort}
           density={density}
           loading={isFetching && !data}
+          onOpenSettings={() => openSettings("colonne")}
         />
       </div>
 

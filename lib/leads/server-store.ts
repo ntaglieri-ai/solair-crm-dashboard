@@ -126,13 +126,12 @@ function mapRow(row: Record<string, unknown>): Lead {
 }
 
 const LIST_COLUMNS = [
-  "id", "nome_lead", "nome", "cognome", "email", "telefono", "mobile_fisso",
-  "stato_lead", "stato_email", "valutazione", "lead_proprietario_id",
-  "origine_lead", "sede", "campaign_name", "citta", "provincia",
-  "codice_postale", "residente_in_sicilia", "wallbox_richiesto",
-  "consenso_contatto_telefono", "consenso_contatto_whatsapp", "consenso_contatto_email",
-  "data_sopralluogo", "installatore_sopralluogo_id", "zoho_installatore_sopralluogo_id",
-  "zoho_installatore_sopralluogo_nome", "data_click", "data_ora", "ora_ultima_attivita", "created_at",
+  "id",
+  ...LEAD_RECORD_FIELDS.map((field) => field.column),
+  "zoho_installatore_sopralluogo_id",
+  "zoho_installatore_sopralluogo_nome",
+  "ora_ultima_attivita",
+  "created_at",
   "updated_at",
 ].join(",")
 

@@ -23,7 +23,7 @@ function result(overrides: Partial<RobertaSyncResult> = {}): RobertaSyncResult {
 }
 
 describe("applyRobertaSyncChecks", () => {
-  it("segnala errore quando ci sono fonti attive ma zero PDF", () => {
+  it("segnala errore quando ci sono fonti attive ma zero file", () => {
     const checked = applyRobertaSyncChecks(result(), {
       activeSources: 1,
       staleSourceKeys: [],
@@ -31,7 +31,7 @@ describe("applyRobertaSyncChecks", () => {
     })
 
     expect(checked.errors).toContain(
-      "1 fonte/i RobertaBot attiva/e ma nessun PDF trovato nelle cartelle selezionate",
+      "1 fonte/i RobertaBot attiva/e ma nessun file trovato nelle cartelle selezionate",
     )
     expect(checked.errors).toContain("Ultima sincronizzazione senza nessun documento processato")
   })

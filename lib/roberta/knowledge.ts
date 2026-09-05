@@ -10,6 +10,8 @@ export type ListinoDocumento = {
   publicUrl?: string
   testo?: string
   contenuto_base64?: string
+  mediaType?: string
+  errore?: string
 }
 
 export type RobertaSourceCategory =
@@ -108,6 +110,23 @@ export type RobertaKnowledgeResult = {
 const DEFAULT_INGEST_MODEL = "claude-sonnet-5"
 const MAX_CHUNK_CHARS = 1800
 const MIN_TOKEN_LENGTH = 3
+const TEXT_FILE_EXTENSIONS = new Set([
+  "csv",
+  "htm",
+  "html",
+  "json",
+  "md",
+  "txt",
+  "xml",
+  "yaml",
+  "yml",
+])
+const IMAGE_MEDIA_TYPES = new Set([
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+])
 
 export const ROBERTA_SOURCE_CATEGORIES: {
   value: RobertaSourceCategory
@@ -173,25 +192,100 @@ function fingerprint(documento: ListinoDocumento) {
     .digest("hex")
 }
 
-function isPdf(nome: string) {
-  return nome.toLowerCase().endsWith(".pdf")
-}
-
 function fingerprintDi(item: WebDavItem) {
   if (item.etag) return `etag:${item.etag}`
   return `size-mtime:${item.dimensioneKb ?? "?"}-${item.modificato ?? "?"}`
 }
 
-async function extractPdfContent(path: string) {
+function extensionOf(nome: string) {
+  const match = nome.toLowerCase().match(/\.([a-z0-9]+)$/)
+  return match?.[1] ?? ""
+}
+
+function normalizeMediaType(value: string | null | undefined) {
+  return value?.split(";")[0]?.trim().toLowerCase() || null
+}
+
+function mediaTypeFromName(nome: string) {
+  switch (extensionOf(nome)) {
+    case "pdf":
+      return "application/pdf"
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg"
+    case "png":
+      return "image/png"
+    case "webp":
+      return "image/webp"
+    case "gif":
+      return "image/gif"
+    case "csv":
+      return "text/csv"
+    case "htm":
+    case "html":
+      return "text/html"
+    case "json":
+      return "application/json"
+    case "md":
+      return "text/markdown"
+    case "txt":
+      return "text/plain"
+    case "xml":
+      return "application/xml"
+    case "yaml":
+    case "yml":
+      return "text/yaml"
+    default:
+      return "application/octet-stream"
+  }
+}
+
+function isTextFile(nome: string, mediaType: string) {
+  return mediaType.startsWith("text/") ||
+    ["application/json", "application/xml"].includes(mediaType) ||
+    TEXT_FILE_EXTENSIONS.has(extensionOf(nome))
+}
+
+function canExtractWithClaude(mediaType: string) {
+  return mediaType === "application/pdf" || IMAGE_MEDIA_TYPES.has(mediaType)
+}
+
+async function extractFileContent(path: string, nome: string) {
   const result = await downloadFile(path)
   if (!result.ok || !result.body) {
     throw new Error(result.error ?? `Download fallito (${result.status})`)
   }
 
   const buffer = new Uint8Array(await new Response(result.body).arrayBuffer())
-  const testo = await estraiTestoDaPdf(buffer)
-  if (testo) return { testo, contenuto_base64: undefined }
-  return { testo: "", contenuto_base64: Buffer.from(buffer).toString("base64") }
+  const mediaType = normalizeMediaType(result.contentType) ?? mediaTypeFromName(nome)
+
+  if (mediaType === "application/pdf") {
+    const testo = await estraiTestoDaPdf(buffer)
+    if (testo) return { testo, contenuto_base64: undefined, mediaType }
+  }
+
+  if (isTextFile(nome, mediaType)) {
+    return {
+      testo: new TextDecoder("utf-8", { fatal: false }).decode(buffer).trim(),
+      contenuto_base64: undefined,
+      mediaType,
+    }
+  }
+
+  if (canExtractWithClaude(mediaType)) {
+    return {
+      testo: "",
+      contenuto_base64: Buffer.from(buffer).toString("base64"),
+      mediaType,
+    }
+  }
+
+  return {
+    testo: "",
+    contenuto_base64: undefined,
+    mediaType,
+    errore: `Formato file non supportato per l'indicizzazione automatica (${mediaType})`,
+  }
 }
 
 export async function fetchRobertaConfiguredDocuments(
@@ -208,7 +302,7 @@ export async function fetchRobertaConfiguredDocuments(
         )
       }
       return listing.items
-        .filter((item) => !item.isFolder && isPdf(item.nome))
+        .filter((item) => !item.isFolder)
         .map((item) => ({
           source,
           item,
@@ -255,7 +349,7 @@ export async function fetchRobertaConfiguredDocuments(
         } satisfies ListinoDocumento
       }
 
-      const extracted = await extractPdfContent(item.path)
+      const extracted = await extractFileContent(item.path, item.nome)
       cacheUpserts.push({
         path: item.path,
         nome: item.nome,
@@ -271,6 +365,8 @@ export async function fetchRobertaConfiguredDocuments(
         publicUrl: source.publicUrl,
         testo: extracted.testo,
         contenuto_base64: extracted.contenuto_base64,
+        mediaType: extracted.mediaType,
+        errore: extracted.errore,
       } satisfies ListinoDocumento
     }),
   )
@@ -383,7 +479,27 @@ function catalogItems(documento: ListinoDocumento, testo: string, categoria: str
 
 async function extractScanWithClaude(documento: ListinoDocumento) {
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey || !documento.contenuto_base64) return null
+  const mediaType = documento.mediaType ?? mediaTypeFromName(documento.nome)
+  if (!apiKey || !documento.contenuto_base64 || !canExtractWithClaude(mediaType)) return null
+
+  const sourceBlock = mediaType === "application/pdf"
+    ? {
+        type: "document",
+        source: {
+          type: "base64",
+          media_type: mediaType,
+          data: documento.contenuto_base64,
+        },
+        title: documento.nome,
+      }
+    : {
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: mediaType,
+          data: documento.contenuto_base64,
+        },
+      }
 
   const model = process.env.ROBERTA_INGEST_MODEL?.trim() || DEFAULT_INGEST_MODEL
   const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -400,19 +516,11 @@ async function extractScanWithClaude(documento: ListinoDocumento) {
         {
           role: "user",
           content: [
-            {
-              type: "document",
-              source: {
-                type: "base64",
-                media_type: "application/pdf",
-                data: documento.contenuto_base64,
-              },
-              title: documento.nome,
-            },
+            sourceBlock,
             {
               type: "text",
               text:
-                "Estrai in italiano tutte le informazioni commerciali utili per un chatbot Solair: prezzi, prodotti, potenze, accumuli, garanzie, condizioni, note e tabelle. Mantieni righe compatte e fedeli, senza inventare.",
+                "Estrai in italiano tutte le informazioni commerciali utili per un chatbot Solair: prezzi, prodotti, marche, modelli, potenze, accumuli, garanzie, condizioni, note, tabelle e testo visibile. Mantieni righe compatte e fedeli, senza inventare.",
             },
           ],
         },
@@ -530,9 +638,14 @@ export async function syncRobertaKnowledge(
 
     let testo = (documento.testo ?? "").trim()
     let stato: "ready" | "scan_pending" | "empty" | "error" = testo ? "ready" : "empty"
-    let errore: string | null = null
+    let errore: string | null = documento.errore ?? null
 
-    if (!testo && documento.contenuto_base64) {
+    if (errore) {
+      stato = "error"
+      result.errors.push(`${documento.nome}: ${errore}`)
+    }
+
+    if (!testo && documento.contenuto_base64 && !errore) {
       try {
         testo = (await extractScanWithClaude(documento)) ?? ""
         stato = testo ? "ready" : "scan_pending"
@@ -625,7 +738,7 @@ export function applyRobertaSyncChecks(
     result.errors.push("Nessuna fonte RobertaBot attiva configurata")
   } else if (result.sources === 0) {
     result.errors.push(
-      `${params.activeSources} fonte/i RobertaBot attiva/e ma nessun PDF trovato nelle cartelle selezionate`,
+      `${params.activeSources} fonte/i RobertaBot attiva/e ma nessun file trovato nelle cartelle selezionate`,
     )
   }
 

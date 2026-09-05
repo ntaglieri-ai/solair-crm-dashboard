@@ -20,14 +20,6 @@ async function requireRobertaCatalogAccess() {
   return { response: null }
 }
 
-async function requireRobertaResetAccess() {
-  const permissions = await getCurrentPermissions()
-  if (!permissions.isSuperadmin) {
-    return { response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) }
-  }
-  return { response: null }
-}
-
 export async function GET() {
   const guard = await requireRobertaCatalogAccess()
   if (guard.response) return guard.response
@@ -76,9 +68,6 @@ export async function GET() {
       ? {
           ok: (lastSyncValue as { ok?: unknown }).ok === true,
           syncedAt: (lastSyncValue as { syncedAt: string }).syncedAt,
-          warnings: Array.isArray((lastSyncValue as { warnings?: unknown }).warnings)
-            ? (lastSyncValue as { warnings: string[] }).warnings.filter((warning) => typeof warning === "string")
-            : [],
           error:
             typeof (lastSyncValue as { error?: unknown }).error === "string"
               ? (lastSyncValue as { error: string }).error
@@ -111,10 +100,7 @@ export async function POST(request: Request) {
 
   try {
     const result = await runRobertaKnowledgeSync({ force: body.force === true })
-    return NextResponse.json(
-      { ...result, error: result.errors[0] ?? null },
-      { status: result.errors.length > 0 ? 422 : 200 },
-    )
+    return NextResponse.json(result)
   } catch (error) {
     const message =
       error instanceof Error
@@ -123,59 +109,4 @@ export async function POST(request: Request) {
     console.error("[roberta/knowledge/sync]", message)
     return NextResponse.json({ error: message }, { status: 500 })
   }
-}
-
-export async function DELETE() {
-  const guard = await requireRobertaResetAccess()
-  if (guard.response) return guard.response
-
-  const supabase = createAdminClient()
-  if (!supabase) {
-    return NextResponse.json(
-      { error: "Supabase admin client non configurato" },
-      { status: 503 },
-    )
-  }
-
-  const resetAt = new Date().toISOString()
-  const { count, error } = await supabase
-    .from("roberta_knowledge_sources")
-    .delete({ count: "exact" })
-    .not("source_key", "is", null)
-
-  if (error) {
-    console.error("[roberta/knowledge/reset]", error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  const { error: settingsError } = await supabase.from("crm_settings").upsert(
-    {
-      chiave: ROBERTA_LAST_SYNC_SETTING_KEY,
-      valore: {
-        ok: true,
-        syncedAt: resetAt,
-        resetAt,
-        operation: "reset",
-        result: {
-          reset: true,
-          deletedSources: count ?? 0,
-        },
-        error: null,
-      },
-      descrizione: "Ultimo controllo automatico/manuale conoscenza RobertaBot",
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "chiave" },
-  )
-
-  if (settingsError) {
-    console.error("[roberta/knowledge/reset/settings]", settingsError.message)
-    return NextResponse.json({ error: settingsError.message }, { status: 500 })
-  }
-
-  return NextResponse.json({
-    ok: true,
-    resetAt,
-    deletedSources: count ?? 0,
-  })
 }

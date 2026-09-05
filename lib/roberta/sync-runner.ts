@@ -36,7 +36,6 @@ export async function runRobertaKnowledgeSync(options: { force?: boolean } = {})
     const documenti = await fetchRobertaConfiguredDocuments(supabase, sources)
     const result = await syncRobertaKnowledge(supabase, documenti, {
       force: options.force === true,
-      activeSources: sources.filter((source) => source.active).length,
     })
     await supabase.from("crm_settings").upsert(
       {
@@ -47,7 +46,6 @@ export async function runRobertaKnowledgeSync(options: { force?: boolean } = {})
           durationMs: Date.now() - started,
           force: options.force === true,
           result,
-          warnings: result.warnings,
           error: result.errors[0] ?? null,
         },
         descrizione: "Ultimo controllo automatico/manuale conoscenza RobertaBot",

@@ -48,6 +48,8 @@ export type RobertaSyncResult = {
 type KnowledgeSourceRow = {
   source_key: string
   fingerprint: string
+  stato: string
+  testo_chars: number
 }
 
 export type RobertaSyncCheckParams = {
@@ -632,7 +634,7 @@ export async function syncRobertaKnowledge(
   const keySet = new Set(keys)
   const { data: existingRows, error: existingError } = await supabase
     .from("roberta_knowledge_sources")
-    .select("source_key, fingerprint")
+    .select("source_key, fingerprint, stato, testo_chars")
   if (existingError) {
     result.errors.push(`lettura indice Roberta: ${existingError.message}`)
   }
@@ -640,7 +642,7 @@ export async function syncRobertaKnowledge(
   const existing = new Map(
     safeExistingRows.map((row) => [
       row.source_key,
-      row.fingerprint,
+      row,
     ]),
   )
   const staleSourceKeys = safeExistingRows
@@ -652,7 +654,13 @@ export async function syncRobertaKnowledge(
     const fp = fingerprint(documento)
     const now = new Date().toISOString()
 
-    if (!options.force && existing.get(key) === fp) {
+    const indexed = existing.get(key)
+    if (
+      !options.force &&
+      indexed?.fingerprint === fp &&
+      indexed.stato === "ready" &&
+      indexed.testo_chars > 0
+    ) {
       result.reused++
       continue
     }

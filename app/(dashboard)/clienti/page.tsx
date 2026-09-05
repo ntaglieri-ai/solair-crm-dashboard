@@ -11,6 +11,7 @@ import {
   CLIENTI_VIEW_COOKIE,
   parseClienteViewPreferences,
 } from "@/lib/clienti/view-preferences"
+import { chiaveCampoCliente } from "@/lib/permissions/field-map"
 import { ClientiClient } from "./clienti-client"
 import { requirePage } from "@/lib/permissions/server"
 
@@ -28,10 +29,14 @@ export default async function ClientiPage() {
     new Set(CLIENTE_COLUMNS.map((column) => column.id)),
   )
 
+  const initialVisibleCols = initialPreferences?.visibleCols ?? DEFAULT_CLIENTE_COLUMNS
+  const permittedInitialCols = initialVisibleCols.filter((id) => {
+    const campo = chiaveCampoCliente(id)
+    return campo === null || permissions.canField("clienti", campo, "view")
+  })
   const initialParams = {
     ...DEFAULT_CLIENTI_PARAMS,
-    fields: (initialPreferences?.visibleCols ??
-      DEFAULT_CLIENTE_COLUMNS) as unknown as string[],
+    fields: permittedInitialCols as unknown as string[],
   }
   const initialSp = buildClientiSearchParams(initialParams).toString()
   const initialData = await queryClienti(initialParams)

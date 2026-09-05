@@ -4,6 +4,8 @@ import {
   buildLeadsSearchParams,
 } from "@/lib/leads/api-types"
 import { queryLeads } from "@/lib/leads/repository"
+import { LEAD_RECORD_APP_FIELD_TO_COLUMN } from "@/lib/leads/field-map"
+import type { Lead } from "@/lib/mock-data"
 import { LEAD_COLUMNS, DEFAULT_VISIBLE_COLUMNS } from "@/lib/mock-data"
 import {
   LEADS_VIEW_COOKIE,
@@ -34,10 +36,14 @@ export default async function LeadsPage() {
     new Set(LEAD_COLUMNS.map((column) => column.id)),
   )
 
+  const initialVisibleCols = initialPreferences?.visibleCols ?? DEFAULT_VISIBLE_COLUMNS
+  const permittedInitialCols = initialVisibleCols.filter((id) => {
+    const campo = LEAD_RECORD_APP_FIELD_TO_COLUMN[id as keyof Lead]
+    return !campo || permissions.canField("lead", campo, "view")
+  })
   const initialParams = {
     ...getInitialLeadsParams(),
-    fields: (initialPreferences?.visibleCols ??
-      DEFAULT_VISIBLE_COLUMNS) as unknown as string[],
+    fields: permittedInitialCols as unknown as string[],
   }
   const initialSp = buildLeadsSearchParams(initialParams).toString()
   const initialLeads = await queryLeads(initialParams)

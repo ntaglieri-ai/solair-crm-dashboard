@@ -17,7 +17,9 @@ import {
 } from "@/lib/leads/api-types"
 import { leadsKeys } from "@/lib/leads/hooks"
 import {
+  DEFAULT_CLIENTE_COLUMNS,
   DEFAULT_VISIBLE_COLUMNS,
+  CLIENTE_COLUMNS,
   LEAD_COLUMNS,
 } from "@/lib/mock-data"
 import { usePermissions } from "@/lib/permissions/provider"
@@ -27,6 +29,11 @@ import {
   type LeadViewPreferences,
   parseLeadViewPreferences,
 } from "@/lib/leads/view-preferences"
+import {
+  CLIENTI_VIEW_COOKIE,
+  type ClienteViewPreferences,
+  parseClienteViewPreferences,
+} from "@/lib/clienti/view-preferences"
 
 type IdleHandle = { id: number; idle: boolean }
 type IdleWindow = Window & {
@@ -71,6 +78,34 @@ function readLeadPreferenceColumns(owner: string) {
       owner,
       validColumnIds,
     )?.visibleCols ?? DEFAULT_VISIBLE_COLUMNS
+  )
+}
+
+function readClientePreferenceColumns(owner: string) {
+  const validColumnIds = new Set(CLIENTE_COLUMNS.map((column) => column.id))
+  const fromLocalStorage = window.localStorage.getItem(
+    `solair:clienti:view:${owner}:v2`,
+  )
+  if (fromLocalStorage) {
+    try {
+      const parsed = JSON.parse(fromLocalStorage) as Partial<ClienteViewPreferences>
+      if (parsed.version === 2 && parsed.owner === owner) {
+        const visibleCols = (parsed.visibleCols ?? []).filter((id) =>
+          validColumnIds.has(id),
+        )
+        if (visibleCols.length) return visibleCols
+      }
+    } catch {
+      window.localStorage.removeItem(`solair:clienti:view:${owner}:v2`)
+    }
+  }
+
+  return (
+    parseClienteViewPreferences(
+      readCookie(CLIENTI_VIEW_COOKIE),
+      owner,
+      validColumnIds,
+    )?.visibleCols ?? DEFAULT_CLIENTE_COLUMNS
   )
 }
 
@@ -139,7 +174,11 @@ export function CrmRouteWarmer() {
 
       if (canReadClienti && !pathname.startsWith("/clienti")) {
         router.prefetch("/clienti")
-        const clientiSp = buildClientiSearchParams(DEFAULT_CLIENTI_PARAMS).toString()
+        const clientiParams = {
+          ...DEFAULT_CLIENTI_PARAMS,
+          fields: readClientePreferenceColumns(preferenceOwner) as unknown as string[],
+        }
+        const clientiSp = buildClientiSearchParams(clientiParams).toString()
         void queryClient.prefetchQuery({
           queryKey: clientiKeys.list(clientiSp),
           queryFn: ({ signal }) =>

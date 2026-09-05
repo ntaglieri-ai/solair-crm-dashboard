@@ -139,6 +139,10 @@ function cancelIdle(handle: IdleHandle) {
   window.clearTimeout(handle.id)
 }
 
+function delay(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms))
+}
+
 async function readJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(url, { signal })
   if (!res.ok) throw new Error(`Warm-up non riuscito: ${url}`)
@@ -160,61 +164,73 @@ export function CrmRouteWarmer() {
     let cancelled = false
 
     const handle = scheduleIdle(() => {
-      if (cancelled) return
+      void (async () => {
+        if (cancelled) return
 
-      if (canReadLeads && !pathname.startsWith("/leads")) {
-        router.prefetch("/leads")
-        void warmLeadReferenceData()
-        const leadParams = {
-          ...getInitialLeadsParams(),
-          fields: readLeadPreferenceColumns(preferenceOwner) as unknown as string[],
-        }
-        const leadSp = buildLeadsSearchParams(leadParams).toString()
-        void queryClient.prefetchQuery({
-          queryKey: leadsKeys.list(leadSp),
-          queryFn: ({ signal }) =>
-            readJson<LeadListResponse>(`/api/leads?${leadSp}`, signal),
-          staleTime: 60_000,
-        })
-        void queryClient.prefetchQuery({
-          queryKey: leadsKeys.stats(),
-          queryFn: ({ signal }) => readJson<LeadStats>("/api/leads/stats", signal),
-          staleTime: 60_000,
-        })
-      }
-
-      if (canReadClienti && !pathname.startsWith("/clienti")) {
-        router.prefetch("/clienti")
-        const clientiParams = {
-          ...DEFAULT_CLIENTI_PARAMS,
-          fields: readClientePreferenceColumns(preferenceOwner) as unknown as string[],
-        }
-        const clientiSp = buildClientiSearchParams(clientiParams).toString()
-        void queryClient.prefetchQuery({
-          queryKey: clientiKeys.list(clientiSp),
-          queryFn: ({ signal }) =>
-            readJson<ClientiListResponse>(`/api/clienti?${clientiSp}`, signal),
-          staleTime: 60_000,
-        })
-      }
-
-      if (canReadCompiti && !pathname.startsWith("/compiti")) {
-        router.prefetch("/compiti")
-        const compitiParams = DEFAULT_COMPITI_PARAMS
-        const kanbanOpenParams = buildKanbanOpenParams(DEFAULT_KANBAN_FILTERS, [
-          ...OPEN_TASK_STATI,
-        ])
-        const kanbanDoneParams = buildKanbanDoneParams(DEFAULT_KANBAN_FILTERS)
-        for (const params of [compitiParams, kanbanOpenParams, kanbanDoneParams]) {
-          const sp = buildCompitiSearchParams(params).toString()
-          void queryClient.prefetchQuery({
-            queryKey: compitiKeys.list(sp),
+        if (canReadLeads && !pathname.startsWith("/leads")) {
+          router.prefetch("/leads")
+          void warmLeadReferenceData()
+          const leadParams = {
+            ...getInitialLeadsParams(),
+            fields: readLeadPreferenceColumns(preferenceOwner) as unknown as string[],
+          }
+          const leadSp = buildLeadsSearchParams(leadParams).toString()
+          await queryClient.prefetchQuery({
+            queryKey: leadsKeys.list(leadSp),
             queryFn: ({ signal }) =>
-              readJson<CompitiListResponse>(`/api/compiti?${sp}`, signal),
+              readJson<LeadListResponse>(`/api/leads?${leadSp}`, signal),
             staleTime: 60_000,
-          })
+          }).catch(() => undefined)
+          if (cancelled) return
+          await delay(350)
+          await queryClient.prefetchQuery({
+            queryKey: leadsKeys.stats(),
+            queryFn: ({ signal }) => readJson<LeadStats>("/api/leads/stats", signal),
+            staleTime: 60_000,
+          }).catch(() => undefined)
         }
-      }
+
+        if (cancelled) return
+        await delay(350)
+
+        if (canReadClienti && !pathname.startsWith("/clienti")) {
+          router.prefetch("/clienti")
+          const clientiParams = {
+            ...DEFAULT_CLIENTI_PARAMS,
+            fields: readClientePreferenceColumns(preferenceOwner) as unknown as string[],
+          }
+          const clientiSp = buildClientiSearchParams(clientiParams).toString()
+          await queryClient.prefetchQuery({
+            queryKey: clientiKeys.list(clientiSp),
+            queryFn: ({ signal }) =>
+              readJson<ClientiListResponse>(`/api/clienti?${clientiSp}`, signal),
+            staleTime: 60_000,
+          }).catch(() => undefined)
+        }
+
+        if (cancelled) return
+        await delay(700)
+
+        if (canReadCompiti && !pathname.startsWith("/compiti")) {
+          router.prefetch("/compiti")
+          const compitiParams = DEFAULT_COMPITI_PARAMS
+          const kanbanOpenParams = buildKanbanOpenParams(DEFAULT_KANBAN_FILTERS, [
+            ...OPEN_TASK_STATI,
+          ])
+          const kanbanDoneParams = buildKanbanDoneParams(DEFAULT_KANBAN_FILTERS)
+          for (const params of [compitiParams, kanbanOpenParams, kanbanDoneParams]) {
+            if (cancelled) return
+            const sp = buildCompitiSearchParams(params).toString()
+            await queryClient.prefetchQuery({
+              queryKey: compitiKeys.list(sp),
+              queryFn: ({ signal }) =>
+                readJson<CompitiListResponse>(`/api/compiti?${sp}`, signal),
+              staleTime: 60_000,
+            }).catch(() => undefined)
+            await delay(250)
+          }
+        }
+      })()
     })
 
     return () => {

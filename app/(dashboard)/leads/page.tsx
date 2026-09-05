@@ -3,7 +3,7 @@ import {
   getInitialLeadsParams,
   buildLeadsSearchParams,
 } from "@/lib/leads/api-types"
-import { queryLeads } from "@/lib/leads/repository"
+import { computeStats, queryLeads } from "@/lib/leads/repository"
 import { LEAD_RECORD_APP_FIELD_TO_COLUMN } from "@/lib/leads/field-map"
 import type { Lead } from "@/lib/mock-data"
 import { LEAD_COLUMNS, DEFAULT_VISIBLE_COLUMNS } from "@/lib/mock-data"
@@ -46,13 +46,19 @@ export default async function LeadsPage() {
     fields: permittedInitialCols as unknown as string[],
   }
   const initialSp = buildLeadsSearchParams(initialParams).toString()
-  const initialLeads = await queryLeads(initialParams)
+  const [initialLeads, initialStats] = await Promise.all([
+    queryLeads(initialParams),
+    computeStats().catch((error) => {
+      console.error("[leads] statistiche non calcolate lato server:", error)
+      return null
+    }),
+  ])
 
   return (
     <LeadsClient
       initialSp={initialSp}
       initialLeads={initialLeads}
-      initialStats={null}
+      initialStats={initialStats}
       initialPreferences={initialPreferences}
     />
   )

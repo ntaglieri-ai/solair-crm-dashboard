@@ -1,6 +1,7 @@
 // Store server-side — Supabase async puro ottimizzato.
 // Search fulltext con indice GIN, paginazione server-side, query aggregate.
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { activeFilterValues, postgrestInList } from "@/lib/shared/filter-values"
 import type { Lead } from "@/lib/mock-data"
 import type { AdvancedFilterState } from "@/lib/leads/advanced-filter-logic"
@@ -14,6 +15,15 @@ import {
 } from "@/lib/leads/list-columns"
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
+
+async function createReadClient(trustedRead?: boolean): Promise<SupabaseServerClient> {
+  if (trustedRead) {
+    const admin = createAdminClient()
+    if (admin) return admin as unknown as SupabaseServerClient
+    console.warn("[server-store] SUPABASE_SERVICE_ROLE_KEY non configurata: lettura Lead su client utente")
+  }
+  return createClient()
+}
 
 async function attachInstallatoreSopralluogoNames(
   supabase: SupabaseServerClient,
@@ -268,8 +278,9 @@ export async function getAllLeads(filters?: {
   includeNoteBadge?: boolean
   includeActivityBadge?: boolean
   includeTags?: boolean
+  trustedRead?: boolean
 }): Promise<Lead[]> {
-  const supabase = await createClient()
+  const supabase = await createReadClient(filters?.trustedRead)
 
   // Ordinamento reale lato query, applicato PRIMA di range/paginazione.
   const { column, ascending } = resolveSort(filters?.sortBy, filters?.sortDir)
@@ -441,8 +452,9 @@ export async function getTotalCount(filters?: {
   search?: string
   advanced?: AdvancedFilterState
   visibleOwnerIds?: string[]
+  trustedRead?: boolean
 }): Promise<number> {
-  const supabase = await createClient()
+  const supabase = await createReadClient(filters?.trustedRead)
 
   let query = supabase
     .from("leads")

@@ -1,7 +1,7 @@
 import { NextResponse, after } from "next/server"
 import type { Lead } from "@/lib/mock-data"
 import { parseLeadsSearchParams } from "@/lib/leads/api-types"
-import { queryLeads, createLeadRecord } from "@/lib/leads/repository"
+import { queryLeadsTrusted, createLeadRecord } from "@/lib/leads/repository"
 import { requireApiRecord } from "@/lib/permissions/server"
 import { ensureFolder } from "@/lib/nextcloud/admin-webdav"
 import {
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const params = parseLeadsSearchParams(searchParams)
-    const result = await queryLeads(params)
+    const result = await queryLeadsTrusted(params)
     return NextResponse.json(result, {
       headers: { "Cache-Control": "private, no-store" },
     })

@@ -17,6 +17,7 @@ import {
   patchLead,
   removeLeads,
 } from "@/lib/leads/server-store"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { filterCurrentAccessibleRecordIds, resolveCurrentOwnerScope } from "@/lib/permissions/data-scope"
 import { activeFilterValues } from "@/lib/shared/filter-values"
@@ -51,7 +52,10 @@ function project(lead: Lead, fields: string[]): LeadListItem {
   return out as LeadListItem
 }
 
-export async function queryLeads(params: LeadListParams): Promise<LeadListResponse> {
+async function queryLeadsWithMode(
+  params: LeadListParams,
+  options?: { trustedRead?: boolean },
+): Promise<LeadListResponse> {
   const visibleOwnerIds = ownerIdsForQuery(await resolveCurrentOwnerScope("lead"))
   const advancedQuick = params.advanced.quick
   const usesTagFilter =
@@ -75,6 +79,7 @@ export async function queryLeads(params: LeadListParams): Promise<LeadListRespon
     includeActivityBadge:
       leadListNeedsActivityBadge(params.fields) || advancedQuick.badgeAttivita,
     includeTags: leadListNeedsTags(params.fields) || usesTagFilter,
+    trustedRead: options?.trustedRead,
   }
 
   const [base, total] = await Promise.all([
@@ -92,9 +97,21 @@ export async function queryLeads(params: LeadListParams): Promise<LeadListRespon
   return { rows, total, page: params.page, pageSize: params.pageSize }
 }
 
+export async function queryLeads(params: LeadListParams): Promise<LeadListResponse> {
+  return queryLeadsWithMode(params)
+}
+
+export async function queryLeadsTrusted(params: LeadListParams): Promise<LeadListResponse> {
+  return queryLeadsWithMode(params, { trustedRead: true })
+}
+
 // computeStats — query SQL aggregata, nessun full scan
-export async function computeStats(): Promise<LeadStats> {
-  const supabase = await createClient()
+async function computeStatsWithMode(options?: { trustedRead?: boolean }): Promise<LeadStats> {
+  const admin = options?.trustedRead ? createAdminClient() : null
+  if (options?.trustedRead && !admin) {
+    console.warn("[leads] SUPABASE_SERVICE_ROLE_KEY non configurata: statistiche Lead su client utente")
+  }
+  const supabase = admin ?? await createClient()
   const scope = await resolveCurrentOwnerScope("lead")
   const visibleOwnerIds = ownerIdsForQuery(scope)
   const { data: aggregate, error: aggregateError } =
@@ -154,6 +171,14 @@ export async function computeStats(): Promise<LeadStats> {
     nonAssegnati,
     nuoviOggi: nuoviOggi ?? 0,
   }
+}
+
+export async function computeStats(): Promise<LeadStats> {
+  return computeStatsWithMode()
+}
+
+export async function computeStatsTrusted(): Promise<LeadStats> {
+  return computeStatsWithMode({ trustedRead: true })
 }
 
 export async function createLeadRecord(lead: Lead): Promise<LeadListItem> {

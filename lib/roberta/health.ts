@@ -7,6 +7,7 @@ export type RobertaHealthInput = {
   lastSync: {
     ok: boolean
     syncedAt: string
+    warnings?: string[]
     error: string | null
   } | null
   recentSources: {
@@ -73,6 +74,9 @@ export function deriveRobertaHealth(status: RobertaHealthInput | null | undefine
         ? `Ultima sincronizzazione fallita: ${status.lastSync.error}`
         : "Ultima sincronizzazione fallita",
     )
+  }
+  if (status.lastSync?.warnings?.length) {
+    yellowAlarms.push(...status.lastSync.warnings)
   }
 
   const lastSync = status.lastSync?.syncedAt

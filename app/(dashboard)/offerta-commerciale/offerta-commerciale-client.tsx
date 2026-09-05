@@ -370,6 +370,9 @@ type RobertaCategoryOption = {
 type RobertaBrowseFolder = {
   name: string
   path: string
+  folderCount: number
+  pdfCount: number
+  error: string | null
 }
 
 function suggerisciUrlPubblico(path: string) {
@@ -392,6 +395,7 @@ function RobertaPathInput({ value, onChange, onPick }: { value: string; onChange
   const [pdfCount, setPdfCount] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [currentPath, setCurrentPath] = useState(value.trim() || "Solair")
+  const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
 
   const browse = useCallback(async (path: string) => {
     setLoading(true)
@@ -402,6 +406,7 @@ function RobertaPathInput({ value, onChange, onPick }: { value: string; onChange
       setCurrentPath(body.path ?? path)
       setFolders(body.folders ?? [])
       setPdfCount(typeof body.pdfCount === "number" ? body.pdfCount : null)
+      setSelectedFolderPath(null)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Lettura cartella non riuscita")
     } finally {
@@ -412,11 +417,25 @@ function RobertaPathInput({ value, onChange, onPick }: { value: string; onChange
   const openBrowser = () => {
     const path = value.trim() || currentPath || "Solair"
     setOpen(true)
+    setSelectedFolderPath(null)
     void browse(path)
   }
 
   const parentPath = currentPath.split("/").filter(Boolean).slice(0, -1).join("/")
   const canGoUp = parentPath.startsWith("Solair")
+  const breadcrumbs = currentPath
+    .split("/")
+    .filter(Boolean)
+    .map((segment, index, segments) => ({
+      label: segment,
+      path: segments.slice(0, index + 1).join("/"),
+    }))
+
+  const choosePath = (path: string) => {
+    onPick(path)
+    setCurrentPath(path)
+    setOpen(false)
+  }
 
   return <div className="relative">
     <Input
@@ -436,33 +455,71 @@ function RobertaPathInput({ value, onChange, onPick }: { value: string; onChange
     >
       <FolderOpen className="size-3.5" />Sfoglia
     </Button>
-    {open ? <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-lg border border-border bg-white shadow-xl">
+    {open ? <div className="absolute left-0 right-0 z-50 mt-2 overflow-hidden rounded-lg border border-border bg-white shadow-xl lg:right-auto lg:w-[42rem] lg:max-w-[calc(100vw-4rem)]">
       <div className="flex items-center justify-between gap-2 border-b border-border bg-slate-50 px-3 py-2">
-        <p className="min-w-0 truncate text-xs font-semibold text-slate-700" title={currentPath}>{currentPath}</p>
+        <div className="flex min-w-0 flex-wrap items-center gap-1 text-xs font-semibold text-slate-700">
+          {breadcrumbs.map((crumb, index) => (
+            <div key={crumb.path} className="flex min-w-0 items-center gap-1">
+              {index > 0 ? <ChevronRight className="size-3 shrink-0 text-slate-400" /> : null}
+              <button
+                type="button"
+                className="max-w-32 truncate rounded px-1.5 py-1 hover:bg-white hover:text-blue-700"
+                title={crumb.path}
+                onClick={() => void browse(crumb.path)}
+              >
+                {crumb.label}
+              </button>
+            </div>
+          ))}
+        </div>
         <Button type="button" variant="ghost" size="icon-sm" aria-label="Chiudi sfoglia path" onClick={() => setOpen(false)}><X className="size-4" /></Button>
       </div>
-      <div className="max-h-72 overflow-y-auto p-1.5">
+      <div className="max-h-80 overflow-y-auto p-1.5">
         {canGoUp ? <button type="button" className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100" onClick={() => void browse(parentPath)}>
           <ChevronRight className="size-4 rotate-180" />Cartella superiore
         </button> : null}
-        {folders.map((folder) => <button
-          type="button"
+        {folders.map((folder) => {
+          const selected = selectedFolderPath === folder.path
+          return <div
           key={folder.path}
-          className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm font-semibold text-slate-800 hover:bg-blue-50 hover:text-blue-800"
-          onClick={() => {
-            onPick(folder.path)
-            setOpen(false)
-          }}
+          className={`flex items-center gap-2 rounded-md px-1 py-1 ${selected ? "bg-blue-50 ring-1 ring-blue-200" : "hover:bg-blue-50"}`}
         >
-          <FolderOpen className="size-4 text-blue-600" />
-          <span className="min-w-0 truncate">{folder.name}</span>
-        </button>)}
+          <button
+            type="button"
+            className={`flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-semibold ${selected ? "text-blue-900" : "text-slate-800 hover:text-blue-800"}`}
+            onClick={() => setSelectedFolderPath(folder.path)}
+            onDoubleClick={() => void browse(folder.path)}
+            title={folder.path}
+            aria-pressed={selected}
+          >
+            <FolderOpen className="size-4 shrink-0 text-blue-600" />
+            <span className="min-w-0 flex-1 truncate">{folder.name}</span>
+            <span className="hidden shrink-0 items-center gap-1 sm:flex">
+              <Badge variant={folder.pdfCount > 0 ? "secondary" : "outline"} className={folder.pdfCount > 0 ? "bg-teal-50 text-teal-800" : ""}>
+                {folder.pdfCount} PDF
+              </Badge>
+              {folder.folderCount > 0 ? <Badge variant="outline">{folder.folderCount} cartelle</Badge> : null}
+              {folder.error ? <Badge variant="destructive">Errore</Badge> : null}
+            </span>
+            <ChevronRight className="size-4 shrink-0 text-slate-400" />
+          </button>
+          <Button
+            type="button"
+            variant={folder.pdfCount > 0 ? "default" : "outline"}
+            size="sm"
+            onClick={() => choosePath(folder.path)}
+            title={folder.pdfCount > 0 ? "Usa questa fonte" : "Usa questa cartella anche se non contiene PDF immediati"}
+          >
+            Scegli
+          </Button>
+        </div>
+        })}
         {!loading && folders.length === 0 ? <p className="px-2.5 py-4 text-sm text-muted-foreground">Nessuna sottocartella disponibile.</p> : null}
         {loading ? <p className="flex items-center gap-2 px-2.5 py-4 text-sm font-medium text-muted-foreground"><Loader2 className="size-4 animate-spin" />Lettura cartelle</p> : null}
       </div>
       <div className="flex items-center justify-between border-t border-border bg-slate-50 px-3 py-2 text-xs text-muted-foreground">
-        <span>{pdfCount == null ? "PDF non letti" : `${pdfCount} PDF in questa cartella`}</span>
-        <Button type="button" variant="outline" size="sm" onClick={() => { onPick(currentPath); setOpen(false) }}>Usa questa</Button>
+        <span>{pdfCount == null ? "PDF non letti" : `${pdfCount} PDF direttamente in questa cartella`}</span>
+        <Button type="button" variant={pdfCount && pdfCount > 0 ? "default" : "outline"} size="sm" onClick={() => choosePath(currentPath)}>Usa questa cartella</Button>
       </div>
     </div> : null}
   </div>
@@ -566,6 +623,9 @@ function RobertaSourcesPanel() {
       if (!response.ok) throw new Error(body.error ?? "Errore sincronizzazione RobertaBot")
       await loadSources()
       toast.success(`RobertaBot aggiornata: ${body.updated} documenti aggiornati, ${body.reused} invariati`)
+      if (Array.isArray(body.warnings) && body.warnings.length > 0) {
+        toast.warning(`${body.warnings.length} avvisi durante la sincronizzazione`)
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Errore sincronizzazione RobertaBot")
     } finally {

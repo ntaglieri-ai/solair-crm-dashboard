@@ -9,6 +9,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -24,6 +25,7 @@ type KnowledgeStatus = {
   lastSync: {
     ok: boolean
     syncedAt: string
+    warnings?: string[]
     error: string | null
   } | null
   recentSources: {
@@ -43,7 +45,14 @@ type SyncResult = {
   chunks: number
   catalogItems: number
   scansPending: number
+  warnings: string[]
   errors: string[]
+}
+
+type ResetResult = {
+  ok: boolean
+  deletedSources: number
+  resetAt: string
 }
 
 export default function RobertaKnowledgePage() {
@@ -51,6 +60,7 @@ export default function RobertaKnowledgePage() {
   const [status, setStatus] = useState<KnowledgeStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
+  const [resetting, setResetting] = useState(false)
   const health = deriveRobertaHealth(status)
   const roleCode = permissions.snapshot.subject.ruoloCode
   const isSuperadmin = permissions.isSuperadmin
@@ -86,8 +96,11 @@ export default function RobertaKnowledgePage() {
       toast.success(
         `RobertaBot aggiornato: ${body.updated} documenti aggiornati, ${body.reused} invariati`,
       )
+      if (body.warnings.length > 0) {
+        toast.warning(`${body.warnings.length} avvisi durante la sincronizzazione`)
+      }
       if (body.errors.length > 0) {
-        toast.warning(`${body.errors.length} avvisi durante la sincronizzazione`)
+        toast.error(`${body.errors.length} errori durante la sincronizzazione`)
       }
       await loadStatus()
     } catch (error) {
@@ -96,6 +109,29 @@ export default function RobertaKnowledgePage() {
       )
     } finally {
       setSyncing(false)
+    }
+  }
+
+  async function resetKnowledge() {
+    const confirmed = window.confirm(
+      "Vuoi svuotare l'indice RobertaBot? La cache dei PDF resta salvata e potrai ricostruire subito dopo.",
+    )
+    if (!confirmed) return
+
+    setResetting(true)
+    try {
+      const response = await fetch("/api/crm-settings/roberta/knowledge/sync", {
+        method: "DELETE",
+      })
+      const body = (await response.json()) as ResetResult & { error?: string }
+      if (!response.ok) throw new Error(body.error ?? "Errore reset indice RobertaBot")
+
+      toast.success(`Indice RobertaBot svuotato: ${body.deletedSources} documenti rimossi`)
+      await loadStatus()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Errore reset indice RobertaBot")
+    } finally {
+      setResetting(false)
     }
   }
 
@@ -146,11 +182,15 @@ export default function RobertaKnowledgePage() {
         description="Stato tecnico della conoscenza indicizzata e comandi di sincronizzazione."
         action={isSuperadmin ? (
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => sync(true)} disabled={syncing}>
+            <Button variant="destructive" onClick={() => void resetKnowledge()} disabled={syncing || resetting}>
+              <Trash2 className={resetting ? "size-4 animate-pulse" : "size-4"} />
+              Reset indice
+            </Button>
+            <Button variant="outline" onClick={() => sync(true)} disabled={syncing || resetting}>
               <RotateCcw className="size-4" />
               Ricostruisci
             </Button>
-            <Button onClick={() => sync(false)} disabled={syncing}>
+            <Button onClick={() => sync(false)} disabled={syncing || resetting}>
               <RefreshCw className={syncing ? "size-4 animate-spin" : "size-4"} />
               Aggiorna
             </Button>

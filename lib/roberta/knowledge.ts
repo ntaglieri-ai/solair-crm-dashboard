@@ -30,18 +30,28 @@ export type RobertaKnowledgeSourceConfig = {
 }
 
 export type RobertaSyncResult = {
+  activeSources: number
   sources: number
   updated: number
   reused: number
   chunks: number
   catalogItems: number
   scansPending: number
+  staleSources: number
+  staleSourceKeys: string[]
+  warnings: string[]
   errors: string[]
 }
 
 type KnowledgeSourceRow = {
   source_key: string
   fingerprint: string
+}
+
+export type RobertaSyncCheckParams = {
+  activeSources: number
+  staleSourceKeys: string[]
+  staleSourcesDeleted: boolean
 }
 
 type ChunkInsert = {
@@ -473,31 +483,40 @@ export async function fetchListinoDocuments(baseUrl: string): Promise<ListinoDoc
 export async function syncRobertaKnowledge(
   supabase: SupabaseClient,
   documenti: ListinoDocumento[],
-  options: { force?: boolean } = {},
+  options: { force?: boolean; activeSources?: number } = {},
 ): Promise<RobertaSyncResult> {
   const result: RobertaSyncResult = {
+    activeSources: options.activeSources ?? documenti.length,
     sources: documenti.length,
     updated: 0,
     reused: 0,
     chunks: 0,
     catalogItems: 0,
     scansPending: 0,
+    staleSources: 0,
+    staleSourceKeys: [],
+    warnings: [],
     errors: [],
   }
 
   const keys = documenti.map(sourceKey)
-  const { data: existingRows } = keys.length
-    ? await supabase
-        .from("roberta_knowledge_sources")
-        .select("source_key, fingerprint")
-        .in("source_key", keys)
-    : { data: [] }
+  const keySet = new Set(keys)
+  const { data: existingRows, error: existingError } = await supabase
+    .from("roberta_knowledge_sources")
+    .select("source_key, fingerprint")
+  if (existingError) {
+    result.errors.push(`lettura indice Roberta: ${existingError.message}`)
+  }
+  const safeExistingRows = (existingRows as KnowledgeSourceRow[] | null) ?? []
   const existing = new Map(
-    ((existingRows as KnowledgeSourceRow[] | null) ?? []).map((row) => [
+    safeExistingRows.map((row) => [
       row.source_key,
       row.fingerprint,
     ]),
   )
+  const staleSourceKeys = safeExistingRows
+    .map((row) => row.source_key)
+    .filter((key) => !keySet.has(key))
 
   for (const documento of documenti) {
     const key = sourceKey(documento)
@@ -572,10 +591,59 @@ export async function syncRobertaKnowledge(
     result.catalogItems += items.length
   }
 
-  if (keys.length > 0) {
-    await supabase.from("roberta_knowledge_sources").delete().not("source_key", "in", `(${keys.map((key) => `"${key.replace(/"/g, '\\"')}"`).join(",")})`)
+  let staleSourcesDeleted = staleSourceKeys.length === 0
+  if (keys.length > 0 && staleSourceKeys.length > 0) {
+    const { error } = await supabase
+      .from("roberta_knowledge_sources")
+      .delete()
+      .in("source_key", staleSourceKeys)
+    if (error) {
+      result.errors.push(`pulizia fonti obsolete Roberta: ${error.message}`)
+    } else {
+      staleSourcesDeleted = true
+    }
   }
 
+  applyRobertaSyncChecks(result, {
+    activeSources: result.activeSources,
+    staleSourceKeys,
+    staleSourcesDeleted,
+  })
+
+  return result
+}
+
+export function applyRobertaSyncChecks(
+  result: RobertaSyncResult,
+  params: RobertaSyncCheckParams,
+) {
+  result.activeSources = params.activeSources
+  result.staleSources = params.staleSourceKeys.length
+  result.staleSourceKeys = params.staleSourceKeys.slice(0, 20)
+
+  if (params.activeSources === 0) {
+    result.errors.push("Nessuna fonte RobertaBot attiva configurata")
+  } else if (result.sources === 0) {
+    result.errors.push(
+      `${params.activeSources} fonte/i RobertaBot attiva/e ma nessun PDF trovato nelle cartelle selezionate`,
+    )
+  }
+
+  if (params.activeSources > 0 && result.updated + result.reused === 0) {
+    result.errors.push("Ultima sincronizzazione senza nessun documento processato")
+  }
+
+  if (params.staleSourceKeys.length > 0) {
+    const message = `${params.staleSourceKeys.length} documento/i RobertaBot non più presenti nelle fonti configurate`
+    if (params.staleSourcesDeleted) {
+      result.warnings.push(`${message}: rimossi dall'indice`)
+    } else {
+      result.errors.push(`${message}: indice vecchio ancora presente`)
+    }
+  }
+
+  result.errors = Array.from(new Set(result.errors))
+  result.warnings = Array.from(new Set(result.warnings))
   return result
 }
 

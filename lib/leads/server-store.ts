@@ -6,7 +6,68 @@ import type { Lead } from "@/lib/mock-data"
 import type { AdvancedFilterState } from "@/lib/leads/advanced-filter-logic"
 import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
 
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
+
+async function attachInstallatoreSopralluogoNames(
+  supabase: SupabaseServerClient,
+  rows: Record<string, unknown>[],
+) {
+  const crmIds = [
+    ...new Set(
+      rows
+        .map((row) => row.installatore_sopralluogo_id)
+        .filter((value): value is string => typeof value === "string" && value.length > 0),
+    ),
+  ]
+  const zohoIds = [
+    ...new Set(
+      rows
+        .map((row) => row.zoho_installatore_sopralluogo_id)
+        .filter((value): value is string => typeof value === "string" && value.length > 0),
+    ),
+  ]
+
+  const [crmResult, zohoResult] = await Promise.all([
+    crmIds.length
+      ? supabase.from("installatori").select("id,nome").in("id", crmIds)
+      : Promise.resolve({ data: [], error: null }),
+    zohoIds.length
+      ? supabase.from("installatori").select("zoho_id,nome").in("zoho_id", zohoIds)
+      : Promise.resolve({ data: [], error: null }),
+  ])
+
+  if (crmResult.error) {
+    console.error("[server-store] installatore sopralluogo CRM:", crmResult.error.message)
+  }
+  if (zohoResult.error) {
+    console.error("[server-store] installatore sopralluogo Zoho:", zohoResult.error.message)
+  }
+
+  const nameByCrmId = new Map((crmResult.data ?? []).map((row) => [row.id, row.nome]))
+  const nameByZohoId = new Map(
+    (zohoResult.data ?? [])
+      .filter((row) => row.zoho_id)
+      .map((row) => [row.zoho_id as string, row.nome]),
+  )
+
+  return rows.map((row) => {
+    const crmId = row.installatore_sopralluogo_id
+    const zohoId = row.zoho_installatore_sopralluogo_id
+    return {
+      ...row,
+      installatore_sopralluogo_nome:
+        (typeof crmId === "string" ? nameByCrmId.get(crmId) : null) ??
+        (typeof zohoId === "string" ? nameByZohoId.get(zohoId) : null) ??
+        null,
+    }
+  })
+}
+
 function mapRow(row: Record<string, unknown>): Lead {
+  const installatoreSopralluogoNome =
+    (row.installatore_sopralluogo_nome as string | null) ??
+    (row.zoho_installatore_sopralluogo_nome as string | null) ??
+    null
   return {
     id: row.id as string,
     "Nome Lead": (row.nome_lead as string) ?? "",
@@ -36,7 +97,8 @@ function mapRow(row: Record<string, unknown>): Lead {
     "Consenso WhatsApp": (row.consenso_contatto_whatsapp as boolean) ?? false,
     "Consenso e-mail": (row.consenso_contatto_email as boolean) ?? false,
     "Data sopralluogo": (row.data_sopralluogo as string) ?? null,
-    "Installatore - Incaricato sopralluogo": null,
+    InstallatoreSopralluogoId: (row.installatore_sopralluogo_id as string) ?? null,
+    "Installatore - Incaricato sopralluogo": installatoreSopralluogoNome,
     "Tempo di conversione Lead": (row.tempo_conversione_lead as string) ?? "",
     "Account convertito": (row.account_convertito_id as string) ?? null,
     "Contatto convertito": (row.contatto_convertito as string) ?? null,
@@ -69,7 +131,8 @@ const LIST_COLUMNS = [
   "origine_lead", "sede", "campaign_name", "citta", "provincia",
   "codice_postale", "residente_in_sicilia", "wallbox_richiesto",
   "consenso_contatto_telefono", "consenso_contatto_whatsapp", "consenso_contatto_email",
-  "data_click", "data_ora", "ora_ultima_attivita", "created_at",
+  "data_sopralluogo", "installatore_sopralluogo_id", "zoho_installatore_sopralluogo_id",
+  "zoho_installatore_sopralluogo_nome", "data_click", "data_ora", "ora_ultima_attivita", "created_at",
   "updated_at",
 ].join(",")
 
@@ -117,6 +180,7 @@ const ADVANCED_DB_COLUMN: Record<string, string> = {
   "Creato da": "creato_da",
   "Data Click": "data_click",
   "Data sopralluogo": "data_sopralluogo",
+  "Installatore - Incaricato sopralluogo": "installatore_sopralluogo_id",
   "Data/Ora": "data_ora",
   Descrizione: "descrizione",
   "E-mail": "email",
@@ -293,7 +357,11 @@ export async function getAllLeads(filters?: {
     console.error("[server-store] getAllLeads error:", error.message)
     throw new Error(`Lettura lead non riuscita: ${error.message}`)
   }
-  const rows = (data as unknown as Record<string, unknown>[]).map(mapRow)
+  const leadRows = await attachInstallatoreSopralluogoNames(
+    supabase,
+    data as unknown as Record<string, unknown>[],
+  )
+  const rows = leadRows.map(mapRow)
   const ids = rows.map((row) => row.id)
   if (ids.length === 0) return rows
 
@@ -452,7 +520,11 @@ export async function getLeadById(id: string): Promise<Lead | undefined> {
     ? await supabase.from("utenti").select("id,nome").in("id", userIds)
     : { data: [], error: null }
   const names = new Map((usersResult.data ?? []).map((user) => [user.id, user.nome]))
-  const lead = mapRow(leadResult.data as Record<string, unknown>)
+  const [leadRow] = await attachInstallatoreSopralluogoNames(
+    supabase,
+    [leadResult.data as Record<string, unknown>],
+  )
+  const lead = mapRow(leadRow)
   lead.attivita = (activityResult.data ?? []).map((item) => ({
     id: item.id,
     tipo:
@@ -493,7 +565,11 @@ export async function getLeadsByIds(ids: Iterable<string>): Promise<Lead[]> {
     console.error("[server-store] getLeadsByIds error:", error.message)
     throw new Error(`Lettura lead non riuscita: ${error.message}`)
   }
-  return (data as unknown as Record<string, unknown>[]).map(mapRow)
+  const leadRows = await attachInstallatoreSopralluogoNames(
+    supabase,
+    data as unknown as Record<string, unknown>[],
+  )
+  return leadRows.map(mapRow)
 }
 
 export async function insertLead(lead: Lead): Promise<Lead> {
@@ -531,7 +607,8 @@ export async function insertLead(lead: Lead): Promise<Lead> {
     .select()
     .single()
   if (error) throw new Error(`insertLead: ${error.message}`)
-  return mapRow(data as Record<string, unknown>)
+  const [row] = await attachInstallatoreSopralluogoNames(supabase, [data as Record<string, unknown>])
+  return mapRow(row)
 }
 
 export async function patchLead(id: string, patch: Partial<Lead>): Promise<Lead | undefined> {
@@ -552,7 +629,8 @@ export async function patchLead(id: string, patch: Partial<Lead>): Promise<Lead 
     .select()
     .single()
   if (error || !data) return undefined
-  return mapRow(data as Record<string, unknown>)
+  const [updatedRow] = await attachInstallatoreSopralluogoNames(supabase, [data as Record<string, unknown>])
+  return mapRow(updatedRow)
 }
 
 export async function removeLeads(ids: string[]): Promise<number> {

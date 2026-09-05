@@ -76,8 +76,8 @@ const MODULE_FIELDS: Record<FieldModuleKey, string[]> = {
     "ora_ultima_attivita", "created_at", "updated_at", "zoho_id",
     "zoho_owner_id", "zoho_creato_da_id", "zoho_account_convertito_id",
     "zoho_contatto_convertito_id", "zoho_installatore_sopralluogo_id",
-    "zoho_connesso_a_id", "zoho_modified_at", "zoho_last_seen_at", "saluti",
-    "convertito", "bloccato",
+    "zoho_installatore_sopralluogo_nome", "zoho_connesso_a_id",
+    "zoho_modified_at", "zoho_last_seen_at", "saluti", "convertito", "bloccato",
   ],
   clienti: [
     "id", "lead_id", "nome", "cognome", "nome_clienti", "saluti",
@@ -135,6 +135,7 @@ const MODULE_FIELDS: Record<FieldModuleKey, string[]> = {
     "tipologia_proprietario", "potenza_sistema_di_accumulo",
     "data_fatt_pagamento", "richiesta_saldo", "configurazione_cer",
     "flag_eps", "flag_cer", "costi_extra_sopralluogo",
+    "consenso_contatto_email",
   ],
   compiti: [
     "id", "oggetto", "priorita", "stato", "scadenza", "proprietario_id",

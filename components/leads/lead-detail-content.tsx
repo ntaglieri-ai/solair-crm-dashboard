@@ -18,7 +18,6 @@ import {
   IconLink,
   IconTimeline,
   IconPlus,
-  IconPhone,
   IconPencil,
   IconStar,
   IconTag,
@@ -29,13 +28,15 @@ import {
 } from "@tabler/icons-react"
 import { CalendarioRecordSection } from "@/components/calendario/calendario-record-section"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { MentionText, MentionTextarea } from "@/components/shared/note-mentions"
 import type { NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ConsensoEmailToggle } from "@/components/shared/consenso-email-toggle"
+import {
+  InlineEditableField,
+  InlineEditableValue,
+  type InlineEditableValueProps,
+} from "@/components/shared/inline-edit-field"
 import {
   Dialog,
   DialogContent,
@@ -132,52 +133,20 @@ function val(v: string | number | null | undefined): string {
 function DataField({
   label,
   children,
+  edit,
 }: {
   label: string
   children: React.ReactNode
+  edit?: Omit<InlineEditableValueProps, "label">
 }) {
+  if (edit) return <InlineEditableField label={label} {...edit} displayValue={edit.displayValue ?? children} />
+
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
       <div className="text-[13px] text-foreground">{children}</div>
-    </div>
-  )
-}
-
-function CopyField({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string
-  value: string
-  icon: typeof IconMail
-}) {
-  const copy = () => {
-    if (!value || value === "—") return
-    navigator.clipboard?.writeText(value)
-    toast.success("Copiato!", { description: value, duration: 1800 })
-  }
-  return (
-    <div className="group flex flex-col gap-0.5">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
-      <div className="flex items-center gap-2">
-        <span className="truncate text-[13px] text-foreground">
-          {val(value)}
-        </span>
-        <button
-          type="button"
-          aria-label={`Copia ${label}`}
-          onClick={copy}
-          className="flex size-6 shrink-0 items-center justify-center rounded-md text-navy opacity-0 transition-all duration-150 hover:bg-secondary group-hover:opacity-100"
-        >
-          <Icon size={14} stroke={1.8} />
-        </button>
-      </div>
     </div>
   )
 }
@@ -249,40 +218,17 @@ const PRIORITY_TONE: Record<string, string> = {
 /* ---------- Sezione Informazioni principali ---------- */
 
 function InfoPrincipali({ lead }: { lead: Lead }) {
-  const [stato, setStato] = useState(lead["Stato Lead"])
-  const [savingStato, setSavingStato] = useState(false)
   const [showMore, setShowMore] = useState(false)
+  const endpoint = `/api/leads/${lead.id}`
   const configuredStatoOptions = useColumnValueOptions(
     "Lead",
     "stato_lead",
     STATO_LEAD_ORDER.map((value) => option(value)),
     { includeFallback: true },
   ).options
-  const statoOptions = withCurrentColumnOption(configuredStatoOptions, stato)
-  const statoItems = Object.fromEntries(
-    statoOptions.map((item) => [item.value, item.label]),
-  )
-
-  async function handleStatoChange(v: string | null) {
-    if (v === null) return
-    const prev = stato
-    setStato(v as Lead["Stato Lead"])
-    setSavingStato(true)
-    try {
-      const res = await fetch(`/api/leads/${lead.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ "Stato Lead": v }),
-      })
-      if (!res.ok) throw new Error("Aggiornamento non riuscito")
-      toast.success("Stato aggiornato", { description: v })
-    } catch {
-      setStato(prev)
-      toast.error("Errore nell'aggiornamento dello stato")
-    } finally {
-      setSavingStato(false)
-    }
-  }
+  const statoOptions = withCurrentColumnOption(configuredStatoOptions, lead["Stato Lead"])
+  const statoValues = statoOptions.map((item) => item.value)
+  const statoLabels = Object.fromEntries(statoOptions.map((item) => [item.value, item.label]))
 
   return (
     <div className="flex flex-col gap-5">
@@ -290,93 +236,58 @@ function InfoPrincipali({ lead }: { lead: Lead }) {
         {/* Colonna sinistra */}
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-4">
-            <DataField label="Nome">{val(lead.Nome)}</DataField>
-            <DataField label="Cognome">{val(lead.Cognome)}</DataField>
+            <DataField label="Nome" edit={{ module: "lead", field: "nome", endpoint, patchKey: "Nome", value: lead.Nome }}>
+              {val(lead.Nome)}
+            </DataField>
+            <DataField label="Cognome" edit={{ module: "lead", field: "cognome", endpoint, patchKey: "Cognome", value: lead.Cognome }}>
+              {val(lead.Cognome)}
+            </DataField>
           </div>
-          <CopyField label="E-mail" value={lead["E-mail"]} icon={IconMail} />
-          <CopyField label="Telefono" value={lead.Telefono} icon={IconPhone} />
-          <DataField label="Mobile / Fisso">
+          <DataField label="E-mail" edit={{ module: "lead", field: "email", endpoint, patchKey: "E-mail", value: lead["E-mail"], type: "email" }}>
+            {val(lead["E-mail"])}
+          </DataField>
+          <DataField label="Telefono" edit={{ module: "lead", field: "telefono", endpoint, patchKey: "Telefono", value: lead.Telefono, type: "tel" }}>
+            {val(lead.Telefono)}
+          </DataField>
+          <DataField label="Mobile / Fisso" edit={{ module: "lead", field: "mobile_fisso", endpoint, patchKey: "Mobile/Fisso", value: lead["Mobile/Fisso"], type: "tel" }}>
             {val(lead["Mobile/Fisso"])}
           </DataField>
-          <DataField label="Consensi contatto">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Badge className={lead["Consenso telefono"] ? "rounded-md bg-teal/10 px-2 py-0.5 text-[11px] font-medium text-teal" : "rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"}>
-                Telefono {lead["Consenso telefono"] ? "si" : "no"}
-              </Badge>
-              <Badge className={lead["Consenso WhatsApp"] ? "rounded-md bg-teal/10 px-2 py-0.5 text-[11px] font-medium text-teal" : "rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"}>
-                WhatsApp {lead["Consenso WhatsApp"] ? "si" : "no"}
-              </Badge>
-            </div>
-            {/* L'e-mail e' l'unico dei tre consensi con un blocco vero dietro,
-                quindi e' l'unico modificabile: telefono e WhatsApp restano
-                badge finche' 3CX e Spoki non passano dal CRM. */}
-            <ConsensoEmailToggle
-              recordId={lead.id}
-              endpoint="/api/leads"
-              iniziale={lead["Consenso e-mail"] === true}
-            />
+          <DataField label="Consenso telefono" edit={{ module: "lead", field: "consenso_contatto_telefono", endpoint, patchKey: "Consenso telefono", value: lead["Consenso telefono"] === true, type: "boolean" }}>
+            {lead["Consenso telefono"] ? "Sì" : "No"}
           </DataField>
-          <DataField label="Stato Lead">
-            <Select
-              items={statoItems}
-              value={stato}
-              onValueChange={handleStatoChange}
-              disabled={savingStato}
-            >
-              <SelectTrigger className="h-8 w-full bg-card text-[13px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {statoOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
+          <DataField label="Consenso WhatsApp" edit={{ module: "lead", field: "consenso_contatto_whatsapp", endpoint, patchKey: "Consenso WhatsApp", value: lead["Consenso WhatsApp"] === true, type: "boolean" }}>
+            {lead["Consenso WhatsApp"] ? "Sì" : "No"}
+          </DataField>
+          <DataField label="Consenso e-mail" edit={{ module: "lead", field: "consenso_contatto_email", endpoint, patchKey: "Consenso e-mail", value: lead["Consenso e-mail"] === true, type: "boolean" }}>
+            {lead["Consenso e-mail"] ? "Sì" : "No"}
+          </DataField>
+          <DataField label="Stato Lead" edit={{ module: "lead", field: "stato_lead", endpoint, patchKey: "Stato Lead", value: lead["Stato Lead"], type: "select", options: statoValues, optionLabels: statoLabels }}>
+            {val(lead["Stato Lead"])}
           </DataField>
         </div>
 
         {/* Colonna destra */}
         <div className="flex flex-col gap-4">
-          <DataField label="campaign name">
+          <DataField label="campaign name" edit={{ module: "lead", field: "campaign_name", endpoint, patchKey: "campaign name", value: lead["campaign name"] }}>
             <span className="break-words">{val(lead["campaign name"])}</span>
           </DataField>
-          <DataField label="Configurazione">
-            <div className="flex flex-wrap gap-1.5">
-              <Badge className="rounded-md bg-teal/10 px-2 py-0.5 text-[11px] font-medium text-teal">
-                {lead.kWp} kWp
-              </Badge>
-              <Badge className="rounded-md bg-teal/10 px-2 py-0.5 text-[11px] font-medium text-teal">
-                {lead.kWh} kWh
-              </Badge>
-              {lead["Modello pannello"] ? (
-                <Badge className="rounded-md bg-navy/10 px-2 py-0.5 text-[11px] font-medium text-navy">
-                  {lead["Modello pannello"]}
-                </Badge>
-              ) : null}
-            </div>
+          <DataField label="kWp" edit={{ module: "lead", field: "kwp", endpoint, patchKey: "kWp", value: lead.kWp, type: "number" }}>
+            {val(lead.kWp)}
           </DataField>
-          <DataField label="Data Click">{val(lead["Data Click"])}</DataField>
-          {lead["Social Lead ID"] ? (
-            <DataField label="Social Lead ID">
-              {val(lead["Social Lead ID"])}
-            </DataField>
-          ) : null}
-          <DataField label="Residente in Sicilia">
-            {lead["Residente in Sicilia"] ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
-                <span className="size-1.5 rounded-full bg-success" />
-                Sì
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                <span className="size-1.5 rounded-full bg-muted-foreground/50" />
-                No
-              </span>
-            )}
+          <DataField label="kWh" edit={{ module: "lead", field: "kwh", endpoint, patchKey: "kWh", value: lead.kWh, type: "number" }}>
+            {val(lead.kWh)}
+          </DataField>
+          <DataField label="Modello pannello" edit={{ module: "lead", field: "modello_pannello", endpoint, patchKey: "Modello pannello", value: lead["Modello pannello"] }}>
+            {val(lead["Modello pannello"])}
+          </DataField>
+          <DataField label="Data Click" edit={{ module: "lead", field: "data_click", endpoint, patchKey: "Data Click", value: lead["Data Click"], type: "datetime-local" }}>
+            {val(lead["Data Click"])}
+          </DataField>
+          <DataField label="Social Lead ID" edit={{ module: "lead", field: "social_lead_id", endpoint, patchKey: "Social Lead ID", value: lead["Social Lead ID"] }}>
+            {val(lead["Social Lead ID"])}
+          </DataField>
+          <DataField label="Residente in Sicilia" edit={{ module: "lead", field: "residente_in_sicilia", endpoint, patchKey: "Residente in Sicilia", value: lead["Residente in Sicilia"] === true, type: "boolean" }}>
+            {lead["Residente in Sicilia"] ? "Sì" : "No"}
           </DataField>
         </div>
       </div>
@@ -397,21 +308,25 @@ function InfoPrincipali({ lead }: { lead: Lead }) {
         </button>
         {showMore ? (
           <div className="mt-4 grid grid-cols-1 gap-x-8 gap-y-4 border-t border-border pt-4 sm:grid-cols-2 animate-in fade-in duration-200">
-            <DataField label="Stato email">{val(lead.Stato)}</DataField>
-            <DataField label="Tempo conversione">
+            <DataField label="Stato email" edit={{ module: "lead", field: "stato_email", endpoint, patchKey: "Stato", value: lead.Stato }}>
+              {val(lead.Stato)}
+            </DataField>
+            <DataField label="Tempo conversione" edit={{ module: "lead", field: "tempo_conversione_lead", endpoint, patchKey: "Tempo di conversione Lead", value: lead["Tempo di conversione Lead"] }}>
               {val(lead["Tempo di conversione Lead"])}
             </DataField>
-            <DataField label="Connesso a">{val(lead["Connesso a"])}</DataField>
+            <DataField label="Connesso a" edit={{ module: "lead", field: "connesso_a", endpoint, patchKey: "Connesso a", value: lead["Connesso a"] }}>
+              {val(lead["Connesso a"])}
+            </DataField>
             <DataField label="Ora ultima attività">
               {val(lead["Ora ultima attività"])}
             </DataField>
-            <DataField label="Account convertito">
+            <DataField label="Account convertito" edit={{ module: "lead", field: "account_convertito_id", endpoint, patchKey: "Account convertito", value: lead["Account convertito"] }}>
               {val(lead["Account convertito"])}
             </DataField>
-            <DataField label="Contatto convertito">
+            <DataField label="Contatto convertito" edit={{ module: "lead", field: "contatto_convertito", endpoint, patchKey: "Contatto convertito", value: lead["Contatto convertito"] }}>
               {val(lead["Contatto convertito"])}
             </DataField>
-            <DataField label="Modalità iscrizione annullata">
+            <DataField label="Modalità iscrizione annullata" edit={{ module: "lead", field: "modalita_iscrizione_annullata", endpoint, patchKey: "Modalità iscrizione annullata", value: lead["Modalità iscrizione annullata"] }}>
               {val(lead["Modalità iscrizione annullata"])}
             </DataField>
             <DataField label="Creato da">{val(lead["Creato da"])}</DataField>
@@ -426,20 +341,28 @@ function InfoPrincipali({ lead }: { lead: Lead }) {
 
 function Indirizzo({ lead }: { lead: Lead }) {
   const [mapOpen, setMapOpen] = useState(false)
+  const endpoint = `/api/leads/${lead.id}`
   return (
     <>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[13px] text-foreground">
-        <span>{val(lead.Paese)}</span>
-        <span className="text-border">·</span>
-        <span>{val(lead["Città"])}</span>
-        <span className="text-border">·</span>
-        <span>{val(lead.Provincia)}</span>
-        <span className="text-border">·</span>
-        <span>{val(lead["Codice postale"])}</span>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <DataField label="Paese" edit={{ module: "lead", field: "paese", endpoint, patchKey: "Paese", value: lead.Paese }}>
+          {val(lead.Paese)}
+        </DataField>
+        <DataField label="Città" edit={{ module: "lead", field: "citta", endpoint, patchKey: "Città", value: lead["Città"] }}>
+          {val(lead["Città"])}
+        </DataField>
+        <DataField label="Provincia" edit={{ module: "lead", field: "provincia", endpoint, patchKey: "Provincia", value: lead.Provincia }}>
+          {val(lead.Provincia)}
+        </DataField>
+        <DataField label="Codice postale" edit={{ module: "lead", field: "codice_postale", endpoint, patchKey: "Codice postale", value: lead["Codice postale"] }}>
+          {val(lead["Codice postale"])}
+        </DataField>
+      </div>
+      <div className="mt-3">
         <button
           type="button"
           onClick={() => setMapOpen(true)}
-          className="ml-1 inline-flex items-center gap-1 text-xs font-medium text-teal hover:underline"
+          className="inline-flex items-center gap-1 text-xs font-medium text-teal hover:underline"
         >
           <IconMapPin size={14} stroke={1.8} />
           Mostra su mappa
@@ -473,82 +396,19 @@ function Indirizzo({ lead }: { lead: Lead }) {
 /* ---------- Sezione Descrizione (edit inline) ---------- */
 
 function Descrizione({ lead }: { lead: Lead }) {
-  const [editing, setEditing] = useState(false)
-  const [text, setText] = useState(lead.Descrizione)
-  const [draft, setDraft] = useState(lead.Descrizione)
-  const [saving, setSaving] = useState(false)
-
-  async function handleSave() {
-    setSaving(true)
-    try {
-      const res = await fetch(`/api/leads/${lead.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ Descrizione: draft }),
-      })
-      if (!res.ok) throw new Error("Aggiornamento non riuscito")
-      setText(draft)
-      setEditing(false)
-      toast.success("Descrizione aggiornata")
-    } catch {
-      toast.error("Errore nel salvataggio della descrizione")
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  if (editing) {
-    return (
-      <div className="flex flex-col gap-2 animate-in fade-in duration-150">
-        <Textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          rows={4}
-          autoFocus
-          className="bg-card text-[13px]"
-        />
-        <div className="flex justify-end gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={saving}
-            onClick={() => {
-              setDraft(text)
-              setEditing(false)
-            }}
-          >
-            Annulla
-          </Button>
-          <Button
-            size="sm"
-            className="bg-teal text-teal-foreground hover:bg-teal/90"
-            disabled={saving}
-            onClick={handleSave}
-          >
-            {saving ? "Salvataggio..." : "Salva"}
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <button
-      type="button"
-      onClick={() => {
-        setDraft(text)
-        setEditing(true)
-      }}
-      className="w-full rounded-lg border border-border bg-secondary/40 p-3 text-left text-[13px] leading-relaxed text-foreground transition-colors duration-150 hover:bg-secondary"
-    >
-      {text && text !== "" ? (
-        text
-      ) : (
-        <span className="text-muted-foreground">
-          Nessuna descrizione. Clicca per aggiungere…
-        </span>
-      )}
-    </button>
+    <InlineEditableValue
+      module="lead"
+      field="descrizione"
+      label="Descrizione"
+      endpoint={`/api/leads/${lead.id}`}
+      patchKey="Descrizione"
+      value={lead.Descrizione}
+      type="textarea"
+      emptyLabel="Nessuna descrizione"
+      className="w-full rounded-lg border border-border bg-secondary/40 p-3 text-left text-[13px] leading-relaxed"
+      valueClassName="whitespace-pre-wrap"
+    />
   )
 }
 
@@ -556,49 +416,38 @@ function Descrizione({ lead }: { lead: Lead }) {
 
 function Sopralluogo({ lead }: { lead: Lead }) {
   const { installers } = useTags()
-  const [data, setData] = useState(lead["Data sopralluogo"] ?? "")
-  const [installatore, setInstallatore] = useState(
-    lead["Installatore - Incaricato sopralluogo"] ?? "",
-  )
-  const items = Object.fromEntries(
-    installers.map((installer) => [installer.id, installer.nome]),
-  )
+  const installerOptions = installers.map((installer) => installer.id)
+  const installerLabels = Object.fromEntries(installers.map((installer) => [installer.id, installer.nome]))
+  const currentInstaller = lead.InstallatoreSopralluogoId ?? ""
+  if (currentInstaller && !installerOptions.includes(currentInstaller)) {
+    installerOptions.push(currentInstaller)
+    installerLabels[currentInstaller] =
+      lead["Installatore - Incaricato sopralluogo"] ?? "Installatore storico"
+  }
+
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <div className="flex flex-col gap-1">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Data sopralluogo
-        </span>
-        <Input
-          type="date"
-          value={data}
-          onChange={(e) => setData(e.target.value)}
-          className="h-9 bg-card text-[13px]"
-        />
-      </div>
-      <div className="flex flex-col gap-1">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Installatore incaricato
-        </span>
-        <Select
-          items={items}
-          value={installatore || undefined}
-          onValueChange={(next) => setInstallatore(next ?? "")}
-        >
-          <SelectTrigger className="h-9 w-full bg-card text-[13px]">
-            <SelectValue placeholder="Seleziona installatore" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              {installers.map((installer) => (
-                <SelectItem key={installer.id} value={installer.id}>
-                  {installer.nome}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </div>
+      <DataField label="Data sopralluogo" edit={{ module: "lead", field: "data_sopralluogo", endpoint: `/api/leads/${lead.id}`, patchKey: "Data sopralluogo", value: lead["Data sopralluogo"], type: "date", emptyLabel: "Nessuno" }}>
+        {val(lead["Data sopralluogo"])}
+      </DataField>
+      <DataField
+        label="Installatore incaricato"
+        edit={{
+          module: "lead",
+          field: "installatore_sopralluogo_id",
+          endpoint: `/api/leads/${lead.id}`,
+          patchKey: "Installatore - Incaricato sopralluogo",
+          value: currentInstaller,
+          type: "select",
+          options: installerOptions,
+          optionLabels: installerLabels,
+          allowEmptyOption: true,
+          emptyLabel: "Nessuno",
+          nullWhenEmpty: true,
+        }}
+      >
+        {val(lead["Installatore - Incaricato sopralluogo"])}
+      </DataField>
     </div>
   )
 }

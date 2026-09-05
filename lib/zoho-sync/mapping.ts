@@ -14,7 +14,6 @@ export const IGNORED_LEAD_HEADERS = [
   "Tag",
   "Lead Proprietario",
   "Account convertito",
-  "Installatore - Incaricato sopralluogo",
   "Data/ora convertita",
   "Ora dell’ultimo arricchimento",
   "Ora dell'ultimo arricchimento",
@@ -54,6 +53,12 @@ export const LEAD_ZOHO_MAPPINGS = [
   { csvHeader: "Stato", column: "stato_email", type: "text", updateExisting: true },
   { csvHeader: "Social Lead ID", column: "social_lead_id", type: "text", updateExisting: true },
   { csvHeader: "Data sopralluogo", column: "data_sopralluogo", type: "timestamp", updateExisting: true },
+  {
+    csvHeader: "Installatore - Incaricato sopralluogo",
+    column: "zoho_installatore_sopralluogo_nome",
+    type: "text",
+    updateExisting: true,
+  },
   {
     csvHeader: "Installatore - Incaricato sopralluogo.id",
     column: "zoho_installatore_sopralluogo_id",

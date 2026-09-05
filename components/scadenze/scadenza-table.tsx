@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { CalendarClock, ExternalLink, LinkIcon, MoreHorizontal, Pencil, Trash2, UserRound } from "lucide-react"
 import { startNavigationFeedback } from "@/components/navigation/navigation-feedback"
@@ -29,6 +29,7 @@ import type { ScadenzaSortKey, SortDir } from "@/lib/scadenze/api-types"
 import { ScadutaBadge, ScadenzaAvatar } from "./scadenza-utils"
 import { ScadenzaTagChip } from "./scadenza-tag-picker"
 import { ScadenzaRowContextMenu } from "./scadenza-row-context-menu"
+import { estimateColumnWidth } from "@/lib/shared/table-column-widths"
 
 function formatDateTime(value: string | null) {
   if (!value) return "—"
@@ -42,13 +43,37 @@ function isScaduta(s: ScadenzaRecord) {
   return new Date(s.data_scadenza).getTime() < Date.now()
 }
 
-const COLUMN_WIDTH: Record<string, number> = {
-  nome: 320,
-  proprietario_nome: 220,
-  tag: 180,
-  collegamento: 150,
-  data_scadenza: 210,
-  updated_at: 210,
+const SCADENZA_COLUMNS = [
+  { id: "nome", label: "Nome", sortKey: "nome" as ScadenzaSortKey },
+  { id: "proprietario_nome", label: "Proprietario", sortKey: "proprietario_nome" as ScadenzaSortKey },
+  { id: "tag", label: "Tag", sortKey: null },
+  { id: "collegamento", label: "Collegamento", sortKey: null },
+  { id: "data_scadenza", label: "Data scadenza", sortKey: "data_scadenza" as ScadenzaSortKey },
+  { id: "updated_at", label: "Aggiornata", sortKey: "updated_at" as ScadenzaSortKey },
+] as const
+
+type ScadenzaColumnId = (typeof SCADENZA_COLUMNS)[number]["id"]
+
+const COLUMN_WIDTH_BOUNDS: Record<ScadenzaColumnId, { min: number; max: number; padding?: number }> = {
+  nome: { min: 320, max: 560 },
+  proprietario_nome: { min: 200, max: 360 },
+  tag: { min: 190, max: 380, padding: 70 },
+  collegamento: { min: 150, max: 190, padding: 58 },
+  data_scadenza: { min: 210, max: 260 },
+  updated_at: { min: 210, max: 260 },
+}
+
+function scadenzaColumnValue(scadenza: ScadenzaRecord, column: ScadenzaColumnId) {
+  if (column === "collegamento") {
+    return scadenza.connesso_a_tipo
+      ? scadenza.connesso_a_tipo === "lead"
+        ? "Lead"
+        : "Cliente"
+      : "—"
+  }
+  if (column === "data_scadenza") return formatDateTime(scadenza.data_scadenza)
+  if (column === "updated_at") return formatDateTime(scadenza.updated_at)
+  return scadenza[column] ?? "—"
 }
 
 function ScadenzaMobileList({
@@ -210,11 +235,22 @@ export function ScadenzaTable({
   const router = useRouter()
   const [stuck, setStuck] = useState(false)
   const allSelected = scadenze.length > 0 && scadenze.every((s) => selected.has(s.id))
-  // "Tag" condivide la key data_scadenza sopra solo per la larghezza colonna;
-  // qui usiamo id univoci per colgroup/celle.
-  const colIds = ["nome", "proprietario_nome", "tag", "collegamento", "data_scadenza", "updated_at"]
+  const columnWidths = useMemo(() => {
+    const widths = {} as Record<ScadenzaColumnId, number>
+    for (const column of SCADENZA_COLUMNS) {
+      const bounds = COLUMN_WIDTH_BOUNDS[column.id]
+      widths[column.id] = estimateColumnWidth({
+        label: column.label,
+        values: scadenze.map((scadenza) => scadenzaColumnValue(scadenza, column.id)),
+        min: bounds.min,
+        max: bounds.max,
+        padding: bounds.padding ?? 48,
+      })
+    }
+    return widths
+  }, [scadenze])
   const tableWidth =
-    44 + colIds.reduce((sum, id) => sum + COLUMN_WIDTH[id], 0) + 64
+    44 + SCADENZA_COLUMNS.reduce((sum, column) => sum + columnWidths[column.id], 0) + 64
 
   return (
     <>
@@ -237,8 +273,8 @@ export function ScadenzaTable({
     >
       <colgroup>
         <col style={{ width: 44 }} />
-        {colIds.map((id) => (
-          <col key={id} style={{ width: COLUMN_WIDTH[id] }} />
+        {SCADENZA_COLUMNS.map((column) => (
+          <col key={column.id} style={{ width: columnWidths[column.id] }} />
         ))}
         <col style={{ width: 64 }} />
       </colgroup>
@@ -256,14 +292,7 @@ export function ScadenzaTable({
               aria-label="Seleziona tutte"
             />
           </TableHead>
-          {[
-            { id: "nome", label: "Nome", sortKey: "nome" as ScadenzaSortKey },
-            { id: "proprietario_nome", label: "Proprietario", sortKey: "proprietario_nome" as ScadenzaSortKey },
-            { id: "tag", label: "Tag", sortKey: null },
-            { id: "collegamento", label: "Collegamento", sortKey: null },
-            { id: "data_scadenza", label: "Data scadenza", sortKey: "data_scadenza" as ScadenzaSortKey },
-            { id: "updated_at", label: "Aggiornata", sortKey: "updated_at" as ScadenzaSortKey },
-          ].map((col) => (
+          {SCADENZA_COLUMNS.map((col) => (
             <TableHead
               key={col.id}
               className={cn(
@@ -271,9 +300,9 @@ export function ScadenzaTable({
                 col.sortKey && "cursor-pointer select-none",
               )}
               style={{
-                width: COLUMN_WIDTH[col.id],
-                minWidth: COLUMN_WIDTH[col.id],
-                maxWidth: COLUMN_WIDTH[col.id],
+                width: columnWidths[col.id],
+                minWidth: columnWidths[col.id],
+                maxWidth: columnWidths[col.id],
               }}
               onClick={() => col.sortKey && onSort(col.sortKey)}
             >
@@ -324,22 +353,22 @@ export function ScadenzaTable({
 
                 <TableCell
                   className="border-r border-border/70"
-                  style={{ width: COLUMN_WIDTH.nome, minWidth: COLUMN_WIDTH.nome, maxWidth: COLUMN_WIDTH.nome }}
+                  style={{ width: columnWidths.nome, minWidth: columnWidths.nome, maxWidth: columnWidths.nome }}
                 >
-                  <span className="truncate font-medium text-foreground">{s.nome}</span>
+                  <span className="block min-w-0 truncate font-medium text-foreground">{s.nome}</span>
                 </TableCell>
 
                 <TableCell
                   className="border-r border-border/70"
                   style={{
-                    width: COLUMN_WIDTH.proprietario_nome,
-                    minWidth: COLUMN_WIDTH.proprietario_nome,
-                    maxWidth: COLUMN_WIDTH.proprietario_nome,
+                    width: columnWidths.proprietario_nome,
+                    minWidth: columnWidths.proprietario_nome,
+                    maxWidth: columnWidths.proprietario_nome,
                   }}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-2 overflow-hidden">
                     <ScadenzaAvatar nome={s.proprietario_nome ?? "—"} size={26} />
-                    <span className="whitespace-nowrap text-sm text-foreground">
+                    <span className="min-w-0 truncate text-sm text-foreground">
                       {s.proprietario_nome ?? "—"}
                     </span>
                   </div>
@@ -347,7 +376,7 @@ export function ScadenzaTable({
 
                 <TableCell
                   className="border-r border-border/70"
-                  style={{ width: COLUMN_WIDTH.tag, minWidth: COLUMN_WIDTH.tag, maxWidth: COLUMN_WIDTH.tag }}
+                  style={{ width: columnWidths.tag, minWidth: columnWidths.tag, maxWidth: columnWidths.tag }}
                 >
                   <ScadenzaTagChip tag={s.tag} />
                 </TableCell>
@@ -355,9 +384,9 @@ export function ScadenzaTable({
                 <TableCell
                   className="border-r border-border/70"
                   style={{
-                    width: COLUMN_WIDTH.collegamento,
-                    minWidth: COLUMN_WIDTH.collegamento,
-                    maxWidth: COLUMN_WIDTH.collegamento,
+                    width: columnWidths.collegamento,
+                    minWidth: columnWidths.collegamento,
+                    maxWidth: columnWidths.collegamento,
                   }}
                 >
                   {s.connesso_a_tipo ? (
@@ -372,9 +401,9 @@ export function ScadenzaTable({
                 <TableCell
                   className="border-r border-border/70"
                   style={{
-                    width: COLUMN_WIDTH.data_scadenza,
-                    minWidth: COLUMN_WIDTH.data_scadenza,
-                    maxWidth: COLUMN_WIDTH.data_scadenza,
+                    width: columnWidths.data_scadenza,
+                    minWidth: columnWidths.data_scadenza,
+                    maxWidth: columnWidths.data_scadenza,
                   }}
                 >
                   <div className="flex items-center gap-2">
@@ -393,9 +422,9 @@ export function ScadenzaTable({
                 <TableCell
                   className="border-r border-border/70"
                   style={{
-                    width: COLUMN_WIDTH.updated_at,
-                    minWidth: COLUMN_WIDTH.updated_at,
-                    maxWidth: COLUMN_WIDTH.updated_at,
+                    width: columnWidths.updated_at,
+                    minWidth: columnWidths.updated_at,
+                    maxWidth: columnWidths.updated_at,
                   }}
                 >
                   <span className="whitespace-nowrap text-sm tabular-nums text-muted-foreground">

@@ -43,7 +43,7 @@ export const CLIENTI_ZOHO_FIELDS = [
   { zoho: "Stato", column: "stato", type: "text", appField: "Stato" },
   { zoho: "Visita più recente", column: "visita_piu_recente", type: "timestamp", appField: "Visita più recente" },
   { zoho: "Prima pagina visitata", column: "prima_pagina_visitata", type: "text", appField: "Prima pagina visitata" },
-  { zoho: "Tempo medio impiegato (minuti)", column: "tempo_medio_impiegato_minuti", type: "numeric", appField: "Tempo medio impiegato (minuti)" },
+  { zoho: "Tempo medio impiegato (minuti)", column: "tempo_medio_impiegato_minuti", type: "numeric", appField: "Tempo medio impiegato minuti" },
   { zoho: "Numero di chat", column: "numero_di_chat", type: "numeric", appField: "Numero di chat" },
   { zoho: "Relatore", column: "relatore", type: "text", appField: "Relatore" },
   { zoho: "Punteggio visitatore", column: "punteggio_visitatore", type: "numeric", appField: "Punteggio visitatore" },

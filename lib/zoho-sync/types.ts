@@ -44,6 +44,7 @@ export type LeadColumn =
   | "social_lead_id"
   | "data_sopralluogo"
   | "zoho_installatore_sopralluogo_id"
+  | "zoho_installatore_sopralluogo_nome"
   | "connesso_a"
   | "zoho_connesso_a_id"
   | "data_click"

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { CalendarClock, ExternalLink, Mail, MoreHorizontal, Pencil, Phone, Trash2, UserRound } from "lucide-react"
 import { startNavigationFeedback } from "@/components/navigation/navigation-feedback"
@@ -34,6 +34,7 @@ import type { InstallatoreRecord } from "@/lib/installatori/repository"
 import type { InstallatoreSortKey, SortDir } from "@/lib/installatori/api-types"
 import { InstallatoreTagBadges } from "./installatore-tag-controls"
 import { InstallatoreRowContextMenu } from "./installatore-row-context-menu"
+import { estimateColumnWidth } from "@/lib/shared/table-column-widths"
 
 function formatDate(value: string | null) {
   if (!value) return "—"
@@ -216,14 +217,32 @@ function InstallatoreMobileList({
 // densita' di default, cosi' le tre restano visivamente allineate.
 const CELL_PAD = LIGHTNING_DENSITY.normale
 
-const COLUMN_WIDTH: Record<string, number> = {
-  nome: 240,
-  email: 240,
-  stato: 140,
-  proprietario_nome: 210,
-  tag: 180,
-  telefono: 170,
-  updated_at: 190,
+const INSTALLATORE_COLUMN_IDS = [
+  "nome",
+  "email",
+  "stato",
+  "proprietario_nome",
+  "tag",
+  "telefono",
+  "updated_at",
+] as const
+
+type InstallatoreColumnId = (typeof INSTALLATORE_COLUMN_IDS)[number]
+
+const COLUMN_WIDTH_BOUNDS: Record<InstallatoreColumnId, { min: number; max: number }> = {
+  nome: { min: 240, max: 460 },
+  email: { min: 220, max: 420 },
+  stato: { min: 140, max: 180 },
+  proprietario_nome: { min: 190, max: 360 },
+  tag: { min: 200, max: 420 },
+  telefono: { min: 160, max: 260 },
+  updated_at: { min: 180, max: 220 },
+}
+
+function installatoreColumnValue(i: InstallatoreRecord, column: InstallatoreColumnId) {
+  if (column === "stato") return i.attivo ? "Attivo" : "Non attivo"
+  if (column === "updated_at") return formatDate(i.updated_at)
+  return i[column] ?? "—"
 }
 
 export function InstallatoreTable({
@@ -251,10 +270,24 @@ export function InstallatoreTable({
   const [stuck, setStuck] = useState(false)
   const allSelected =
     installatori.length > 0 && installatori.every((i) => selected.has(i.id))
-  const colIds = ["nome", "email", "stato", "proprietario_nome", "tag", "telefono", "updated_at"]
-  const tableWidth = 44 + colIds.reduce((sum, id) => sum + COLUMN_WIDTH[id], 0) + 64
+  const columnWidths = useMemo(() => {
+    const widths = {} as Record<InstallatoreColumnId, number>
+    for (const column of INSTALLATORE_COLUMN_IDS) {
+      const bounds = COLUMN_WIDTH_BOUNDS[column]
+      widths[column] = estimateColumnWidth({
+        label: column === "proprietario_nome" ? "Proprietario" : column,
+        values: installatori.map((i) => installatoreColumnValue(i, column)),
+        min: bounds.min,
+        max: bounds.max,
+        padding: column === "tag" ? 76 : 46,
+      })
+    }
+    return widths
+  }, [installatori])
+  const tableWidth =
+    44 + INSTALLATORE_COLUMN_IDS.reduce((sum, id) => sum + columnWidths[id], 0) + 84
 
-  const HEADERS: { id: string; label: string; sortKey: InstallatoreSortKey | null }[] = [
+  const HEADERS: { id: InstallatoreColumnId; label: string; sortKey: InstallatoreSortKey | null }[] = [
     { id: "nome", label: "Nome", sortKey: "nome" },
     { id: "email", label: "E-mail", sortKey: "email" },
     { id: "stato", label: "Stato", sortKey: null },
@@ -285,8 +318,8 @@ export function InstallatoreTable({
     >
       <colgroup>
         <col style={{ width: 44 }} />
-        {colIds.map((id) => (
-          <col key={id} style={{ width: COLUMN_WIDTH[id] }} />
+        {INSTALLATORE_COLUMN_IDS.map((id) => (
+          <col key={id} style={{ width: columnWidths[id] }} />
         ))}
         <col style={{ width: 84 }} />
       </colgroup>
@@ -310,9 +343,9 @@ export function InstallatoreTable({
                 col.sortKey && "cursor-pointer select-none",
               )}
               style={{
-                width: COLUMN_WIDTH[col.id],
-                minWidth: COLUMN_WIDTH[col.id],
-                maxWidth: COLUMN_WIDTH[col.id],
+                width: columnWidths[col.id],
+                minWidth: columnWidths[col.id],
+                maxWidth: columnWidths[col.id],
               }}
               onClick={() => col.sortKey && onSort(col.sortKey)}
             >
@@ -366,24 +399,24 @@ export function InstallatoreTable({
 
               <TableCell
                 className={cn(LIGHTNING.cell, CELL_PAD)}
-                style={{ width: COLUMN_WIDTH.nome, minWidth: COLUMN_WIDTH.nome, maxWidth: COLUMN_WIDTH.nome }}
+                style={{ width: columnWidths.nome, minWidth: columnWidths.nome, maxWidth: columnWidths.nome }}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2 overflow-hidden">
                   <InstallatoreAvatar nome={i.nome} />
-                  <span className="truncate font-medium text-foreground">{i.nome}</span>
+                  <span className="min-w-0 truncate font-medium text-foreground">{i.nome}</span>
                 </div>
               </TableCell>
 
               <TableCell
                 className={cn(LIGHTNING.cell, CELL_PAD)}
-                style={{ width: COLUMN_WIDTH.email, minWidth: COLUMN_WIDTH.email, maxWidth: COLUMN_WIDTH.email }}
+                style={{ width: columnWidths.email, minWidth: columnWidths.email, maxWidth: columnWidths.email }}
               >
-                <span className="truncate text-foreground">{i.email ?? "—"}</span>
+                <span className="block min-w-0 truncate text-foreground">{i.email ?? "—"}</span>
               </TableCell>
 
               <TableCell
                 className={cn(LIGHTNING.cell, CELL_PAD)}
-                style={{ width: COLUMN_WIDTH.stato, minWidth: COLUMN_WIDTH.stato, maxWidth: COLUMN_WIDTH.stato }}
+                style={{ width: columnWidths.stato, minWidth: columnWidths.stato, maxWidth: columnWidths.stato }}
               >
                 <StatoPill tone={i.attivo ? "success" : "muted"}>
                   {i.attivo ? "Attivo" : "Non attivo"}
@@ -393,19 +426,19 @@ export function InstallatoreTable({
               <TableCell
                 className={cn(LIGHTNING.cell, CELL_PAD)}
                 style={{
-                  width: COLUMN_WIDTH.proprietario_nome,
-                  minWidth: COLUMN_WIDTH.proprietario_nome,
-                  maxWidth: COLUMN_WIDTH.proprietario_nome,
+                  width: columnWidths.proprietario_nome,
+                  minWidth: columnWidths.proprietario_nome,
+                  maxWidth: columnWidths.proprietario_nome,
                 }}
               >
-                <span className="whitespace-nowrap text-foreground">
+                <span className="block min-w-0 truncate text-foreground">
                   {i.proprietario_nome ?? "—"}
                 </span>
               </TableCell>
 
               <TableCell
                 className={cn(LIGHTNING.cell, CELL_PAD)}
-                style={{ width: COLUMN_WIDTH.tag, minWidth: COLUMN_WIDTH.tag, maxWidth: COLUMN_WIDTH.tag }}
+                style={{ width: columnWidths.tag, minWidth: columnWidths.tag, maxWidth: columnWidths.tag }}
               >
                 <InstallatoreTagBadges installatoreId={i.id} max={2} />
               </TableCell>
@@ -413,12 +446,12 @@ export function InstallatoreTable({
               <TableCell
                 className={cn(LIGHTNING.cell, CELL_PAD)}
                 style={{
-                  width: COLUMN_WIDTH.telefono,
-                  minWidth: COLUMN_WIDTH.telefono,
-                  maxWidth: COLUMN_WIDTH.telefono,
+                  width: columnWidths.telefono,
+                  minWidth: columnWidths.telefono,
+                  maxWidth: columnWidths.telefono,
                 }}
               >
-                <span className="whitespace-nowrap text-muted-foreground">
+                <span className="block min-w-0 truncate text-muted-foreground">
                   {i.telefono ?? "—"}
                 </span>
               </TableCell>
@@ -426,9 +459,9 @@ export function InstallatoreTable({
               <TableCell
                 className={cn(LIGHTNING.cell, CELL_PAD)}
                 style={{
-                  width: COLUMN_WIDTH.updated_at,
-                  minWidth: COLUMN_WIDTH.updated_at,
-                  maxWidth: COLUMN_WIDTH.updated_at,
+                  width: columnWidths.updated_at,
+                  minWidth: columnWidths.updated_at,
+                  maxWidth: columnWidths.updated_at,
                 }}
               >
                 <span className="whitespace-nowrap tabular-nums text-muted-foreground">

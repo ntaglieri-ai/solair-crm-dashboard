@@ -88,7 +88,7 @@ function GateDocumentiLabel({
 }
 
 export function LeadDetailHeader({ lead }: { lead: Lead }) {
-  const { ownerNames } = useTags()
+  const { ownerNames, installers } = useTags()
   const router = useRouter()
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -451,7 +451,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
         onOpenChange={setEditOpen}
         title="Modifica lead"
         endpoint={`/api/leads/${lead.id}`}
-        fields={buildLeadEditFields(lead, permissions)}
+        fields={buildLeadEditFields(lead, permissions, { installers })}
       />
     </div>
   )

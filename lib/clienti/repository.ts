@@ -13,6 +13,7 @@ import type {
   ClientiListResponse,
 } from "@/lib/clienti/api-types"
 import { CLIENTI_RECORD_COLUMNS, CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
+import { CLIENTI_LIST_COLUMN_NAMES } from "@/lib/clienti/list-columns"
 import { applicaTagItalia } from "@/lib/clienti/tag-italia"
 import { DEFAULT_CLIENTI_PARAMS } from "@/lib/clienti/api-types"
 import { getCurrentPermissions } from "@/lib/permissions/server"
@@ -25,30 +26,10 @@ import {
   postgrestInList,
 } from "@/lib/shared/filter-values"
 
-// Colonne proiettate in lettura — mai SELECT *.
-const LIST_COLUMNS = [
-  "id",
-  "nome",
-  "cognome",
-  "nome_clienti",
-  "email",
-  "cellulare",
-  "codice_fiscale",
-  "tag",
-  "stato",
-  "sede",
-  "zona",
-  "installatore",
-  "installatore_id",
-  "clienti_proprietario",
-  "clienti_proprietario_id",
-  // Serve anche in lista: e' cio' che decide se l'invio email e' possibile.
-  "consenso_contatto_email",
-  "created_at",
-  "updated_at",
-  "ora_modifica",
-  "ora_creazione",
-].join(",")
+// Colonne proiettate in lettura — mai SELECT * dal client. La lista deve pero'
+// caricare tutti i campi Cliente selezionabili, altrimenti una colonna visibile
+// come "Importo Contrattuale" risulta vuota pur essendo popolata in DB.
+const LIST_COLUMNS = CLIENTI_LIST_COLUMN_NAMES.join(",")
 
 const DETAIL_COLUMNS = [
   // installatore_id (FK uuid verso installatori) non e' tra le colonne Zoho:

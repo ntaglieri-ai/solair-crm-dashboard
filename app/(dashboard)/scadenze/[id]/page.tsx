@@ -5,6 +5,7 @@ import { requirePage } from "@/lib/permissions/server"
 import { getScadenzaById, getScadenzaCompiti } from "@/lib/scadenze/repository"
 import { ScadenzaCompitiSection } from "@/components/scadenze/scadenza-compiti-section"
 import { ScadenzaDetailActions } from "@/components/scadenze/scadenza-detail-actions"
+import { InlineEditableField } from "@/components/shared/inline-edit-field"
 
 function value(text: string | null) {
   return text?.trim() || "—"
@@ -58,6 +59,31 @@ export default async function ScadenzaDetailPage({
 
       <section className="border-y border-border py-5">
         <dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <InlineEditableField
+            module="scadenze"
+            field="nome"
+            label="Nome"
+            endpoint={`/api/scadenze/${scadenza.id}`}
+            patchKey="nome"
+            value={scadenza.nome}
+          />
+          <InlineEditableField
+            module="scadenze"
+            field="data_scadenza"
+            label="Data scadenza"
+            endpoint={`/api/scadenze/${scadenza.id}`}
+            patchKey="data_scadenza"
+            value={scadenza.data_scadenza}
+            type="datetime-local"
+          />
+          <InlineEditableField
+            module="scadenze"
+            field="tag"
+            label="Tag"
+            endpoint={`/api/scadenze/${scadenza.id}`}
+            patchKey="tag"
+            value={scadenza.tag}
+          />
           <div>
             <dt className="text-xs font-medium text-muted-foreground">Proprietario</dt>
             <dd className="mt-1 text-sm text-foreground">
@@ -83,10 +109,15 @@ export default async function ScadenzaDetailPage({
             </dd>
           </div>
           <div className="sm:col-span-2 lg:col-span-3">
-            <dt className="text-xs font-medium text-muted-foreground">Descrizione</dt>
-            <dd className="mt-1 whitespace-pre-wrap text-sm text-foreground">
-              {value(scadenza.descrizione)}
-            </dd>
+            <InlineEditableField
+              module="scadenze"
+              field="descrizione"
+              label="Descrizione"
+              endpoint={`/api/scadenze/${scadenza.id}`}
+              patchKey="descrizione"
+              value={scadenza.descrizione}
+              type="textarea"
+            />
           </div>
         </dl>
       </section>

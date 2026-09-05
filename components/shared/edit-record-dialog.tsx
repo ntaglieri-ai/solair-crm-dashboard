@@ -38,6 +38,7 @@ export type EditField = {
   /** Solo per type "select": valori ammessi nella tendina. */
   options?: string[]
   optionLabels?: Record<string, string>
+  nullWhenEmpty?: boolean
   custom?: CustomFieldValue
 }
 
@@ -45,6 +46,7 @@ export type LeadEditValueOptions = {
   statoLead?: string[]
   origineLead?: string[]
   sedi?: string[]
+  installers?: ClienteReferenceOption[]
 }
 
 type EditValue = string | boolean
@@ -160,6 +162,27 @@ export function buildLeadEditFields(
           value: lead[field.appField],
           type: "select" as const,
           options: withCurrentOption(options.sedi ?? [], lead[field.appField]),
+        }
+      }
+      if (field.appField === "Installatore - Incaricato sopralluogo") {
+        const currentId = lead.InstallatoreSopralluogoId || ""
+        const installerOptions = [...(options.installers ?? []).map((installer) => installer.id)]
+        const installerLabels = Object.fromEntries(
+          (options.installers ?? []).map((installer) => [installer.id, installer.nome]),
+        )
+        if (currentId && !installerOptions.includes(currentId)) {
+          installerOptions.push(currentId)
+          installerLabels[currentId] =
+            lead["Installatore - Incaricato sopralluogo"] ?? "Installatore storico"
+        }
+        return {
+          key: String(field.appField),
+          label: String(field.appField),
+          value: currentId,
+          type: "select" as const,
+          options: installerOptions,
+          optionLabels: installerLabels,
+          nullWhenEmpty: true,
         }
       }
       return {
@@ -314,7 +337,9 @@ function EditRecordDialogBody({
           .filter((field) => !(field.key === "InstallatoreId" && values[field.key] === "__legacy_installer__"))
           .map((field) => [
             field.key,
-            outgoingEditValue(field, values[field.key] ?? ""),
+            field.nullWhenEmpty && values[field.key] === ""
+              ? null
+              : outgoingEditValue(field, values[field.key] ?? ""),
           ]),
       )
 
@@ -390,7 +415,7 @@ function EditRecordDialogBody({
                         <SelectValue placeholder={`Seleziona ${field.label.toLowerCase()}`} />
                       </SelectTrigger>
                       <SelectContent>
-                        {(field.key === "InstallatoreId" || field.custom && !field.custom.required) && <SelectItem value="">Non assegnato</SelectItem>}
+                        {(field.key === "InstallatoreId" || field.nullWhenEmpty || field.custom && !field.custom.required) && <SelectItem value="">Non assegnato</SelectItem>}
                         {(field.options ?? []).map((option) => (
                           <SelectItem key={option} value={option}>
                             {field.optionLabels?.[option] ?? option}

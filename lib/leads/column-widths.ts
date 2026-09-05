@@ -9,7 +9,7 @@ export const LEAD_DATE_TIME_COLUMNS = new Set<LeadColumnId>([
 
 export const LEAD_DATE_TIME_COLUMN_WIDTH = 178
 export const LEAD_COMPACT_ICON_COLUMN_WIDTH = 56
-export const LEAD_DEFAULT_MAX_COLUMN_WIDTH = 480
+export const LEAD_DEFAULT_MAX_COLUMN_WIDTH = 640
 
 const LEAD_COLUMN_MIN_WIDTHS: Partial<Record<LeadColumnId, number>> = {
   "Badge dell'attività": LEAD_COMPACT_ICON_COLUMN_WIDTH,
@@ -44,6 +44,16 @@ const LEAD_COLUMN_MIN_WIDTHS: Partial<Record<LeadColumnId, number>> = {
   Sede: 120,
 }
 
+const LEAD_COLUMN_MAX_WIDTHS: Partial<Record<LeadColumnId, number>> = {
+  Tag: 460,
+  "Nome Lead": 520,
+  "Lead Proprietario": 360,
+  "campaign name": 460,
+  "E-mail": 420,
+  Descrizione: 620,
+  "Installatore - Incaricato sopralluogo": 440,
+}
+
 function leadColumnGrowWeight(column: LeadColumnId) {
   if (column === "Badge dell'attività" || column === "Badge di nota") return 0
   if (column === "Valutazione" || column === "kWp" || column === "kWh") return 0.45
@@ -75,7 +85,10 @@ export function clampLeadColumnWidth(
   width: number,
   max = LEAD_DEFAULT_MAX_COLUMN_WIDTH,
 ) {
-  return Math.min(max, Math.max(minimumLeadColumnWidth(column), width))
+  return Math.min(
+    LEAD_COLUMN_MAX_WIDTHS[column] ?? max,
+    Math.max(minimumLeadColumnWidth(column), width),
+  )
 }
 
 export function normalizeLeadColumnWidths(

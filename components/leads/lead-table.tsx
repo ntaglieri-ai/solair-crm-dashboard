@@ -79,6 +79,7 @@ import { LeadTagBadges } from "./tag-controls"
 import { LeadRowContextMenu } from "./lead-row-context-menu"
 import { usePermissions } from "@/lib/permissions/provider"
 import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
+import { estimateColumnWidth } from "@/lib/shared/table-column-widths"
 import {
   LeadAvatar,
   OrigineBadge,
@@ -351,22 +352,30 @@ export function LeadTable({
         continue
       }
       if (column.id === "Tag") {
-        widths[column.id] = 210
+        widths[column.id] = clampLeadColumnWidth(
+          column.id,
+          estimateColumnWidth({
+            label: column.label,
+            values: leads.map((lead) => lead[column.id]),
+            min: minimumLeadColumnWidth(column.id),
+            padding: 72,
+          }),
+        )
         continue
       }
       if (isLeadDateTimeColumn(column.id)) {
         widths[column.id] = LEAD_DATE_TIME_COLUMN_WIDTH
         continue
       }
-      const contentLength = leads.reduce((maximum, lead) => {
-        const value = lead[column.id]
-        const length = Array.isArray(value)
-          ? value.join(", ").length
-          : String(value ?? "").length
-        return Math.max(maximum, length)
-      }, column.label.length)
-      const minimum = minimumLeadColumnWidth(column.id)
-      widths[column.id] = Math.min(360, Math.max(minimum, contentLength * 7 + 40))
+      widths[column.id] = clampLeadColumnWidth(
+        column.id,
+        estimateColumnWidth({
+          label: column.label,
+          values: leads.map((lead) => lead[column.id]),
+          min: minimumLeadColumnWidth(column.id),
+          padding: 48,
+        }),
+      )
     }
     return widths
   }, [columns, leads])

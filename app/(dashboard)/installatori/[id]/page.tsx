@@ -9,6 +9,7 @@ import { InstallatoreDetailActions } from "@/components/installatori/installator
 import { InstallatoreTagBadges } from "@/components/installatori/installatore-tag-controls"
 import { AllegatiSection } from "@/components/shared/allegati-section"
 import { CalendarioRecordSection } from "@/components/calendario/calendario-record-section"
+import { InlineEditableField } from "@/components/shared/inline-edit-field"
 
 function value(text: string | null) {
   return text?.trim() || "—"
@@ -31,6 +32,8 @@ export default async function InstallatoreDetailPage({
   const { id } = await params
   const installatore = await getInstallatoreById(id)
   if (!installatore) notFound()
+  const endpoint = `/api/installatori/${installatore.id}`
+  const canaleOptions = Object.keys(CANALE_PREFERITO_LABELS)
 
   return (
     <div className="flex flex-col gap-6">
@@ -57,34 +60,23 @@ export default async function InstallatoreDetailPage({
 
       <section className="border-y border-border py-5">
         <dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          <div>
-            <dt className="text-xs font-medium text-muted-foreground">Email</dt>
-            <dd className="mt-1 text-sm text-foreground">
-              {value(installatore.email)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium text-muted-foreground">
-              Email secondaria
-            </dt>
-            <dd className="mt-1 text-sm text-foreground">
-              {value(installatore.email_secondaria)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium text-muted-foreground">Telefono</dt>
-            <dd className="mt-1 text-sm text-foreground">
-              {value(installatore.telefono)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium text-muted-foreground">
-              Canale preferito
-            </dt>
-            <dd className="mt-1 text-sm text-foreground">
-              {CANALE_PREFERITO_LABELS[installatore.canale_preferito]}
-            </dd>
-          </div>
+          <InlineEditableField module="installatori" field="nome" label="Nome" endpoint={endpoint} patchKey="nome" value={installatore.nome} />
+          <InlineEditableField module="installatori" field="email" label="Email" endpoint={endpoint} patchKey="email" value={installatore.email} type="email" />
+          <InlineEditableField module="installatori" field="email_secondaria" label="Email secondaria" endpoint={endpoint} patchKey="email_secondaria" value={installatore.email_secondaria} type="email" />
+          <InlineEditableField module="installatori" field="telefono" label="Telefono" endpoint={endpoint} patchKey="telefono" value={installatore.telefono} type="tel" />
+          <InlineEditableField module="installatori" field="tag" label="Tag" endpoint={endpoint} patchKey="tag" value={installatore.tag} />
+          <InlineEditableField module="installatori" field="attivo" label="Attivo" endpoint={endpoint} patchKey="attivo" value={installatore.attivo} type="boolean" />
+          <InlineEditableField
+            module="installatori"
+            field="canale_preferito"
+            label="Canale preferito"
+            endpoint={endpoint}
+            patchKey="canale_preferito"
+            value={installatore.canale_preferito}
+            type="select"
+            options={canaleOptions}
+            optionLabels={CANALE_PREFERITO_LABELS}
+          />
           <div>
             <dt className="text-xs font-medium text-muted-foreground">
               Proprietario
@@ -106,10 +98,7 @@ export default async function InstallatoreDetailPage({
             </dd>
           </div>
           <div className="sm:col-span-2 lg:col-span-3">
-            <dt className="text-xs font-medium text-muted-foreground">Note</dt>
-            <dd className="mt-1 whitespace-pre-wrap text-sm text-foreground">
-              {value(installatore.note)}
-            </dd>
+            <InlineEditableField module="installatori" field="note" label="Note" endpoint={endpoint} patchKey="note" value={installatore.note} type="textarea" />
           </div>
         </dl>
       </section>

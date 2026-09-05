@@ -24,7 +24,7 @@ try {
       clienti_proprietario_id uuid references utenti(id), consenso_contatto_email boolean,
       created_at timestamptz default now(), updated_at timestamptz default now(),
       ora_modifica timestamptz, ora_creazione timestamptz, provincia_indirizzo_postale text,
-      lead_id uuid references leads(id));
+      importo_contrattuale numeric, lead_id uuid references leads(id));
     grant usage on schema public to authenticated, service_role;
     grant select on utenti to authenticated;
     grant select, insert, update on clienti, leads to authenticated;
@@ -39,6 +39,9 @@ try {
   await db.exec(await sqlFile('supabase/migrations/20260904b_clienti_report_sort.sql'))
   check((await rows('select nome_clienti from clienti_report_list order by modifica_visualizzata desc, id'))[0].nome_clienti === 'Second', 'sort uses displayed date, including null fallback')
   check((await rows('select nome_clienti from clienti_report_list order by proprietario_ordinamento, id limit 1 offset 0'))[0].nome_clienti === 'Second', 'sort uses owner name before pagination')
+  await db.exec(await sqlFile('supabase/migrations/20260905_clienti_report_list_all_fields.sql'))
+  await db.query("update clienti set importo_contrattuale = 28190 where nome_clienti = 'First'")
+  check((await rows("select importo_contrattuale from clienti_report_list where nome_clienti = 'First'"))[0].importo_contrattuale === '28190', 'client list view exposes contractual amount')
   await db.exec(`set role authenticated; set test.owner = '${a}';`)
   check((await rows('select id from clienti_report_list')).length === 1, 'view preserves invoker RLS')
   await db.exec('reset role')

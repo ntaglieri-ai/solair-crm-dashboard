@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { AllegatiSection } from "@/components/shared/allegati-section"
 import { NoteInterneSection } from "./note-interne-section"
@@ -21,7 +21,6 @@ import {
   IconCircleCheck,
   IconMail,
   IconPhone,
-  IconMapPin,
   IconSolarPanel,
   IconPlug,
   IconBattery,
@@ -33,13 +32,16 @@ import {
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { MentionText, MentionTextarea } from "@/components/shared/note-mentions"
 import type { NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
-import { ConsensoEmailToggle } from "@/components/shared/consenso-email-toggle"
 import { CampoProtetto, useCampoVisibile } from "@/components/shared/campo-protetto"
+import {
+  InlineEditableField,
+  InlineEditableValue,
+  type InlineEditableValueProps,
+} from "@/components/shared/inline-edit-field"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { type ClienteRecord, type Compito, type CustomFieldValue, OPEN_TASK_STATI } from "@/lib/mock-data"
@@ -48,6 +50,8 @@ import { InstallatoreAssegnatoSelect } from "./installatore-assegnato-select"
 import { QuickCompitoDialog } from "@/components/compiti/quick-compito-dialog"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { displayClienteOwner } from "@/lib/clienti/owner-display"
+import { CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
+import { CUSTOM_FIELD_PREFIX } from "@/lib/clienti/custom-fields"
 
 /* ---------- Helpers ---------- */
 
@@ -76,6 +80,74 @@ function valCustomField(tipo: string, v: unknown): string {
   return String(v)
 }
 
+const ClienteInlineEditContext = createContext<ClienteRecord | null>(null)
+
+const CLIENTI_INLINE_LABEL_ALIASES: Record<string, string> = {
+  "Stratigrafia superficie": "Stratigrafia superficie di installazione",
+  "Conferma Iter E-distribuzione": "Data conferma Iter E-distribuzione",
+  "Potenza (Wp)": "Potenza Moduli Wp",
+  "COD. Moduli": "COD- MODULI",
+  "Potenza": "Potenza Inverter",
+  "Tot Potenza AC (kW)": "Tot Potenza AC KW",
+  "Capacità": "Capacità Batterie",
+  "COD. Storage": "COD. STORAGE",
+}
+
+const CLIENTI_INLINE_FIELD_BY_LABEL = new Map(
+  CLIENTI_RECORD_FIELDS.map((field) => [field.appField, field]),
+)
+
+function clienteInlineType(
+  fieldType: "text" | "numeric" | "boolean" | "timestamp",
+  appField: string,
+): InlineEditableValueProps["type"] {
+  if (fieldType === "boolean") return "boolean"
+  if (fieldType === "numeric") return "number"
+  if (fieldType === "timestamp") return "date"
+  return /descrizione|note|materiali|assistenza|stratigrafia/i.test(appField) ? "textarea" : "text"
+}
+
+function clienteInlineEdit(
+  cliente: ClienteRecord | null,
+  label: string,
+): Omit<InlineEditableValueProps, "label"> | null {
+  if (!cliente) return null
+  const appField = CLIENTI_INLINE_LABEL_ALIASES[label] ?? label
+  const field = CLIENTI_INLINE_FIELD_BY_LABEL.get(appField)
+  if (!field) return null
+  const value = (cliente as unknown as Record<string, unknown>)[field.appField]
+  if (
+    value !== null &&
+    value !== undefined &&
+    typeof value !== "string" &&
+    typeof value !== "number" &&
+    typeof value !== "boolean"
+  ) {
+    return null
+  }
+  return {
+    module: "clienti",
+    field: field.column,
+    endpoint: `/api/clienti/${cliente.id}`,
+    patchKey: field.appField,
+    value,
+    type: clienteInlineType(field.type, field.appField),
+    emptyLabel: "—",
+  }
+}
+
+function customInlineType(campo: CustomFieldValue): InlineEditableValueProps["type"] {
+  if (campo.tipo === "boolean") return "boolean"
+  if (campo.tipo === "number" || campo.tipo === "currency") return "number"
+  if (campo.tipo === "date") return "date"
+  if (campo.tipo === "datetime") return "datetime-local"
+  if (campo.tipo === "email") return "email"
+  if (campo.tipo === "phone") return "tel"
+  if (campo.tipo === "textarea" || campo.tipo === "multiselect") return "textarea"
+  if (campo.tipo === "select" && campo.options?.length) return "select"
+  return "text"
+}
+
 /**
  * Campi aggiunti da CRM Settings → Attributi (report Vito, punto 6): prima
  * la colonna veniva creata davvero nel database ma non compariva in nessuna
@@ -89,6 +161,32 @@ function valCustomField(tipo: string, v: unknown): string {
  * esplicitamente di vedere "Verifica", non "Campi personalizzati" (03/09).
  */
 function CampoPersonalizzato({ campo }: { campo: CustomFieldValue }) {
+  const cliente = useContext(ClienteInlineEditContext)
+  if (cliente && campo.column) {
+    return (
+      <div className="rounded-lg border border-dashed border-violet-300 bg-violet-50/40 p-3">
+        <Badge
+          variant="outline"
+          className="mb-2 h-4 w-fit border-violet-300 bg-violet-100 px-1.5 text-[9px] font-semibold uppercase tracking-wide text-violet-700"
+        >
+          Personalizzato
+        </Badge>
+        <InlineEditableField
+          module="clienti"
+          field={campo.column}
+          label={campo.label}
+          endpoint={`/api/clienti/${cliente.id}`}
+          patchKey={`${CUSTOM_FIELD_PREFIX}${campo.key}`}
+          value={campo.value}
+          type={customInlineType(campo)}
+          options={campo.options}
+          custom={campo}
+          displayValue={valCustomField(campo.tipo, campo.value)}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-1.5 rounded-lg border border-dashed border-violet-300 bg-violet-50/40 p-3">
       <Badge
@@ -164,6 +262,10 @@ function DataField({
   label: string
   children: React.ReactNode
 }) {
+  const cliente = useContext(ClienteInlineEditContext)
+  const edit = clienteInlineEdit(cliente, label)
+  if (edit) return <InlineEditableField label={label} {...edit} displayValue={children} />
+
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -183,6 +285,19 @@ function CopyField({
   value: string | undefined
   icon: typeof IconMail
 }) {
+  const cliente = useContext(ClienteInlineEditContext)
+  const edit = clienteInlineEdit(cliente, label)
+  if (edit) {
+    return (
+      <InlineEditableField
+        label={label}
+        {...edit}
+        type={label.toLowerCase().includes("mail") ? "email" : label.toLowerCase().includes("telefono") || label === "Cellulare" ? "tel" : edit.type}
+        displayValue={val(value)}
+      />
+    )
+  }
+
   const v = value ?? ""
   const copy = () => {
     if (!v) return
@@ -289,29 +404,6 @@ function RelatedNav({
 function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
   const { ownerNames } = useClienteTags()
   const ownerName = displayClienteOwner(cliente, ownerNames, "Non assegnato")
-  const [editing, setEditing] = useState(false)
-  const [descr, setDescr] = useState(cliente.Descrizione ?? "")
-  const [draft, setDraft] = useState(cliente.Descrizione ?? "")
-  const [savingDescr, setSavingDescr] = useState(false)
-
-  async function handleSaveDescr() {
-    setSavingDescr(true)
-    try {
-      const res = await fetch(`/api/clienti/${cliente.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ Descrizione: draft }),
-      })
-      if (!res.ok) throw new Error("Aggiornamento non riuscito")
-      setDescr(draft)
-      setEditing(false)
-      toast.success("Descrizione aggiornata")
-    } catch {
-      toast.error("Errore nel salvataggio della descrizione")
-    } finally {
-      setSavingDescr(false)
-    }
-  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -333,12 +425,8 @@ function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
           />
           {/* Sta accanto agli indirizzi e non in fondo alla scheda: e' cio' che
               decide se quegli indirizzi sono utilizzabili. */}
-          <DataField label="Consenso contatto">
-            <ConsensoEmailToggle
-              recordId={cliente.id}
-              endpoint="/api/clienti"
-              iniziale={cliente["Consenso e-mail"] === true}
-            />
+          <DataField label="Consenso e-mail">
+            {cliente["Consenso e-mail"] ? "Sì" : "No"}
           </DataField>
         </div>
         <div className="flex flex-col gap-4">
@@ -362,22 +450,15 @@ function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
         <span className="text-[11px] font-semibold uppercase tracking-wide text-navy">
           Indirizzo
         </span>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-foreground">
-          <IconMapPin size={14} stroke={1.8} className="text-muted-foreground" />
-          <span>{val(cliente["Via indirizzo postale"])}</span>
-          <span className="text-border">·</span>
-          <span>{val(cliente["Città indirizzo postale"])}</span>
-          <span className="text-border">·</span>
-          <span>{val(cliente["Provincia indirizzo postale"])}</span>
-          <span className="text-border">·</span>
-          <span>{val(cliente["Codice postale indirizzo"])}</span>
+        <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+          <DataField label="Via indirizzo postale">{val(cliente["Via indirizzo postale"])}</DataField>
+          <DataField label="Città indirizzo postale">{val(cliente["Città indirizzo postale"])}</DataField>
+          <DataField label="Provincia indirizzo postale">{val(cliente["Provincia indirizzo postale"])}</DataField>
+          <DataField label="Codice postale indirizzo">{val(cliente["Codice postale indirizzo"])}</DataField>
         </div>
         {/* Report Vito (1): Zona subito sotto l'indirizzo — prima stava in
             Iter burocratico, lontana dal resto dei dati di localizzazione. */}
-        <div className="flex items-center gap-1.5 text-[13px] text-foreground">
-          <span className="text-muted-foreground">Zona:</span>
-          <span>{val(cliente.Zona)}</span>
-        </div>
+        <DataField label="Zona">{val(cliente.Zona)}</DataField>
       </div>
 
       {/* Descrizione */}
@@ -385,55 +466,18 @@ function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
         <span className="text-[11px] font-semibold uppercase tracking-wide text-navy">
           Descrizione
         </span>
-        {editing ? (
-          <div className="flex flex-col gap-2 animate-in fade-in duration-150">
-            <Textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              rows={3}
-              autoFocus
-              className="bg-card text-[13px]"
-            />
-            <div className="flex justify-end gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={savingDescr}
-                onClick={() => {
-                  setDraft(descr)
-                  setEditing(false)
-                }}
-              >
-                Annulla
-              </Button>
-              <Button
-                size="sm"
-                className="bg-teal text-teal-foreground hover:bg-teal/90"
-                disabled={savingDescr}
-                onClick={handleSaveDescr}
-              >
-                {savingDescr ? "Salvataggio..." : "Salva"}
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setDraft(descr)
-              setEditing(true)
-            }}
-            className="w-full rounded-lg border border-border bg-secondary/40 p-3 text-left text-[13px] leading-relaxed text-foreground transition-colors duration-150 hover:bg-secondary"
-          >
-            {descr ? (
-              descr
-            ) : (
-              <span className="text-muted-foreground">
-                Nessuna descrizione. Clicca per aggiungere…
-              </span>
-            )}
-          </button>
-        )}
+        <InlineEditableValue
+          module="clienti"
+          field="descrizione"
+          label="Descrizione"
+          endpoint={`/api/clienti/${cliente.id}`}
+          patchKey="Descrizione"
+          value={cliente.Descrizione}
+          type="textarea"
+          emptyLabel="Nessuna descrizione"
+          className="w-full rounded-lg border border-border bg-secondary/40 p-3 text-left text-[13px] leading-relaxed"
+          valueClassName="whitespace-pre-wrap"
+        />
       </div>
     </div>
   )
@@ -450,6 +494,7 @@ function ImpiantoCard({
   icon: typeof IconSolarPanel
   rows: [string, string][]
 }) {
+  const cliente = useContext(ClienteInlineEditContext)
   const filled = rows.filter(([, v]) => v !== "—")
   if (filled.length === 0) return null
   return (
@@ -459,12 +504,27 @@ function ImpiantoCard({
         {title}
       </div>
       <dl className="flex flex-col gap-1.5">
-        {rows.map(([k, v]) => (
-          <div key={k} className="flex items-baseline justify-between gap-3">
-            <dt className="text-[11px] text-muted-foreground">{k}</dt>
-            <dd className="text-right text-[12px] font-medium text-foreground">{v}</dd>
-          </div>
-        ))}
+        {rows.map(([k, v]) => {
+          const edit = clienteInlineEdit(cliente, k)
+          return (
+            <div key={k} className="flex items-baseline justify-between gap-3">
+              <dt className="text-[11px] text-muted-foreground">{k}</dt>
+              <dd className="min-w-0 text-right text-[12px] font-medium text-foreground">
+                {edit ? (
+                  <InlineEditableValue
+                    label={k}
+                    {...edit}
+                    displayValue={v}
+                    className="justify-end"
+                    valueClassName="text-right"
+                  />
+                ) : (
+                  v
+                )}
+              </dd>
+            </div>
+          )
+        })}
       </dl>
     </div>
   )
@@ -1470,6 +1530,7 @@ export function ClienteDetailContent({ cliente }: { cliente: ClienteRecord }) {
   const vediNoteInterne = canAccessNoteInterne(permissions.snapshot.subject.ruoloCode)
 
   return (
+    <ClienteInlineEditContext.Provider value={cliente}>
     <div className="flex min-w-0 flex-1 flex-col gap-1">
       <RelatedNav vediNoteInterne={vediNoteInterne} customFields={cliente.customFields ?? []} />
 
@@ -1542,5 +1603,6 @@ export function ClienteDetailContent({ cliente }: { cliente: ClienteRecord }) {
         <Attivita cliente={cliente} />
       </Section>
     </div>
+    </ClienteInlineEditContext.Provider>
   )
 }

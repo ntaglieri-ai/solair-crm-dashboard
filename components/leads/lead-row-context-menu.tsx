@@ -74,7 +74,7 @@ export function LeadRowContextMenu({
   onDuplicate: (lead: Lead) => void
   onRefresh: () => void
 }) {
-  const { owners } = useTags()
+  const { owners, installers } = useTags()
   const permissions = usePermissions()
   const router = useRouter()
   const [tagOpen, setTagOpen] = useState(false)
@@ -410,6 +410,7 @@ export function LeadRowContextMenu({
           statoLead: statoLeadValues.map((item) => item.value),
           origineLead: origineLeadValues.map((item) => item.value),
           sedi: sedeValues.map((item) => item.value),
+          installers,
         })}
         onSaved={onRefresh}
       />

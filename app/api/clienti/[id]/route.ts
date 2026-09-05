@@ -5,6 +5,7 @@ import { requireApiRecord } from "@/lib/permissions/server"
 import { canAccessOwnedRecord } from "@/lib/permissions/data-scope"
 import { attoreDaPermessi, logAudit } from "@/lib/audit/log"
 import { campiModificati, descriviModifica, diffCampi, etichettaRecord } from "@/lib/audit/describe"
+import { CLIENTI_PATCH_FIELD_MAP, nonEditablePatchField } from "@/lib/permissions/patch-fields"
 
 export async function PATCH(
   request: Request,
@@ -16,6 +17,8 @@ export async function PATCH(
   const { id } = await params
   if (!await canAccessOwnedRecord(guard.permissions.snapshot, "clienti", "clienti", "clienti_proprietario_id", id)) return NextResponse.json({ error: "Cliente non trovato" }, { status: 404 })
   const patch = (await request.json()) as Partial<ClienteRecord>
+  const deniedField = nonEditablePatchField(guard.permissions, "clienti", patch as Record<string, unknown>, CLIENTI_PATCH_FIELD_MAP)
+  if (deniedField) return NextResponse.json({ error: `Campo non modificabile: ${deniedField}` }, { status: 403 })
   let saveError: string | null = null
   const updated = await updateClienteRecord(id, patch, (message) => {
     saveError = message

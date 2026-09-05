@@ -36,6 +36,7 @@ export const LEAD_RECORD_FIELDS = [
   { column: "consenso_contatto_whatsapp", type: "boolean", appField: "Consenso WhatsApp" },
   { column: "consenso_contatto_email", type: "boolean", appField: "Consenso e-mail" },
   { column: "data_sopralluogo", type: "timestamp", appField: "Data sopralluogo" },
+  { column: "installatore_sopralluogo_id", type: "text", appField: "Installatore - Incaricato sopralluogo" },
   { column: "tempo_conversione_lead", type: "text", appField: "Tempo di conversione Lead" },
   { column: "account_convertito_id", type: "text", appField: "Account convertito" },
   { column: "contatto_convertito", type: "text", appField: "Contatto convertito" },

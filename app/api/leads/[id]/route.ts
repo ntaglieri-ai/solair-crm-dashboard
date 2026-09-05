@@ -6,6 +6,7 @@ import { canAccessOwnedRecord } from "@/lib/permissions/data-scope"
 import { createClient } from "@/lib/supabase/server"
 import { attoreDaPermessi, logAudit } from "@/lib/audit/log"
 import { campiModificati, descriviModifica, diffCampi, etichettaRecord } from "@/lib/audit/describe"
+import { LEAD_PATCH_FIELD_MAP, nonEditablePatchField } from "@/lib/permissions/patch-fields"
 import {
   buildLeadUpdateActivityText,
   insertLeadUpdateActivity,
@@ -21,6 +22,8 @@ export async function PATCH(
   const { id } = await params
   if (!await canAccessOwnedRecord(guard.permissions.snapshot, "lead", "leads", "lead_proprietario_id", id)) return NextResponse.json({ error: "Lead non trovato" }, { status: 404 })
   const patch = (await request.json()) as Partial<Lead>
+  const deniedField = nonEditablePatchField(guard.permissions, "lead", patch as Record<string, unknown>, LEAD_PATCH_FIELD_MAP)
+  if (deniedField) return NextResponse.json({ error: `Campo non modificabile: ${deniedField}` }, { status: 403 })
   const updated = await updateLeadRecord(id, patch)
   if (!updated) {
     return NextResponse.json({ error: "Lead non trovato" }, { status: 404 })

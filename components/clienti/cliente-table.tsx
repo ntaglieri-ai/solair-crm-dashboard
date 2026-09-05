@@ -39,6 +39,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
+import { estimateColumnWidth } from "@/lib/shared/table-column-widths"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -92,7 +93,26 @@ function columnWidth(id: ClienteColumnId) {
 }
 
 function minimumColumnWidth(id: ClienteColumnId) {
-  return isCompactIconColumn(id) ? CLIENTE_COMPACT_ICON_COLUMN_WIDTH : 72
+  if (isCompactIconColumn(id)) return CLIENTE_COMPACT_ICON_COLUMN_WIDTH
+  if (id === "Tag") return 220
+  if (id === "Nome Clienti") return 240
+  if (id === "E-mail") return 220
+  if (id === "Clienti Proprietario" || id === "Installatore") return 180
+  if (id === "Ora modifica" || id === "Ora creazione") return 180
+  return 120
+}
+
+function maximumColumnWidth(id: ClienteColumnId) {
+  if (isCompactIconColumn(id)) return CLIENTE_COMPACT_ICON_COLUMN_WIDTH
+  if (id === "Tag") return 520
+  if (id === "Nome Clienti") return 560
+  if (id === "E-mail") return 420
+  if (id === "Clienti Proprietario" || id === "Installatore") return 380
+  return 520
+}
+
+function clampColumnWidth(id: ClienteColumnId, width: number) {
+  return Math.min(maximumColumnWidth(id), Math.max(minimumColumnWidth(id), width))
 }
 
 function ClienteHeaderLabel({ column }: { column: ClienteColumn }) {
@@ -334,13 +354,28 @@ export function ClienteTable({
     clienti.length > 0 && clienti.every((c) => selected.has(c.id))
   const colSpan = columns.length + 2
   const cellPad = CLIENTE_TABLE_DENSITY[density]
-  const resolvedWidths = useMemo(() => {
+  const autoWidths = useMemo(() => {
     const widths = {} as Record<ClienteColumnId, number>
     for (const column of columns) {
-      widths[column.id] = columnWidths[column.id] ?? columnWidth(column.id)
+      widths[column.id] = estimateColumnWidth({
+        label: column.label,
+        values: clienti.map((cliente) => cliente[column.id]),
+        min: minimumColumnWidth(column.id),
+        max: maximumColumnWidth(column.id),
+        padding: column.id === "Tag" ? 82 : 48,
+      })
     }
     return widths
-  }, [columns, columnWidths])
+  }, [clienti, columns])
+  const resolvedWidths = useMemo(() => {
+    const widths = { ...autoWidths }
+    for (const column of columns) {
+      if (columnWidths[column.id]) {
+        widths[column.id] = clampColumnWidth(column.id, columnWidths[column.id]!)
+      }
+    }
+    return widths
+  }, [autoWidths, columns, columnWidths])
   const tableWidth =
     44 +
     columns.reduce((sum, col) => sum + resolvedWidths[col.id], 0) +
@@ -357,13 +392,7 @@ export function ClienteTable({
     const onMove = (moveEvent: PointerEvent) => {
       onColumnWidthChange?.(
         column,
-        Math.min(
-          480,
-          Math.max(
-            minimumColumnWidth(column),
-            startWidth + moveEvent.clientX - startX,
-          ),
-        ),
+        clampColumnWidth(column, startWidth + moveEvent.clientX - startX),
       )
     }
     const onEnd = () => {
@@ -505,7 +534,7 @@ export function ClienteTable({
                     onPointerDown={(event) => startResize(event, col.id)}
                     onDoubleClick={(event) => {
                       event.stopPropagation()
-                      onColumnWidthChange?.(col.id, columnWidth(col.id))
+                      onColumnWidthChange?.(col.id, autoWidths[col.id] ?? columnWidth(col.id))
                     }}
                     className="absolute inset-y-0 right-0 z-10 w-2 cursor-col-resize touch-none before:absolute before:inset-y-2 before:left-1/2 before:w-px before:bg-teal/0 before:transition-colors hover:before:bg-teal"
                   />

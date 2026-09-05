@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { CalendarClock, Check, ExternalLink, LinkIcon, MoreHorizontal, Trash2, UserRound } from "lucide-react"
@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { type Compito, isCompitoScaduto } from "@/lib/mock-data"
 import { StatoBadge, PrioritaBadge, CompitoAvatar, correlatoHref } from "./compito-utils"
+import { estimateColumnWidth } from "@/lib/shared/table-column-widths"
 
 export type SortDir = "asc" | "desc"
 export type CompitoSortKey =
@@ -47,14 +48,19 @@ const COLUMNS: { key: CompitoSortKey; label: string; sortable: boolean }[] = [
   { key: "Priorità", label: "Priorità", sortable: true },
 ]
 
-const COLUMN_WIDTH: Record<CompitoSortKey, number> = {
-  Oggetto: 360,
-  "Proprietario del compito": 250,
-  "Nome contatto": 240,
-  Tag: 220,
-  "Data di scadenza": 190,
-  Stato: 170,
-  Priorità: 150,
+const COLUMN_WIDTH_BOUNDS: Record<CompitoSortKey, { min: number; max: number; padding?: number }> = {
+  Oggetto: { min: 360, max: 620, padding: 58 },
+  "Proprietario del compito": { min: 220, max: 380 },
+  "Nome contatto": { min: 220, max: 420 },
+  Tag: { min: 220, max: 420, padding: 74 },
+  "Data di scadenza": { min: 190, max: 230 },
+  Stato: { min: 170, max: 260, padding: 64 },
+  Priorità: { min: 150, max: 210, padding: 64 },
+}
+
+function compitoColumnValue(compito: Compito, column: CompitoSortKey) {
+  if (column === "Nome contatto") return compito["Nome contatto"] || "—"
+  return compito[column] ?? "—"
 }
 
 function CompitoMobileList({
@@ -234,8 +240,22 @@ export function CompitoTable({
   const [stuck, setStuck] = useState(false)
   const allSelected =
     compiti.length > 0 && compiti.every((c) => selected.has(c.id))
+  const columnWidths = useMemo(() => {
+    const widths = {} as Record<CompitoSortKey, number>
+    for (const column of COLUMNS) {
+      const bounds = COLUMN_WIDTH_BOUNDS[column.key]
+      widths[column.key] = estimateColumnWidth({
+        label: column.label,
+        values: compiti.map((compito) => compitoColumnValue(compito, column.key)),
+        min: bounds.min,
+        max: bounds.max,
+        padding: bounds.padding ?? 48,
+      })
+    }
+    return widths
+  }, [compiti])
   const tableWidth =
-    44 + COLUMNS.reduce((sum, col) => sum + COLUMN_WIDTH[col.key], 0) + 64
+    44 + COLUMNS.reduce((sum, col) => sum + columnWidths[col.key], 0) + 64
 
   return (
     <>
@@ -259,7 +279,7 @@ export function CompitoTable({
       <colgroup>
         <col style={{ width: 44 }} />
         {COLUMNS.map((column) => (
-          <col key={column.key} style={{ width: COLUMN_WIDTH[column.key] }} />
+          <col key={column.key} style={{ width: columnWidths[column.key] }} />
         ))}
         <col style={{ width: 64 }} />
       </colgroup>
@@ -285,9 +305,9 @@ export function CompitoTable({
                   col.sortable && "cursor-pointer select-none",
                 )}
                 style={{
-                  width: COLUMN_WIDTH[col.key],
-                  minWidth: COLUMN_WIDTH[col.key],
-                  maxWidth: COLUMN_WIDTH[col.key],
+                  width: columnWidths[col.key],
+                  minWidth: columnWidths[col.key],
+                  maxWidth: columnWidths[col.key],
                 }}
                 onClick={() => col.sortable && onSort(col.key)}
               >
@@ -347,15 +367,15 @@ export function CompitoTable({
                   <TableCell
                     className="border-r border-border/70"
                     style={{
-                      width: COLUMN_WIDTH.Oggetto,
-                      minWidth: COLUMN_WIDTH.Oggetto,
-                      maxWidth: COLUMN_WIDTH.Oggetto,
+                      width: columnWidths.Oggetto,
+                      minWidth: columnWidths.Oggetto,
+                      maxWidth: columnWidths.Oggetto,
                     }}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-2 overflow-hidden">
                       <span
                         className={cn(
-                          "truncate font-medium text-foreground",
+                          "min-w-0 truncate font-medium text-foreground",
                           completato && "text-muted-foreground line-through",
                         )}
                       >
@@ -381,12 +401,12 @@ export function CompitoTable({
                         <Link
                           href={correlatoHref(c["Correlato a"])}
                           onClick={(e) => e.stopPropagation()}
-                          className="text-xs text-info hover:underline"
+                          className="block max-w-full truncate text-xs text-info hover:underline"
                         >
                           {c["Correlato a"].nome}
                         </Link>
                       ) : (
-                        <span className="text-xs text-muted-foreground">
+                        <span className="block max-w-full truncate text-xs text-muted-foreground">
                           {c["Correlato a"].nome}
                         </span>
                       ))}
@@ -396,17 +416,17 @@ export function CompitoTable({
                   <TableCell
                     className="border-r border-border/70"
                     style={{
-                      width: COLUMN_WIDTH["Proprietario del compito"],
-                      minWidth: COLUMN_WIDTH["Proprietario del compito"],
-                      maxWidth: COLUMN_WIDTH["Proprietario del compito"],
+                      width: columnWidths["Proprietario del compito"],
+                      minWidth: columnWidths["Proprietario del compito"],
+                      maxWidth: columnWidths["Proprietario del compito"],
                     }}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-2 overflow-hidden">
                       <CompitoAvatar
                         nome={c["Proprietario del compito"]}
                         size={26}
                       />
-                      <span className="whitespace-nowrap text-sm text-foreground">
+                      <span className="min-w-0 truncate text-sm text-foreground">
                         {c["Proprietario del compito"]}
                       </span>
                     </div>
@@ -415,9 +435,9 @@ export function CompitoTable({
                   <TableCell
                     className="border-r border-border/70"
                     style={{
-                      width: COLUMN_WIDTH["Nome contatto"],
-                      minWidth: COLUMN_WIDTH["Nome contatto"],
-                      maxWidth: COLUMN_WIDTH["Nome contatto"],
+                      width: columnWidths["Nome contatto"],
+                      minWidth: columnWidths["Nome contatto"],
+                      maxWidth: columnWidths["Nome contatto"],
                     }}
                   >
                     <span className="block truncate text-sm font-medium text-foreground">
@@ -428,9 +448,9 @@ export function CompitoTable({
                   <TableCell
                     className="border-r border-border/70"
                     style={{
-                      width: COLUMN_WIDTH.Tag,
-                      minWidth: COLUMN_WIDTH.Tag,
-                      maxWidth: COLUMN_WIDTH.Tag,
+                      width: columnWidths.Tag,
+                      minWidth: columnWidths.Tag,
+                      maxWidth: columnWidths.Tag,
                     }}
                   >
                     {c.Tag ? (
@@ -446,9 +466,9 @@ export function CompitoTable({
                   <TableCell
                     className="border-r border-border/70"
                     style={{
-                      width: COLUMN_WIDTH["Data di scadenza"],
-                      minWidth: COLUMN_WIDTH["Data di scadenza"],
-                      maxWidth: COLUMN_WIDTH["Data di scadenza"],
+                      width: columnWidths["Data di scadenza"],
+                      minWidth: columnWidths["Data di scadenza"],
+                      maxWidth: columnWidths["Data di scadenza"],
                     }}
                   >
                     <span
@@ -467,9 +487,9 @@ export function CompitoTable({
                   <TableCell
                     className="border-r border-border/70"
                     style={{
-                      width: COLUMN_WIDTH.Stato,
-                      minWidth: COLUMN_WIDTH.Stato,
-                      maxWidth: COLUMN_WIDTH.Stato,
+                      width: columnWidths.Stato,
+                      minWidth: columnWidths.Stato,
+                      maxWidth: columnWidths.Stato,
                     }}
                   >
                     <StatoBadge stato={c.Stato} />
@@ -479,9 +499,9 @@ export function CompitoTable({
                   <TableCell
                     className="border-r border-border/70"
                     style={{
-                      width: COLUMN_WIDTH.Priorità,
-                      minWidth: COLUMN_WIDTH.Priorità,
-                      maxWidth: COLUMN_WIDTH.Priorità,
+                      width: columnWidths.Priorità,
+                      minWidth: columnWidths.Priorità,
+                      maxWidth: columnWidths.Priorità,
                     }}
                   >
                     <PrioritaBadge priorita={c.Priorità} />

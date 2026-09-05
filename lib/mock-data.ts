@@ -574,6 +574,7 @@ export interface Lead {
   "Residente in Sicilia": boolean
   "Social Lead ID": string | null
   "Data sopralluogo": string | null
+  InstallatoreSopralluogoId?: string | null
   "Installatore - Incaricato sopralluogo": string | null
   "Connesso a": string | null
   "Data/Ora": string

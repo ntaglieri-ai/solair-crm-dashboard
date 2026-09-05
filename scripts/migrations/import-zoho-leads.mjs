@@ -166,6 +166,8 @@ function sourceToLead(row, ownerIds, seenAt) {
       normalizeZohoId(row["Contatto convertito.id"]) || null,
     zoho_installatore_sopralluogo_id:
       normalizeZohoId(row["Installatore - Incaricato sopralluogo.id"]) || null,
+    zoho_installatore_sopralluogo_nome:
+      nullable(row["Installatore - Incaricato sopralluogo"]),
     zoho_connesso_a_id: normalizeZohoId(row["Connesso a.id"]) || null,
     zoho_modified_at: modifiedAt,
     zoho_last_seen_at: seenAt,

@@ -21,11 +21,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   type Compito,
   type CompitoNota,
+  PRIORITA_COMPITO_ORDER,
+  STATO_COMPITO_ORDER,
   formatCompitoNotaData,
   isCompitoScaduto,
 } from "@/lib/mock-data"
 import { CompitoDetailHeader } from "./compito-detail-header"
-import { StatoBadge, PrioritaBadge, CompitoAvatar, correlatoHref } from "./compito-utils"
+import { CompitoAvatar, correlatoHref } from "./compito-utils"
+import { InlineEditableValue } from "@/components/shared/inline-edit-field"
+import { option, withCurrentColumnOption } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 
 function InfoRow({
   icon: Icon,
@@ -53,6 +58,21 @@ export function CompitoDetailView({ compito }: { compito: Compito }) {
   const [menzioni, setMenzioni] = useState<NoteMentionDraft[]>([])
   const [notaSaving, setNotaSaving] = useState(false)
   const scaduto = isCompitoScaduto(compito)
+  const endpoint = `/api/compiti/${compito.id}`
+  const configuredStatoOptions = useColumnValueOptions(
+    "Compiti",
+    "stato",
+    STATO_COMPITO_ORDER.map((value) => option(value)),
+    { includeFallback: true },
+  ).options
+  const statoOptions = withCurrentColumnOption(configuredStatoOptions, compito.Stato)
+  const configuredPrioritaOptions = useColumnValueOptions(
+    "Compiti",
+    "priorita",
+    PRIORITA_COMPITO_ORDER.map((value) => option(value)),
+    { includeFallback: true },
+  ).options
+  const prioritaOptions = withCurrentColumnOption(configuredPrioritaOptions, compito.Priorità)
 
   const addNota = async () => {
     const testo = draft.trim()
@@ -155,9 +175,18 @@ export function CompitoDetailView({ compito }: { compito: Compito }) {
                   <h2 className="mb-2 text-sm font-semibold text-foreground">
                     Descrizione
                   </h2>
-                  <p className="text-pretty text-sm leading-relaxed text-muted-foreground">
-                    {compito.Descrizione || "Nessuna descrizione fornita."}
-                  </p>
+                  <InlineEditableValue
+                    module="compiti"
+                    field="descrizione"
+                    label="Descrizione"
+                    endpoint={endpoint}
+                    patchKey="Descrizione"
+                    value={compito.Descrizione}
+                    type="textarea"
+                    emptyLabel="Nessuna descrizione fornita."
+                    className="w-full rounded-lg border border-border bg-secondary/40 p-3 text-sm leading-relaxed"
+                    valueClassName="whitespace-pre-wrap"
+                  />
                 </section>
 
                 {/* Note */}
@@ -258,23 +287,50 @@ export function CompitoDetailView({ compito }: { compito: Compito }) {
               Dettagli
             </h2>
             <div className="divide-y divide-border">
+              <InfoRow icon={IconClock} label="Oggetto">
+                <InlineEditableValue module="compiti" field="oggetto" label="Oggetto" endpoint={endpoint} patchKey="Oggetto" value={compito.Oggetto} />
+              </InfoRow>
               <InfoRow icon={IconClock} label="Stato">
-                <StatoBadge stato={compito.Stato} />
+                <InlineEditableValue
+                  module="compiti"
+                  field="stato"
+                  label="Stato"
+                  endpoint={endpoint}
+                  patchKey="Stato"
+                  value={compito.Stato}
+                  type="select"
+                  options={statoOptions.map((item) => item.value)}
+                  optionLabels={Object.fromEntries(statoOptions.map((item) => [item.value, item.label]))}
+                />
               </InfoRow>
               <InfoRow icon={IconClock} label="Priorità">
-                <PrioritaBadge priorita={compito.Priorità} />
+                <InlineEditableValue
+                  module="compiti"
+                  field="priorita"
+                  label="Priorità"
+                  endpoint={endpoint}
+                  patchKey="Priorità"
+                  value={compito.Priorità}
+                  type="select"
+                  options={prioritaOptions.map((item) => item.value)}
+                  optionLabels={Object.fromEntries(prioritaOptions.map((item) => [item.value, item.label]))}
+                />
               </InfoRow>
               <InfoRow icon={IconCalendarEvent} label="Data di scadenza">
-                <span className={cn(scaduto && "font-medium text-destructive")}>
-                  {compito["Data di scadenza"]}
-                  {scaduto ? " · Scaduto" : ""}
-                </span>
+                <InlineEditableValue
+                  module="compiti"
+                  field="scadenza"
+                  label="Data di scadenza"
+                  endpoint={endpoint}
+                  patchKey="Data di scadenza"
+                  value={compito["Data di scadenza"]}
+                  valueClassName={cn(scaduto && "font-medium text-destructive")}
+                  displayValue={`${compito["Data di scadenza"]}${scaduto ? " · Scaduto" : ""}`}
+                />
               </InfoRow>
-              {compito.Promemoria && (
-                <InfoRow icon={IconBellRinging} label="Promemoria">
-                  {compito.Promemoria}
-                </InfoRow>
-              )}
+              <InfoRow icon={IconBellRinging} label="Promemoria">
+                <InlineEditableValue module="compiti" field="promemoria" label="Promemoria" endpoint={endpoint} patchKey="Promemoria" value={compito.Promemoria} />
+              </InfoRow>
               <InfoRow icon={IconUser} label="Proprietario">
                 <span className="inline-flex items-center gap-2">
                   <CompitoAvatar
@@ -285,7 +341,16 @@ export function CompitoDetailView({ compito }: { compito: Compito }) {
                 </span>
               </InfoRow>
               <InfoRow icon={IconMapPin} label="Sede">
-                {compito.Sede}
+                <InlineEditableValue module="compiti" field="sede" label="Sede" endpoint={endpoint} patchKey="Sede" value={compito.Sede} />
+              </InfoRow>
+              <InfoRow icon={IconUser} label="Nome contatto">
+                <InlineEditableValue module="compiti" field="nome_contatto" label="Nome contatto" endpoint={endpoint} patchKey="Nome contatto" value={compito["Nome contatto"]} />
+              </InfoRow>
+              <InfoRow icon={IconClock} label="Ripeti">
+                <InlineEditableValue module="compiti" field="ripeti" label="Ripeti" endpoint={endpoint} patchKey="Ripeti" value={compito.Ripeti} />
+              </InfoRow>
+              <InfoRow icon={IconLink} label="Tag">
+                <InlineEditableValue module="compiti" field="tag" label="Tag" endpoint={endpoint} patchKey="Tag" value={compito.Tag} />
               </InfoRow>
               {compito["Correlato a"] && (
                 <InfoRow icon={IconLink} label="Correlato a">

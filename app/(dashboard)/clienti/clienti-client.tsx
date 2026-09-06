@@ -9,6 +9,7 @@ import { usePermissions } from "@/lib/permissions/provider"
 import { useColumnPreferences } from "@/lib/shared/use-column-preferences"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { useIsMobile } from "@/hooks/use-is-mobile"
+import { useIsTouchDevice } from "@/hooks/use-is-touch-device"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -137,6 +138,7 @@ export function ClientiClient({
   const [page, setPage] = useState(1)
   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
   const isMobile = useIsMobile()
+  const isTouchDevice = useIsTouchDevice()
   const mobileDefaultApplied = useRef(false)
   useEffect(() => {
     if (isMobile && !mobileDefaultApplied.current && rowsPerPage === INITIAL_PAGE_SIZE) {
@@ -147,7 +149,11 @@ export function ClientiClient({
   // Blocca lo scroll della pagina su mobile: stesso fix già applicato a Lead,
   // resta scrollabile solo la lista clienti. Nessun effetto su desktop.
   useEffect(() => {
-    if (!isMobile) return
+    // Doppio-scroll: bug tocca solo dispositivi touch, non tutti i viewport
+    // stretti — un iPad orizzontale e' largo 1024-1366px (isMobile=false a
+    // 1023px) ma resta un touchscreen, quindi il bug torna se si controlla
+    // solo isMobile. Vedi hooks/use-is-touch-device.ts.
+    if (!isMobile && !isTouchDevice) return
     const html = document.documentElement
     const prevHtmlOverflow = html.style.overflow
     const prevBodyOverflow = document.body.style.overflow
@@ -160,7 +166,7 @@ export function ClientiClient({
       document.body.style.overflow = prevBodyOverflow
       document.body.style.overscrollBehavior = prevBodyOverscroll
     }
-  }, [isMobile])
+  }, [isMobile, isTouchDevice])
   // Altezza disponibile: calcolata solo su mobile, per non alterare in alcun
   // modo il comportamento (pagina intera che scrolla) su desktop.
   const rootRef = useRef<HTMLDivElement>(null)
@@ -212,7 +218,7 @@ export function ClientiClient({
     reorderColumns,
     preferencesLoaded,
   } = useColumnPreferences<ClienteColumnId>({
-    storageKey: `solair:clienti:view:${preferenceOwner}:v2`,
+    storageKey: `solair:clienti:view:${preferenceOwner}:v1`,
     validIds: new Set(CLIENTE_COLUMNS.map((c) => c.id)),
     defaultVisibleCols: DEFAULT_CLIENTE_COLUMNS,
     initialPreferences,
@@ -234,7 +240,7 @@ export function ClientiClient({
   useEffect(() => {
     if (!preferencesLoaded) return
     const preferences: ClienteViewPreferences = {
-      version: 2,
+      version: 1,
       owner: preferenceOwner,
       visibleCols,
       columnWidths,
@@ -269,9 +275,8 @@ export function ClientiClient({
       proprietario: filters.proprietario,
       installatore: filters.installatore,
       tag: filters.tag,
-      fields: visibleCols as unknown as string[],
     }),
-    [page, rowsPerPage, sortBy, sortDir, filters, visibleCols],
+    [page, rowsPerPage, sortBy, sortDir, filters],
   )
 
   const { data, isFetching } = useClientiQuery(params, {

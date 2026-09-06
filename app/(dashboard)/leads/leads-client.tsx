@@ -87,6 +87,7 @@ import {
 import { normalizeLeadColumnWidths } from "@/lib/leads/column-widths"
 import { leadsKeys } from "@/lib/leads/hooks"
 import { useIsMobile } from "@/hooks/use-is-mobile"
+import { useIsTouchDevice } from "@/hooks/use-is-touch-device"
 
 type StoredLeadPreferences = {
   visibleCols: LeadColumnId[]
@@ -177,6 +178,7 @@ export function LeadsClient({
   const pendingExport = useRef<(() => void) | null>(null)
   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
   const isMobile = useIsMobile()
+  const isTouchDevice = useIsTouchDevice()
   // Su mobile una pagina da 20 lead scrolla molto meno di una da 50: applichiamo
   // il default più contenuto solo finché l'utente non ha scelto altro lui stesso.
   const mobileDefaultApplied = useRef(false)
@@ -192,7 +194,11 @@ export function LeadsClient({
   // a volte muove quella sbagliata creando lo strappo tra header e lista.
   // Con l'esterno bloccato resta scrollabile solo la lista lead.
   useEffect(() => {
-    if (!isMobile) return
+    // Doppio-scroll: bug tocca solo dispositivi touch, non tutti i viewport
+    // stretti — un iPad orizzontale e' largo 1024-1366px (isMobile=false a
+    // 1023px) ma resta un touchscreen, quindi il bug torna se si controlla
+    // solo isMobile. Vedi hooks/use-is-touch-device.ts.
+    if (!isMobile && !isTouchDevice) return
     const html = document.documentElement
     const prevHtmlOverflow = html.style.overflow
     const prevBodyOverflow = document.body.style.overflow
@@ -205,7 +211,7 @@ export function LeadsClient({
       document.body.style.overflow = prevBodyOverflow
       document.body.style.overscrollBehavior = prevBodyOverscroll
     }
-  }, [isMobile])
+  }, [isMobile, isTouchDevice])
   const [page, setPage] = useState(1)
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
   const [convertTarget, setConvertTarget] = useState<Lead | null>(null)
@@ -391,11 +397,8 @@ export function LeadsClient({
   )
   useEffect(() => {
     const assignments = Object.fromEntries(
-      pageRows
-        .filter((lead) => Array.isArray(lead.tagIds))
-        .map((lead) => [lead.id, lead.tagIds ?? []]),
+      pageRows.map((lead) => [lead.id, lead.tagIds ?? []]),
     )
-    if (Object.keys(assignments).length === 0) return
     hydrateLeadTagIds(assignments)
   }, [hydrateLeadTagIds, pageRows])
   const total = data?.total ?? 0
@@ -820,19 +823,9 @@ export function LeadsClient({
             onQuickFiltersReset={handleReset}
             quickViews={QUICK_VIEWS.map((view) => ({
               label: view.label,
-              active:
-                (view.stato === "all"
-                  ? filters.stato.length === 0
-                  : filters.stato.length === 1 && filters.stato.includes(view.stato)) &&
-                (view.commerciale === "all"
-                  ? filters.commerciale.length === 0
-                  : filters.commerciale.length === 1 && filters.commerciale.includes(view.commerciale)),
+              active: filters.stato === view.stato && filters.commerciale === view.commerciale,
               onSelect: () =>
-                handleFilterChange({
-                  ...DEFAULT_FILTERS,
-                  stato: view.stato === "all" ? [] : [view.stato],
-                  commerciale: view.commerciale === "all" ? [] : [view.commerciale],
-                }),
+                handleFilterChange({ ...DEFAULT_FILTERS, stato: view.stato, commerciale: view.commerciale }),
             }))}
             trigger={({ onClick, count }) => (
               <Button
@@ -941,7 +934,6 @@ export function LeadsClient({
           onSort={handleSort}
           density={density}
           loading={isFetching && !data}
-          onOpenSettings={() => openSettings("colonne")}
         />
       </div>
 

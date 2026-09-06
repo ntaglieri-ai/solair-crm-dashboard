@@ -1,0 +1,471 @@
+diff --git a/app/(dashboard)/clienti/clienti-client.tsx b/app/(dashboard)/clienti/clienti-client.tsx
+index 0060d5c..cf05da0 100644
+--- a/app/(dashboard)/clienti/clienti-client.tsx
++++ b/app/(dashboard)/clienti/clienti-client.tsx
+@@ -9,6 +9,7 @@ import { usePermissions } from "@/lib/permissions/provider"
+ import { useColumnPreferences } from "@/lib/shared/use-column-preferences"
+ import { useClienteTags } from "@/lib/cliente-tag-store"
+ import { useIsMobile } from "@/hooks/use-is-mobile"
++import { useIsTouchDevice } from "@/hooks/use-is-touch-device"
+ import { Button } from "@/components/ui/button"
+ import {
+   Dialog,
+@@ -137,6 +138,7 @@ export function ClientiClient({
+   const [page, setPage] = useState(1)
+   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
+   const isMobile = useIsMobile()
++  const isTouchDevice = useIsTouchDevice()
+   const mobileDefaultApplied = useRef(false)
+   useEffect(() => {
+     if (isMobile && !mobileDefaultApplied.current && rowsPerPage === INITIAL_PAGE_SIZE) {
+@@ -147,7 +149,11 @@ export function ClientiClient({
+   // Blocca lo scroll della pagina su mobile: stesso fix già applicato a Lead,
+   // resta scrollabile solo la lista clienti. Nessun effetto su desktop.
+   useEffect(() => {
+-    if (!isMobile) return
++    // Doppio-scroll: bug tocca solo dispositivi touch, non tutti i viewport
++    // stretti — un iPad orizzontale e' largo 1024-1366px (isMobile=false a
++    // 1023px) ma resta un touchscreen, quindi il bug torna se si controlla
++    // solo isMobile. Vedi hooks/use-is-touch-device.ts.
++    if (!isMobile && !isTouchDevice) return
+     const html = document.documentElement
+     const prevHtmlOverflow = html.style.overflow
+     const prevBodyOverflow = document.body.style.overflow
+@@ -160,7 +166,7 @@ export function ClientiClient({
+       document.body.style.overflow = prevBodyOverflow
+       document.body.style.overscrollBehavior = prevBodyOverscroll
+     }
+-  }, [isMobile])
++  }, [isMobile, isTouchDevice])
+   // Altezza disponibile: calcolata solo su mobile, per non alterare in alcun
+   // modo il comportamento (pagina intera che scrolla) su desktop.
+   const rootRef = useRef<HTMLDivElement>(null)
+@@ -212,7 +218,7 @@ export function ClientiClient({
+     reorderColumns,
+     preferencesLoaded,
+   } = useColumnPreferences<ClienteColumnId>({
+-    storageKey: `solair:clienti:view:${preferenceOwner}:v2`,
++    storageKey: `solair:clienti:view:${preferenceOwner}:v1`,
+     validIds: new Set(CLIENTE_COLUMNS.map((c) => c.id)),
+     defaultVisibleCols: DEFAULT_CLIENTE_COLUMNS,
+     initialPreferences,
+@@ -234,7 +240,7 @@ export function ClientiClient({
+   useEffect(() => {
+     if (!preferencesLoaded) return
+     const preferences: ClienteViewPreferences = {
+-      version: 2,
++      version: 1,
+       owner: preferenceOwner,
+       visibleCols,
+       columnWidths,
+@@ -269,9 +275,8 @@ export function ClientiClient({
+       proprietario: filters.proprietario,
+       installatore: filters.installatore,
+       tag: filters.tag,
+-      fields: visibleCols as unknown as string[],
+     }),
+-    [page, rowsPerPage, sortBy, sortDir, filters, visibleCols],
++    [page, rowsPerPage, sortBy, sortDir, filters],
+   )
+ 
+   const { data, isFetching } = useClientiQuery(params, {
+diff --git a/app/(dashboard)/compiti/compiti-client.tsx b/app/(dashboard)/compiti/compiti-client.tsx
+index 2ba2333..b45e41d 100644
+--- a/app/(dashboard)/compiti/compiti-client.tsx
++++ b/app/(dashboard)/compiti/compiti-client.tsx
+@@ -19,6 +19,7 @@ import {
+ } from "@tabler/icons-react"
+ import { useQueryClient } from "@tanstack/react-query"
+ import { useIsMobile } from "@/hooks/use-is-mobile"
++import { useIsTouchDevice } from "@/hooks/use-is-touch-device"
+ import { Button } from "@/components/ui/button"
+ import {
+   Dialog,
+@@ -37,8 +38,7 @@ import {
+   SelectValue,
+ } from "@/components/ui/select"
+ import { cn } from "@/lib/utils"
+-import { hasFilterValues } from "@/lib/shared/filter-values"
+-import { type Compito, type StatoCompito, OPEN_TASK_STATI, STATO_COMPITO_ORDER } from "@/lib/mock-data"
++import { type Compito, type StatoCompito, OPEN_TASK_STATI } from "@/lib/mock-data"
+ import {
+   buildKanbanDoneParams,
+   buildKanbanOpenParams,
+@@ -78,8 +78,6 @@ import {
+   BulkOperationError,
+   type CompitoProprietario,
+ } from "@/lib/compiti/hooks"
+-import { option } from "@/lib/crm-settings/column-values"
+-import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
+ 
+ const ROWS_ITEMS: Record<string, string> = {
+   "10": "10 righe",
+@@ -127,6 +125,7 @@ export function CompitiClient({
+   const [page, setPage] = useState(1)
+   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
+   const isMobile = useIsMobile()
++  const isTouchDevice = useIsTouchDevice()
+   const mobileDefaultApplied = useRef(false)
+   useEffect(() => {
+     if (isMobile && !mobileDefaultApplied.current && rowsPerPage === INITIAL_PAGE_SIZE) {
+@@ -138,7 +137,11 @@ export function CompitiClient({
+   // Lead/Clienti/Installatori, resta scrollabile solo la lista. Nessun
+   // effetto su desktop.
+   useEffect(() => {
+-    if (!isMobile) return
++    // Doppio-scroll: bug tocca solo dispositivi touch, non tutti i viewport
++    // stretti — un iPad orizzontale e' largo 1024-1366px (isMobile=false a
++    // 1023px) ma resta un touchscreen, quindi il bug torna se si controlla
++    // solo isMobile. Vedi hooks/use-is-touch-device.ts.
++    if (!isMobile && !isTouchDevice) return
+     const html = document.documentElement
+     const prevHtmlOverflow = html.style.overflow
+     const prevBodyOverflow = document.body.style.overflow
+@@ -151,7 +154,7 @@ export function CompitiClient({
+       document.body.style.overflow = prevBodyOverflow
+       document.body.style.overscrollBehavior = prevBodyOverscroll
+     }
+-  }, [isMobile])
++  }, [isMobile, isTouchDevice])
+   // Altezza disponibile: calcolata solo su mobile, per non alterare in alcun
+   // modo il comportamento (pagina intera che scrolla) su desktop.
+   const rootRef = useRef<HTMLDivElement>(null)
+@@ -192,23 +195,6 @@ export function CompitiClient({
+   const [settingsOpen, setSettingsOpen] = useState(false)
+   const [settingsSection, setSettingsSection] =
+     useState<CompitoSettingsSectionId>("stati")
+-  const statoOptions = useColumnValueOptions(
+-    "Compiti",
+-    "stato",
+-    STATO_COMPITO_ORDER.map((s) => option(s)),
+-    { includeFallback: true },
+-  ).options
+-  const kanbanStati = useMemo(
+-    () => statoOptions.map((item) => item.value),
+-    [statoOptions],
+-  )
+-  const openTaskStati = useMemo(
+-    () => {
+-      const values = kanbanStati.filter((stato) => stato !== "Completato")
+-      return values.length > 0 ? values : OPEN_TASK_STATI
+-    },
+-    [kanbanStati],
+-  )
+ 
+   // --- Build server-side query params ---
+   const debouncedSearch = useDebouncedValue(filters.search, 300)
+@@ -238,8 +224,7 @@ export function CompitiClient({
+   // --- Query dedicate alla kanban, indipendenti dalla paginazione della lista.
+   // La board mostra sempre i compiti aperti più urgenti (fino a 200) e le
+   // chiusure più recenti, applicando i filtri della barra (ricerca, priorità,
+-  // proprietario, sede, date). Gli stati arrivano dai valori configurati,
+-  // con fallback sui valori storici se la configurazione e' vuota.
++  // proprietario, sede, date). Gli stati sono fissati per colonna.
+   const kanbanFilters = useMemo(
+     () => ({
+       search: debouncedSearch,
+@@ -253,8 +238,8 @@ export function CompitiClient({
+     [debouncedSearch, filters],
+   )
+   const kanbanOpenParams = useMemo(
+-    () => buildKanbanOpenParams(kanbanFilters, [...openTaskStati]),
+-    [kanbanFilters, openTaskStati],
++    () => buildKanbanOpenParams(kanbanFilters, [...OPEN_TASK_STATI]),
++    [kanbanFilters],
+   )
+   const kanbanDoneParams = useMemo(
+     () => buildKanbanDoneParams(kanbanFilters),
+@@ -289,18 +274,17 @@ export function CompitiClient({
+   const rangeStart = total === 0 ? 0 : (page - 1) * rowsPerPage + 1
+   const rangeEnd = Math.min(page * rowsPerPage, total)
+   const hasOpenStateFilter =
+-    filters.stati.length === openTaskStati.length &&
+-    openTaskStati.every((stato) => filters.stati.includes(stato))
++    filters.stati.length === OPEN_TASK_STATI.length &&
++    OPEN_TASK_STATI.every((stato) => filters.stati.includes(stato))
+   const isOverdueFilterActive = hasOpenStateFilter && filters.overdue
+-  const isHighPriorityFilterActive =
+-    filters.priorita.length === 1 && filters.priorita.includes("Alto")
++  const isHighPriorityFilterActive = filters.priorita === "Alto"
+   const isOpenFilterActive = hasOpenStateFilter && !filters.overdue
+   const hasActiveFilters =
+     filters.search.trim().length > 0 ||
+     filters.stati.length > 0 ||
+-    hasFilterValues(filters.priorita) ||
+-    hasFilterValues(filters.proprietario) ||
+-    hasFilterValues(filters.sede) ||
++    filters.priorita !== "all" ||
++    filters.proprietario !== "all" ||
++    filters.sede !== "all" ||
+     Boolean(filters.scadenzaDa) ||
+     Boolean(filters.scadenzaA) ||
+     filters.overdue
+@@ -332,20 +316,20 @@ export function CompitiClient({
+ 
+   const showOverdueTasks = () => {
+     applyQuickFilter({
+-      stati: openTaskStati,
++      stati: OPEN_TASK_STATI,
+       overdue: true,
+     })
+   }
+ 
+   const showHighPriorityTasks = () => {
+     applyQuickFilter({
+-      priorita: ["Alto"],
++      priorita: "Alto",
+     })
+   }
+ 
+   const showOpenTasks = () => {
+     applyQuickFilter({
+-      stati: openTaskStati,
++      stati: OPEN_TASK_STATI,
+     })
+   }
+ 
+@@ -804,7 +788,7 @@ export function CompitiClient({
+               i filtri per vedere tutto.
+             </div>
+           )}
+-          <CompitoKanban compiti={kanbanRows} stati={kanbanStati} onMove={handleMove} />
++          <CompitoKanban compiti={kanbanRows} onMove={handleMove} />
+         </>
+       ) : null}
+ 
+diff --git a/app/(dashboard)/installatori/installatori-client.tsx b/app/(dashboard)/installatori/installatori-client.tsx
+index df8f2d4..85d3640 100644
+--- a/app/(dashboard)/installatori/installatori-client.tsx
++++ b/app/(dashboard)/installatori/installatori-client.tsx
+@@ -14,6 +14,7 @@ import {
+ import { IconSettings } from "@tabler/icons-react"
+ import { useQueryClient } from "@tanstack/react-query"
+ import { useIsMobile } from "@/hooks/use-is-mobile"
++import { useIsTouchDevice } from "@/hooks/use-is-touch-device"
+ import { Button } from "@/components/ui/button"
+ import {
+   Dialog,
+@@ -32,7 +33,6 @@ import {
+   SelectValue,
+ } from "@/components/ui/select"
+ import { cn } from "@/lib/utils"
+-import { hasFilterValues } from "@/lib/shared/filter-values"
+ import type { InstallatoreRecord } from "@/lib/installatori/repository"
+ import {
+   InstallatoreSearchInput,
+@@ -97,6 +97,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
+   const [page, setPage] = useState(1)
+   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
+   const isMobile = useIsMobile()
++  const isTouchDevice = useIsTouchDevice()
+   const mobileDefaultApplied = useRef(false)
+   useEffect(() => {
+     if (isMobile && !mobileDefaultApplied.current && rowsPerPage === INITIAL_PAGE_SIZE) {
+@@ -107,7 +108,11 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
+   // Blocca lo scroll della pagina su mobile: stesso fix già applicato a
+   // Lead/Clienti, resta scrollabile solo la lista. Nessun effetto su desktop.
+   useEffect(() => {
+-    if (!isMobile) return
++    // Doppio-scroll: bug tocca solo dispositivi touch, non tutti i viewport
++    // stretti — un iPad orizzontale e' largo 1024-1366px (isMobile=false a
++    // 1023px) ma resta un touchscreen, quindi il bug torna se si controlla
++    // solo isMobile. Vedi hooks/use-is-touch-device.ts.
++    if (!isMobile && !isTouchDevice) return
+     const html = document.documentElement
+     const prevHtmlOverflow = html.style.overflow
+     const prevBodyOverflow = document.body.style.overflow
+@@ -120,7 +125,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
+       document.body.style.overflow = prevBodyOverflow
+       document.body.style.overscrollBehavior = prevBodyOverscroll
+     }
+-  }, [isMobile])
++  }, [isMobile, isTouchDevice])
+   // Altezza disponibile: calcolata solo su mobile, per non alterare in alcun
+   // modo il comportamento (pagina intera che scrolla) su desktop.
+   const rootRef = useRef<HTMLDivElement>(null)
+@@ -187,12 +192,12 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
+ 
+   const hasActiveFilters =
+     filters.search.trim().length > 0 ||
+-    hasFilterValues(filters.proprietario) ||
+-    hasFilterValues(filters.tag) ||
+-    hasFilterValues(filters.stato)
++    filters.proprietario !== "all" ||
++    filters.tag !== "all" ||
++    filters.stato !== "all"
+ 
+-  const isAttivoFilterActive = filters.stato.length === 1 && filters.stato.includes("attivo")
+-  const isNonAttivoFilterActive = filters.stato.length === 1 && filters.stato.includes("non_attivo")
++  const isAttivoFilterActive = filters.stato === "attivo"
++  const isNonAttivoFilterActive = filters.stato === "non_attivo"
+ 
+   const deleteSingle = useDeleteInstallatore()
+   const deleteBulk = useDeleteInstallatori()
+@@ -391,7 +396,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
+ 
+         <button
+           type="button"
+-          onClick={() => applyQuickFilter({ stato: ["attivo"] })}
++          onClick={() => applyQuickFilter({ stato: "attivo" })}
+           className={cn(
+             "rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400",
+             isAttivoFilterActive && "ring-2 ring-emerald-300",
+@@ -411,7 +416,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
+ 
+         <button
+           type="button"
+-          onClick={() => applyQuickFilter({ stato: ["non_attivo"] })}
++          onClick={() => applyQuickFilter({ stato: "non_attivo" })}
+           className={cn(
+             "rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400",
+             isNonAttivoFilterActive && "ring-2 ring-slate-300",
+diff --git a/app/(dashboard)/leads/leads-client.tsx b/app/(dashboard)/leads/leads-client.tsx
+index 0df4f90..febccc8 100644
+--- a/app/(dashboard)/leads/leads-client.tsx
++++ b/app/(dashboard)/leads/leads-client.tsx
+@@ -87,6 +87,7 @@ import {
+ import { normalizeLeadColumnWidths } from "@/lib/leads/column-widths"
+ import { leadsKeys } from "@/lib/leads/hooks"
+ import { useIsMobile } from "@/hooks/use-is-mobile"
++import { useIsTouchDevice } from "@/hooks/use-is-touch-device"
+ 
+ type StoredLeadPreferences = {
+   visibleCols: LeadColumnId[]
+@@ -177,6 +178,7 @@ export function LeadsClient({
+   const pendingExport = useRef<(() => void) | null>(null)
+   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
+   const isMobile = useIsMobile()
++  const isTouchDevice = useIsTouchDevice()
+   // Su mobile una pagina da 20 lead scrolla molto meno di una da 50: applichiamo
+   // il default più contenuto solo finché l'utente non ha scelto altro lui stesso.
+   const mobileDefaultApplied = useRef(false)
+@@ -192,7 +194,11 @@ export function LeadsClient({
+   // a volte muove quella sbagliata creando lo strappo tra header e lista.
+   // Con l'esterno bloccato resta scrollabile solo la lista lead.
+   useEffect(() => {
+-    if (!isMobile) return
++    // Doppio-scroll: bug tocca solo dispositivi touch, non tutti i viewport
++    // stretti — un iPad orizzontale e' largo 1024-1366px (isMobile=false a
++    // 1023px) ma resta un touchscreen, quindi il bug torna se si controlla
++    // solo isMobile. Vedi hooks/use-is-touch-device.ts.
++    if (!isMobile && !isTouchDevice) return
+     const html = document.documentElement
+     const prevHtmlOverflow = html.style.overflow
+     const prevBodyOverflow = document.body.style.overflow
+@@ -205,7 +211,7 @@ export function LeadsClient({
+       document.body.style.overflow = prevBodyOverflow
+       document.body.style.overscrollBehavior = prevBodyOverscroll
+     }
+-  }, [isMobile])
++  }, [isMobile, isTouchDevice])
+   const [page, setPage] = useState(1)
+   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
+   const [convertTarget, setConvertTarget] = useState<Lead | null>(null)
+@@ -391,11 +397,8 @@ export function LeadsClient({
+   )
+   useEffect(() => {
+     const assignments = Object.fromEntries(
+-      pageRows
+-        .filter((lead) => Array.isArray(lead.tagIds))
+-        .map((lead) => [lead.id, lead.tagIds ?? []]),
++      pageRows.map((lead) => [lead.id, lead.tagIds ?? []]),
+     )
+-    if (Object.keys(assignments).length === 0) return
+     hydrateLeadTagIds(assignments)
+   }, [hydrateLeadTagIds, pageRows])
+   const total = data?.total ?? 0
+@@ -820,19 +823,9 @@ export function LeadsClient({
+             onQuickFiltersReset={handleReset}
+             quickViews={QUICK_VIEWS.map((view) => ({
+               label: view.label,
+-              active:
+-                (view.stato === "all"
+-                  ? filters.stato.length === 0
+-                  : filters.stato.length === 1 && filters.stato.includes(view.stato)) &&
+-                (view.commerciale === "all"
+-                  ? filters.commerciale.length === 0
+-                  : filters.commerciale.length === 1 && filters.commerciale.includes(view.commerciale)),
++              active: filters.stato === view.stato && filters.commerciale === view.commerciale,
+               onSelect: () =>
+-                handleFilterChange({
+-                  ...DEFAULT_FILTERS,
+-                  stato: view.stato === "all" ? [] : [view.stato],
+-                  commerciale: view.commerciale === "all" ? [] : [view.commerciale],
+-                }),
++                handleFilterChange({ ...DEFAULT_FILTERS, stato: view.stato, commerciale: view.commerciale }),
+             }))}
+             trigger={({ onClick, count }) => (
+               <Button
+@@ -941,7 +934,6 @@ export function LeadsClient({
+           onSort={handleSort}
+           density={density}
+           loading={isFetching && !data}
+-          onOpenSettings={() => openSettings("colonne")}
+         />
+       </div>
+ 
+diff --git a/app/(dashboard)/scadenze/scadenze-client.tsx b/app/(dashboard)/scadenze/scadenze-client.tsx
+index e69c0df..dbaa004 100644
+--- a/app/(dashboard)/scadenze/scadenze-client.tsx
++++ b/app/(dashboard)/scadenze/scadenze-client.tsx
+@@ -14,6 +14,7 @@ import {
+ import { IconSettings } from "@tabler/icons-react"
+ import { useQueryClient } from "@tanstack/react-query"
+ import { useIsMobile } from "@/hooks/use-is-mobile"
++import { useIsTouchDevice } from "@/hooks/use-is-touch-device"
+ import { Button } from "@/components/ui/button"
+ import {
+   Dialog,
+@@ -32,7 +33,6 @@ import {
+   SelectValue,
+ } from "@/components/ui/select"
+ import { cn } from "@/lib/utils"
+-import { hasFilterValues } from "@/lib/shared/filter-values"
+ import type { ScadenzaRecord } from "@/lib/scadenze/repository"
+ import {
+   ScadenzaSearchInput,
+@@ -100,6 +100,7 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps)
+   const [page, setPage] = useState(1)
+   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
+   const isMobile = useIsMobile()
++  const isTouchDevice = useIsTouchDevice()
+   const mobileDefaultApplied = useRef(false)
+   useEffect(() => {
+     if (isMobile && !mobileDefaultApplied.current && rowsPerPage === INITIAL_PAGE_SIZE) {
+@@ -111,7 +112,11 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps)
+   // Lead/Clienti/Installatori/Compiti, resta scrollabile solo la lista.
+   // Nessun effetto su desktop.
+   useEffect(() => {
+-    if (!isMobile) return
++    // Doppio-scroll: bug tocca solo dispositivi touch, non tutti i viewport
++    // stretti — un iPad orizzontale e' largo 1024-1366px (isMobile=false a
++    // 1023px) ma resta un touchscreen, quindi il bug torna se si controlla
++    // solo isMobile. Vedi hooks/use-is-touch-device.ts.
++    if (!isMobile && !isTouchDevice) return
+     const html = document.documentElement
+     const prevHtmlOverflow = html.style.overflow
+     const prevBodyOverflow = document.body.style.overflow
+@@ -124,7 +129,7 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps)
+       document.body.style.overflow = prevBodyOverflow
+       document.body.style.overscrollBehavior = prevBodyOverscroll
+     }
+-  }, [isMobile])
++  }, [isMobile, isTouchDevice])
+   // Altezza disponibile: calcolata solo su mobile, per non alterare in alcun
+   // modo il comportamento (pagina intera che scrolla) su desktop.
+   const rootRef = useRef<HTMLDivElement>(null)
+@@ -191,11 +196,11 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps)
+ 
+   const hasActiveFilters =
+     filters.search.trim().length > 0 ||
+-    hasFilterValues(filters.proprietario) ||
+-    hasFilterValues(filters.tag) ||
++    filters.proprietario !== "all" ||
++    filters.tag !== "all" ||
+     Boolean(filters.scadenzaDa) ||
+     Boolean(filters.scadenzaA) ||
+-    hasFilterValues(filters.collegamento)
++    filters.collegamento !== "all"
+ 
+   const isOverdueFilterActive = filters.scadenzaDa === "" && filters.scadenzaA === todayISO()
+   const isNext7FilterActive =

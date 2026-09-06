@@ -14,6 +14,7 @@ import {
 import { IconSettings } from "@tabler/icons-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useIsMobile } from "@/hooks/use-is-mobile"
+import { useIsTouchDevice } from "@/hooks/use-is-touch-device"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -32,7 +33,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { hasFilterValues } from "@/lib/shared/filter-values"
 import type { InstallatoreRecord } from "@/lib/installatori/repository"
 import {
   InstallatoreSearchInput,
@@ -97,6 +97,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
   const [page, setPage] = useState(1)
   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
   const isMobile = useIsMobile()
+  const isTouchDevice = useIsTouchDevice()
   const mobileDefaultApplied = useRef(false)
   useEffect(() => {
     if (isMobile && !mobileDefaultApplied.current && rowsPerPage === INITIAL_PAGE_SIZE) {
@@ -107,7 +108,11 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
   // Blocca lo scroll della pagina su mobile: stesso fix già applicato a
   // Lead/Clienti, resta scrollabile solo la lista. Nessun effetto su desktop.
   useEffect(() => {
-    if (!isMobile) return
+    // Doppio-scroll: bug tocca solo dispositivi touch, non tutti i viewport
+    // stretti — un iPad orizzontale e' largo 1024-1366px (isMobile=false a
+    // 1023px) ma resta un touchscreen, quindi il bug torna se si controlla
+    // solo isMobile. Vedi hooks/use-is-touch-device.ts.
+    if (!isMobile && !isTouchDevice) return
     const html = document.documentElement
     const prevHtmlOverflow = html.style.overflow
     const prevBodyOverflow = document.body.style.overflow
@@ -120,7 +125,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
       document.body.style.overflow = prevBodyOverflow
       document.body.style.overscrollBehavior = prevBodyOverscroll
     }
-  }, [isMobile])
+  }, [isMobile, isTouchDevice])
   // Altezza disponibile: calcolata solo su mobile, per non alterare in alcun
   // modo il comportamento (pagina intera che scrolla) su desktop.
   const rootRef = useRef<HTMLDivElement>(null)
@@ -187,12 +192,12 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
 
   const hasActiveFilters =
     filters.search.trim().length > 0 ||
-    hasFilterValues(filters.proprietario) ||
-    hasFilterValues(filters.tag) ||
-    hasFilterValues(filters.stato)
+    filters.proprietario !== "all" ||
+    filters.tag !== "all" ||
+    filters.stato !== "all"
 
-  const isAttivoFilterActive = filters.stato.length === 1 && filters.stato.includes("attivo")
-  const isNonAttivoFilterActive = filters.stato.length === 1 && filters.stato.includes("non_attivo")
+  const isAttivoFilterActive = filters.stato === "attivo"
+  const isNonAttivoFilterActive = filters.stato === "non_attivo"
 
   const deleteSingle = useDeleteInstallatore()
   const deleteBulk = useDeleteInstallatori()
@@ -391,7 +396,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
 
         <button
           type="button"
-          onClick={() => applyQuickFilter({ stato: ["attivo"] })}
+          onClick={() => applyQuickFilter({ stato: "attivo" })}
           className={cn(
             "rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400",
             isAttivoFilterActive && "ring-2 ring-emerald-300",
@@ -411,7 +416,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
 
         <button
           type="button"
-          onClick={() => applyQuickFilter({ stato: ["non_attivo"] })}
+          onClick={() => applyQuickFilter({ stato: "non_attivo" })}
           className={cn(
             "rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400",
             isNonAttivoFilterActive && "ring-2 ring-slate-300",

@@ -103,12 +103,18 @@ const ROWS_ITEMS: Record<string, string> = {
 }
 
 /** Viste rapide del drawer Filtri (Tutti/Da contattare/…). */
-const QUICK_VIEWS: { label: string; stato: string; commerciale: string }[] = [
-  { label: "Tutti", stato: "all", commerciale: "all" },
-  { label: "Da contattare", stato: "Non contattato", commerciale: "all" },
-  { label: "Da richiamare", stato: "Tentato di contattare", commerciale: "all" },
-  { label: "Non assegnati", stato: "all", commerciale: "__unassigned__" },
+const QUICK_VIEWS: { label: string; stato: string[]; commerciale: string[] }[] = [
+  { label: "Tutti", stato: [], commerciale: [] },
+  { label: "Da contattare", stato: ["Non contattato"], commerciale: [] },
+  { label: "Da richiamare", stato: ["Tentato di contattare"], commerciale: [] },
+  { label: "Non assegnati", stato: [], commerciale: ["__unassigned__"] },
 ]
+
+function sameStringSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  const setB = new Set(b)
+  return a.every((v) => setB.has(v))
+}
 
 // Simula il download di un file CSV a partire dalle righe passate
 function downloadLeadsCsv(rows: LeadListItem[], filename: string) {
@@ -823,7 +829,11 @@ export function LeadsClient({
             onQuickFiltersReset={handleReset}
             quickViews={QUICK_VIEWS.map((view) => ({
               label: view.label,
-              active: filters.stato === view.stato && filters.commerciale === view.commerciale,
+              // Confronto per contenuto, non per riferimento: due array con
+              // gli stessi elementi non sono "===" in JS.
+              active:
+                sameStringSet(filters.stato, view.stato) &&
+                sameStringSet(filters.commerciale, view.commerciale),
               onSelect: () =>
                 handleFilterChange({ ...DEFAULT_FILTERS, stato: view.stato, commerciale: view.commerciale }),
             }))}

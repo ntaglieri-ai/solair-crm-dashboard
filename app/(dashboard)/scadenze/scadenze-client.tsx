@@ -196,11 +196,11 @@ export function ScadenzeClient({ initialSp, initialData }: ScadenzeClientProps) 
 
   const hasActiveFilters =
     filters.search.trim().length > 0 ||
-    filters.proprietario !== "all" ||
-    filters.tag !== "all" ||
+    filters.proprietario.length > 0 ||
+    filters.tag.length > 0 ||
     Boolean(filters.scadenzaDa) ||
     Boolean(filters.scadenzaA) ||
-    filters.collegamento !== "all"
+    filters.collegamento.length > 0
 
   const isOverdueFilterActive = filters.scadenzaDa === "" && filters.scadenzaA === todayISO()
   const isNext7FilterActive =

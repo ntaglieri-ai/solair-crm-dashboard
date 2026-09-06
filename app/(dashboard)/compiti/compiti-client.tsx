@@ -277,14 +277,15 @@ export function CompitiClient({
     filters.stati.length === OPEN_TASK_STATI.length &&
     OPEN_TASK_STATI.every((stato) => filters.stati.includes(stato))
   const isOverdueFilterActive = hasOpenStateFilter && filters.overdue
-  const isHighPriorityFilterActive = filters.priorita === "Alto"
+  const isHighPriorityFilterActive =
+    filters.priorita.length === 1 && filters.priorita[0] === "Alto"
   const isOpenFilterActive = hasOpenStateFilter && !filters.overdue
   const hasActiveFilters =
     filters.search.trim().length > 0 ||
     filters.stati.length > 0 ||
-    filters.priorita !== "all" ||
-    filters.proprietario !== "all" ||
-    filters.sede !== "all" ||
+    filters.priorita.length > 0 ||
+    filters.proprietario.length > 0 ||
+    filters.sede.length > 0 ||
     Boolean(filters.scadenzaDa) ||
     Boolean(filters.scadenzaA) ||
     filters.overdue
@@ -323,7 +324,7 @@ export function CompitiClient({
 
   const showHighPriorityTasks = () => {
     applyQuickFilter({
-      priorita: "Alto",
+      priorita: ["Alto"],
     })
   }
 

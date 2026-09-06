@@ -87,7 +87,6 @@ import {
 import { normalizeLeadColumnWidths } from "@/lib/leads/column-widths"
 import { leadsKeys } from "@/lib/leads/hooks"
 import { useIsMobile } from "@/hooks/use-is-mobile"
-import { useIsTouchDevice } from "@/hooks/use-is-touch-device"
 
 type StoredLeadPreferences = {
   visibleCols: LeadColumnId[]
@@ -184,7 +183,6 @@ export function LeadsClient({
   const pendingExport = useRef<(() => void) | null>(null)
   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
   const isMobile = useIsMobile()
-  const isTouchDevice = useIsTouchDevice()
   // Su mobile una pagina da 20 lead scrolla molto meno di una da 50: applichiamo
   // il default più contenuto solo finché l'utente non ha scelto altro lui stesso.
   const mobileDefaultApplied = useRef(false)
@@ -200,11 +198,7 @@ export function LeadsClient({
   // a volte muove quella sbagliata creando lo strappo tra header e lista.
   // Con l'esterno bloccato resta scrollabile solo la lista lead.
   useEffect(() => {
-    // Doppio-scroll: bug tocca solo dispositivi touch, non tutti i viewport
-    // stretti — un iPad orizzontale e' largo 1024-1366px (isMobile=false a
-    // 1023px) ma resta un touchscreen, quindi il bug torna se si controlla
-    // solo isMobile. Vedi hooks/use-is-touch-device.ts.
-    if (!isMobile && !isTouchDevice) return
+    if (!isMobile) return
     const html = document.documentElement
     const prevHtmlOverflow = html.style.overflow
     const prevBodyOverflow = document.body.style.overflow
@@ -217,7 +211,7 @@ export function LeadsClient({
       document.body.style.overflow = prevBodyOverflow
       document.body.style.overscrollBehavior = prevBodyOverscroll
     }
-  }, [isMobile, isTouchDevice])
+  }, [isMobile])
   const [page, setPage] = useState(1)
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
   const [convertTarget, setConvertTarget] = useState<Lead | null>(null)

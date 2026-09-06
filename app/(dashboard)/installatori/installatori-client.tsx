@@ -14,7 +14,6 @@ import {
 import { IconSettings } from "@tabler/icons-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useIsMobile } from "@/hooks/use-is-mobile"
-import { useIsTouchDevice } from "@/hooks/use-is-touch-device"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -97,7 +96,6 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
   const [page, setPage] = useState(1)
   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
   const isMobile = useIsMobile()
-  const isTouchDevice = useIsTouchDevice()
   const mobileDefaultApplied = useRef(false)
   useEffect(() => {
     if (isMobile && !mobileDefaultApplied.current && rowsPerPage === INITIAL_PAGE_SIZE) {
@@ -108,11 +106,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
   // Blocca lo scroll della pagina su mobile: stesso fix già applicato a
   // Lead/Clienti, resta scrollabile solo la lista. Nessun effetto su desktop.
   useEffect(() => {
-    // Doppio-scroll: bug tocca solo dispositivi touch, non tutti i viewport
-    // stretti — un iPad orizzontale e' largo 1024-1366px (isMobile=false a
-    // 1023px) ma resta un touchscreen, quindi il bug torna se si controlla
-    // solo isMobile. Vedi hooks/use-is-touch-device.ts.
-    if (!isMobile && !isTouchDevice) return
+    if (!isMobile) return
     const html = document.documentElement
     const prevHtmlOverflow = html.style.overflow
     const prevBodyOverflow = document.body.style.overflow
@@ -125,7 +119,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
       document.body.style.overflow = prevBodyOverflow
       document.body.style.overscrollBehavior = prevBodyOverscroll
     }
-  }, [isMobile, isTouchDevice])
+  }, [isMobile])
   // Altezza disponibile: calcolata solo su mobile, per non alterare in alcun
   // modo il comportamento (pagina intera che scrolla) su desktop.
   const rootRef = useRef<HTMLDivElement>(null)

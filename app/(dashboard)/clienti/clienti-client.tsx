@@ -275,8 +275,14 @@ export function ClientiClient({
       proprietario: filters.proprietario,
       installatore: filters.installatore,
       tag: filters.tag,
+      // Colonne richieste al server = quelle davvero visibili in tabella:
+      // e' l'ottimizzazione query (fetch solo cio' che serve, non tutto),
+      // non va rotta passando [] a prescindere — altrimenti chi ha
+      // personalizzato le colonne extra da "Gestisci colonne" riceverebbe
+      // dal server solo il set di default, con celle vuote per quelle in piu'.
+      fields: visibleCols,
     }),
-    [page, rowsPerPage, sortBy, sortDir, filters],
+    [page, rowsPerPage, sortBy, sortDir, filters, visibleCols],
   )
 
   const { data, isFetching } = useClientiQuery(params, {

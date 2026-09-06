@@ -789,7 +789,7 @@ export function CompitiClient({
               i filtri per vedere tutto.
             </div>
           )}
-          <CompitoKanban compiti={kanbanRows} onMove={handleMove} />
+          <CompitoKanban compiti={kanbanRows} stati={OPEN_TASK_STATI} onMove={handleMove} />
         </>
       ) : null}
 

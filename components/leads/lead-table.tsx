@@ -850,7 +850,8 @@ export function LeadTable({
 
       <div className="relative hidden h-full overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_18px_45px_-34px_rgb(15_23_42/0.6)] lg:flex lg:max-h-full lg:flex-col">
       {/* Area scrollabile: header sticky + body virtualizzato in un'unica table.
-          Scrolla verticalmente; orizzontalmente è pilotata dalla barra dedicata. */}
+          Su iPad deve accettare anche il pan orizzontale diretto; la barra
+          dedicata resta sotto per mouse/trackpad desktop. */}
       <div
         ref={scrollRef}
         tabIndex={0}
@@ -878,7 +879,7 @@ export function LeadTable({
           const delta = shiftedWheel ? e.deltaY : e.deltaX
           el.scrollLeft += delta * 0.72
         }}
-        className="min-h-0 flex-1 overscroll-contain overflow-y-auto overflow-x-hidden bg-card outline-none [scroll-behavior:auto] [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:w-2.5"
+        className="min-h-0 flex-1 overscroll-contain overflow-auto bg-card outline-none [scroll-behavior:auto] [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:size-2.5"
       >
         {/* table semplice (no wrapper shadcn): un solo contenitore di scroll,
             così l'header sticky e la barra orizzontale dedicata funzionano. */}

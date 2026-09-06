@@ -140,7 +140,7 @@ export default async function AutorizzaMcpPage({
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
           <div className="space-y-1">
             <p>
-              Claude vedra' esattamente cio' che vedi tu: lead, clienti, compiti, scadenze,
+              Claude vedra&apos; esattamente cio&apos; che vedi tu: lead, clienti, compiti, scadenze,
               installatori, offerta commerciale e file.
             </p>
             <p className="text-[#1E3A5F]/80">
@@ -174,7 +174,7 @@ function Esito({ titolo, messaggio }: { titolo: string; messaggio: string }) {
   return (
     <AuthShell eyebrow="Connettore Claude" title={titolo} subtitle={messaggio}>
       <p className="text-sm text-gray-600">
-        Nessun accesso e' stato concesso. Puoi chiudere questa finestra e tornare a Claude.
+        Nessun accesso e&apos; stato concesso. Puoi chiudere questa finestra e tornare a Claude.
       </p>
     </AuthShell>
   )

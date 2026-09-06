@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { startNavigationFeedback } from "@/components/navigation/navigation-feedback"
 import Link from "next/link"
+import { useHorizontalTouchScroll } from "@/hooks/use-horizontal-touch-scroll"
 import {
   MoreHorizontal,
   ExternalLink,
@@ -599,6 +600,7 @@ export function LeadTable({
     const bar = hScrollRef.current
     if (bar && bar.scrollLeft !== el.scrollLeft) bar.scrollLeft = el.scrollLeft
   }, [])
+  const touchScrollHandlers = useHorizontalTouchScroll(syncBarFromContainer)
   const syncContainerFromBar = useCallback(() => {
     const bar = hScrollRef.current
     const el = scrollRef.current
@@ -863,6 +865,7 @@ export function LeadTable({
           onScrollerScroll?.(e.currentTarget)
           syncBarFromContainer(e.currentTarget)
         }}
+        {...touchScrollHandlers}
         onWheel={(e) => {
           // I trackpad emettono spesso piccoli delta diagonali anche durante uno
           // scroll verticale. Ignoriamo quella deriva per evitare che la griglia
@@ -879,7 +882,7 @@ export function LeadTable({
           const delta = shiftedWheel ? e.deltaY : e.deltaX
           el.scrollLeft += delta * 0.72
         }}
-        className="min-h-0 flex-1 overscroll-contain overflow-auto bg-card outline-none [scroll-behavior:auto] [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:h-0 [&::-webkit-scrollbar]:w-2.5"
+        className="min-h-0 flex-1 overscroll-contain overflow-y-auto overflow-x-hidden bg-card outline-none [scroll-behavior:auto] [touch-action:pan-y] [-webkit-overflow-scrolling:touch] focus-visible:ring-2 focus-visible:ring-ring/40 [scrollbar-color:var(--crm-scrollbar-thumb)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--crm-scrollbar-thumb)] [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar]:w-2.5"
       >
         {/* table semplice (no wrapper shadcn): un solo contenitore di scroll,
             così l'header sticky e la barra orizzontale dedicata funzionano. */}

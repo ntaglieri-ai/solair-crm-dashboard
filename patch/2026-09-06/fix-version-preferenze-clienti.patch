@@ -1,0 +1,13 @@
+diff --git a/app/(dashboard)/clienti/clienti-client.tsx b/app/(dashboard)/clienti/clienti-client.tsx
+index cf05da0..9126797 100644
+--- a/app/(dashboard)/clienti/clienti-client.tsx
++++ b/app/(dashboard)/clienti/clienti-client.tsx
+@@ -240,7 +240,7 @@ export function ClientiClient({
+   useEffect(() => {
+     if (!preferencesLoaded) return
+     const preferences: ClienteViewPreferences = {
+-      version: 1,
++      version: 2,
+       owner: preferenceOwner,
+       visibleCols,
+       columnWidths,

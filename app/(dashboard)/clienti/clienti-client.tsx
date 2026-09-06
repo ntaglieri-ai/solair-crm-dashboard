@@ -240,7 +240,7 @@ export function ClientiClient({
   useEffect(() => {
     if (!preferencesLoaded) return
     const preferences: ClienteViewPreferences = {
-      version: 1,
+      version: 2,
       owner: preferenceOwner,
       visibleCols,
       columnWidths,

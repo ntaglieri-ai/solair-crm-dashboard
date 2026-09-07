@@ -438,9 +438,14 @@ function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
         <div className="flex flex-col gap-4">
           <CopyField label="Cellulare" value={cliente.Cellulare} icon={IconPhone} />
           <CopyField label="Altro telefono" value={cliente["Altro telefono"]} icon={IconPhone} />
+          {/* Sede, Proprietario e Installatore: prima erano pillole
+              nell'header, tolte per alleggerirlo (report Nando). Restano
+              qui, dove stavano gia' anche gli altri dati anagrafici. */}
+          <DataField label="Sede">{val(cliente.Sede)}</DataField>
           <DataField label="Clienti Proprietario">
             {ownerName}
           </DataField>
+          <DataField label="Installatore">{val(cliente.Installatore)}</DataField>
           <DataField label="Origine Lead">{val(cliente["Origine Lead"])}</DataField>
           <DataField label="Creato da">
             {val(cliente["Creato da"])}
@@ -448,6 +453,7 @@ function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
               <span className="text-muted-foreground"> · {cliente["Ora creazione"]}</span>
             ) : null}
           </DataField>
+          <DataField label="Ultimo aggiornamento">{val(cliente["Ora modifica"])}</DataField>
         </div>
       </div>
 

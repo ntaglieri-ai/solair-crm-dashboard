@@ -319,6 +319,10 @@ const PRIORITY_TONE: Record<string, string> = {
 function InfoPrincipali({ lead }: { lead: Lead }) {
   const [showMore, setShowMore] = useState(false)
   const endpoint = `/api/leads/${lead.id}`
+  const { ownerNames: leadOwnerNames } = useTags()
+  const leadOwnerName = lead["Lead Proprietario"]
+    ? leadOwnerNames[lead["Lead Proprietario"]] ?? "Utente non disponibile"
+    : "Non assegnato"
   const configuredStatoOptions = useColumnValueOptions(
     "Lead",
     "stato_lead",
@@ -407,6 +411,11 @@ function InfoPrincipali({ lead }: { lead: Lead }) {
         </button>
         {showMore ? (
           <div className="mt-4 grid grid-cols-1 gap-x-8 gap-y-4 border-t border-border pt-4 sm:grid-cols-2 animate-in fade-in duration-200">
+            {/* Sede, Proprietario e Origine Lead: prima erano pillole
+                nell'header, tolte per alleggerirlo (report Nando). */}
+            <DataField label="Sede">{val(lead.Sede)}</DataField>
+            <DataField label="Lead Proprietario">{val(leadOwnerName)}</DataField>
+            <DataField label="Origine Lead">{val(lead["Origine Lead"])}</DataField>
             <DataField label="Stato email" edit={{ module: "lead", field: "stato_email", endpoint, patchKey: "Stato", value: lead.Stato }}>
               {val(lead.Stato)}
             </DataField>

@@ -10,10 +10,6 @@ import {
   Trash2,
   Copy,
   FileDown,
-  Building2,
-  UserCircle,
-  Wrench,
-  CalendarDays,
   Plus,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -43,14 +39,8 @@ import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
 import { ClienteTagBadges, ClienteTagAssignPopover } from "./cliente-tag-controls"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
-import { displayClienteOwner } from "@/lib/clienti/owner-display"
 import { option } from "@/lib/crm-settings/column-values"
 import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
-
-function val(v: string | number | null | undefined): string {
-  if (v === null || v === undefined || v === "") return "—"
-  return String(v)
-}
 
 export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
   const router = useRouter()
@@ -60,7 +50,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
   const permissions = usePermissions()
   const [editOpen, setEditOpen] = useState(false)
   const nome = cliente["Nome Clienti"]
-  const { ownerNames, installers } = useClienteTags()
+  const { installers } = useClienteTags()
   const { data: statoOptions } = useStatoClienteQuery()
   const sedeOptions = useColumnValueOptions(
     "Clienti",
@@ -68,7 +58,6 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
     SEDE_LABELS.map((value) => option(value)),
     { includeFallback: true },
   ).options
-  const ownerName = displayClienteOwner(cliente, ownerNames, "Non assegnato")
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card px-4 py-3 shadow-[0_18px_45px_-32px_rgb(15_23_42/0.55)]">
@@ -83,31 +72,20 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
         <span className="truncate font-semibold text-foreground">{nome}</span>
       </nav>
 
-      {/* Titolo + azioni */}
+      {/* Titolo + azioni: nome, stato e pulsanti sulla stessa riga. E' la
+          riga che resta ancorata in alto durante lo scroll (vedi
+          StickyDetailHeader), quindi va tenuta bassa — niente altro qui. */}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        {/* Nome, stato e tag stanno sulla stessa riga: e' la riga che resta
-            ancorata in alto durante lo scroll, quindi va tenuta bassa. */}
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <ClienteAvatar nome={nome} className="size-10 shrink-0 text-sm shadow-sm ring-2 ring-secondary" />
           <h1 className="min-w-0 truncate text-xl font-black leading-tight text-foreground sm:text-2xl">
             {nome}
           </h1>
-          <StatoClienteBadge stato={cliente.Stato} />
-          <div className="flex flex-wrap items-center gap-1.5">
-            <ClienteTagBadges clienteId={cliente.id} empty="" animate />
-            <ClienteTagAssignPopover
-              clienteId={cliente.id}
-              trigger={
-                <button
-                  type="button"
-                  aria-label="Aggiungi tag"
-                  className="flex size-5 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
-                >
-                  <Plus size={14} strokeWidth={2} />
-                </button>
-              }
-            />
-          </div>
+          {/* Su schermi molto stretti il badge stato cede il posto al nome:
+              torna visibile da 'sm' in su. */}
+          <span className="hidden sm:inline-flex">
+            <StatoClienteBadge stato={cliente.Stato} />
+          </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 no-print">
@@ -195,27 +173,23 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
         </div>
       </div>
 
-      {/* Riga info rapida */}
-      <div className="flex flex-wrap items-center gap-1.5 text-xs text-foreground">
-        <span className="inline-flex min-h-6 items-center gap-1 rounded-md bg-navy/10 px-2 font-semibold text-navy">
-          <Building2 className="size-3" />
-          {val(cliente.Sede)}
-        </span>
-        <span className="inline-flex min-h-6 items-center gap-1 rounded-md bg-info/10 px-2 font-semibold text-info">
-          <UserCircle className="size-3" />
-          {ownerName}
-        </span>
-        <span className="inline-flex min-h-6 items-center gap-1 rounded-md bg-warning/15 px-2 font-semibold text-warning">
-          <Wrench className="size-3" />
-          {val(cliente.Installatore)}
-        </span>
-        <span className="inline-flex min-h-6 items-center gap-1 rounded-md bg-teal/10 px-2 font-semibold text-teal">
-          <CalendarDays className="size-3" />
-          {val(cliente["Ora creazione"])}
-        </span>
-        <span className="ml-auto inline-flex min-h-6 items-center rounded-md bg-muted px-2 text-xs font-semibold text-muted-foreground">
-          Ultimo aggiornamento: {val(cliente["Ora modifica"])}
-        </span>
+      {/* Tag: riga propria sotto al nome, come su Zoho. Nascosta sotto 'sm'
+          insieme al badge stato — su mobile restano solo nome + azione
+          primaria + menu, il resto e' a un tap di distanza. */}
+      <div className="hidden flex-wrap items-center gap-1.5 sm:flex">
+        <ClienteTagBadges clienteId={cliente.id} empty="" animate />
+        <ClienteTagAssignPopover
+          clienteId={cliente.id}
+          trigger={
+            <button
+              type="button"
+              aria-label="Aggiungi tag"
+              className="flex size-5 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
+            >
+              <Plus size={14} strokeWidth={2} />
+            </button>
+          }
+        />
       </div>
       </div>
 

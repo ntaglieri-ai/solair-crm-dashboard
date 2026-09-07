@@ -6,6 +6,12 @@ import { activeFilterValues, postgrestInList } from "@/lib/shared/filter-values"
 import type { Lead } from "@/lib/mock-data"
 import type { AdvancedFilterState } from "@/lib/leads/advanced-filter-logic"
 import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
+import { buildCustomPatch, CUSTOM_FIELD_PREFIX } from "@/lib/crm-settings/custom-fields"
+import {
+  loadEditableCustomFieldMetadata,
+  loadRecordCustomFieldValues,
+} from "@/lib/crm-settings/custom-fields-server"
+import { getCurrentPermissions } from "@/lib/permissions/server"
 import {
   leadListColumnsForFields,
   leadListNeedsActivityBadge,
@@ -584,6 +590,7 @@ export async function getLeadById(id: string): Promise<Lead | undefined> {
   }))
   lead["Badge di nota"] = lead.attivita.some((item) => item.tipo === "nota")
   lead["Badge dell'attività"] = lead.compiti.some((item) => !item.completato)
+  lead.customFields = await loadRecordCustomFieldValues(supabase, "leads", "lead", id)
   return lead
 }
 
@@ -645,6 +652,18 @@ export async function insertLead(lead: Lead): Promise<Lead> {
   return mapRow(row)
 }
 
+/** Colonne native: un campo personalizzato non puo' scriverci sopra. */
+const LEAD_RECORD_COLUMNS: string[] = LEAD_RECORD_FIELDS.map((field) => field.column)
+const LEAD_RESERVED_COLUMNS = [
+  "id",
+  "created_at",
+  "updated_at",
+  "ora_ultima_attivita",
+  "lead_proprietario_id",
+  "installatore_sopralluogo_id",
+  "sede",
+]
+
 export async function patchLead(id: string, patch: Partial<Lead>): Promise<Lead | undefined> {
   const supabase = await createClient()
   const now = new Date().toISOString()
@@ -656,6 +675,25 @@ export async function patchLead(id: string, patch: Partial<Lead>): Promise<Lead 
   for (const field of LEAD_RECORD_FIELDS) {
     if (field.appField in patchRecord) row[field.column] = patchRecord[field.appField]
   }
+
+  // Campi personalizzati (chiavi "custom:<field_key>"): la colonna vera e il
+  // tipo si leggono da crm_custom_fields, mai da quello che manda il client.
+  // Stessa identica logica di updateClienteRecord.
+  const hasCustom = Object.keys(patchRecord).some((key) => key.startsWith(CUSTOM_FIELD_PREFIX))
+  if (hasCustom) {
+    const fields = await loadEditableCustomFieldMetadata(supabase, "leads")
+    if (!fields) return undefined
+    const permissions = await getCurrentPermissions()
+    try {
+      Object.assign(row, buildCustomPatch(patchRecord, fields, (column) =>
+        !LEAD_RECORD_COLUMNS.includes(column) &&
+        !LEAD_RESERVED_COLUMNS.includes(column) &&
+        permissions.canField("lead", column, "edit")))
+    } catch {
+      return undefined
+    }
+  }
+
   const { data, error } = await supabase
     .from("leads")
     .update(row)
@@ -664,7 +702,11 @@ export async function patchLead(id: string, patch: Partial<Lead>): Promise<Lead 
     .single()
   if (error || !data) return undefined
   const [updatedRow] = await attachInstallatoreSopralluogoNames(supabase, [data as Record<string, unknown>])
-  return mapRow(updatedRow)
+  const updated = mapRow(updatedRow)
+  if (hasCustom) {
+    updated.customFields = await loadRecordCustomFieldValues(supabase, "leads", "lead", id)
+  }
+  return updated
 }
 
 export async function removeLeads(ids: string[]): Promise<number> {

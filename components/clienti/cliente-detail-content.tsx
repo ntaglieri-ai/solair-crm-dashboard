@@ -53,7 +53,7 @@ import { QuickCompitoDialog } from "@/components/compiti/quick-compito-dialog"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { displayClienteOwner } from "@/lib/clienti/owner-display"
 import { CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
-import { CUSTOM_FIELD_PREFIX } from "@/lib/clienti/custom-fields"
+import { CUSTOM_FIELD_PREFIX } from "@/lib/crm-settings/custom-fields"
 
 /* ---------- Helpers ---------- */
 

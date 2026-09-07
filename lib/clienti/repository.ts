@@ -18,7 +18,8 @@ import { CLIENTI_LIST_COLUMN_NAMES } from "@/lib/clienti/list-columns"
 import { applicaTagItalia } from "@/lib/clienti/tag-italia"
 import { DEFAULT_CLIENTI_PARAMS } from "@/lib/clienti/api-types"
 import { getCurrentPermissions } from "@/lib/permissions/server"
-import { buildCustomPatch, CUSTOM_FIELD_PREFIX, customOptions, validDate, type CustomFieldMetadata } from "./custom-fields"
+import { buildCustomPatch, CUSTOM_FIELD_PREFIX, validDate, type CustomFieldMetadata } from "@/lib/crm-settings/custom-fields"
+import { loadEditableCustomFieldMetadata, loadRecordCustomFieldValues } from "@/lib/crm-settings/custom-fields-server"
 import { resolveInstallerAssignment } from "./installer-assignment"
 import { applyOwnerScope, filterCurrentAccessibleRecordIds, resolveCurrentOwnerScope } from "@/lib/permissions/data-scope"
 import {
@@ -365,47 +366,15 @@ async function loadCompitiCorrelati(id: string): Promise<ClienteCompito[]> {
 }
 
 /**
- * Legge i campi custom visibili per il modulo Clienti (crm_custom_fields,
- * colonna reale aggiunta via ALTER TABLE da CRM Settings → Attributi) e i
- * loro valori per QUESTO cliente. Sempre a prova di errore: se la tabella
- * metadata non esiste ancora o la query fallisce, ritorna array vuoto
- * invece di far fallire l'intera pagina cliente per un pezzo accessorio.
+ * I campi custom del modulo Clienti. Il corpo vive in
+ * lib/crm-settings/custom-fields-server.ts: e' identico per Lead, e
+ * crm_custom_fields e' gia' indicizzata per table_name.
  */
-async function loadClienteCustomFieldValues(
+function loadClienteCustomFieldValues(
   supabase: Awaited<ReturnType<typeof createClient>>,
   clienteId: string,
 ): Promise<ClienteRecord["customFields"]> {
-  const { data: fields, error: fieldsError } = await supabase
-    .from("crm_custom_fields")
-    .select("field_key, label, tipo, column_name, required, options")
-    .eq("table_name", "clienti")
-    .eq("visible", true)
-    .is("deleted_at", null)
-    .order("ordinamento", { ascending: true })
-
-  if (fieldsError || !fields || fields.length === 0) return []
-
-  const permissions = await getCurrentPermissions()
-  const visibleFields = fields.filter((f) => /^[a-z][a-z0-9_]*$/.test(f.column_name) && permissions.canField("clienti", f.column_name, "view"))
-  if (!visibleFields.length) return []
-  const columns = visibleFields.map((f) => f.column_name as string)
-  const { data: row, error: valuesError } = await supabase
-    .from("clienti")
-    .select(columns.join(","))
-    .eq("id", clienteId)
-    .maybeSingle()
-
-  if (valuesError || !row) return []
-
-  return visibleFields.map((f) => ({
-    key: f.field_key as string,
-    label: f.label as string,
-    tipo: f.tipo as string,
-    column: f.column_name as string,
-    required: Boolean(f.required),
-    options: customOptions(f.options),
-    value: (row as unknown as Record<string, unknown>)[f.column_name as string] ?? null,
-  }))
+  return loadRecordCustomFieldValues(supabase, "clienti", "clienti", clienteId)
 }
 
 export async function getClienteById(
@@ -543,13 +512,11 @@ export async function updateClienteRecord(
   }
 
   if (Object.keys(patchRecord).some((key) => key.startsWith(CUSTOM_FIELD_PREFIX))) {
-    const { data: fields, error: metadataError } = await supabase.from("crm_custom_fields")
-      .select("field_key,column_name,label,tipo,required,options")
-      .eq("table_name", "clienti").eq("visible", true).eq("system", false).is("deleted_at", null)
-    if (metadataError) { onError?.("Impossibile verificare i campi personalizzati"); return null }
+    const fields = await loadEditableCustomFieldMetadata(supabase, "clienti")
+    if (!fields) { onError?.("Impossibile verificare i campi personalizzati"); return null }
     const permissions = await getCurrentPermissions()
     try {
-      const custom = buildCustomPatch(patchRecord, (fields ?? []) as CustomFieldMetadata[],
+      const custom = buildCustomPatch(patchRecord, fields,
         (column) => !CLIENTI_RECORD_COLUMNS.includes(column) && !["id", "updated_at", "created_at", "clienti_proprietario_id", "installatore_id", "lead_id", "sede"].includes(column) && permissions.canField("clienti", column, "edit"))
       Object.assign(row, custom)
     } catch (error) {

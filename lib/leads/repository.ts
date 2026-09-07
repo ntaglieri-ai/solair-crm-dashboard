@@ -49,6 +49,9 @@ function project(lead: Lead, fields: string[]): LeadListItem {
   out.noteItems = lead.noteItems ?? []
   out.taskItems = lead.taskItems ?? []
   if (lead.tagIds) out.tagIds = lead.tagIds
+  // I campi personalizzati non sono colonne di lista: senza questo, la
+  // risposta di una PATCH tornerebbe senza il valore appena scritto.
+  if (lead.customFields) out.customFields = lead.customFields
   return out as LeadListItem
 }
 

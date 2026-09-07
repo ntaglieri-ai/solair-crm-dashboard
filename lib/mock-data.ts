@@ -598,6 +598,13 @@ export interface Lead {
   taskItems?: LeadListTask[]
   tagIds?: string[]
   documenti: LeadDoc[]
+
+  /**
+   * Campi aggiunti da CRM Settings → Attributi (crm_custom_fields + colonna
+   * reale via ALTER TABLE), stessa meccanica del Cliente. Popolato
+   * server-side da getLeadById.
+   */
+  customFields?: CustomFieldValue[]
 }
 
 export type LeadColumnId = Exclude<
@@ -613,6 +620,7 @@ export type LeadColumnId = Exclude<
   | "taskItems"
   | "tagIds"
   | "documenti"
+  | "customFields"
 >
 
 export interface LeadColumn {

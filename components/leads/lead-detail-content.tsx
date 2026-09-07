@@ -5,6 +5,7 @@ import Link from "next/link"
 import { toast } from "sonner"
 import { useTags } from "@/lib/tag-store"
 import {
+  IconAdjustmentsAlt,
   IconChevronDown,
   IconInfoCircle,
   IconMapPin,
@@ -57,12 +58,14 @@ import { cn } from "@/lib/utils"
 import {
   type Lead,
   type Compito,
+  type CustomFieldValue,
   STATO_LEAD_ORDER,
 } from "@/lib/mock-data"
 import { option, withCurrentColumnOption } from "@/lib/crm-settings/column-values"
 import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 import type { EmailLogEntry } from "@/lib/email/email-log"
 import { LeadAvatar } from "./lead-utils"
+import { CUSTOM_FIELD_PREFIX } from "@/lib/crm-settings/custom-fields"
 import { QuickCompitoDialog } from "@/components/compiti/quick-compito-dialog"
 import { AllegatiSection } from "@/components/shared/allegati-section"
 import { DOCUMENTI_OBBLIGATORI_FOLDER } from "@/lib/allegati/paths"
@@ -131,6 +134,80 @@ function val(v: string | number | null | undefined): string {
   return String(v)
 }
 
+/**
+ * Stesso trattamento visivo di val(), esteso ai tipi che i campi custom
+ * possono avere (date/timestamptz formattate, non ISO grezzo).
+ */
+function valCustomField(tipo: string, v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—"
+  if (tipo === "boolean") return v ? "Sì" : "No"
+  if (tipo === "date" || tipo === "datetime" || tipo === "timestamptz") {
+    const d = new Date(String(v))
+    if (Number.isNaN(d.getTime())) return String(v)
+    return new Intl.DateTimeFormat("it-IT", { dateStyle: "medium" }).format(d)
+  }
+  return String(v)
+}
+
+function customInlineType(campo: CustomFieldValue): InlineEditableValueProps["type"] {
+  if (campo.tipo === "boolean") return "boolean"
+  if (campo.tipo === "number" || campo.tipo === "currency") return "number"
+  if (campo.tipo === "date") return "date"
+  if (campo.tipo === "datetime") return "datetime-local"
+  if (campo.tipo === "email") return "email"
+  if (campo.tipo === "phone") return "tel"
+  if (campo.tipo === "textarea" || campo.tipo === "multiselect") return "textarea"
+  if (campo.tipo === "select" && campo.options?.length) return "select"
+  return "text"
+}
+
+/**
+ * Campi aggiunti da CRM Settings → Attributi. Stessa resa del Cliente, cosi'
+ * un campo custom e' indistinguibile fra le due schede.
+ *
+ * Non raggruppati sotto un'unica sezione "Campi personalizzati": ogni campo
+ * e' la SUA sezione, con il suo nome vero in nav — Nando ha chiesto
+ * esplicitamente di vedere "Verifica", non "Campi personalizzati" (03/09).
+ */
+function CampoPersonalizzato({ leadId, campo }: { leadId: string; campo: CustomFieldValue }) {
+  if (campo.column) {
+    return (
+      <div className="rounded-lg border border-dashed border-violet-300 bg-violet-50/40 p-3">
+        <Badge
+          variant="outline"
+          className="mb-2 h-4 w-fit border-violet-300 bg-violet-100 px-1.5 text-[9px] font-semibold uppercase tracking-wide text-violet-700"
+        >
+          Personalizzato
+        </Badge>
+        <InlineEditableField
+          module="lead"
+          field={campo.column}
+          label={campo.label}
+          endpoint={`/api/leads/${leadId}`}
+          patchKey={`${CUSTOM_FIELD_PREFIX}${campo.key}`}
+          value={campo.value}
+          type={customInlineType(campo)}
+          options={campo.options}
+          custom={campo}
+          displayValue={valCustomField(campo.tipo, campo.value)}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-dashed border-violet-300 bg-violet-50/40 p-3">
+      <Badge
+        variant="outline"
+        className="h-4 w-fit border-violet-300 bg-violet-100 px-1.5 text-[9px] font-semibold uppercase tracking-wide text-violet-700"
+      >
+        Personalizzato
+      </Badge>
+      <div className="text-[13px] text-foreground">{valCustomField(campo.tipo, campo.value)}</div>
+    </div>
+  )
+}
+
 /* ---------- Campo label/valore ---------- */
 
 function DataField({
@@ -172,14 +249,27 @@ const NAV_ITEMS = [
   { id: "section-timeline", label: "Sequenza temporale" },
 ] as const
 
-function RelatedNav({ counts }: { counts: Record<string, number> }) {
+function RelatedNav({
+  counts,
+  customFields,
+}: {
+  counts: Record<string, number>
+  customFields: CustomFieldValue[]
+}) {
   const go = (id: string) =>
     document
       .getElementById(id)
       ?.scrollIntoView({ behavior: "smooth", block: "start" })
+  // Stessa collocazione della scheda Cliente: ogni campo personalizzato ha la
+  // sua voce, col suo nome vero, subito dopo la prima sezione della pagina.
+  const items: { id: string; label: string }[] = [
+    NAV_ITEMS[0],
+    ...customFields.map((c) => ({ id: `section-campo-${c.key}`, label: c.label })),
+    ...NAV_ITEMS.slice(1),
+  ]
   return (
     <nav className="flex flex-wrap items-center gap-1 border-b border-border bg-background pb-3 lg:sticky lg:top-[var(--detail-header-h,0px)] lg:z-10 lg:pt-2">
-      {NAV_ITEMS.map((item) => (
+      {items.map((item) => (
         <button
           key={item.id}
           type="button"
@@ -1004,11 +1094,22 @@ export function LeadDetailContent({
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1">
-      <RelatedNav counts={counts} />
+      <RelatedNav counts={counts} customFields={lead.customFields ?? []} />
 
       <Section id="section-info" title="Informazioni principali" icon={IconInfoCircle}>
         <InfoPrincipali lead={lead} />
       </Section>
+
+      {(lead.customFields ?? []).map((c) => (
+        <Section
+          key={c.key}
+          id={`section-campo-${c.key}`}
+          title={c.label}
+          icon={IconAdjustmentsAlt}
+        >
+          <CampoPersonalizzato leadId={lead.id} campo={c} />
+        </Section>
+      ))}
 
       <Section id="section-indirizzo" title="Indirizzo" icon={IconMapPin}>
         <Indirizzo lead={lead} />

@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
 import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
 import type { Lead, ClienteRecord } from "@/lib/mock-data"
-import { CUSTOM_FIELD_PREFIX, validateCustomValue } from "@/lib/clienti/custom-fields"
+import { CUSTOM_FIELD_PREFIX, validateCustomValue } from "@/lib/crm-settings/custom-fields"
 import type { CustomFieldValue } from "@/lib/mock-data"
 import type { ClienteReferenceOption } from "@/lib/cliente-tag-store"
 import type { PermissionEngine } from "@/lib/permissions/types"
@@ -129,12 +129,31 @@ function withCurrentOption(options: string[], current: unknown) {
   return [value, ...options]
 }
 
+const CUSTOM_EDIT_TYPES: Record<string, EditField["type"]> = {
+  number: "number",
+  currency: "number",
+  boolean: "boolean",
+  date: "date",
+  datetime: "datetime-local",
+  email: "email",
+  phone: "tel",
+  textarea: "textarea",
+  multiselect: "textarea",
+}
+
+function customEditType(custom: CustomFieldValue): EditField["type"] {
+  return (
+    CUSTOM_EDIT_TYPES[custom.tipo] ??
+    (custom.tipo === "select" && custom.options?.length ? "select" : "text")
+  )
+}
+
 export function buildLeadEditFields(
   lead: Lead,
   permissions: PermissionEngine,
   options: LeadEditValueOptions = {},
 ): EditField[] {
-  return LEAD_RECORD_FIELDS
+  const fields: EditField[] = LEAD_RECORD_FIELDS
     .filter((field) => permissions.canField("lead", field.column, "edit"))
     .map((field) => {
       if (field.appField === "Stato Lead") {
@@ -194,6 +213,18 @@ export function buildLeadEditFields(
           : fieldType(field.type),
       }
     })
+  for (const custom of lead.customFields ?? []) {
+    if (!custom.column || !permissions.canField("lead", custom.column, "edit")) continue
+    fields.push({
+      key: `${CUSTOM_FIELD_PREFIX}${custom.key}`,
+      label: `${custom.label}${custom.required ? " *" : ""}`,
+      value: custom.value,
+      type: customEditType(custom),
+      options: custom.options,
+      custom,
+    })
+  }
+  return fields
 }
 
 export function buildClienteEditFields(
@@ -255,9 +286,7 @@ export function buildClienteEditFields(
     })
   for (const custom of cliente.customFields ?? []) {
     if (!custom.column || !permissions.canField("clienti", custom.column, "edit")) continue
-    const type: EditField["type"] = ({ number: "number", currency: "number", boolean: "boolean", date: "date", datetime: "datetime-local", email: "email", phone: "tel", textarea: "textarea", multiselect: "textarea" } as Record<string, EditField["type"]>)[custom.tipo]
-      ?? (custom.tipo === "select" && custom.options?.length ? "select" : "text")
-    fields.push({ key: `${CUSTOM_FIELD_PREFIX}${custom.key}`, label: `${custom.label}${custom.required ? " *" : ""}`, value: custom.value, type, options: custom.options, custom })
+    fields.push({ key: `${CUSTOM_FIELD_PREFIX}${custom.key}`, label: `${custom.label}${custom.required ? " *" : ""}`, value: custom.value, type: customEditType(custom), options: custom.options, custom })
   }
   return fields
 }

@@ -154,6 +154,10 @@ function DataField({
 /* ---------- Navigazione correlato ---------- */
 
 const NAV_ITEMS = [
+  { id: "section-info", label: "Informazioni principali" },
+  { id: "section-indirizzo", label: "Indirizzo" },
+  { id: "section-descrizione", label: "Descrizione" },
+  { id: "section-sopralluogo", label: "Sopralluogo" },
   { id: "section-note", label: "Note" },
   { id: "section-documenti-obbligatori", label: "Documenti obbligatori" },
   { id: "section-allegati", label: "Allegati" },
@@ -162,6 +166,7 @@ const NAV_ITEMS = [
   { id: "section-email", label: "E-mail" },
   { id: "section-calendario", label: "Calendario" },
   { id: "section-record", label: "Record collegati" },
+  { id: "section-timeline", label: "Sequenza temporale" },
 ] as const
 
 function RelatedNav({ counts }: { counts: Record<string, number> }) {

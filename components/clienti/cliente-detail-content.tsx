@@ -358,6 +358,7 @@ const NAV_ITEMS = [
   { id: "section-logistica", label: "Logistica" },
   { id: "section-comunicazioni", label: "Comunicazioni" },
   { id: "section-note", label: "Note cliente" },
+  { id: "section-email", label: "E-mail" },
   { id: "section-note-interne", label: "Note interne" },
   { id: "section-calendario", label: "Calendario" },
   { id: "section-attivita", label: "Attività" },

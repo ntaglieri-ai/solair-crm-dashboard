@@ -132,45 +132,44 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
     : "Non assegnato"
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card p-5 shadow-[0_18px_45px_-32px_rgb(15_23_42/0.55)]">
+    <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card px-4 py-3 shadow-[0_18px_45px_-32px_rgb(15_23_42/0.55)]">
       <div className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,var(--navy),var(--teal),var(--info),var(--warning))]" />
-      <div className="flex flex-col gap-5 pt-1">
+      <div className="flex flex-col gap-2 pt-1">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+      <nav className="flex min-w-0 items-center gap-1 text-xs font-medium text-muted-foreground">
         <Link href="/leads" className="transition-colors hover:text-navy">
           Lead
         </Link>
-        <ChevronRight className="size-4" />
-        <span className="font-semibold text-foreground">{nome}</span>
+        <ChevronRight className="size-3 shrink-0" />
+        <span className="truncate font-semibold text-foreground">{nome}</span>
       </nav>
 
       {/* Titolo + azioni */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <LeadAvatar nome={nome} className="size-14 text-lg shadow-lg ring-4 ring-secondary" />
-          <div className="flex min-w-0 flex-col gap-2.5">
-            <h1 className="text-2xl font-black leading-tight text-foreground sm:text-3xl">
-              {nome}
-            </h1>
-            <div className="flex flex-wrap items-center gap-3">
-              <StatoLeadBadge stato={lead["Stato Lead"]} />
-              <ScoreBar score={lead.Valutazione} />
-              <div className="flex flex-wrap items-center gap-1.5">
-                <LeadTagBadges leadId={lead.id} animate />
-                <TagAssignPopover
-                  leadId={lead.id}
-                  trigger={
-                    <button
-                      type="button"
-                      aria-label="Aggiungi tag"
-                      className="flex size-5 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
-                    >
-                      <IconPlus size={14} stroke={2} />
-                    </button>
-                  }
-                />
-              </div>
-            </div>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        {/* Nome, stato, punteggio e tag stanno sulla stessa riga: e' la riga
+            che resta ancorata in alto durante lo scroll, quindi va tenuta
+            bassa. */}
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <LeadAvatar nome={nome} className="size-10 shrink-0 text-sm shadow-sm ring-2 ring-secondary" />
+          <h1 className="min-w-0 truncate text-xl font-black leading-tight text-foreground sm:text-2xl">
+            {nome}
+          </h1>
+          <StatoLeadBadge stato={lead["Stato Lead"]} />
+          <ScoreBar score={lead.Valutazione} />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <LeadTagBadges leadId={lead.id} animate />
+            <TagAssignPopover
+              leadId={lead.id}
+              trigger={
+                <button
+                  type="button"
+                  aria-label="Aggiungi tag"
+                  className="flex size-5 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
+                >
+                  <IconPlus size={14} stroke={2} />
+                </button>
+              }
+            />
           </div>
         </div>
 
@@ -179,7 +178,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
               disabilitato senza spostare la riga delle azioni. */}
           <GateDocumentiLabel stato={documenti} />
           <Button
-            className="h-10 bg-teal px-4 text-sm font-bold text-teal-foreground shadow-sm hover:bg-teal/90"
+            className="h-9 bg-teal px-3 text-sm font-bold text-teal-foreground shadow-sm hover:bg-teal/90"
             disabled={giaConvertito}
             onClick={() => setShowConvert(true)}
           >
@@ -188,7 +187,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
           </Button>
           <Button
             variant="outline"
-            className="h-10 bg-card px-4 text-sm font-semibold shadow-sm"
+            className="h-9 bg-card px-3 text-sm font-semibold shadow-sm"
             onClick={() => setEditOpen(true)}
           >
             <Pencil data-icon="inline-start" />
@@ -206,7 +205,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
-                <Button variant="outline" size="icon" className="bg-card" aria-label="Altre azioni">
+                <Button variant="outline" size="icon" className="size-9 bg-card" aria-label="Altre azioni">
                   <MoreHorizontal />
                 </Button>
               }
@@ -237,24 +236,24 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
       </div>
 
       {/* Riga info rapida */}
-      <div className="flex flex-wrap items-center gap-2 text-sm text-foreground">
-        <span className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-navy/10 px-2.5 font-semibold text-navy">
-          <Building2 className="size-3.5" />
+      <div className="flex flex-wrap items-center gap-1.5 text-xs text-foreground">
+        <span className="inline-flex min-h-6 items-center gap-1 rounded-md bg-navy/10 px-2 font-semibold text-navy">
+          <Building2 className="size-3" />
           {lead.Sede}
         </span>
-        <span className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-info/10 px-2.5 font-semibold text-info">
-          <UserCircle className="size-3.5" />
+        <span className="inline-flex min-h-6 items-center gap-1 rounded-md bg-info/10 px-2 font-semibold text-info">
+          <UserCircle className="size-3" />
           {ownerName}
         </span>
-        <span className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-warning/15 px-2.5 font-semibold text-warning">
-          <Megaphone className="size-3.5" />
+        <span className="inline-flex min-h-6 items-center gap-1 rounded-md bg-warning/15 px-2 font-semibold text-warning">
+          <Megaphone className="size-3" />
           {lead["Origine Lead"]}
         </span>
-        <span className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-teal/10 px-2.5 font-semibold text-teal">
-          <CalendarDays className="size-3.5" />
+        <span className="inline-flex min-h-6 items-center gap-1 rounded-md bg-teal/10 px-2 font-semibold text-teal">
+          <CalendarDays className="size-3" />
           {lead["Ora creazione"]}
         </span>
-        <span className="ml-auto inline-flex min-h-8 items-center rounded-lg bg-muted px-2.5 text-sm font-semibold text-muted-foreground">
+        <span className="ml-auto inline-flex min-h-6 items-center rounded-md bg-muted px-2 text-xs font-semibold text-muted-foreground">
           Ultimo aggiornamento: {lead["Ora ultima attività"]}
         </span>
       </div>

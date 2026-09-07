@@ -7,9 +7,12 @@ import { CANALE_PREFERITO_LABELS } from "@/lib/installatori/api-types"
 import { Badge } from "@/components/ui/badge"
 import { InstallatoreDetailActions } from "@/components/installatori/installatore-detail-actions"
 import { InstallatoreTagBadges } from "@/components/installatori/installatore-tag-controls"
+import { InstallatoreNoteSection } from "@/components/installatori/installatore-note-section"
 import { AllegatiSection } from "@/components/shared/allegati-section"
+import { EmailHistorySection } from "@/components/shared/email-history-section"
 import { CalendarioRecordSection } from "@/components/calendario/calendario-record-section"
 import { InlineEditableField } from "@/components/shared/inline-edit-field"
+import { listEmailLog } from "@/lib/email/email-log"
 
 function value(text: string | null) {
   return text?.trim() || "—"
@@ -34,6 +37,7 @@ export default async function InstallatoreDetailPage({
   if (!installatore) notFound()
   const endpoint = `/api/installatori/${installatore.id}`
   const canaleOptions = Object.keys(CANALE_PREFERITO_LABELS)
+  const emailLog = await listEmailLog("installatore", id)
 
   return (
     <div className="flex flex-col gap-6">
@@ -105,6 +109,22 @@ export default async function InstallatoreDetailPage({
 
       <section className="border-b border-border pb-5">
         <AllegatiSection
+          recordTipo="installatore"
+          recordId={installatore.id}
+          nomeRecord={installatore.nome}
+        />
+      </section>
+
+      <section className="border-b border-border pb-5">
+        <h2 className="mb-3 text-[13px] font-bold text-navy">Note</h2>
+        <InstallatoreNoteSection installatoreId={installatore.id} nomeRecord={installatore.nome} />
+      </section>
+
+      <section className="border-b border-border pb-5">
+        <h2 className="mb-3 text-[13px] font-bold text-navy">E-mail</h2>
+        <EmailHistorySection
+          emailLog={emailLog}
+          emptyLabel="Nessuna email inviata a questo installatore dal CRM."
           recordTipo="installatore"
           recordId={installatore.id}
           nomeRecord={installatore.nome}

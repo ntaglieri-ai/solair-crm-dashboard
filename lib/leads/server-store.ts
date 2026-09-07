@@ -530,7 +530,7 @@ export async function getLeadById(id: string): Promise<Lead | undefined> {
     supabase.from("leads").select("*").eq("id", id).single(),
     supabase
       .from("attivita")
-      .select("id,tipo,testo,created_at,utente_id,menzioni")
+      .select("id,tipo,testo,created_at,utente_id,menzioni,formato,allegati")
       .eq("record_tipo", "lead")
       .eq("record_id", id)
       .order("created_at", { ascending: false }),
@@ -570,6 +570,7 @@ export async function getLeadById(id: string): Promise<Lead | undefined> {
     timestamp: item.created_at ?? "",
     autore: item.utente_id ? names.get(item.utente_id) ?? "Utente CRM" : "Sistema",
     menzioni: (item.menzioni ?? []) as import("@/lib/notes/mentions").NoteMention[],
+    allegati: (item.allegati ?? []) as import("@/lib/notes/mentions").NoteAttachment[],
   }))
   lead.compiti = (taskResult.data ?? []).map((item) => ({
     id: item.id,

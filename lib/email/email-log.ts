@@ -16,8 +16,9 @@
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import type { NoteAttachment } from "@/lib/notes/mentions"
 
-export type EmailLogEntita = "lead" | "cliente"
+export type EmailLogEntita = "lead" | "cliente" | "installatore"
 
 export type EmailLogEntry = {
   id: string
@@ -25,6 +26,8 @@ export type EmailLogEntry = {
   fromEmail: string
   fromNome: string | null
   oggetto: string
+  corpo: string | null
+  allegati: NoteAttachment[]
   dataInvio: string
   inviataDaNome: string | null
 }
@@ -35,12 +38,14 @@ type EmailLogRow = {
   from_email: string
   from_nome: string | null
   oggetto: string
+  corpo: string | null
+  allegati: NoteAttachment[] | null
   data_invio: string
   utenti: { nome: string | null } | { nome: string | null }[] | null
 }
 
 const LOG_COLUMNS =
-  "id, destinatario, from_email, from_nome, oggetto, data_invio, utenti:inviata_da (nome)"
+  "id, destinatario, from_email, from_nome, oggetto, corpo, allegati, data_invio, utenti:inviata_da (nome)"
 
 function toEntry(row: EmailLogRow): EmailLogEntry {
   // La join annidata di PostgREST torna oggetto o array secondo la cardinalita'
@@ -54,6 +59,8 @@ function toEntry(row: EmailLogRow): EmailLogEntry {
     fromEmail: row.from_email,
     fromNome: row.from_nome,
     oggetto: row.oggetto,
+    corpo: row.corpo,
+    allegati: row.allegati ?? [],
     dataInvio: row.data_invio,
     inviataDaNome: utente?.nome ?? null,
   }
@@ -68,10 +75,11 @@ function toEntry(row: EmailLogRow): EmailLogEntry {
  */
 export async function logEmailInviate(params: {
   entita: EmailLogEntita
-  destinatari: Array<{ id: string; email: string }>
+  destinatari: Array<{ id: string; email: string; oggetto?: string; corpo?: string | null; allegati?: NoteAttachment[] }>
   fromEmail: string
   fromNome?: string | null
   oggetto: string
+  corpo?: string | null
   inviataDa: string | null
 }): Promise<void> {
   if (params.destinatari.length === 0) return
@@ -83,7 +91,12 @@ export async function logEmailInviate(params: {
       return
     }
 
-    const colonnaRecord = params.entita === "lead" ? "lead_id" : "cliente_id"
+    const colonnaRecord =
+      params.entita === "lead"
+        ? "lead_id"
+        : params.entita === "cliente"
+          ? "cliente_id"
+          : "installatore_id"
 
     const { error } = await admin.from("crm_email_log").insert(
       params.destinatari.map((destinatario) => ({
@@ -91,7 +104,9 @@ export async function logEmailInviate(params: {
         destinatario: destinatario.email,
         from_email: params.fromEmail,
         from_nome: params.fromNome ?? null,
-        oggetto: params.oggetto,
+        oggetto: destinatario.oggetto ?? params.oggetto,
+        corpo: destinatario.corpo ?? params.corpo ?? null,
+        allegati: destinatario.allegati ?? [],
         inviata_da: params.inviataDa,
       })),
     )
@@ -119,7 +134,14 @@ export async function listEmailLog(
   const { data, error } = await supabase
     .from("crm_email_log")
     .select(LOG_COLUMNS)
-    .eq(entita === "lead" ? "lead_id" : "cliente_id", recordId)
+    .eq(
+      entita === "lead"
+        ? "lead_id"
+        : entita === "cliente"
+          ? "cliente_id"
+          : "installatore_id",
+      recordId,
+    )
     .order("data_invio", { ascending: false })
 
   if (error) {

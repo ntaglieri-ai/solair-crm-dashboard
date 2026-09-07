@@ -183,19 +183,14 @@ export async function POST(request: Request) {
           await updateEmailMassaProgress(job.id, progress)
         },
       })
-      // Storico invii: gli installatori non hanno una scheda con storico e
-      // config.consentEntita e' gia' il discriminante giusto (null solo per
-      // loro), quindi si registra solo lead e clienti.
-      if (config.consentEntita) {
-        await logEmailInviate({
-          entita: config.consentEntita,
-          destinatari: outcome.destinatariRaggiunti,
-          fromEmail: outcome.fromEmail,
-          fromNome: outcome.fromName,
-          oggetto,
-          inviataDa: subject.userId,
-        })
-      }
+      await logEmailInviate({
+        entita: recordTipo,
+        destinatari: outcome.destinatariRaggiunti,
+        fromEmail: outcome.fromEmail,
+        fromNome: outcome.fromName,
+        oggetto,
+        inviataDa: subject.userId,
+      })
 
       await finishEmailMassaJob(job.id, {
         inviate: outcome.inviate,

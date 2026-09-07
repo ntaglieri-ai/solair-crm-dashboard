@@ -4,11 +4,70 @@ import { requireApiNoteInterne } from "@/lib/clienti/note-interne-guard"
 import type { NotaInterna } from "@/lib/clienti/note-interne"
 import { notaInternaInput } from "@/lib/clienti/note-interne-input"
 import { resolveInternalMentions, notifyInternalMentions } from "@/lib/clienti/note-interne-mentions-server"
+import { uploadNoteFiles } from "@/lib/notes/note-files"
+import type { NoteMentionDraft } from "@/lib/notes/mentions"
 
 const COLUMNS =
-  "id,contenuto,menzioni,creato_da,creato_il,modificato_da,modificato_il"
+  "id,contenuto,formato,menzioni,allegati,creato_da,creato_il,modificato_da,modificato_il"
 
 type NotaRow = Omit<NotaInterna, "creato_da_nome" | "modificato_da_nome">
+type NotaInternaPayload = { contenuto: string; menzioni?: NoteMentionDraft[]; files: File[] }
+
+function safeMentions(value: unknown): NoteMentionDraft[] {
+  return Array.isArray(value)
+    ? value.flatMap((item) => {
+        if (
+          !item ||
+          typeof item.userId !== "string" ||
+          typeof item.start !== "number" ||
+          typeof item.end !== "number"
+        ) {
+          return []
+        }
+        return [{ userId: item.userId, start: item.start, end: item.end }]
+      })
+    : []
+}
+
+async function parseNotaInternaPayload(request: Request): Promise<NotaInternaPayload | null> {
+  const contentType = request.headers.get("content-type") ?? ""
+  if (contentType.includes("multipart/form-data")) {
+    const formData = await request.formData().catch(() => null)
+    if (!formData) return null
+    const rawMentions = formData.get("menzioni") ?? formData.get("mentions")
+    let mentions: unknown
+    if (typeof rawMentions === "string" && rawMentions.trim()) {
+      try {
+        mentions = JSON.parse(rawMentions)
+      } catch {
+        mentions = []
+      }
+    }
+    const contenuto = formData.get("contenuto") ?? formData.get("text")
+    return {
+      contenuto: typeof contenuto === "string" ? contenuto : "",
+      menzioni: safeMentions(mentions),
+      files: formData.getAll("files").filter((item): item is File => item instanceof File),
+    }
+  }
+
+  const body = (await request.json().catch(() => null)) as
+    | { contenuto?: unknown; text?: unknown; menzioni?: unknown; mentions?: unknown }
+    | null
+  const contenuto = typeof body?.contenuto === "string"
+    ? body.contenuto
+    : typeof body?.text === "string"
+      ? body.text
+      : ""
+  const rawMentions = body && ("menzioni" in body || "mentions" in body)
+    ? body.menzioni ?? body.mentions
+    : undefined
+  return {
+    contenuto,
+    menzioni: rawMentions === undefined ? undefined : safeMentions(rawMentions),
+    files: [],
+  }
+}
 
 /**
  * Le note portano solo gli id degli autori: il nome va risolto a parte.
@@ -41,6 +100,22 @@ function withAutori(rows: NotaRow[], nomi: Map<string, string>): NotaInterna[] {
   }))
 }
 
+async function clienteNomeRecord(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  clienteId: string,
+) {
+  const { data } = await supabase
+    .from("clienti")
+    .select("nome_clienti,nome,cognome")
+    .eq("id", clienteId)
+    .maybeSingle()
+  return (
+    (data?.nome_clienti as string | null) ||
+    [data?.nome, data?.cognome].filter(Boolean).join(" ") ||
+    "Cliente"
+  )
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -71,9 +146,10 @@ export async function POST(
   const guard = await requireApiNoteInterne(id)
   if (guard.response) return guard.response
 
-  const parsed = notaInternaInput.safeParse(await request.json().catch(() => null))
+  const payload = await parseNotaInternaPayload(request)
+  const contenuto = payload?.contenuto || (payload?.files.length ? "Allegato alla nota interna" : "")
+  const parsed = notaInternaInput.safeParse({ contenuto, menzioni: payload?.menzioni })
   if (!parsed.success) return NextResponse.json({ error: "Nota vuota o menzioni non valide" }, { status: 400 })
-  const { contenuto } = parsed.data
 
   const autoreId = guard.permissions.snapshot.subject.userId
   // La policy di insert impone creato_da = current_utente_id(): senza id
@@ -95,11 +171,27 @@ export async function POST(
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("cliente_note_interne")
-    .insert({ cliente_id: id, contenuto, menzioni, creato_da: autoreId })
+    .insert({ cliente_id: id, contenuto, formato: "markdown", menzioni, creato_da: autoreId })
     .select(COLUMNS)
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const uploaded = await uploadNoteFiles({
+    recordTipo: "cliente",
+    recordId: id,
+    nomeRecord: payload?.files.length ? await clienteNomeRecord(supabase, id) : "Cliente",
+    noteId: data.id,
+    files: payload?.files ?? [],
+  })
+  if (uploaded.allegati.length > 0) {
+    const { data: updated, error: updateError } = await supabase
+      .from("cliente_note_interne")
+      .update({ allegati: uploaded.allegati })
+      .eq("id", data.id)
+      .select(COLUMNS)
+      .single()
+    if (!updateError && updated) data.allegati = updated.allegati
+  }
 
   const rows = [data as NotaRow]
   const [nota] = withAutori(rows, await autoriNomi(supabase, rows))

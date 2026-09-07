@@ -505,6 +505,7 @@ export interface LeadActivity {
   timestamp: string
   autore?: string
   menzioni?: import("@/lib/notes/mentions").NoteMention[]
+  allegati?: import("@/lib/notes/mentions").NoteAttachment[]
 }
 
 export interface LeadTask {
@@ -521,6 +522,7 @@ export interface LeadListNote {
   text: string
   createdAt: string
   menzioni?: import("@/lib/notes/mentions").NoteMention[]
+  allegati?: import("@/lib/notes/mentions").NoteAttachment[]
 }
 
 export interface LeadListTask {

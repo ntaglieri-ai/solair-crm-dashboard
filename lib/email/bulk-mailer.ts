@@ -32,7 +32,7 @@ export type BulkSendOutcome = {
    * Chi ha ricevuto davvero, per lo storico invii. Non ricavabile dai soli
    * contatori: i saltati per consenso revocato e i falliti non ci sono.
    */
-  destinatariRaggiunti: Array<{ id: string; email: string }>
+  destinatariRaggiunti: Array<{ id: string; email: string; oggetto: string; corpo: string }>
   /** Mittente realmente usato per il batch. */
   fromEmail: string
   fromName: string | null
@@ -77,7 +77,7 @@ export async function sendBulkEmails(params: {
   let inviate = 0
   let fallite = 0
   const errori: string[] = []
-  const destinatariRaggiunti: Array<{ id: string; email: string }> = []
+  const destinatariRaggiunti: Array<{ id: string; email: string; oggetto: string; corpo: string }> = []
 
   for (const recipient of params.recipients) {
     const body = renderTemplate(params.template, recipient.placeholders)
@@ -93,7 +93,7 @@ export async function sendBulkEmails(params: {
         html: textToSafeHtml(body),
       })
       inviate++
-      destinatariRaggiunti.push({ id: recipient.id, email: recipient.email })
+      destinatariRaggiunti.push({ id: recipient.id, email: recipient.email, oggetto: subject, corpo: body })
     } catch (error) {
       fallite++
       const message = error instanceof Error ? error.message : "Errore invio"

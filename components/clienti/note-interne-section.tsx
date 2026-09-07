@@ -4,8 +4,8 @@ import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { IconLock, IconPencil, IconTrash, IconX, IconCheck } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
-import { MentionTextarea, MentionText } from "@/components/shared/note-mentions"
-import type { NoteMentionDraft, NoteMention } from "@/lib/notes/mentions"
+import { NoteAttachmentList, RichNoteComposer, RichNoteText } from "@/components/shared/rich-note"
+import type { NoteAttachment, NoteMentionDraft, NoteMention } from "@/lib/notes/mentions"
 import { usePermissions } from "@/lib/permissions/provider"
 import { canAccessNoteInterne, type NotaInterna } from "@/lib/clienti/note-interne"
 import { ClienteAvatar } from "./cliente-utils"
@@ -25,15 +25,20 @@ function NotaCard({
   onSave,
   onDelete,
   usersUrl,
+  clienteId,
+  nomeRecord,
 }: {
   nota: NotaInterna
-  onSave: (id: string, contenuto: string, menzioni: NoteMentionDraft[]) => Promise<void>
+  onSave: (id: string, contenuto: string, menzioni: NoteMentionDraft[], files: File[]) => Promise<void>
   onDelete: (id: string) => Promise<void>
   usersUrl: string
+  clienteId: string
+  nomeRecord: string
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(nota.contenuto)
   const [menzioni, setMenzioni] = useState<NoteMentionDraft[]>(nota.menzioni ?? [])
+  const [files, setFiles] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
   const autore = nota.creato_da_nome ?? "Utente rimosso"
 
@@ -41,7 +46,8 @@ function NotaCard({
     if (!draft.trim() || busy) return
     setBusy(true)
     try {
-      await onSave(nota.id, draft, menzioni)
+      await onSave(nota.id, draft, menzioni, files)
+      setFiles([])
       setEditing(false)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Errore nell'aggiornamento della nota interna")
@@ -75,6 +81,7 @@ function NotaCard({
                 onClick={() => {
                   setDraft(nota.contenuto)
                   setMenzioni(nota.menzioni ?? [])
+                  setFiles([])
                   setEditing(true)
                 }}
               >
@@ -103,16 +110,24 @@ function NotaCard({
 
         {editing ? (
           <div className="flex flex-col gap-2">
-            <MentionTextarea
+            <RichNoteComposer
               value={draft}
               onChange={setDraft}
               mentions={menzioni}
               onMentionsChange={setMenzioni}
+              files={files}
+              onFilesChange={setFiles}
               usersUrl={usersUrl}
               disabled={busy}
               placeholder="Modifica nota interna… usa @ per menzionare"
               rows={3}
               className="bg-card text-[13px]"
+            />
+            <NoteAttachmentList
+              allegati={nota.allegati}
+              recordTipo="cliente"
+              recordId={clienteId}
+              nomeRecord={nomeRecord}
             />
             <div className="flex justify-end gap-2">
               <Button
@@ -121,6 +136,7 @@ function NotaCard({
                 disabled={busy}
                 onClick={() => {
                   setDraft(nota.contenuto)
+                  setFiles([])
                   setEditing(false)
                 }}
               >
@@ -134,7 +150,15 @@ function NotaCard({
             </div>
           </div>
         ) : (
-          <MentionText text={nota.contenuto} mentions={nota.menzioni} allowEmail={false} className="text-[13px] text-foreground" />
+          <>
+            <RichNoteText text={nota.contenuto} mentions={nota.menzioni} className="text-[13px] text-foreground" />
+            <NoteAttachmentList
+              allegati={nota.allegati}
+              recordTipo="cliente"
+              recordId={clienteId}
+              nomeRecord={nomeRecord}
+            />
+          </>
         )}
       </div>
     </li>
@@ -150,7 +174,7 @@ function NotaCard({
  * cortesia, non una difesa. Il muro e' la RLS su cliente_note_interne,
  * e le route rispondono 404.
  */
-export function NoteInterneSection({ clienteId }: { clienteId: string }) {
+export function NoteInterneSection({ clienteId, nomeRecord }: { clienteId: string; nomeRecord: string }) {
   const permissions = usePermissions()
   const abilitato = canAccessNoteInterne(permissions.snapshot.subject.ruoloCode) && permissions.canAction("clienti.note_interne.view")
 
@@ -158,6 +182,7 @@ export function NoteInterneSection({ clienteId }: { clienteId: string }) {
   const [loading, setLoading] = useState(true)
   const [nuova, setNuova] = useState("")
   const [nuoveMenzioni, setNuoveMenzioni] = useState<NoteMentionDraft[]>([])
+  const [nuoviFiles, setNuoviFiles] = useState<File[]>([])
   const [saving, setSaving] = useState(false)
   const usersUrl = `/api/clienti/${clienteId}/note-interne/mention-users`
 
@@ -179,21 +204,26 @@ export function NoteInterneSection({ clienteId }: { clienteId: string }) {
 
   const aggiungi = async () => {
     const contenuto = nuova
-    if (!contenuto.trim() || saving) return
+    if ((!contenuto.trim() && nuoviFiles.length === 0) || saving) return
     setSaving(true)
     try {
+      const formData = new FormData()
+      formData.append("contenuto", contenuto)
+      formData.append("menzioni", JSON.stringify(nuoveMenzioni))
+      nuoviFiles.forEach((file) => formData.append("files", file))
       const res = await fetch(`/api/clienti/${clienteId}/note-interne`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contenuto, menzioni: nuoveMenzioni }),
+        body: formData,
       })
-      const creata = (await res.json()) as NotaInterna & { error?: string; notificationFailures?: number }
+      const creata = (await res.json()) as NotaInterna & { error?: string; notificationFailures?: number; attachmentFailures?: number }
       if (!res.ok) throw new Error(creata.error ?? "Errore nel salvataggio della nota interna")
       setNote((prev) => [creata, ...prev])
       setNuova("")
       setNuoveMenzioni([])
+      setNuoviFiles([])
       toast.success("Nota interna aggiunta")
       if (creata.notificationFailures) toast.warning("Nota salvata, ma alcune notifiche delle menzioni non sono state inviate")
+      if (creata.attachmentFailures) toast.warning("Nota salvata, ma uno o più allegati non sono stati caricati")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Errore nel salvataggio della nota interna")
     } finally {
@@ -201,13 +231,16 @@ export function NoteInterneSection({ clienteId }: { clienteId: string }) {
     }
   }
 
-  const salva = async (id: string, contenuto: string, menzioni: NoteMentionDraft[]) => {
+  const salva = async (id: string, contenuto: string, menzioni: NoteMentionDraft[], files: File[]) => {
+    const formData = new FormData()
+    formData.append("contenuto", contenuto)
+    formData.append("menzioni", JSON.stringify(menzioni))
+    files.forEach((file) => formData.append("files", file))
     const res = await fetch(`/api/clienti/${clienteId}/note-interne/${id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contenuto, menzioni }),
+      body: formData,
     })
-    const payload = await res.json() as { error?: string; menzioni: NoteMention[]; contenuto: string; modificato_il: string; notificationFailures?: number }
+    const payload = await res.json() as { error?: string; menzioni: NoteMention[]; contenuto: string; modificato_il: string; allegati?: NoteAttachment[]; notificationFailures?: number; attachmentFailures?: number }
     if (!res.ok) throw new Error(payload.error ?? "Errore nell'aggiornamento della nota interna")
     // Il nome di chi modifica non torna dalla PATCH: si prende dal
     // soggetto della sessione, che e' esattamente chi ha appena scritto.
@@ -219,6 +252,7 @@ export function NoteInterneSection({ clienteId }: { clienteId: string }) {
               ...nota,
               contenuto: payload.contenuto,
               menzioni: payload.menzioni,
+              allegati: payload.allegati ?? nota.allegati,
               modificato_da: subject.userId,
               modificato_da_nome: subject.nome,
               modificato_il: payload.modificato_il,
@@ -228,6 +262,7 @@ export function NoteInterneSection({ clienteId }: { clienteId: string }) {
     )
     toast.success("Nota interna aggiornata")
     if (payload.notificationFailures) toast.warning("Nota salvata, ma alcune notifiche delle menzioni non sono state inviate")
+    if (payload.attachmentFailures) toast.warning("Nota salvata, ma uno o più allegati non sono stati caricati")
   }
 
   const elimina = async (id: string) => {
@@ -255,7 +290,15 @@ export function NoteInterneSection({ clienteId }: { clienteId: string }) {
       ) : note.length > 0 ? (
         <ul className="flex flex-col gap-3">
           {note.map((nota) => (
-            <NotaCard key={nota.id} nota={nota} onSave={salva} onDelete={elimina} usersUrl={usersUrl} />
+            <NotaCard
+              key={nota.id}
+              nota={nota}
+              onSave={salva}
+              onDelete={elimina}
+              usersUrl={usersUrl}
+              clienteId={clienteId}
+              nomeRecord={nomeRecord}
+            />
           ))}
         </ul>
       ) : (
@@ -265,11 +308,13 @@ export function NoteInterneSection({ clienteId }: { clienteId: string }) {
       )}
 
       <div className="flex flex-col gap-2 rounded-lg border border-border bg-secondary/40 p-3">
-        <MentionTextarea
+        <RichNoteComposer
           value={nuova}
           onChange={setNuova}
           mentions={nuoveMenzioni}
           onMentionsChange={setNuoveMenzioni}
+          files={nuoviFiles}
+          onFilesChange={setNuoviFiles}
           usersUrl={usersUrl}
           disabled={saving}
           rows={2}
@@ -279,7 +324,7 @@ export function NoteInterneSection({ clienteId }: { clienteId: string }) {
         <div className="flex justify-end">
           <Button
             size="sm"
-            disabled={nuova.trim() === "" || saving}
+            disabled={(nuova.trim() === "" && nuoviFiles.length === 0) || saving}
             className="bg-navy text-navy-foreground hover:bg-navy/90"
             onClick={aggiungi}
           >

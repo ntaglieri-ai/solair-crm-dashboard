@@ -138,6 +138,7 @@ export async function POST(request: Request) {
         fromEmail,
         fromNome: fromName,
         oggetto: emailSubject,
+        corpo: emailBody,
         inviataDa: subject.userId,
       }),
     )

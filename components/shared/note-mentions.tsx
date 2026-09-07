@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
+import type { RefObject } from "react"
 import { createPortal } from "react-dom"
 import { Loader2, Mail } from "lucide-react"
 import { toast } from "sonner"
@@ -52,6 +53,7 @@ export function MentionTextarea({
   placeholder,
   usersUrl = "/api/mentions/users",
   disabled = false,
+  textareaRef,
 }: {
   value: string
   onChange: (value: string) => void
@@ -62,6 +64,7 @@ export function MentionTextarea({
   placeholder?: string
   usersUrl?: string
   disabled?: boolean
+  textareaRef?: RefObject<HTMLTextAreaElement | null>
 }) {
   const ref = useRef<HTMLTextAreaElement>(null)
   const [userList, setUserList] = useState<{ url: string; users: MentionUser[]; failed: boolean } | null>(null)
@@ -182,12 +185,15 @@ export function MentionTextarea({
   return (
     <div className="relative">
       <Textarea
-        ref={ref}
         value={value}
         rows={rows}
         placeholder={placeholder}
         aria-label={placeholder}
         disabled={disabled}
+        ref={(node) => {
+          ref.current = node
+          if (textareaRef) textareaRef.current = node
+        }}
         className={className}
         onChange={(event) => handleChange(event.target.value, event.target.selectionStart)}
         onClick={(event) => updateQuery(value, event.currentTarget.selectionStart)}

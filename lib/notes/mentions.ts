@@ -7,6 +7,15 @@ export type NoteMention = {
 
 export type NoteMentionDraft = Pick<NoteMention, "userId" | "start" | "end">
 
+export type NoteFormat = "plain" | "markdown"
+
+export type NoteAttachment = {
+  nome: string
+  path: string
+  byte: number | null
+  contentType: string | null
+}
+
 export function sanitizeNoteMentions(
   text: string,
   drafts: NoteMentionDraft[],

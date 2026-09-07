@@ -39,7 +39,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { MentionTextarea } from "@/components/shared/note-mentions"
+import { RichNoteComposer } from "@/components/shared/rich-note"
 import type { NoteMentionDraft } from "@/lib/notes/mentions"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -96,28 +96,34 @@ export function ClienteRowContextMenu({
   const [taskOpen, setTaskOpen] = useState(false)
   const [noteText, setNoteText] = useState("")
   const [noteMentions, setNoteMentions] = useState<NoteMentionDraft[]>([])
+  const [noteFiles, setNoteFiles] = useState<File[]>([])
   const [taskTitle, setTaskTitle] = useState("")
   const [taskDueDate, setTaskDueDate] = useState("")
   const [taskPriority, setTaskPriority] = useState("Medio")
   const [saving, setSaving] = useState(false)
 
   async function createNote() {
-    if (!noteText.trim()) return
+    if (!noteText.trim() && noteFiles.length === 0) return
     setSaving(true)
     try {
+      const formData = new FormData()
+      formData.append("text", noteText)
+      formData.append("mentions", JSON.stringify(noteMentions))
+      noteFiles.forEach((file) => formData.append("files", file))
       const response = await fetch(`/api/clienti/${cliente.id}/notes`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: noteText, mentions: noteMentions }),
+        body: formData,
       })
       if (!response.ok) throw new Error()
-      const result = (await response.json()) as { notificationFailures?: number }
+      const result = (await response.json()) as { notificationFailures?: number; attachmentFailures?: number }
       setNoteText("")
       setNoteMentions([])
+      setNoteFiles([])
       setNoteOpen(false)
       onRefresh()
       toast.success("Nota creata")
       if (result.notificationFailures) toast.warning("Nota salvata, ma una o più notifiche email non sono state inviate")
+      if (result.attachmentFailures) toast.warning("Nota salvata, ma uno o più allegati non sono stati caricati")
     } catch {
       toast.error("Creazione nota non riuscita")
     } finally {
@@ -373,19 +379,22 @@ export function ClienteRowContextMenu({
               La nota sarà collegata a {cliente["Nome Clienti"]}.
             </DialogDescription>
           </DialogHeader>
-          <MentionTextarea
+          <RichNoteComposer
             value={noteText}
             onChange={setNoteText}
             mentions={noteMentions}
             onMentionsChange={setNoteMentions}
+            files={noteFiles}
+            onFilesChange={setNoteFiles}
             placeholder="Scrivi una nota..."
             className="min-h-28"
+            disabled={saving}
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setNoteOpen(false)}>
               Annulla
             </Button>
-            <Button onClick={createNote} disabled={saving || !noteText.trim()}>
+            <Button onClick={createNote} disabled={saving || (!noteText.trim() && noteFiles.length === 0)}>
               Salva nota
             </Button>
           </DialogFooter>

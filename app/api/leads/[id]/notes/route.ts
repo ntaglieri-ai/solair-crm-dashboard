@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { requireApiRecord } from "@/lib/permissions/server"
 import { canAccessOwnedRecord } from "@/lib/permissions/data-scope"
 import { absoluteCrmUrl, notifyMentionedUsers, resolveNoteMentions } from "@/lib/notes/mentions-server"
-import type { NoteMentionDraft } from "@/lib/notes/mentions"
+import { parseNotePayload, uploadNoteFiles } from "@/lib/notes/note-files"
 
 export async function POST(
   request: Request,
@@ -13,12 +13,17 @@ export async function POST(
   if (guard.response) return guard.response
   const { id } = await params
   if (!await canAccessOwnedRecord(guard.permissions.snapshot, "lead", "leads", "lead_proprietario_id", id)) return NextResponse.json({ error: "Lead non trovato" }, { status: 404 })
-  const body = (await request.json().catch(() => null)) as { text?: string; mentions?: NoteMentionDraft[] } | null
-  const text = body?.text?.trim()
+  const payload = await parseNotePayload(request)
+  const text = payload?.text || (payload?.files.length ? "Allegato alla nota" : "")
   if (!text) return NextResponse.json({ error: "Nota vuota" }, { status: 400 })
 
   const supabase = await createClient()
-  const resolved = await resolveNoteMentions(supabase, text, Array.isArray(body?.mentions) ? body.mentions : [])
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("nome_lead")
+    .eq("id", id)
+    .maybeSingle()
+  const resolved = await resolveNoteMentions(supabase, text, payload?.mentions ?? [])
   const { data, error } = await supabase
     .from("attivita")
     .insert({
@@ -28,10 +33,27 @@ export async function POST(
       record_tipo: "lead",
       utente_id: guard.permissions.snapshot.subject.userId,
       menzioni: resolved.mentions,
+      formato: "markdown",
     })
-    .select("id,tipo,testo,created_at,menzioni")
+    .select("id,tipo,testo,created_at,menzioni,formato,allegati")
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const uploaded = await uploadNoteFiles({
+    recordTipo: "lead",
+    recordId: id,
+    nomeRecord: (lead?.nome_lead as string | null) ?? "",
+    noteId: data.id,
+    files: payload?.files ?? [],
+  })
+  if (uploaded.allegati.length > 0) {
+    const { data: updated, error: updateError } = await supabase
+      .from("attivita")
+      .update({ allegati: uploaded.allegati })
+      .eq("id", data.id)
+      .select("id,tipo,testo,created_at,menzioni,formato,allegati")
+      .single()
+    if (!updateError && updated) data.allegati = updated.allegati
+  }
   const notificationFailures = await notifyMentionedUsers({
     recipients: resolved.recipients,
     authorId: guard.permissions.snapshot.subject.userId,
@@ -44,5 +66,6 @@ export async function POST(
     ...data,
     autore: guard.permissions.snapshot.subject.nome ?? "Utente CRM",
     notificationFailures,
+    attachmentFailures: uploaded.falliti,
   }, { status: 201 })
 }

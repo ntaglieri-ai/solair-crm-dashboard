@@ -45,7 +45,7 @@ describe("internal notes routes", () => {
     const response = await POST(request(), params)
     expect(response.status).toBe(201)
     expect((await response.json()).menzioni).toEqual([mention])
-    expect(operations).toContainEqual(["insert", { cliente_id: "cliente", contenuto: "@Mario Rossi", menzioni: [mention], creato_da: "author" }])
+    expect(operations).toContainEqual(["insert", { cliente_id: "cliente", contenuto: "@Mario Rossi", formato: "markdown", menzioni: [mention], creato_da: "author" }])
     expect(operations).not.toContainEqual(["from", "attivita"])
     expect(mocks.notify).toHaveBeenCalledTimes(1)
     expect(mocks.notify.mock.calls[0][0].text).toBe(saved.contenuto)

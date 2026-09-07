@@ -28,8 +28,9 @@ import {
 } from "@tabler/icons-react"
 import { CalendarioRecordSection } from "@/components/calendario/calendario-record-section"
 import { Button } from "@/components/ui/button"
-import { MentionText, MentionTextarea } from "@/components/shared/note-mentions"
-import type { NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
+import { EmailHistorySection } from "@/components/shared/email-history-section"
+import { NoteAttachmentList, RichNoteComposer, RichNoteText } from "@/components/shared/rich-note"
+import type { NoteAttachment, NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -61,7 +62,6 @@ import {
 import { option, withCurrentColumnOption } from "@/lib/crm-settings/column-values"
 import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 import type { EmailLogEntry } from "@/lib/email/email-log"
-import { formatEmailLogDate } from "./email-log-format"
 import { LeadAvatar } from "./lead-utils"
 import { QuickCompitoDialog } from "@/components/compiti/quick-compito-dialog"
 import { AllegatiSection } from "@/components/shared/allegati-section"
@@ -198,6 +198,7 @@ interface Nota {
   quando: string
   testo: string
   menzioni?: NoteMention[]
+  allegati?: NoteAttachment[]
 }
 
 interface Task {
@@ -467,34 +468,47 @@ function NoteSection({ lead }: { lead: Lead }) {
           : "",
         testo: item.descrizione,
         menzioni: item.menzioni,
+        allegati: item.allegati,
       })),
   )
   const [nuova, setNuova] = useState("")
   const [menzioni, setMenzioni] = useState<NoteMentionDraft[]>([])
+  const [files, setFiles] = useState<File[]>([])
+  const [saving, setSaving] = useState(false)
 
   const aggiungi = async () => {
-    if (nuova.trim() === "") return
-    const response = await fetch(`/api/leads/${lead.id}/notes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: nuova, mentions: menzioni }),
-    })
-    if (!response.ok) {
+    if (nuova.trim() === "" && files.length === 0) return
+    setSaving(true)
+    try {
+      const formData = new FormData()
+      formData.append("text", nuova)
+      formData.append("mentions", JSON.stringify(menzioni))
+      files.forEach((file) => formData.append("files", file))
+      const response = await fetch(`/api/leads/${lead.id}/notes`, {
+        method: "POST",
+        body: formData,
+      })
+      if (!response.ok) throw new Error()
+      const created = (await response.json()) as { id: string; testo: string; created_at: string; autore: string; menzioni?: NoteMention[]; allegati?: NoteAttachment[]; notificationFailures?: number; attachmentFailures?: number }
+      setNote((prev) => [{
+        id: created.id,
+        autore: created.autore,
+        quando: "adesso",
+        testo: created.testo,
+        menzioni: created.menzioni,
+        allegati: created.allegati,
+      }, ...prev])
+      setNuova("")
+      setMenzioni([])
+      setFiles([])
+      toast.success("Nota aggiunta")
+      if (created.notificationFailures) toast.warning("Nota salvata, ma una o più notifiche email non sono state inviate")
+      if (created.attachmentFailures) toast.warning("Nota salvata, ma uno o più allegati non sono stati caricati")
+    } catch {
       toast.error("Creazione nota non riuscita")
-      return
+    } finally {
+      setSaving(false)
     }
-    const created = (await response.json()) as { id: string; testo: string; created_at: string; autore: string; menzioni?: NoteMention[]; notificationFailures?: number }
-    setNote((prev) => [{
-      id: created.id,
-      autore: created.autore,
-      quando: "adesso",
-      testo: created.testo,
-      menzioni: created.menzioni,
-    }, ...prev])
-    setNuova("")
-    setMenzioni([])
-    toast.success("Nota aggiunta")
-    if (created.notificationFailures) toast.warning("Nota salvata, ma una o più notifiche email non sono state inviate")
   }
 
   return (
@@ -518,29 +532,38 @@ function NoteSection({ lead }: { lead: Lead }) {
                   Modifica
                 </button>
               </div>
-              <MentionText text={n.testo} mentions={n.menzioni} className="text-[13px] text-foreground" />
+              <RichNoteText text={n.testo} mentions={n.menzioni} className="text-[13px] text-foreground" />
+              <NoteAttachmentList
+                allegati={n.allegati}
+                recordTipo="lead"
+                recordId={lead.id}
+                nomeRecord={lead["Nome Lead"]}
+              />
             </div>
           </li>
         ))}
       </ul>
       <div className="flex flex-col gap-2 rounded-lg border border-border bg-secondary/40 p-3">
-        <MentionTextarea
+        <RichNoteComposer
           value={nuova}
           onChange={setNuova}
           mentions={menzioni}
           onMentionsChange={setMenzioni}
+          files={files}
+          onFilesChange={setFiles}
           rows={2}
           placeholder="Aggiungi nota…"
           className="bg-card text-[13px]"
+          disabled={saving}
         />
         <div className="flex justify-end">
           <Button
             size="sm"
-            disabled={nuova.trim() === ""}
+            disabled={saving || (nuova.trim() === "" && files.length === 0)}
             className="bg-teal text-teal-foreground hover:bg-teal/90"
             onClick={aggiungi}
           >
-            Salva
+            {saving ? "Salvataggio..." : "Salva"}
           </Button>
         </div>
       </div>
@@ -650,44 +673,6 @@ function AttivitaChiuse({ lead }: { lead: Lead }) {
       ) : null}
       {tasks.map((t) => (
         <TaskRow key={t.id} task={t} readOnly />
-      ))}
-    </ul>
-  )
-}
-
-/* ---------- Sezione E-mail ---------- */
-
-function EmailSection({ emailLog }: { emailLog: EmailLogEntry[] }) {
-  return (
-    <ul className="flex flex-col gap-2">
-      {emailLog.length === 0 ? (
-        <li className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
-          Nessuna email inviata a questo lead dal CRM.
-        </li>
-      ) : null}
-      {emailLog.map((email) => (
-        <li
-          key={email.id}
-          className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5"
-        >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success">
-            <IconMail size={16} stroke={1.8} />
-          </span>
-          <div className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-[13px] font-medium text-foreground">
-              {email.oggetto}
-            </span>
-            <span className="truncate text-[11px] text-muted-foreground">
-              {[
-                formatEmailLogDate(email.dataInvio),
-                `da ${email.fromEmail}`,
-                email.inviataDaNome ? `inviata da ${email.inviataDaNome}` : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </span>
-          </div>
-        </li>
       ))}
     </ul>
   )
@@ -1110,7 +1095,13 @@ export function LeadDetailContent({
         title="E-mail"
         icon={IconMail}
       >
-        <EmailSection emailLog={emailLog} />
+        <EmailHistorySection
+          emailLog={emailLog}
+          emptyLabel="Nessuna email inviata a questo lead dal CRM."
+          recordTipo="lead"
+          recordId={lead.id}
+          nomeRecord={lead["Nome Lead"]}
+        />
       </Section>
 
       <Section

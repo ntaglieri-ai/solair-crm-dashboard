@@ -32,8 +32,10 @@ import {
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { MentionText, MentionTextarea } from "@/components/shared/note-mentions"
-import type { NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
+import { EmailHistorySection } from "@/components/shared/email-history-section"
+import { NoteAttachmentList, RichNoteComposer, RichNoteText } from "@/components/shared/rich-note"
+import type { NoteAttachment, NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
+import type { EmailLogEntry } from "@/lib/email/email-log"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { CampoProtetto, useCampoVisibile } from "@/components/shared/campo-protetto"
@@ -1282,6 +1284,7 @@ interface Nota {
   quando: string
   testo: string
   menzioni?: NoteMention[]
+  allegati?: NoteAttachment[]
 }
 
 function NoteSection({ cliente }: { cliente: ClienteRecord }) {
@@ -1298,12 +1301,14 @@ function NoteSection({ cliente }: { cliente: ClienteRecord }) {
   const [note, setNote] = useState<Nota[]>(seed)
   const [nuova, setNuova] = useState("")
   const [menzioni, setMenzioni] = useState<NoteMentionDraft[]>([])
+  const [files, setFiles] = useState<File[]>([])
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     fetch(`/api/clienti/${cliente.id}/notes`)
       .then((response) => response.ok ? response.json() : Promise.reject())
-      .then((body: { notes?: Array<{ id: string; testo: string; created_at: string; autore: string; menzioni?: NoteMention[] }> }) => {
+      .then((body: { notes?: Array<{ id: string; testo: string; created_at: string; autore: string; menzioni?: NoteMention[]; allegati?: NoteAttachment[] }> }) => {
         if (cancelled) return
         setNote((body.notes ?? []).map((item) => ({
           id: item.id,
@@ -1311,6 +1316,7 @@ function NoteSection({ cliente }: { cliente: ClienteRecord }) {
           quando: new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at)),
           testo: item.testo,
           menzioni: item.menzioni,
+          allegati: item.allegati,
         })))
       })
       .catch(() => undefined)
@@ -1318,31 +1324,41 @@ function NoteSection({ cliente }: { cliente: ClienteRecord }) {
   }, [cliente.id])
 
   const aggiungi = async () => {
-    if (nuova.trim() === "") return
-    const response = await fetch(`/api/clienti/${cliente.id}/notes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: nuova, mentions: menzioni }),
-    })
-    if (!response.ok) {
+    if (nuova.trim() === "" && files.length === 0) return
+    setSaving(true)
+    try {
+      const formData = new FormData()
+      formData.append("text", nuova)
+      formData.append("mentions", JSON.stringify(menzioni))
+      files.forEach((file) => formData.append("files", file))
+      const response = await fetch(`/api/clienti/${cliente.id}/notes`, {
+        method: "POST",
+        body: formData,
+      })
+      if (!response.ok) throw new Error()
+      const created = (await response.json()) as { id: string; testo: string; autore: string; menzioni?: NoteMention[]; allegati?: NoteAttachment[]; notificationFailures?: number; attachmentFailures?: number }
+      setNote((prev) => [
+        {
+          id: created.id,
+          autore: created.autore,
+          quando: "adesso",
+          testo: created.testo,
+          menzioni: created.menzioni,
+          allegati: created.allegati,
+        },
+        ...prev,
+      ])
+      setNuova("")
+      setMenzioni([])
+      setFiles([])
+      toast.success("Nota aggiunta")
+      if (created.notificationFailures) toast.warning("Nota salvata, ma una o più notifiche email non sono state inviate")
+      if (created.attachmentFailures) toast.warning("Nota salvata, ma uno o più allegati non sono stati caricati")
+    } catch {
       toast.error("Creazione nota non riuscita")
-      return
+    } finally {
+      setSaving(false)
     }
-    const created = (await response.json()) as { id: string; testo: string; autore: string; menzioni?: NoteMention[]; notificationFailures?: number }
-    setNote((prev) => [
-      {
-        id: created.id,
-        autore: created.autore,
-        quando: "adesso",
-        testo: created.testo,
-        menzioni: created.menzioni,
-      },
-      ...prev,
-    ])
-    setNuova("")
-    setMenzioni([])
-    toast.success("Nota aggiunta")
-    if (created.notificationFailures) toast.warning("Nota salvata, ma una o più notifiche email non sono state inviate")
   }
 
   // "Note ufficio" non ha restrizioni configurate; "Note Provvigioni" si',
@@ -1371,30 +1387,39 @@ function NoteSection({ cliente }: { cliente: ClienteRecord }) {
                     <span className="text-[13px] font-semibold text-foreground">{n.autore}</span>
                     <span className="text-[11px] text-muted-foreground">{n.quando}</span>
                   </div>
-                  <MentionText text={n.testo} mentions={n.menzioni} className="text-[13px] text-foreground" />
+                  <RichNoteText text={n.testo} mentions={n.menzioni} className="text-[13px] text-foreground" />
+                  <NoteAttachmentList
+                    allegati={n.allegati}
+                    recordTipo="cliente"
+                    recordId={cliente.id}
+                    nomeRecord={cliente["Nome Clienti"]}
+                  />
                 </div>
               </li>
             ))}
           </ul>
         ) : null}
         <div className="flex flex-col gap-2 rounded-lg border border-border bg-secondary/40 p-3">
-          <MentionTextarea
+          <RichNoteComposer
             value={nuova}
             onChange={setNuova}
             mentions={menzioni}
             onMentionsChange={setMenzioni}
+            files={files}
+            onFilesChange={setFiles}
             rows={2}
             placeholder="Aggiungi nota…"
             className="bg-card text-[13px]"
+            disabled={saving}
           />
           <div className="flex justify-end">
             <Button
               size="sm"
-              disabled={nuova.trim() === ""}
+              disabled={saving || (nuova.trim() === "" && files.length === 0)}
               className="bg-teal text-teal-foreground hover:bg-teal/90"
               onClick={aggiungi}
             >
-              Salva
+              {saving ? "Salvataggio..." : "Salva"}
             </Button>
           </div>
         </div>
@@ -1525,7 +1550,13 @@ function Attivita({ cliente }: { cliente: ClienteRecord }) {
 
 /* ---------- Componente principale ---------- */
 
-export function ClienteDetailContent({ cliente }: { cliente: ClienteRecord }) {
+export function ClienteDetailContent({
+  cliente,
+  emailLog,
+}: {
+  cliente: ClienteRecord
+  emailLog: EmailLogEntry[]
+}) {
   const permissions = usePermissions()
   const vediNoteInterne = canAccessNoteInterne(permissions.snapshot.subject.ruoloCode)
 
@@ -1580,9 +1611,19 @@ export function ClienteDetailContent({ cliente }: { cliente: ClienteRecord }) {
         <NoteSection cliente={cliente} />
       </Section>
 
+      <Section id="section-email" title="E-mail" icon={IconMail}>
+        <EmailHistorySection
+          emailLog={emailLog}
+          emptyLabel="Nessuna email inviata a questo cliente dal CRM."
+          recordTipo="cliente"
+          recordId={cliente.id}
+          nomeRecord={cliente["Nome Clienti"]}
+        />
+      </Section>
+
       {vediNoteInterne ? (
         <Section id="section-note-interne" title="Note interne" icon={IconLock}>
-          <NoteInterneSection clienteId={cliente.id} />
+          <NoteInterneSection clienteId={cliente.id} nomeRecord={cliente["Nome Clienti"]} />
         </Section>
       ) : null}
 

@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "migrate:zoho-users": "node --env-file=.env.local scripts/migrations/import-zoho-users.mjs",
-    "migrate:zoho-leads": "node --env-file=.env.local scripts/migrations/import-zoho-leads.mjs"
+    "migrate:zoho-leads": "node --env-file=.env.local scripts/migrations/import-zoho-leads.mjs",
+    "migrate:zoho-clienti-allegati": "node --env-file=.env.local scripts/migrations/backfill-zoho-clienti-allegati.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

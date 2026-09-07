@@ -17,6 +17,7 @@ import {
   Plus,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -118,6 +119,15 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
             <Pencil data-icon="inline-start" />
             Modifica
           </Button>
+          <QuickContactIcons
+            kind="cliente"
+            recordId={cliente.id}
+            nome={cliente["Nome Clienti"]}
+            telefono={cliente.Cellulare}
+            email={cliente["E-mail"]}
+            show={["email"]}
+            emailAsButton
+          />
           <DropdownMenu>
             <DropdownMenuTrigger
               render={

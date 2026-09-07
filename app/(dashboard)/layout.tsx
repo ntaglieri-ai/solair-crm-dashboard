@@ -21,7 +21,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
           <Sidebar />
           <NavigationFeedback />
           <div className="flex min-h-screen min-w-0 flex-col pt-20 lg:pl-[248px] lg:pt-0">
-            <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-5 sm:py-6 lg:px-8 lg:py-7">
+            <main className="min-w-0 flex-1 overflow-x-clip px-4 py-5 sm:px-5 sm:py-6 lg:px-8 lg:py-7">
               <PageTransition>{children}</PageTransition>
             </main>
           </div>

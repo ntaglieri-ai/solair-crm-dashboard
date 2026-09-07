@@ -373,7 +373,7 @@ function ContattiRapidiCard({ cliente }: { cliente: ClienteRecord }) {
 
 export function ClienteIntelligencePanel({ cliente }: { cliente: ClienteRecord }) {
   return (
-    <aside className="flex w-full flex-col gap-4 lg:sticky lg:top-20 lg:w-[340px] lg:shrink-0">
+    <aside className="flex w-full flex-col gap-4 lg:sticky lg:top-[calc(var(--detail-header-h,5rem)+1rem)] lg:w-[340px] lg:shrink-0">
       <AvanzamentoCard cliente={cliente} />
       <RiepilogoEconomicoCard cliente={cliente} />
       <ProvvigioniCard cliente={cliente} />

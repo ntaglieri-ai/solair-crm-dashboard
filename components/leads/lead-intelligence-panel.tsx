@@ -406,7 +406,7 @@ export function LeadIntelligencePanel({
   emailLog: EmailLogEntry[]
 }) {
   return (
-    <aside className="flex w-full flex-col gap-4 lg:sticky lg:top-20 lg:w-[340px] lg:shrink-0">
+    <aside className="flex w-full flex-col gap-4 lg:sticky lg:top-[calc(var(--detail-header-h,5rem)+1rem)] lg:w-[340px] lg:shrink-0">
       <ScoreBreakdownCard lead={lead} />
       <EmailInviateCard emailLog={emailLog} />
       <UpcomingTasksCard lead={lead} />

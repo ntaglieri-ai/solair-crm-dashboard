@@ -221,7 +221,10 @@ function Section({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <section id={id} className="scroll-mt-24 border-b border-border last:border-b-0">
+    <section
+      id={id}
+      className="scroll-mt-24 border-b border-border last:border-b-0 lg:scroll-mt-[calc(var(--detail-header-h,0px)+3.5rem)]"
+    >
       <div className="flex items-center justify-between gap-2 py-3">
         <button
           type="button"
@@ -387,7 +390,7 @@ function RelatedNav({
     ...base.slice(1),
   ]
   return (
-    <nav className="flex flex-wrap items-center gap-1 border-b border-border pb-3">
+    <nav className="flex flex-wrap items-center gap-1 border-b border-border bg-background pb-3 lg:sticky lg:top-[var(--detail-header-h,0px)] lg:z-10 lg:pt-2">
       {items.map((item) => (
         <button
           key={item.id}

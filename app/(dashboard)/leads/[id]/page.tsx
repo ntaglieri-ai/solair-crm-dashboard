@@ -2,6 +2,7 @@ import { notFound } from "next/navigation"
 import { getLeadById } from "@/lib/leads/server-store"
 import { getClienteById } from "@/lib/clienti/repository"
 import { LeadDetailHeader } from "@/components/leads/lead-detail-header"
+import { StickyDetailHeader } from "@/components/shared/sticky-detail-header"
 import { LeadDetailContent } from "@/components/leads/lead-detail-content"
 import { LeadIntelligencePanel } from "@/components/leads/lead-intelligence-panel"
 import { requirePage } from "@/lib/permissions/server"
@@ -32,7 +33,9 @@ export default async function LeadDetailPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <LeadDetailHeader lead={lead} />
+      <StickyDetailHeader>
+        <LeadDetailHeader lead={lead} />
+      </StickyDetailHeader>
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <LeadDetailContent
           lead={lead}

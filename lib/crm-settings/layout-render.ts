@@ -83,6 +83,19 @@ export function formattaValore(
   if (valore === "true") return "Sì"
   if (valore === "false") return "No"
 
+  // Date e timestamp arrivano in forma ISO ("2026-07-28T12:00:00+00:00").
+  // Mostrarli cosi' com'e' costringe a decifrare fuso e millisecondi per
+  // leggere un giorno: si stampa la data, e l'ora solo quando non e'
+  // mezzanotte, cioe' quando qualcuno l'ha davvero indicata.
+  if (typeof valore === "string") {
+    const iso = valore.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/)
+    if (iso) {
+      const [, anno, mese, giorno, ore, minuti] = iso
+      const data = `${giorno}/${mese}/${anno}`
+      return ore && !(ore === "00" && minuti === "00") ? `${data} ${ore}:${minuti}` : data
+    }
+  }
+
   if (typeof valore === "number") {
     if (!Number.isFinite(valore)) return vuoto
     const decimali = formato.decimali

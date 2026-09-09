@@ -40,7 +40,12 @@ export type InlineEditableValueProps = {
   displayValue?: ReactNode
   className?: string
   valueClassName?: string
-  onSaved?: () => void
+  /**
+   * Riceve il valore appena salvato. Serve a chi mostra campi calcolati:
+   * router.refresh() ricarica dal server, ma nel frattempo la formula
+   * resterebbe ferma al valore vecchio.
+   */
+  onSaved?: (nuovoValore: unknown) => void
 }
 
 function displayText(
@@ -132,7 +137,7 @@ function InlineEditableValueInner(props: InlineEditableValueProps) {
       setDraft(initialEditValue({ ...freshField, value: outgoing }))
       setEditing(false)
       toast.success("Campo aggiornato")
-      props.onSaved?.()
+      props.onSaved?.(outgoing)
       router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Salvataggio non riuscito")

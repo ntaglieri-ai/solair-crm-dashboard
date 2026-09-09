@@ -1,6 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useCallback, useState, type ReactNode } from "react"
 import { AlertTriangle, Sigma } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { InlineEditableField } from "@/components/shared/inline-edit-field"
@@ -42,6 +42,7 @@ export type RisolviModifica = (
   value: unknown
   type?: string
   options?: string[]
+  optionLabels?: Record<string, string>
 } | null
 
 export function LayoutRenderer({
@@ -68,7 +69,21 @@ export function LayoutRenderer({
   valoriVisualizzati?: Record<string, ReactNode>
   onSalvato?: () => void
 }) {
-  const valori = mappaValori(record)
+  // Valori appena modificati, prima che il server rimandi il record
+  // aggiornato. Senza, un campo calcolato resterebbe fermo al numero vecchio
+  // per tutta la durata del giro di rete: cambi il numero di batterie e il
+  // totale si aggiorna un istante dopo.
+  const [modificati, setModificati] = useState<Record<string, unknown>>({})
+  const recordVivo = { ...record, ...modificati }
+  const valori = mappaValori(recordVivo)
+
+  const salvato = useCallback(
+    (fieldKey: string, nuovoValore: unknown) => {
+      setModificati((precedenti) => ({ ...precedenti, [fieldKey]: nuovoValore }))
+      onSalvato?.()
+    },
+    [onSalvato],
+  )
 
   return (
     <div className="flex flex-col gap-4">
@@ -89,11 +104,11 @@ export function LayoutRenderer({
               <BloccoRenderer
                 key={blocco.id}
                 blocco={blocco}
-                record={record}
+                record={recordVivo}
                 valori={valori}
                 risolviModifica={risolviModifica}
                 valoriVisualizzati={valoriVisualizzati}
-                onSalvato={onSalvato}
+                onSalvato={salvato}
               />
             ))}
           </div>
@@ -116,7 +131,7 @@ function BloccoRenderer({
   valori: ReturnType<typeof mappaValori>
   risolviModifica?: RisolviModifica
   valoriVisualizzati?: Record<string, ReactNode>
-  onSalvato?: () => void
+  onSalvato?: (fieldKey: string, nuovoValore: unknown) => void
 }) {
   if (blocco.campi.length === 0) return null
 
@@ -166,7 +181,7 @@ function CampoRenderer({
   valori: ReturnType<typeof mappaValori>
   risolviModifica?: RisolviModifica
   valoriVisualizzati?: Record<string, ReactNode>
-  onSalvato?: () => void
+  onSalvato?: (fieldKey: string, nuovoValore: unknown) => void
 }) {
   const etichetta = campo.labelOverride ?? campo.fieldKey
   const giaPronto = valoriVisualizzati?.[campo.fieldKey]
@@ -200,6 +215,10 @@ function CampoRenderer({
   // modificabile sia per sapere come formattarlo quando non lo e'.
   const configurazione = risolviModifica?.(campo.fieldKey) ?? null
   const modifica = campoScrivibile(campo) ? configurazione : null
+  // Stessa formattazione per il campo modificabile e per quello in sola
+  // lettura: senza, un booleano mostrava "Sì" da fermo e "true" da
+  // modificabile, e una data restava in forma ISO.
+  const testo = formattaValore(esito.valore, campo.formato, configurazione?.type)
 
   if (modifica) {
     return (
@@ -209,14 +228,12 @@ function CampoRenderer({
           label={etichetta}
           type={modifica.type as never}
           emptyLabel={campo.formato.placeholder ?? "—"}
-          displayValue={giaPronto}
-          onSaved={onSalvato}
+          displayValue={giaPronto ?? testo}
+          onSaved={(nuovoValore) => onSalvato?.(campo.fieldKey, nuovoValore)}
         />
       </div>
     )
   }
-
-  const testo = formattaValore(esito.valore, campo.formato, configurazione?.type)
 
   return (
     <div className={cn("flex flex-col gap-0.5", larghezza)}>

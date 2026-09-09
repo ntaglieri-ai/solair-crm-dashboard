@@ -117,6 +117,18 @@ describe("formattaValore", () => {
     expect(formattaValore("false", {})).toBe("No")
   })
 
+  it("mostra le date in forma leggibile, senza ora a mezzanotte", () => {
+    // Il database restituisce ISO completo: "2026-08-27T00:00:00+00:00" e'
+    // una data senza orario indicato, e mostrarne l'ora non aggiunge nulla.
+    expect(formattaValore("2026-08-27T00:00:00+00:00", {})).toBe("27/08/2026")
+    expect(formattaValore("2026-07-28T12:00:00+00:00", {})).toBe("28/07/2026 12:00")
+    expect(formattaValore("2026-06-15", {})).toBe("15/06/2026")
+  })
+
+  it("non scambia per data un testo che comincia con dei numeri", () => {
+    expect(formattaValore("30-50-20", {})).toBe("30-50-20")
+  })
+
   it("usa il segnaposto per i valori vuoti", () => {
     expect(formattaValore(null, {})).toBe("—")
     expect(formattaValore("", {})).toBe("—")

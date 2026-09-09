@@ -1744,6 +1744,23 @@ function ClienteDaLayout({
   const risolviModifica: RisolviModifica = (fieldKey) => {
     const edit = clienteInlineEdit(cliente, fieldKey)
     if (!edit) return null
+
+    // Il proprietario e' salvato come id utente: come campo di testo si
+    // modificherebbe incollando un UUID a mano. Diventa un elenco di nomi,
+    // mentre il valore scritto resta l'id.
+    if (fieldKey === "Clienti Proprietario") {
+      return {
+        module: edit.module,
+        field: edit.field,
+        endpoint: edit.endpoint,
+        patchKey: edit.patchKey,
+        value: edit.value,
+        type: "select",
+        options: Object.keys(ownerNames),
+        optionLabels: ownerNames,
+      }
+    }
+
     return {
       module: edit.module,
       field: edit.field,

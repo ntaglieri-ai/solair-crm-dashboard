@@ -16,6 +16,7 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { MentionText, MentionTextarea } from "@/components/shared/note-mentions"
+import { NotaAzioni } from "@/components/shared/nota-azioni"
 import type { NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -236,6 +237,24 @@ export function CompitoDetailView({ compito }: { compito: Compito }) {
                               <span className="text-xs text-muted-foreground">
                                 {n.data}
                               </span>
+                              <NotaAzioni
+                                noteId={n.id}
+                                basePath={`/api/compiti/${compito.id}/notes`}
+                                testo={n.testo}
+                                menzioni={n.menzioni}
+                                onModificata={(testo, menzioni) =>
+                                  setNote((precedenti) =>
+                                    precedenti.map((nota) =>
+                                      nota.id === n.id ? { ...nota, testo, menzioni } : nota,
+                                    ),
+                                  )
+                                }
+                                onEliminata={() =>
+                                  setNote((precedenti) =>
+                                    precedenti.filter((nota) => nota.id !== n.id),
+                                  )
+                                }
+                              />
                             </div>
                             <MentionText text={n.testo} mentions={n.menzioni} className="text-pretty text-sm text-muted-foreground" />
                           </div>

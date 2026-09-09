@@ -20,6 +20,7 @@ export async function GET(
     .eq("record_tipo", "cliente")
     .eq("record_id", id)
     .eq("tipo", "nota")
+    .eq("eliminato", false)
     .order("created_at", { ascending: false })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const ids = [...new Set((data ?? []).map((row) => row.utente_id).filter((value): value is string => Boolean(value)))]

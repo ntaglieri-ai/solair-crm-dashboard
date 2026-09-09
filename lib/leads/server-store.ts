@@ -400,6 +400,7 @@ export async function getAllLeads(filters?: {
           .select("record_id")
           .eq("record_tipo", "lead")
           .eq("tipo", "nota")
+          .eq("eliminato", false)
           .in("record_id", ids)
       : Promise.resolve({ data: [], error: null }),
     includeActivityBadge
@@ -539,6 +540,9 @@ export async function getLeadById(id: string): Promise<Lead | undefined> {
       .select("id,tipo,testo,created_at,utente_id,menzioni,formato,allegati")
       .eq("record_tipo", "lead")
       .eq("record_id", id)
+      // Le note cancellate spariscono dalla scheda: la riga resta nel
+      // database, ma non deve piu' comparire in sequenza temporale.
+      .eq("eliminato", false)
       .order("created_at", { ascending: false }),
     supabase
       .from("compiti")

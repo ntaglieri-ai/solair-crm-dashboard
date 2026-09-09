@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { EmailHistorySection } from "@/components/shared/email-history-section"
 import { LayoutRenderer, type RisolviModifica } from "@/components/shared/layout-renderer"
+import { NotaAzioni } from "@/components/shared/nota-azioni"
 import type { LayoutPagina } from "@/lib/crm-settings/layout"
 import { ancoraPagina, paginePiene } from "@/lib/crm-settings/layout-render"
 import { NoteAttachmentList, RichNoteComposer, RichNoteText } from "@/components/shared/rich-note"
@@ -1400,6 +1401,22 @@ function NoteSection({ cliente }: { cliente: ClienteRecord }) {
                   <div className="flex items-center gap-2">
                     <span className="text-[13px] font-semibold text-foreground">{n.autore}</span>
                     <span className="text-[11px] text-muted-foreground">{n.quando}</span>
+                    <NotaAzioni
+                      noteId={n.id}
+                      basePath={`/api/clienti/${cliente.id}/notes`}
+                      testo={n.testo}
+                      menzioni={n.menzioni}
+                      onModificata={(testo, menzioni) =>
+                        setNote((precedenti) =>
+                          precedenti.map((nota) =>
+                            nota.id === n.id ? { ...nota, testo, menzioni } : nota,
+                          ),
+                        )
+                      }
+                      onEliminata={() =>
+                        setNote((precedenti) => precedenti.filter((nota) => nota.id !== n.id))
+                      }
+                    />
                   </div>
                   <RichNoteText text={n.testo} mentions={n.menzioni} className="text-[13px] text-foreground" />
                   <NoteAttachmentList

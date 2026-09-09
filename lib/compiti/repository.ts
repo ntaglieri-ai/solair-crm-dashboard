@@ -360,6 +360,7 @@ export async function getCompitoById(id: string): Promise<Compito | null> {
     .eq("record_tipo", "compito")
     .eq("record_id", id)
     .eq("tipo", "nota")
+    .eq("eliminato", false)
     .order("created_at", { ascending: false })
   if (notes.error) {
     console.error("[compiti/repository] note:", notes.error.message)

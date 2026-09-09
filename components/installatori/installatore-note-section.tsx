@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { NoteAttachmentList, RichNoteComposer, RichNoteText } from "@/components/shared/rich-note"
+import { NotaAzioni } from "@/components/shared/nota-azioni"
 import type { NoteAttachment, NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
 import { InstallatoreAvatar } from "./installatore-utils"
 
@@ -107,6 +108,22 @@ export function InstallatoreNoteSection({
                 <div className="flex items-center gap-2">
                   <span className="text-[13px] font-semibold text-foreground">{n.autore}</span>
                   <span className="text-[11px] text-muted-foreground">{n.quando}</span>
+                  <NotaAzioni
+                    noteId={n.id}
+                    basePath={`/api/installatori/${installatoreId}/notes`}
+                    testo={n.testo}
+                    menzioni={n.menzioni}
+                    onModificata={(testo, menzioni) =>
+                      setNote((precedenti) =>
+                        precedenti.map((nota) =>
+                          nota.id === n.id ? { ...nota, testo, menzioni } : nota,
+                        ),
+                      )
+                    }
+                    onEliminata={() =>
+                      setNote((precedenti) => precedenti.filter((nota) => nota.id !== n.id))
+                    }
+                  />
                 </div>
                 <RichNoteText text={n.testo} mentions={n.menzioni} className="text-[13px] text-foreground" />
                 <NoteAttachmentList

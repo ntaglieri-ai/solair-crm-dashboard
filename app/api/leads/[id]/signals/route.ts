@@ -31,6 +31,7 @@ export async function GET(
       .eq("record_tipo", "lead")
       .eq("record_id", id)
       .eq("tipo", "nota")
+      .eq("eliminato", false)
       .order("created_at", { ascending: false }),
     supabase
       .from("compiti")

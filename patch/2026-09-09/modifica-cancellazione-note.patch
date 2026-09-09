@@ -1,0 +1,735 @@
+diff --git a/app/api/clienti/[id]/notes/[notaId]/route.ts b/app/api/clienti/[id]/notes/[notaId]/route.ts
+new file mode 100644
+index 0000000..f7750a6
+--- /dev/null
++++ b/app/api/clienti/[id]/notes/[notaId]/route.ts
+@@ -0,0 +1,27 @@
++import { aggiornaNota, eliminaNota, type NoteModuloConfig } from "@/lib/notes/note-crud-server"
++
++/**
++ * Modifica e cancellazione di una nota cliente.
++ *
++ * La logica sta in lib/notes/note-crud-server: le note di tutti i moduli
++ * vivono nella stessa tabella, e qui cambia solo di quale record si tratta.
++ */
++const CONFIG: NoteModuloConfig = {
++  modulo: "clienti",
++  recordTipo: "cliente",
++  tabellaRecord: "clienti",
++  colonnaProprietario: "clienti_proprietario_id",
++  nonTrovato: "Cliente non trovato",
++}
++
++type Params = { params: Promise<{ id: string; notaId: string }> }
++
++export async function PATCH(request: Request, { params }: Params) {
++  const { id, notaId } = await params
++  return aggiornaNota(CONFIG, request, id, notaId)
++}
++
++export async function DELETE(_request: Request, { params }: Params) {
++  const { id, notaId } = await params
++  return eliminaNota(CONFIG, id, notaId)
++}
+diff --git a/app/api/clienti/[id]/notes/route.ts b/app/api/clienti/[id]/notes/route.ts
+index 791fa86..34a0972 100644
+--- a/app/api/clienti/[id]/notes/route.ts
++++ b/app/api/clienti/[id]/notes/route.ts
+@@ -20,6 +20,7 @@ export async function GET(
+     .eq("record_tipo", "cliente")
+     .eq("record_id", id)
+     .eq("tipo", "nota")
++    .eq("eliminato", false)
+     .order("created_at", { ascending: false })
+   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+   const ids = [...new Set((data ?? []).map((row) => row.utente_id).filter((value): value is string => Boolean(value)))]
+diff --git a/app/api/compiti/[id]/notes/[notaId]/route.ts b/app/api/compiti/[id]/notes/[notaId]/route.ts
+new file mode 100644
+index 0000000..146746a
+--- /dev/null
++++ b/app/api/compiti/[id]/notes/[notaId]/route.ts
+@@ -0,0 +1,27 @@
++import { aggiornaNota, eliminaNota, type NoteModuloConfig } from "@/lib/notes/note-crud-server"
++
++/**
++ * Modifica e cancellazione di una nota compito.
++ *
++ * La logica sta in lib/notes/note-crud-server: le note di tutti i moduli
++ * vivono nella stessa tabella, e qui cambia solo di quale record si tratta.
++ */
++const CONFIG: NoteModuloConfig = {
++  modulo: "compiti",
++  recordTipo: "compito",
++  tabellaRecord: "compiti",
++  colonnaProprietario: "proprietario_id",
++  nonTrovato: "Compito non trovato",
++}
++
++type Params = { params: Promise<{ id: string; notaId: string }> }
++
++export async function PATCH(request: Request, { params }: Params) {
++  const { id, notaId } = await params
++  return aggiornaNota(CONFIG, request, id, notaId)
++}
++
++export async function DELETE(_request: Request, { params }: Params) {
++  const { id, notaId } = await params
++  return eliminaNota(CONFIG, id, notaId)
++}
+diff --git a/app/api/compiti/[id]/notes/route.ts b/app/api/compiti/[id]/notes/route.ts
+index 44703c8..ecd2e4e 100644
+--- a/app/api/compiti/[id]/notes/route.ts
++++ b/app/api/compiti/[id]/notes/route.ts
+@@ -21,6 +21,7 @@ export async function GET(
+     .eq("record_tipo", "compito")
+     .eq("record_id", id)
+     .eq("tipo", "nota")
++    .eq("eliminato", false)
+     .order("created_at", { ascending: false })
+   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+ 
+diff --git a/app/api/installatori/[id]/notes/[notaId]/route.ts b/app/api/installatori/[id]/notes/[notaId]/route.ts
+new file mode 100644
+index 0000000..db9c3cc
+--- /dev/null
++++ b/app/api/installatori/[id]/notes/[notaId]/route.ts
+@@ -0,0 +1,27 @@
++import { aggiornaNota, eliminaNota, type NoteModuloConfig } from "@/lib/notes/note-crud-server"
++
++/**
++ * Modifica e cancellazione di una nota installatore.
++ *
++ * La logica sta in lib/notes/note-crud-server: le note di tutti i moduli
++ * vivono nella stessa tabella, e qui cambia solo di quale record si tratta.
++ */
++const CONFIG: NoteModuloConfig = {
++  modulo: "installatori",
++  recordTipo: "installatore",
++  tabellaRecord: "installatori",
++  colonnaProprietario: "proprietario_id",
++  nonTrovato: "Installatore non trovato",
++}
++
++type Params = { params: Promise<{ id: string; notaId: string }> }
++
++export async function PATCH(request: Request, { params }: Params) {
++  const { id, notaId } = await params
++  return aggiornaNota(CONFIG, request, id, notaId)
++}
++
++export async function DELETE(_request: Request, { params }: Params) {
++  const { id, notaId } = await params
++  return eliminaNota(CONFIG, id, notaId)
++}
+diff --git a/app/api/installatori/[id]/notes/route.ts b/app/api/installatori/[id]/notes/route.ts
+index 93ed35b..2d61290 100644
+--- a/app/api/installatori/[id]/notes/route.ts
++++ b/app/api/installatori/[id]/notes/route.ts
+@@ -21,6 +21,7 @@ export async function GET(
+     .eq("record_tipo", "installatore")
+     .eq("record_id", id)
+     .eq("tipo", "nota")
++    .eq("eliminato", false)
+     .order("created_at", { ascending: false })
+   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+ 
+diff --git a/app/api/leads/[id]/notes/[notaId]/route.ts b/app/api/leads/[id]/notes/[notaId]/route.ts
+new file mode 100644
+index 0000000..5045467
+--- /dev/null
++++ b/app/api/leads/[id]/notes/[notaId]/route.ts
+@@ -0,0 +1,27 @@
++import { aggiornaNota, eliminaNota, type NoteModuloConfig } from "@/lib/notes/note-crud-server"
++
++/**
++ * Modifica e cancellazione di una nota lead.
++ *
++ * La logica sta in lib/notes/note-crud-server: le note di tutti i moduli
++ * vivono nella stessa tabella, e qui cambia solo di quale record si tratta.
++ */
++const CONFIG: NoteModuloConfig = {
++  modulo: "lead",
++  recordTipo: "lead",
++  tabellaRecord: "leads",
++  colonnaProprietario: "lead_proprietario_id",
++  nonTrovato: "Lead non trovato",
++}
++
++type Params = { params: Promise<{ id: string; notaId: string }> }
++
++export async function PATCH(request: Request, { params }: Params) {
++  const { id, notaId } = await params
++  return aggiornaNota(CONFIG, request, id, notaId)
++}
++
++export async function DELETE(_request: Request, { params }: Params) {
++  const { id, notaId } = await params
++  return eliminaNota(CONFIG, id, notaId)
++}
+diff --git a/app/api/leads/[id]/signals/route.ts b/app/api/leads/[id]/signals/route.ts
+index 6d273b1..b2abca5 100644
+--- a/app/api/leads/[id]/signals/route.ts
++++ b/app/api/leads/[id]/signals/route.ts
+@@ -31,6 +31,7 @@ export async function GET(
+       .eq("record_tipo", "lead")
+       .eq("record_id", id)
+       .eq("tipo", "nota")
++      .eq("eliminato", false)
+       .order("created_at", { ascending: false }),
+     supabase
+       .from("compiti")
+diff --git a/components/clienti/cliente-detail-content.tsx b/components/clienti/cliente-detail-content.tsx
+index 4d3c7e0..3b80f41 100644
+--- a/components/clienti/cliente-detail-content.tsx
++++ b/components/clienti/cliente-detail-content.tsx
+@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button"
+ import { Input } from "@/components/ui/input"
+ import { EmailHistorySection } from "@/components/shared/email-history-section"
+ import { LayoutRenderer, type RisolviModifica } from "@/components/shared/layout-renderer"
++import { NotaAzioni } from "@/components/shared/nota-azioni"
+ import type { LayoutPagina } from "@/lib/crm-settings/layout"
+ import { ancoraPagina, paginePiene } from "@/lib/crm-settings/layout-render"
+ import { NoteAttachmentList, RichNoteComposer, RichNoteText } from "@/components/shared/rich-note"
+@@ -1400,6 +1401,22 @@ function NoteSection({ cliente }: { cliente: ClienteRecord }) {
+                   <div className="flex items-center gap-2">
+                     <span className="text-[13px] font-semibold text-foreground">{n.autore}</span>
+                     <span className="text-[11px] text-muted-foreground">{n.quando}</span>
++                    <NotaAzioni
++                      noteId={n.id}
++                      basePath={`/api/clienti/${cliente.id}/notes`}
++                      testo={n.testo}
++                      menzioni={n.menzioni}
++                      onModificata={(testo, menzioni) =>
++                        setNote((precedenti) =>
++                          precedenti.map((nota) =>
++                            nota.id === n.id ? { ...nota, testo, menzioni } : nota,
++                          ),
++                        )
++                      }
++                      onEliminata={() =>
++                        setNote((precedenti) => precedenti.filter((nota) => nota.id !== n.id))
++                      }
++                    />
+                   </div>
+                   <RichNoteText text={n.testo} mentions={n.menzioni} className="text-[13px] text-foreground" />
+                   <NoteAttachmentList
+diff --git a/components/compiti/compito-detail-view.tsx b/components/compiti/compito-detail-view.tsx
+index 77a8f50..98fa0c2 100644
+--- a/components/compiti/compito-detail-view.tsx
++++ b/components/compiti/compito-detail-view.tsx
+@@ -16,6 +16,7 @@ import { toast } from "sonner"
+ import { cn } from "@/lib/utils"
+ import { Button } from "@/components/ui/button"
+ import { MentionText, MentionTextarea } from "@/components/shared/note-mentions"
++import { NotaAzioni } from "@/components/shared/nota-azioni"
+ import type { NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
+ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+ import {
+@@ -236,6 +237,24 @@ export function CompitoDetailView({ compito }: { compito: Compito }) {
+                               <span className="text-xs text-muted-foreground">
+                                 {n.data}
+                               </span>
++                              <NotaAzioni
++                                noteId={n.id}
++                                basePath={`/api/compiti/${compito.id}/notes`}
++                                testo={n.testo}
++                                menzioni={n.menzioni}
++                                onModificata={(testo, menzioni) =>
++                                  setNote((precedenti) =>
++                                    precedenti.map((nota) =>
++                                      nota.id === n.id ? { ...nota, testo, menzioni } : nota,
++                                    ),
++                                  )
++                                }
++                                onEliminata={() =>
++                                  setNote((precedenti) =>
++                                    precedenti.filter((nota) => nota.id !== n.id),
++                                  )
++                                }
++                              />
+                             </div>
+                             <MentionText text={n.testo} mentions={n.menzioni} className="text-pretty text-sm text-muted-foreground" />
+                           </div>
+diff --git a/components/installatori/installatore-note-section.tsx b/components/installatori/installatore-note-section.tsx
+index 978346c..b911771 100644
+--- a/components/installatori/installatore-note-section.tsx
++++ b/components/installatori/installatore-note-section.tsx
+@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
+ import { toast } from "sonner"
+ import { Button } from "@/components/ui/button"
+ import { NoteAttachmentList, RichNoteComposer, RichNoteText } from "@/components/shared/rich-note"
++import { NotaAzioni } from "@/components/shared/nota-azioni"
+ import type { NoteAttachment, NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
+ import { InstallatoreAvatar } from "./installatore-utils"
+ 
+@@ -107,6 +108,22 @@ export function InstallatoreNoteSection({
+                 <div className="flex items-center gap-2">
+                   <span className="text-[13px] font-semibold text-foreground">{n.autore}</span>
+                   <span className="text-[11px] text-muted-foreground">{n.quando}</span>
++                  <NotaAzioni
++                    noteId={n.id}
++                    basePath={`/api/installatori/${installatoreId}/notes`}
++                    testo={n.testo}
++                    menzioni={n.menzioni}
++                    onModificata={(testo, menzioni) =>
++                      setNote((precedenti) =>
++                        precedenti.map((nota) =>
++                          nota.id === n.id ? { ...nota, testo, menzioni } : nota,
++                        ),
++                      )
++                    }
++                    onEliminata={() =>
++                      setNote((precedenti) => precedenti.filter((nota) => nota.id !== n.id))
++                    }
++                  />
+                 </div>
+                 <RichNoteText text={n.testo} mentions={n.menzioni} className="text-[13px] text-foreground" />
+                 <NoteAttachmentList
+diff --git a/components/leads/lead-detail-content.tsx b/components/leads/lead-detail-content.tsx
+index f5dc6d6..2b21f58 100644
+--- a/components/leads/lead-detail-content.tsx
++++ b/components/leads/lead-detail-content.tsx
+@@ -32,6 +32,7 @@ import { CalendarioRecordSection } from "@/components/calendario/calendario-reco
+ import { Button } from "@/components/ui/button"
+ import { EmailHistorySection } from "@/components/shared/email-history-section"
+ import { LayoutRenderer, type RisolviModifica } from "@/components/shared/layout-renderer"
++import { NotaAzioni } from "@/components/shared/nota-azioni"
+ import type { LayoutPagina } from "@/lib/crm-settings/layout"
+ import { ancoraPagina, paginePiene } from "@/lib/crm-settings/layout-render"
+ import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
+@@ -637,12 +638,24 @@ function NoteSection({ lead }: { lead: Lead }) {
+                 <span className="text-[11px] text-muted-foreground">
+                   {n.quando}
+                 </span>
+-                <button
+-                  type="button"
+-                  className="ml-auto text-[11px] font-medium text-teal opacity-0 transition-opacity hover:underline group-hover:opacity-100"
+-                >
+-                  Modifica
+-                </button>
++                {/* Qui c'era un pulsante "Modifica" che non faceva nulla:
++                    sostituito dai comandi veri. */}
++                <NotaAzioni
++                  noteId={n.id}
++                  basePath={`/api/leads/${lead.id}/notes`}
++                  testo={n.testo}
++                  menzioni={n.menzioni}
++                  onModificata={(testo, menzioni) =>
++                    setNote((precedenti) =>
++                      precedenti.map((nota) =>
++                        nota.id === n.id ? { ...nota, testo, menzioni } : nota,
++                      ),
++                    )
++                  }
++                  onEliminata={() =>
++                    setNote((precedenti) => precedenti.filter((nota) => nota.id !== n.id))
++                  }
++                />
+               </div>
+               <RichNoteText text={n.testo} mentions={n.menzioni} className="text-[13px] text-foreground" />
+               <NoteAttachmentList
+diff --git a/components/shared/nota-azioni.tsx b/components/shared/nota-azioni.tsx
+new file mode 100644
+index 0000000..08e6fe6
+--- /dev/null
++++ b/components/shared/nota-azioni.tsx
+@@ -0,0 +1,142 @@
++"use client"
++
++import { useState } from "react"
++import { toast } from "sonner"
++import { IconPencil, IconTrash, IconCheck, IconX } from "@tabler/icons-react"
++import { Button } from "@/components/ui/button"
++import { RichNoteComposer } from "@/components/shared/rich-note"
++import { usePermissions } from "@/lib/permissions/provider"
++import type { NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
++
++/**
++ * Comandi di modifica e cancellazione di una nota.
++ *
++ * Le liste di note dei quattro moduli hanno resa diversa ma stessi comandi:
++ * tenerli qui evita quattro copie che si correggono una alla volta.
++ *
++ * Chi puo' usarli lo decide il permesso `note.gestione`, concesso a
++ * Superadmin e Amministratori: chi non ce l'ha non vede i pulsanti, e le
++ * route rispondono comunque 404.
++ */
++export function NotaAzioni({
++  noteId,
++  basePath,
++  testo,
++  menzioni,
++  onModificata,
++  onEliminata,
++}: {
++  noteId: string
++  /** Base delle route del modulo, es. "/api/clienti/<id>/notes". */
++  basePath: string
++  testo: string
++  menzioni?: NoteMention[]
++  onModificata: (testo: string, menzioni: NoteMention[]) => void
++  onEliminata: () => void
++}) {
++  const permissions = usePermissions()
++  const [modifica, setModifica] = useState(false)
++  const [bozza, setBozza] = useState(testo)
++  const [bozzaMenzioni, setBozzaMenzioni] = useState<NoteMentionDraft[]>(menzioni ?? [])
++  // Il compositore accetta allegati, ma in modifica non se ne aggiungono:
++  // quelli della nota restano quelli caricati alla creazione.
++  const [allegati, setAllegati] = useState<File[]>([])
++  const [inCorso, setInCorso] = useState(false)
++
++  if (!permissions.canAction("note.gestione")) return null
++
++  async function salva() {
++    if (!bozza.trim()) return
++    setInCorso(true)
++    try {
++      const formData = new FormData()
++      formData.append("text", bozza)
++      formData.append("mentions", JSON.stringify(bozzaMenzioni))
++      const risposta = await fetch(`${basePath}/${noteId}`, { method: "PATCH", body: formData })
++      if (!risposta.ok) throw new Error()
++      const aggiornata = (await risposta.json()) as { testo?: string; menzioni?: NoteMention[] }
++      onModificata(aggiornata.testo ?? bozza, aggiornata.menzioni ?? [])
++      setModifica(false)
++    } catch {
++      toast.error("Modifica non riuscita")
++    } finally {
++      setInCorso(false)
++    }
++  }
++
++  async function elimina() {
++    if (!window.confirm("Eliminare questa nota? Sparisce dalla scheda.")) return
++    setInCorso(true)
++    try {
++      const risposta = await fetch(`${basePath}/${noteId}`, { method: "DELETE" })
++      if (!risposta.ok) throw new Error()
++      onEliminata()
++    } catch {
++      toast.error("Eliminazione non riuscita")
++    } finally {
++      setInCorso(false)
++    }
++  }
++
++  if (modifica) {
++    return (
++      <div className="mt-2 flex flex-col gap-2">
++        <RichNoteComposer
++          value={bozza}
++          onChange={setBozza}
++          mentions={bozzaMenzioni}
++          onMentionsChange={setBozzaMenzioni}
++          files={allegati}
++          onFilesChange={setAllegati}
++          rows={3}
++          className="bg-card text-[13px]"
++          disabled={inCorso}
++        />
++        <div className="flex justify-end gap-1">
++          <Button
++            size="sm"
++            variant="ghost"
++            disabled={inCorso}
++            onClick={() => {
++              setBozza(testo)
++              setBozzaMenzioni(menzioni ?? [])
++              setModifica(false)
++            }}
++          >
++            <IconX size={14} data-icon="inline-start" />
++            Annulla
++          </Button>
++          <Button size="sm" disabled={inCorso || !bozza.trim()} onClick={() => void salva()}>
++            <IconCheck size={14} data-icon="inline-start" />
++            Salva
++          </Button>
++        </div>
++      </div>
++    )
++  }
++
++  return (
++    <div className="ml-auto flex items-center gap-0.5 text-muted-foreground/70">
++      <Button
++        variant="ghost"
++        size="icon"
++        className="size-7"
++        aria-label="Modifica nota"
++        disabled={inCorso}
++        onClick={() => setModifica(true)}
++      >
++        <IconPencil size={14} />
++      </Button>
++      <Button
++        variant="ghost"
++        size="icon"
++        className="size-7 text-destructive hover:text-destructive"
++        aria-label="Elimina nota"
++        disabled={inCorso}
++        onClick={() => void elimina()}
++      >
++        <IconTrash size={14} />
++      </Button>
++    </div>
++  )
++}
+diff --git a/lib/compiti/repository.ts b/lib/compiti/repository.ts
+index 580f0fa..cf965ad 100644
+--- a/lib/compiti/repository.ts
++++ b/lib/compiti/repository.ts
+@@ -360,6 +360,7 @@ export async function getCompitoById(id: string): Promise<Compito | null> {
+     .eq("record_tipo", "compito")
+     .eq("record_id", id)
+     .eq("tipo", "nota")
++    .eq("eliminato", false)
+     .order("created_at", { ascending: false })
+   if (notes.error) {
+     console.error("[compiti/repository] note:", notes.error.message)
+diff --git a/lib/leads/server-store.ts b/lib/leads/server-store.ts
+index 58133e0..e6db60a 100644
+--- a/lib/leads/server-store.ts
++++ b/lib/leads/server-store.ts
+@@ -400,6 +400,7 @@ export async function getAllLeads(filters?: {
+           .select("record_id")
+           .eq("record_tipo", "lead")
+           .eq("tipo", "nota")
++          .eq("eliminato", false)
+           .in("record_id", ids)
+       : Promise.resolve({ data: [], error: null }),
+     includeActivityBadge
+@@ -539,6 +540,9 @@ export async function getLeadById(id: string): Promise<Lead | undefined> {
+       .select("id,tipo,testo,created_at,utente_id,menzioni,formato,allegati")
+       .eq("record_tipo", "lead")
+       .eq("record_id", id)
++      // Le note cancellate spariscono dalla scheda: la riga resta nel
++      // database, ma non deve piu' comparire in sequenza temporale.
++      .eq("eliminato", false)
+       .order("created_at", { ascending: false }),
+     supabase
+       .from("compiti")
+diff --git a/lib/notes/note-crud-server.ts b/lib/notes/note-crud-server.ts
+new file mode 100644
+index 0000000..111da83
+--- /dev/null
++++ b/lib/notes/note-crud-server.ts
+@@ -0,0 +1,144 @@
++import { NextResponse } from "next/server"
++import { createClient } from "@/lib/supabase/server"
++import { requireApiRecord } from "@/lib/permissions/server"
++import { canAccessOwnedRecord } from "@/lib/permissions/data-scope"
++import { resolveNoteMentions } from "./mentions-server"
++import { parseNotePayload } from "./note-files"
++import type { FieldModuleKey } from "@/lib/permissions/field-catalog"
++
++/**
++ * Modifica e cancellazione delle note normali.
++ *
++ * Le note vivono tutte in `attivita`, distinte dal record a cui
++ * appartengono: la logica e' quindi una sola, e ogni modulo si limita a
++ * dire qual e' il suo record.
++ *
++ * Chi puo' farlo lo decide il permesso `note.gestione`, concesso per
++ * impostazione predefinita a Superadmin e Amministratori. Non e' un elenco
++ * di ruoli scritto qui: si toglie e si concede dalla pagina Permessi.
++ *
++ * La cancellazione e' recuperabile: la riga resta e viene marcata, come per
++ * le note interne. Una nota cancellata per sbaglio e' un'informazione persa,
++ * e in un CRM le informazioni perse non tornano.
++ */
++
++export const AZIONE_GESTIONE_NOTE = "note.gestione"
++
++export type NoteModuloConfig = {
++  /** Modulo dei permessi. */
++  modulo: FieldModuleKey
++  /** Valore di `attivita.record_tipo` per questo modulo. */
++  recordTipo: string
++  /** Tabella del record a cui la nota appartiene. */
++  tabellaRecord: string
++  /** Colonna del proprietario sul record, per il perimetro di visibilita'. */
++  colonnaProprietario: string
++  /** Messaggio quando il record non e' raggiungibile da chi chiede. */
++  nonTrovato: string
++}
++
++const COLONNE = "id,testo,created_at,utente_id,menzioni,formato,allegati"
++
++/**
++ * Verifica in un colpo solo che chi chiede possa gestire le note, che veda
++ * il record, e che la nota indicata appartenga davvero a quel record.
++ *
++ * L'ultimo controllo non e' pedanteria: senza, passando l'id di una nota di
++ * un altro record si modificherebbe una nota che non si ha diritto di
++ * toccare.
++ */
++async function verifica(config: NoteModuloConfig, recordId: string, notaId: string) {
++  const guard = await requireApiRecord(config.modulo, "edit")
++  if (guard.response) return { errore: guard.response }
++
++  if (!guard.permissions.canAction(AZIONE_GESTIONE_NOTE)) {
++    return { errore: NextResponse.json({ error: "Not found" }, { status: 404 }) }
++  }
++
++  const nelPerimetro = await canAccessOwnedRecord(
++    guard.permissions.snapshot,
++    config.modulo,
++    config.tabellaRecord,
++    config.colonnaProprietario,
++    recordId,
++  )
++  if (!nelPerimetro) {
++    return { errore: NextResponse.json({ error: config.nonTrovato }, { status: 404 }) }
++  }
++
++  const supabase = await createClient()
++  const { data: nota } = await supabase
++    .from("attivita")
++    .select("id")
++    .eq("id", notaId)
++    .eq("record_tipo", config.recordTipo)
++    .eq("record_id", recordId)
++    .eq("tipo", "nota")
++    .eq("eliminato", false)
++    .maybeSingle()
++
++  if (!nota) {
++    return { errore: NextResponse.json({ error: "Nota non trovata" }, { status: 404 }) }
++  }
++
++  return { guard, supabase }
++}
++
++export async function aggiornaNota(
++  config: NoteModuloConfig,
++  request: Request,
++  recordId: string,
++  notaId: string,
++) {
++  const esito = await verifica(config, recordId, notaId)
++  if (esito.errore) return esito.errore
++  const { guard, supabase } = esito
++
++  const payload = await parseNotePayload(request)
++  const testo = payload?.text?.trim() ?? ""
++  if (!testo) return NextResponse.json({ error: "Nota vuota" }, { status: 400 })
++
++  const risolte = await resolveNoteMentions(supabase, testo, payload?.mentions ?? [])
++
++  const { data, error } = await supabase
++    .from("attivita")
++    .update({
++      testo,
++      menzioni: risolte.mentions,
++      formato: "markdown",
++      modificato_da: guard.permissions.snapshot.subject.userId,
++      modificato_il: new Date().toISOString(),
++    })
++    .eq("id", notaId)
++    .select(COLONNE)
++    .single()
++
++  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
++
++  // Nessun avviso ai menzionati in modifica: chi era gia' menzionato lo
++  // sapeva, e chi viene aggiunto correggendo un refuso non deve ricevere
++  // una notifica per una nota di ieri.
++  return NextResponse.json(data)
++}
++
++export async function eliminaNota(
++  config: NoteModuloConfig,
++  recordId: string,
++  notaId: string,
++) {
++  const esito = await verifica(config, recordId, notaId)
++  if (esito.errore) return esito.errore
++  const { guard, supabase } = esito
++
++  const { error } = await supabase
++    .from("attivita")
++    .update({
++      eliminato: true,
++      eliminato_il: new Date().toISOString(),
++      modificato_da: guard.permissions.snapshot.subject.userId,
++    })
++    .eq("id", notaId)
++
++  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
++  return NextResponse.json({ ok: true })
++}
+diff --git a/lib/permissions/constants.ts b/lib/permissions/constants.ts
+index 2d332c7..c958bf8 100644
+--- a/lib/permissions/constants.ts
++++ b/lib/permissions/constants.ts
+@@ -105,6 +105,7 @@ export const ACTION_KEYS = [
+   "dashboard.system_status.view",
+   "calendario.events.manage_all",
+   "clienti.note_interne.view",
++  "note.gestione",
+   "installatori.note_interne.view",
+   "crm_settings.account.audit.view",
+   "crm_settings.account.session.view",
+@@ -304,6 +305,7 @@ export function buildDefaultPermissionSnapshot(params?: {
+       "dashboard.system_status.view",
+       "calendario.events.manage_all",
+       "clienti.note_interne.view",
++      "note.gestione",
+       "installatori.note_interne.view",
+       "crm_settings.account.users.manage",
+       "crm_settings.account.roles.manage",
+diff --git a/supabase/migrations/20260909e_attivita_note_modifica.sql b/supabase/migrations/20260909e_attivita_note_modifica.sql
+new file mode 100644
+index 0000000..d63a4a8
+--- /dev/null
++++ b/supabase/migrations/20260909e_attivita_note_modifica.sql
+@@ -0,0 +1,47 @@
++-- Modifica e cancellazione delle note normali.
++--
++-- Le note dei moduli (Cliente, Lead, Installatori, Compiti) vivono tutte in
++-- `attivita`. Finora si potevano solo scrivere: una nota sbagliata restava
++-- in scheda per sempre.
++--
++-- La cancellazione e' recuperabile, come per le note interne: la riga resta
++-- e viene marcata. Una nota cancellata per sbaglio e' un'informazione persa,
++-- e in un CRM le informazioni perse non tornano.
++--
++-- `attivita` contiene anche eventi non-nota (cambio stato, creazione): le
++-- colonne nascono con valori che li lasciano intatti, e l'applicazione
++-- consente di marcare solo le righe di tipo 'nota'.
++
++begin;
++
++alter table public.attivita
++  add column if not exists eliminato boolean not null default false,
++  add column if not exists eliminato_il timestamptz,
++  add column if not exists modificato_da uuid references public.utenti(id) on delete set null,
++  add column if not exists modificato_il timestamptz;
++
++do $$ begin
++  -- I due campi della cancellazione si muovono insieme: una riga eliminata
++  -- senza data (o viceversa) perderebbe meta' dell'informazione.
++  if not exists (
++    select 1 from pg_constraint
++    where conrelid = 'public.attivita'::regclass
++      and conname = 'attivita_eliminato_coerente'
++  ) then
++    alter table public.attivita add constraint attivita_eliminato_coerente
++      check ((eliminato and eliminato_il is not null) or (not eliminato and eliminato_il is null));
++  end if;
++end $$;
++
++-- Le attivita' vive di un record: e' la lettura che fa l'app. Indice
++-- parziale, cosi' le eliminate non gonfiano l'indice.
++create index if not exists attivita_record_vive_idx
++  on public.attivita (record_tipo, record_id, created_at desc)
++  where not eliminato;
++
++comment on column public.attivita.eliminato is
++  'Cancellazione recuperabile delle note: la riga resta, sparisce dalla scheda.';
++
++notify pgrst, 'reload schema';
++
++commit;

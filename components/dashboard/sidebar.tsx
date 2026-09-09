@@ -26,12 +26,43 @@ import { usePermissions } from "@/lib/permissions/provider"
 import { NAV_ICONS } from "./icons"
 import { motion } from "framer-motion"
 
-const OGGI = new Intl.DateTimeFormat("it-IT", {
+const FORMATO_DATA = new Intl.DateTimeFormat("it-IT", {
   weekday: "long",
   day: "numeric",
   month: "long",
   year: "numeric",
-}).format(new Date())
+})
+
+function oggi(): string {
+  return FORMATO_DATA.format(new Date())
+}
+
+/**
+ * La data di oggi nella barra laterale.
+ *
+ * Calcolarla una volta sola al caricamento del modulo la congelava: sul
+ * server succede all'avvio del processo, quindi dopo mezzanotte la barra
+ * mostrava il giorno prima a tutti, finche' il server non ripartiva.
+ *
+ * Il primo disegno resta vuoto perche' server e browser devono produrre lo
+ * stesso HTML: a cavallo della mezzanotte i due momenti cadono in giorni
+ * diversi. Il valore compare subito dopo, e si aggiorna da solo al
+ * cambio di giorno per chi lascia la scheda aperta la notte.
+ */
+function useOggi(): string {
+  const [data, setData] = useState("")
+
+  useEffect(() => {
+    setData(oggi())
+
+    const mezzanotte = new Date()
+    mezzanotte.setHours(24, 0, 5, 0)
+    const attesa = setTimeout(() => setData(oggi()), mezzanotte.getTime() - Date.now())
+    return () => clearTimeout(attesa)
+  }, [])
+
+  return data
+}
 
 const DEFAULT_COMPANY_LOGO = "/solair-brand-logo.png"
 
@@ -204,6 +235,7 @@ function SidebarContent({
   onCrmSettingsOpen?: () => void
   onNavigate?: () => void
 }) {
+  const dataOggi = useOggi()
   return (
     <>
       <div className={cn("border-b border-sidebar-border px-5 py-5", mobile && "py-4")}>
@@ -223,8 +255,8 @@ function SidebarContent({
             />
           </div>
         </Link>
-        <p className="mt-3 text-[15px] font-bold capitalize leading-5 text-primary">
-          {OGGI}
+        <p className="mt-3 min-h-5 text-[15px] font-bold capitalize leading-5 text-primary">
+          {dataOggi}
         </p>
       </div>
 
@@ -249,6 +281,7 @@ function SidebarContent({
 }
 
 export function Sidebar() {
+  const dataOggi = useOggi()
   const permissions = usePermissions()
   const pathname = usePathname()
   const previousPathname = useRef(pathname)
@@ -317,7 +350,7 @@ export function Sidebar() {
           </div>
         </div>
         <span className="min-w-0 max-w-[44vw] truncate pl-3 text-right text-sm font-bold capitalize leading-tight text-muted-foreground">
-          {OGGI}
+          {dataOggi}
         </span>
       </header>
 

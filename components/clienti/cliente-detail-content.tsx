@@ -1,6 +1,7 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { AllegatiSection } from "@/components/shared/allegati-section"
 import { NoteInterneSection } from "./note-interne-section"
@@ -33,6 +34,9 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { EmailHistorySection } from "@/components/shared/email-history-section"
+import { LayoutRenderer, type RisolviModifica } from "@/components/shared/layout-renderer"
+import type { LayoutPagina } from "@/lib/crm-settings/layout"
+import { ancoraPagina, paginePiene } from "@/lib/crm-settings/layout-render"
 import { NoteAttachmentList, RichNoteComposer, RichNoteText } from "@/components/shared/rich-note"
 import type { NoteAttachment, NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
 import type { EmailLogEntry } from "@/lib/email/email-log"
@@ -1563,12 +1567,29 @@ function Attivita({ cliente }: { cliente: ClienteRecord }) {
 export function ClienteDetailContent({
   cliente,
   emailLog,
+  layout = [],
 }: {
   cliente: ClienteRecord
   emailLog: EmailLogEntry[]
+  layout?: LayoutPagina[]
 }) {
   const permissions = usePermissions()
   const vediNoteInterne = canAccessNoteInterne(permissions.snapshot.subject.ruoloCode)
+
+  // Con un layout configurato la scheda si disegna da quello. Senza, resta
+  // il rendering scritto qui sotto: e' il percorso di riserva se le tabelle
+  // del layout non sono ancora popolate o la lettura fallisce.
+  const paginePronte = paginePiene(layout)
+  if (paginePronte.length > 0) {
+    return (
+      <ClienteDaLayout
+        cliente={cliente}
+        emailLog={emailLog}
+        layout={paginePronte}
+        vediNoteInterne={vediNoteInterne}
+      />
+    )
+  }
 
   return (
     <ClienteInlineEditContext.Provider value={cliente}>
@@ -1655,5 +1676,116 @@ export function ClienteDetailContent({
       </Section>
     </div>
     </ClienteInlineEditContext.Provider>
+  )
+}
+
+/* -------------------------------------------------------------------------
+ * Scheda disegnata dal layout configurato.
+ *
+ * I campi arrivano dalla configurazione; i pezzi che non sono campi (elenco
+ * allegati, note, storico email, calendario, attivita') restano i componenti
+ * gia' esistenti, agganciati alla pagina che li dichiara.
+ * ---------------------------------------------------------------------- */
+
+function ClienteDaLayout({
+  cliente,
+  emailLog,
+  layout,
+  vediNoteInterne,
+}: {
+  cliente: ClienteRecord
+  emailLog: EmailLogEntry[]
+  layout: LayoutPagina[]
+  vediNoteInterne: boolean
+}) {
+  const router = useRouter()
+
+  // Le note interne restano soggette al permesso: una pagina configurata non
+  // deve poter aggirare un controllo di accesso.
+  const pagineVisibili = vediNoteInterne
+    ? layout
+    : layout.filter((pagina) => pagina.componente !== "note-interne")
+
+  const componenti: Record<string, ReactNode> = {
+    allegati: <Documenti cliente={cliente} />,
+    note: <NoteSection cliente={cliente} />,
+    email: (
+      <EmailHistorySection
+        emailLog={emailLog}
+        emptyLabel="Nessuna email inviata a questo cliente dal CRM."
+        recordTipo="cliente"
+        recordId={cliente.id}
+        nomeRecord={cliente["Nome Clienti"]}
+      />
+    ),
+    "note-interne": (
+      <NoteInterneSection clienteId={cliente.id} nomeRecord={cliente["Nome Clienti"]} />
+    ),
+    calendario: (
+      <CalendarioRecordSection
+        recordTipo="cliente"
+        recordId={cliente.id}
+        nomeRecord={cliente["Nome Clienti"]}
+      />
+    ),
+    attivita: <Attivita cliente={cliente} />,
+  }
+
+  // La modifica inline riusa la risoluzione gia' in uso nella scheda scritta
+  // a mano: stessa colonna, stesso endpoint, stessi permessi di campo.
+  const risolviModifica: RisolviModifica = (fieldKey) => {
+    const edit = clienteInlineEdit(cliente, fieldKey)
+    if (!edit) return null
+    return {
+      module: edit.module,
+      field: edit.field,
+      endpoint: edit.endpoint,
+      patchKey: edit.patchKey,
+      value: edit.value,
+      type: edit.type,
+    }
+  }
+
+  return (
+    <ClienteInlineEditContext.Provider value={cliente}>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <NavDaLayout pagine={pagineVisibili} />
+        <LayoutRenderer
+          pagine={pagineVisibili}
+          record={cliente as unknown as Record<string, unknown>}
+          risolviModifica={risolviModifica}
+          componenti={componenti}
+          onSalvato={() => router.refresh()}
+        />
+      </div>
+    </ClienteInlineEditContext.Provider>
+  )
+}
+
+/**
+ * Navbar delle sezioni ricavata dal layout.
+ *
+ * Le voci e le ancore vengono dalle stesse pagine che il renderer disegna:
+ * cosi' non possono divergere, come invece succederebbe con un elenco
+ * scritto a parte (una pagina rinominata o riordinata lascerebbe un link
+ * verso un'ancora che non esiste).
+ */
+function NavDaLayout({ pagine }: { pagine: LayoutPagina[] }) {
+  const vai = (id: string) =>
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+
+  return (
+    <nav className="flex flex-wrap items-center gap-1 border-b border-border bg-background pb-3 lg:sticky lg:top-[var(--detail-header-h,0px)] lg:z-10 lg:pt-2">
+      {pagine.map((pagina) => (
+        <button
+          key={pagina.id}
+          type="button"
+          onClick={() => vai(ancoraPagina(pagina.pageKey))}
+          className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        >
+          {pagina.label}
+        </button>
+      ))}
+    </nav>
   )
 }

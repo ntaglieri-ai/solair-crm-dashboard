@@ -6,6 +6,9 @@ import { ClienteDetailContent } from "@/components/clienti/cliente-detail-conten
 import { ClienteIntelligencePanel } from "@/components/clienti/cliente-intelligence-panel"
 import { requirePage } from "@/lib/permissions/server"
 import { listEmailLog } from "@/lib/email/email-log"
+import { createClient } from "@/lib/supabase/server"
+import { loadLayout } from "@/lib/crm-settings/layout-server"
+import { soloVisibili } from "@/lib/crm-settings/layout"
 
 export default async function ClienteDetailPage({
   params,
@@ -20,6 +23,13 @@ export default async function ClienteDetailPage({
   if (!cliente) notFound()
   const emailLog = await listEmailLog("cliente", id)
 
+  // Layout configurabile: se ci sono pagine configurate la scheda si disegna
+  // da queste, altrimenti resta il rendering scritto nel codice. Il loader
+  // torna array vuoto quando le tabelle non ci sono o la lettura fallisce,
+  // quindi un problema sul layout non lascia la scheda inaccessibile.
+  const supabase = await createClient()
+  const layout = soloVisibili(await loadLayout(supabase, "clienti"))
+
   return (
     <div className="flex flex-col gap-6">
       <StickyDetailHeader>
@@ -27,7 +37,7 @@ export default async function ClienteDetailPage({
       </StickyDetailHeader>
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <ClienteDetailContent cliente={cliente} emailLog={emailLog} />
+        <ClienteDetailContent cliente={cliente} emailLog={emailLog} layout={layout} />
         <ClienteIntelligencePanel cliente={cliente} />
       </div>
     </div>

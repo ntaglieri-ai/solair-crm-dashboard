@@ -1,0 +1,352 @@
+diff --git a/app/api/filtri-salvati/route.ts b/app/api/filtri-salvati/route.ts
+new file mode 100644
+index 0000000..27c0f90
+--- /dev/null
++++ b/app/api/filtri-salvati/route.ts
+@@ -0,0 +1,153 @@
++import { NextResponse } from "next/server"
++import { createClient } from "@/lib/supabase/server"
++import { getCurrentPermissions } from "@/lib/permissions/server"
++import { validaAlbero, type CampoFiltrabile } from "@/lib/filtri/albero"
++import { catalogoDaGruppi, gruppiCampiLead } from "@/lib/filtri/catalogo-lead"
++
++/**
++ * Filtri salvati, condivisi fra tutti.
++ *
++ * Su Zoho restano personali e non si possono passare ai colleghi: chi
++ * costruisce un filtro utile se lo tiene. Qui sono di tutti, ed e' la
++ * ragione principale per cui li rifacciamo invece di importarli.
++ *
++ * La definizione viene validata contro il catalogo del modulo prima di
++ * essere salvata: un filtro che arriva dal browser non entra nel database
++ * senza che campi e operatori siano stati riconosciuti.
++ */
++
++const MODULI = ["lead", "clienti", "installatori", "compiti"] as const
++type Modulo = (typeof MODULI)[number]
++
++function isModulo(valore: unknown): valore is Modulo {
++  return typeof valore === "string" && (MODULI as readonly string[]).includes(valore)
++}
++
++/**
++ * Il catalogo del modulo, con le opzioni lasciate aperte.
++ *
++ * Qui interessa che campo e operatore esistano e siano compatibili; i valori
++ * ammessi dei campi a elenco cambiano nel tempo (un nuovo stato, un nuovo
++ * proprietario) e bloccarli al salvataggio renderebbe invalido un filtro
++ * corretto il giorno dopo.
++ */
++function catalogoPerModulo(modulo: Modulo): CampoFiltrabile[] {
++  if (modulo === "lead") {
++    const gruppi = gruppiCampiLead({
++      stati: [],
++      origini: [],
++      sedi: [],
++      proprietari: [],
++      tag: [],
++    })
++    // Le opzioni vengono tolte di proposito: interessa che campo e
++    // operatore esistano, non che il valore sia fra quelli di oggi.
++    return catalogoDaGruppi(gruppi).map((campo) => ({
++      chiave: campo.chiave,
++      etichetta: campo.etichetta,
++      tipo: campo.tipo,
++    }))
++  }
++  return []
++}
++
++export async function GET(request: Request) {
++  const modulo = new URL(request.url).searchParams.get("modulo")
++  if (!isModulo(modulo)) {
++    return NextResponse.json({ error: "Modulo non valido" }, { status: 400 })
++  }
++
++  const permissions = await getCurrentPermissions()
++  if (!permissions.canPage(modulo)) {
++    return NextResponse.json({ error: "Not found" }, { status: 404 })
++  }
++
++  const supabase = await createClient()
++  const { data, error } = await supabase
++    .from("crm_filtri_salvati")
++    .select("id,nome,definizione,creato_da,creato_il")
++    .eq("modulo", modulo)
++    .order("nome")
++
++  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
++  return NextResponse.json({ filtri: data ?? [] })
++}
++
++export async function POST(request: Request) {
++  let body: { modulo?: unknown; nome?: unknown; definizione?: unknown }
++  try {
++    body = await request.json()
++  } catch {
++    return NextResponse.json({ error: "Corpo richiesta non valido" }, { status: 400 })
++  }
++
++  if (!isModulo(body.modulo)) {
++    return NextResponse.json({ error: "Modulo non valido" }, { status: 400 })
++  }
++
++  const permissions = await getCurrentPermissions()
++  if (!permissions.canPage(body.modulo)) {
++    return NextResponse.json({ error: "Not found" }, { status: 404 })
++  }
++
++  const nome = typeof body.nome === "string" ? body.nome.trim() : ""
++  if (!nome || nome.length > 80) {
++    return NextResponse.json({ error: "Nome non valido" }, { status: 400 })
++  }
++
++  const validato = validaAlbero(body.definizione, catalogoPerModulo(body.modulo))
++  if (!validato.ok) {
++    return NextResponse.json({ error: validato.errore }, { status: 400 })
++  }
++
++  const supabase = await createClient()
++  const { data, error } = await supabase
++    .from("crm_filtri_salvati")
++    .insert({
++      modulo: body.modulo,
++      nome,
++      definizione: validato.gruppo,
++      creato_da: permissions.snapshot.subject.userId,
++    })
++    .select("id,nome,definizione,creato_da,creato_il")
++    .single()
++
++  if (error) {
++    // Il nome e' unico per modulo: due filtri omonimi renderebbero l'elenco
++    // illeggibile, e il messaggio del database non lo spiegherebbe.
++    if (error.code === "23505") {
++      return NextResponse.json({ error: "Esiste gia' un filtro con questo nome" }, { status: 409 })
++    }
++    return NextResponse.json({ error: error.message }, { status: 500 })
++  }
++
++  return NextResponse.json(data)
++}
++
++export async function DELETE(request: Request) {
++  const id = new URL(request.url).searchParams.get("id")
++  if (!id) return NextResponse.json({ error: "Id mancante" }, { status: 400 })
++
++  const permissions = await getCurrentPermissions()
++  const supabase = await createClient()
++
++  const { data: filtro } = await supabase
++    .from("crm_filtri_salvati")
++    .select("creato_da")
++    .eq("id", id)
++    .maybeSingle()
++
++  if (!filtro) return NextResponse.json({ error: "Filtro non trovato" }, { status: 404 })
++
++  // Chi l'ha creato lo elimina; gli amministratori possono togliere anche
++  // quelli altrui, perche' un filtro condiviso sbagliato resterebbe li' per
++  // tutti se il suo autore non c'e' piu'.
++  const proprio = filtro.creato_da === permissions.snapshot.subject.userId
++  if (!proprio && !permissions.canAction("note.gestione")) {
++    return NextResponse.json({ error: "Not found" }, { status: 404 })
++  }
++
++  const { error } = await supabase.from("crm_filtri_salvati").delete().eq("id", id)
++  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
++  return NextResponse.json({ ok: true })
++}
+diff --git a/components/shared/quick-contact-icons.tsx b/components/shared/quick-contact-icons.tsx
+index 19a0f5d..25eef5a 100644
+--- a/components/shared/quick-contact-icons.tsx
++++ b/components/shared/quick-contact-icons.tsx
+@@ -1,6 +1,6 @@
+ "use client"
+ 
+-import { useState } from "react"
++import { useEffect, useState } from "react"
+ import { Loader2, Mail, MessageCircle, Phone } from "lucide-react"
+ import { toast } from "sonner"
+ import { Button, buttonVariants } from "@/components/ui/button"
+@@ -90,6 +90,23 @@ export function QuickContactIcons({
+    * (per gli header di dettaglio) invece che come icona compatta (per le celle tabella). */
+   emailAsButton?: boolean
+ }) {
++  // Le icone si disegnano solo nel browser, non nell'HTML del server.
++  //
++  // Il loro aspetto dipende dal numero e dall'e-mail del record: link
++  // cliccabile se ci sono, pulsante spento se mancano. Ma la lista e' viva —
++  // i lead arrivano di continuo dal chatbot — quindi la riga che il server
++  // fotografa e quella a cui il browser si aggancia un istante dopo possono
++  // essere di due record diversi, e React segnala la differenza come errore.
++  //
++  // Disegnarle dopo l'aggancio elimina il confronto alla radice invece di
++  // inseguire i dati. Costa un fotogramma su elementi piccoli e accessori;
++  // il nome, i numeri e tutto il resto della riga restano nell'HTML del
++  // server come prima.
++  const [montato, setMontato] = useState(false)
++  useEffect(() => {
++    setMontato(true)
++  }, [])
++
+   const [emailOpen, setEmailOpen] = useState(false)
+   const [subject, setSubject] = useState("")
+   const [body, setBody] = useState("")
+@@ -137,6 +154,12 @@ export function QuickContactIcons({
+     }
+   }
+ 
++  // Prima dell'aggancio si tiene lo spazio, cosi' la riga non salta quando
++  // le icone compaiono.
++  if (!montato) {
++    return <span className="flex h-8 shrink-0 items-center gap-0.5" aria-hidden />
++  }
++
+   return (
+     <span
+       className="flex shrink-0 items-center gap-0.5"
+diff --git a/lib/filtri/catalogo-lead.ts b/lib/filtri/catalogo-lead.ts
+new file mode 100644
+index 0000000..09d4947
+--- /dev/null
++++ b/lib/filtri/catalogo-lead.ts
+@@ -0,0 +1,138 @@
++import type { CampoFiltrabile, TipoCampo } from "./albero"
++
++/**
++ * I campi filtrabili del Lead, raggruppati per sezione.
++ *
++ * In colonna, trenta campi in fila sono illeggibili: si scorre a lungo senza
++ * sapere dove ci si trova. I gruppi ricalcano le sezioni della scheda, cosi'
++ * chi cerca "Citta'" la trova sotto Indirizzo, dov'e' abituato a vederla.
++ *
++ * L'ordine dentro ogni gruppo e' quello della scheda, non alfabetico: si
++ * cerca per posizione ricordata, non per iniziale.
++ */
++
++export type GruppoCampi = {
++  chiave: string
++  etichetta: string
++  campi: CampoFiltrabile[]
++}
++
++function campo(
++  chiave: string,
++  etichetta: string,
++  tipo: TipoCampo,
++  opzioni?: readonly string[],
++): CampoFiltrabile {
++  return { chiave, etichetta, tipo, opzioni }
++}
++
++/**
++ * I collegati: non sono colonne del record ma domande su altre tabelle
++ * ("questo lead ha attivita' aperte?"). L'unica cosa sensata da chiedere e'
++ * se ce ne sono o no, quindi si presentano come Si'/No.
++ */
++export const COLLEGATI_LEAD: CampoFiltrabile[] = [
++  campo("Attività aperte", "Attività aperte", "collegato"),
++  campo("Attività chiuse", "Attività chiuse", "collegato"),
++  campo("Note", "Note", "collegato"),
++  campo("Allegati", "Allegati", "collegato"),
++  campo("E-mail inviate", "E-mail inviate", "collegato"),
++  campo("Eventi in calendario", "Eventi in calendario", "collegato"),
++]
++
++/**
++ * Costruisce i gruppi per il modulo Lead.
++ *
++ * Le opzioni dei campi a elenco (stati, proprietari, origini) arrivano dai
++ * dati veri e non da un elenco scritto qui: un valore aggiunto in
++ * configurazione deve comparire nel filtro senza toccare il codice.
++ */
++export function gruppiCampiLead(opzioni: {
++  stati: readonly string[]
++  origini: readonly string[]
++  sedi: readonly string[]
++  proprietari: readonly string[]
++  tag: readonly string[]
++}): GruppoCampi[] {
++  return [
++    {
++      chiave: "principali",
++      etichetta: "Informazioni principali",
++      campi: [
++        campo("Nome Lead", "Nome lead", "testo"),
++        campo("Nome", "Nome", "testo"),
++        campo("Cognome", "Cognome", "testo"),
++        campo("E-mail", "E-mail", "testo"),
++        campo("Telefono", "Telefono", "testo"),
++        campo("Mobile/Fisso", "Mobile/Fisso", "testo"),
++        campo("Stato Lead", "Stato lead", "elenco", opzioni.stati),
++        campo("Origine Lead", "Origine lead", "elenco", opzioni.origini),
++        campo("Lead Proprietario", "Proprietario", "elenco", opzioni.proprietari),
++        campo("Sede", "Sede", "elenco", opzioni.sedi),
++        campo("Tag", "Tag", "elenco", opzioni.tag),
++        campo("Valutazione", "Valutazione", "numero"),
++        campo("Residente in Sicilia", "Residente in Sicilia", "booleano"),
++        campo("Wallbox richiesto", "Wallbox richiesto", "booleano"),
++        campo("Creato da", "Creato da", "testo"),
++        campo("campaign name", "Campagna", "testo"),
++        campo("Social Lead ID", "Social Lead ID", "testo"),
++      ],
++    },
++    {
++      chiave: "consensi",
++      etichetta: "Consensi",
++      campi: [
++        campo("Consenso telefono", "Consenso telefono", "booleano"),
++        campo("Consenso e-mail", "Consenso e-mail", "booleano"),
++        campo("Consenso WhatsApp", "Consenso WhatsApp", "booleano"),
++      ],
++    },
++    {
++      chiave: "indirizzo",
++      etichetta: "Indirizzo",
++      campi: [
++        campo("Città", "Città", "testo"),
++        campo("Provincia", "Provincia", "testo"),
++        campo("Paese", "Paese", "testo"),
++        campo("Codice postale", "Codice postale", "testo"),
++      ],
++    },
++    {
++      chiave: "date",
++      etichetta: "Date",
++      campi: [
++        campo("Ora creazione", "Ora creazione", "data"),
++        campo("Ora ultima attività", "Ora ultima attività", "data"),
++        campo("Data Click", "Data click", "data"),
++        campo("Data/Ora", "Data/Ora", "data"),
++      ],
++    },
++    {
++      chiave: "sopralluogo",
++      etichetta: "Sopralluogo",
++      campi: [
++        campo("Installatore - Incaricato sopralluogo", "Installatore incaricato", "testo"),
++        campo("Descrizione", "Descrizione", "testo"),
++      ],
++    },
++    {
++      chiave: "conversione",
++      etichetta: "Conversione",
++      campi: [
++        campo("Account convertito", "Account convertito", "testo"),
++        campo("Contatto convertito", "Contatto convertito", "testo"),
++        campo("Tempo di conversione Lead", "Tempo di conversione", "numero"),
++      ],
++    },
++    {
++      chiave: "collegati",
++      etichetta: "Contenuti collegati",
++      campi: COLLEGATI_LEAD,
++    },
++  ]
++}
++
++/** Il catalogo piatto, per la validazione lato server. */
++export function catalogoDaGruppi(gruppi: GruppoCampi[]): CampoFiltrabile[] {
++  return gruppi.flatMap((gruppo) => gruppo.campi)
++}

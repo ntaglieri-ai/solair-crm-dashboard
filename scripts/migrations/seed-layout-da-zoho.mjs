@@ -105,6 +105,63 @@ const PAGINE_PER_MODULO = {
     { key: "record", label: "Record collegati", componente: "record-collegati", sezioni: [] },
     { key: "timeline", label: "Sequenza temporale", componente: "timeline", sezioni: [] },
   ],
+
+  // Installatori non deriva dall'export Zoho.
+  //
+  // Il modulo Zoho ha 17 campi, di cui 6 interni: quello che resta e' meno
+  // di quanto la scheda mostra gia' oggi, che ha in piu' canale preferito,
+  // stato attivo e note — campi nostri, legati alle automazioni di invio
+  // scheda sopralluogo. Rispecchiare Zoho qui toglierebbe invece di
+  // aggiungere, quindi i blocchi sono descritti direttamente.
+  //
+  // Le chiavi sono quelle del record applicativo (nome, email, ...), non
+  // etichette Zoho: e' cosi' che questo modulo espone i suoi campi.
+  installatori: [
+    {
+      key: "anagrafica",
+      label: "Anagrafica",
+      blocchi: [
+        {
+          key: "contatti",
+          label: "Contatti",
+          campi: [
+            { key: "nome", label: "Nome" },
+            { key: "email", label: "E-mail" },
+            { key: "email_secondaria", label: "E-mail secondaria" },
+            { key: "telefono", label: "Telefono" },
+          ],
+        },
+        {
+          key: "stato-assegnazione",
+          label: "Stato e assegnazione",
+          campi: [
+            { key: "attivo", label: "Attivo" },
+            { key: "canale_preferito", label: "Canale preferito" },
+            { key: "tag", label: "Tag" },
+            { key: "proprietario_nome", label: "Proprietario", solaLettura: true },
+          ],
+        },
+        {
+          key: "annotazioni",
+          label: "Annotazioni",
+          colonne: 1,
+          campi: [{ key: "note", label: "Note", span: 1 }],
+        },
+        {
+          key: "registro",
+          label: "Registro",
+          campi: [
+            { key: "created_at", label: "Creato", solaLettura: true },
+            { key: "updated_at", label: "Aggiornato", solaLettura: true },
+          ],
+        },
+      ],
+    },
+    { key: "allegati", label: "Allegati", componente: "allegati", blocchi: [] },
+    { key: "note", label: "Note", componente: "note", blocchi: [] },
+    { key: "email", label: "E-mail", componente: "email", blocchi: [] },
+    { key: "calendario", label: "Calendario", componente: "calendario", blocchi: [] },
+  ],
 }
 
 /**
@@ -194,10 +251,6 @@ function traduciFormula(expression, etichettaPerApiName) {
 
 async function main() {
   const percorso = argomento("file")
-  if (typeof percorso !== "string") {
-    console.error("Indicare il file: --file=layout-clienti.json")
-    process.exit(1)
-  }
   const modulo = argomento("modulo", "clienti")
   const PAGINE = PAGINE_PER_MODULO[modulo]
   const CAMPI_IGNORATI = CAMPI_IGNORATI_PER_MODULO[modulo] ?? {}
@@ -213,14 +266,24 @@ async function main() {
     { auth: { persistSession: false } },
   )
 
-  const esportazione = JSON.parse(readFileSync(percorso, "utf8"))
-  const layout = esportazione.layouts?.[0]
-  if (!layout) {
-    console.error("Nessun layout nel file indicato")
-    process.exit(1)
-  }
+  // I moduli descritti a mano (vedi installatori) non hanno un export da
+  // leggere: i loro blocchi stanno gia' nella mappatura.
+  const daDefinizione = PAGINE.some((pagina) => Array.isArray(pagina.blocchi))
 
-  const sezioni = layout.sections ?? []
+  let sezioni = []
+  if (!daDefinizione) {
+    if (typeof percorso !== "string") {
+      console.error("Indicare il file: --file=layout-clienti.json")
+      process.exit(1)
+    }
+    const esportazione = JSON.parse(readFileSync(percorso, "utf8"))
+    const layout = esportazione.layouts?.[0]
+    if (!layout) {
+      console.error("Nessun layout nel file indicato")
+      process.exit(1)
+    }
+    sezioni = layout.sections ?? []
+  }
   const sezionePerNome = new Map(sezioni.map((s) => [s.display_label, s]))
 
   // api_name -> etichetta, per tradurre i riferimenti nelle formule.
@@ -279,9 +342,23 @@ async function main() {
     }
     totalePagine += 1
 
-    const blocchi = definizione.sezioni
-      .map((nome) => sezionePerNome.get(nome))
-      .filter(Boolean)
+    // Blocchi presi dall'export Zoho oppure dichiarati nella mappatura,
+    // normalizzati nella stessa forma per il resto del ciclo.
+    const blocchi = daDefinizione
+      ? (definizione.blocchi ?? []).map((b) => ({
+          display_label: b.label,
+          block_key: b.key,
+          colonne: b.colonne ?? 2,
+          fields: b.campi.map((c) => ({
+            field_label: c.label,
+            field_key: c.key,
+            sola_lettura: c.solaLettura === true,
+            span: c.span ?? 1,
+          })),
+        }))
+      : (definizione.sezioni ?? [])
+          .map((nome) => sezionePerNome.get(nome))
+          .filter(Boolean)
 
     console.log(
       `${definizione.label}${definizione.componente ? `  [componente: ${definizione.componente}]` : ""}`,
@@ -295,7 +372,7 @@ async function main() {
         }
       }
 
-      const blockKey = sezione.display_label
+      const blockKey = sezione.block_key ?? sezione.display_label
         .toLowerCase()
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
@@ -312,7 +389,7 @@ async function main() {
               pagina_id: paginaId,
               block_key: blockKey,
               label: sezione.display_label,
-              colonne: 2,
+              colonne: sezione.colonne ?? 2,
               ordinamento: indiceBlocco,
             },
             { onConflict: "pagina_id,block_key" },
@@ -345,11 +422,18 @@ async function main() {
             {
               blocco_id: bloccoId,
               origine: "system",
-              field_key: campo.field_label,
+              field_key: campo.field_key ?? campo.field_label,
+              // L'etichetta si registra solo quando differisce dalla chiave,
+              // altrimenti si userebbe comunque quella nativa.
+              label_override:
+                campo.field_key && campo.field_key !== campo.field_label
+                  ? campo.field_label
+                  : null,
               ordinamento: indiceCampo,
+              span: campo.span ?? 1,
               // Un campo calcolato non e' scrivibile: il valore arriva dalla
               // formula. Su Zoho sono nascosti in creazione e modifica.
-              sola_lettura: campo.data_type === "formula",
+              sola_lettura: campo.sola_lettura === true || campo.data_type === "formula",
               formato:
                 campo.decimal_place != null ? { decimali: campo.decimal_place } : {},
               formula,

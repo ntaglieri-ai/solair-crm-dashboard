@@ -322,7 +322,11 @@ function ContenitoreCampo({
       {trascinabile ? (
         <button
           type="button"
-          className="absolute left-0 top-0.5 cursor-grab touch-none p-0.5 text-muted-foreground/40 transition-opacity hover:text-foreground focus-visible:opacity-100 active:cursor-grabbing sm:opacity-0 sm:group-hover/campo:opacity-100"
+          // Sempre visibile, appena accennata: si scurisce passandoci sopra
+          // o passando sul campo. Prima era nascosta e compariva solo
+          // all'hover, ma la combinazione di prefisso responsive e gruppo
+          // con nome non produceva la classe attesa e restava invisibile.
+          className="absolute left-0 top-0.5 cursor-grab touch-none p-0.5 text-muted-foreground/30 transition-colors hover:text-foreground group-hover/campo:text-muted-foreground/70 active:cursor-grabbing"
           aria-label={`Trascina per spostare il campo ${etichetta}`}
           {...attributes}
           {...listeners}

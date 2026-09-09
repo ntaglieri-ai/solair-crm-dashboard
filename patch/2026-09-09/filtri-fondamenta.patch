@@ -1,0 +1,717 @@
+diff --git a/lib/filtri/__tests__/albero.test.ts b/lib/filtri/__tests__/albero.test.ts
+new file mode 100644
+index 0000000..245ed49
+--- /dev/null
++++ b/lib/filtri/__tests__/albero.test.ts
+@@ -0,0 +1,204 @@
++import { describe, expect, it } from "vitest"
++import {
++  contaCondizioni,
++  potaVuoti,
++  validaAlbero,
++  type CampoFiltrabile,
++  type Gruppo,
++} from "../albero"
++import { condizioniCollegate, traduciAlbero } from "../traduci"
++
++const CATALOGO: CampoFiltrabile[] = [
++  { chiave: "Nome Lead", etichetta: "Nome", tipo: "testo" },
++  {
++    chiave: "Stato Lead",
++    etichetta: "Stato",
++    tipo: "elenco",
++    opzioni: ["Contattato", "Perso", "Non contattato"],
++  },
++  { chiave: "Valutazione", etichetta: "Valutazione", tipo: "numero" },
++  { chiave: "Ora creazione", etichetta: "Creato", tipo: "data" },
++  { chiave: "Residente in Sicilia", etichetta: "Sicilia", tipo: "booleano" },
++  { chiave: "Attività aperte", etichetta: "Attività aperte", tipo: "collegato" },
++]
++
++const COLONNE: Record<string, string> = {
++  "Nome Lead": "nome_lead",
++  "Stato Lead": "stato_lead",
++  Valutazione: "valutazione",
++  "Ora creazione": "created_at",
++  "Residente in Sicilia": "residente_in_sicilia",
++}
++
++function gruppo(nodi: unknown[], connettore: "e" | "o" = "e") {
++  return { tipo: "gruppo", connettore, nodi }
++}
++function cond(campo: string, operatore: string, valori: unknown[] = []) {
++  return { tipo: "condizione", campo, operatore, valori }
++}
++
++describe("validaAlbero", () => {
++  it("accetta un filtro semplice", () => {
++    const esito = validaAlbero(gruppo([cond("Nome Lead", "contiene", ["rossi"])]), CATALOGO)
++    expect(esito.ok).toBe(true)
++  })
++
++  it("rifiuta un campo che non e' nel catalogo", () => {
++    // Senza questo controllo si potrebbe chiedere al database di filtrare su
++    // una colonna qualsiasi, comprese quelle che l'utente non deve vedere.
++    const esito = validaAlbero(gruppo([cond("password", "uguale", ["x"])]), CATALOGO)
++    expect(esito.ok).toBe(false)
++    if (!esito.ok) expect(esito.errore).toContain("password")
++  })
++
++  it("rifiuta un operatore incompatibile col tipo del campo", () => {
++    const esito = validaAlbero(gruppo([cond("Valutazione", "contiene", ["x"])]), CATALOGO)
++    expect(esito.ok).toBe(false)
++  })
++
++  it("rifiuta un valore fuori dalle opzioni di un elenco", () => {
++    const esito = validaAlbero(
++      gruppo([cond("Stato Lead", "uno_di", ["Inventato"])]),
++      CATALOGO,
++    )
++    expect(esito.ok).toBe(false)
++  })
++
++  it("non pretende valori dagli operatori che non ne vogliono", () => {
++    const esito = validaAlbero(gruppo([cond("Nome Lead", "vuoto")]), CATALOGO)
++    expect(esito.ok).toBe(true)
++  })
++
++  it("pretende due valori per 'fra'", () => {
++    expect(validaAlbero(gruppo([cond("Valutazione", "fra", [10])]), CATALOGO).ok).toBe(false)
++    expect(validaAlbero(gruppo([cond("Valutazione", "fra", [10, 20])]), CATALOGO).ok).toBe(true)
++  })
++
++  it("rifiuta un annidamento oltre il limite tecnico", () => {
++    // Non e' un limite per chi compone: serve contro un albero costruito ad
++    // arte e spedito all'endpoint.
++    let nodo: unknown = cond("Nome Lead", "contiene", ["x"])
++    for (let i = 0; i < 15; i += 1) nodo = gruppo([nodo])
++    expect(validaAlbero(nodo, CATALOGO).ok).toBe(false)
++  })
++
++  it("accetta gruppi annidati piu' volte entro il limite", () => {
++    const albero = gruppo([
++      gruppo([cond("Stato Lead", "uno_di", ["Perso"]), cond("Nome Lead", "contiene", ["a"])], "o"),
++      cond("Valutazione", "maggiore", [30]),
++    ])
++    expect(validaAlbero(albero, CATALOGO).ok).toBe(true)
++  })
++})
++
++describe("traduciAlbero", () => {
++  function traduci(albero: unknown) {
++    const validato = validaAlbero(albero, CATALOGO)
++    if (!validato.ok) throw new Error(validato.errore)
++    const esito = traduciAlbero(validato.gruppo, CATALOGO, COLONNE)
++    if (!esito.ok) throw new Error(esito.errore)
++    return esito.espressione
++  }
++
++  it("traduce una condizione singola senza involucro inutile", () => {
++    expect(traduci(gruppo([cond("Stato Lead", "uno_di", ["Perso"])]))).toBe(
++      'stato_lead.in.("Perso")',
++    )
++  })
++
++  it("unisce con and le condizioni di un gruppo in E", () => {
++    const espressione = traduci(
++      gruppo([cond("Stato Lead", "uno_di", ["Perso"]), cond("Valutazione", "maggiore", [30])]),
++    )
++    expect(espressione).toBe('and(stato_lead.in.("Perso"),valutazione.gt.30)')
++  })
++
++  it("annida or dentro and, come nel caso che una lista piatta non sa dire", () => {
++    const espressione = traduci(
++      gruppo([
++        gruppo(
++          [cond("Stato Lead", "uno_di", ["Perso"]), cond("Stato Lead", "uno_di", ["Contattato"])],
++          "o",
++        ),
++        cond("Valutazione", "maggiore", [30]),
++      ]),
++    )
++    expect(espressione).toBe(
++      'and(or(stato_lead.in.("Perso"),stato_lead.in.("Contattato")),valutazione.gt.30)',
++    )
++  })
++
++  it("mette fra virgolette i valori con virgole e parentesi", () => {
++    // Senza virgolette, una virgola nel valore verrebbe letta come
++    // separatore fra condizioni e cambierebbe il significato del filtro.
++    const espressione = traduci(gruppo([cond("Nome Lead", "uguale", ["Rossi, Mario (SRL)"])]))
++    expect(espressione).toBe('nome_lead.eq."Rossi, Mario (SRL)"')
++  })
++
++  it("raddoppia le virgolette contenute nel valore", () => {
++    const espressione = traduci(gruppo([cond("Nome Lead", "uguale", ['Bar "Da Gino"'])]))
++    expect(espressione).toBe('nome_lead.eq."Bar ""Da Gino"""')
++  })
++
++  it("considera vuoto come 'no' sui booleani", () => {
++    // Chi guarda la scheda vede "No" anche quando il campo non e' mai stato
++    // toccato: il filtro deve comportarsi allo stesso modo.
++    expect(traduci(gruppo([cond("Residente in Sicilia", "falso")]))).toBe(
++      "or(residente_in_sicilia.is.false,residente_in_sicilia.is.null)",
++    )
++  })
++
++  it("include gli estremi in 'fra'", () => {
++    expect(traduci(gruppo([cond("Valutazione", "fra", [10, 20])]))).toBe(
++      "and(valutazione.gte.10,valutazione.lte.20)",
++    )
++  })
++
++  it("torna null quando non c'e' nulla da filtrare", () => {
++    expect(traduci(gruppo([]))).toBeNull()
++  })
++
++  it("lascia fuori dall'espressione le condizioni sui collegati", () => {
++    // Non sono colonne del record: si risolvono con una lettura a parte.
++    const espressione = traduci(
++      gruppo([cond("Attività aperte", "presente"), cond("Valutazione", "maggiore", [30])]),
++    )
++    expect(espressione).toBe("valutazione.gt.30")
++  })
++})
++
++describe("condizioniCollegate", () => {
++  it("raccoglie le condizioni sui collegati a ogni livello", () => {
++    const validato = validaAlbero(
++      gruppo([gruppo([cond("Attività aperte", "assente")], "o"), cond("Valutazione", "maggiore", [1])]),
++      CATALOGO,
++    )
++    expect(validato.ok).toBe(true)
++    if (validato.ok) {
++      const collegate = condizioniCollegate(validato.gruppo)
++      expect(collegate).toHaveLength(1)
++      expect(collegate[0].campo).toBe("Attività aperte")
++    }
++  })
++})
++
++describe("potaVuoti e contaCondizioni", () => {
++  const albero: Gruppo = {
++    tipo: "gruppo",
++    connettore: "e",
++    nodi: [
++      { tipo: "gruppo", connettore: "o", nodi: [] },
++      { tipo: "condizione", campo: "Nome Lead", operatore: "contiene", valori: ["a"] },
++    ],
++  }
++
++  it("toglie i gruppi rimasti senza condizioni", () => {
++    // Comporre un filtro lascia gruppi aperti e mai riempiti: tradotti come
++    // sono darebbero condizioni vuote.
++    expect(potaVuoti(albero).nodi).toHaveLength(1)
++  })
++
++  it("conta le condizioni a ogni livello", () => {
++    expect(contaCondizioni(albero)).toBe(1)
++  })
++})
+diff --git a/lib/filtri/albero.ts b/lib/filtri/albero.ts
+new file mode 100644
+index 0000000..0d30138
+--- /dev/null
++++ b/lib/filtri/albero.ts
+@@ -0,0 +1,239 @@
++/**
++ * Filtri componibili: la struttura.
++ *
++ * Un filtro e' un albero. Un gruppo tiene insieme dei nodi con un
++ * connettore — tutti in E oppure tutti in O — e ogni nodo puo' essere una
++ * condizione o, a sua volta, un altro gruppo. L'annidamento non ha limiti
++ * di forma: serve a esprimere cose come
++ *
++ *   (Sede e' Catania OPPURE Sede e' Palermo) E Stato e' Contattato
++ *
++ * che una lista piatta di condizioni non sa dire.
++ *
++ * Le condizioni arrivano dal browser e diventano un'interrogazione al
++ * database: qui non ci si fida di nulla. Campo e operatore devono comparire
++ * nel catalogo dei campi ammessi del modulo, e i valori vengono trattati
++ * come dati, mai come pezzi di query.
++ */
++
++export type Connettore = "e" | "o"
++
++export type OperatoreTesto =
++  | "contiene"
++  | "non_contiene"
++  | "uguale"
++  | "diverso"
++  | "inizia_con"
++  | "vuoto"
++  | "non_vuoto"
++
++export type OperatoreElenco = "uno_di" | "nessuno_di" | "vuoto" | "non_vuoto"
++export type OperatoreNumero =
++  | "uguale"
++  | "diverso"
++  | "maggiore"
++  | "minore"
++  | "fra"
++  | "vuoto"
++  | "non_vuoto"
++export type OperatoreData =
++  | "uguale"
++  | "prima"
++  | "dopo"
++  | "fra"
++  | "ultimi_giorni"
++  | "vuoto"
++  | "non_vuoto"
++export type OperatoreBooleano = "vero" | "falso"
++export type OperatoreCollegato = "presente" | "assente"
++
++export type Operatore =
++  | OperatoreTesto
++  | OperatoreElenco
++  | OperatoreNumero
++  | OperatoreData
++  | OperatoreBooleano
++  | OperatoreCollegato
++
++/** Il tipo del campo decide quali operatori hanno senso. */
++export type TipoCampo = "testo" | "elenco" | "numero" | "data" | "booleano" | "collegato"
++
++export const OPERATORI_PER_TIPO: Record<TipoCampo, readonly Operatore[]> = {
++  testo: ["contiene", "non_contiene", "uguale", "diverso", "inizia_con", "vuoto", "non_vuoto"],
++  elenco: ["uno_di", "nessuno_di", "vuoto", "non_vuoto"],
++  numero: ["uguale", "diverso", "maggiore", "minore", "fra", "vuoto", "non_vuoto"],
++  data: ["uguale", "prima", "dopo", "fra", "ultimi_giorni", "vuoto", "non_vuoto"],
++  booleano: ["vero", "falso"],
++  // I collegati non sono colonne: sono domande su altre tabelle ("ha
++  // attivita' aperte?"), e l'unica cosa sensata da chiedere e' se ce ne
++  // sono o no.
++  collegato: ["presente", "assente"],
++}
++
++/** Operatori che non vogliono valori: chiederli sarebbe un errore. */
++const SENZA_VALORE: ReadonlySet<Operatore> = new Set([
++  "vuoto",
++  "non_vuoto",
++  "vero",
++  "falso",
++  "presente",
++  "assente",
++])
++
++export function operatoreSenzaValore(operatore: Operatore): boolean {
++  return SENZA_VALORE.has(operatore)
++}
++
++export type Condizione = {
++  tipo: "condizione"
++  /** Chiave del campo, come compare nel catalogo del modulo. */
++  campo: string
++  operatore: Operatore
++  /** Valori dell'operatore. Vuoto per gli operatori che non ne vogliono. */
++  valori: (string | number | boolean)[]
++}
++
++export type Gruppo = {
++  tipo: "gruppo"
++  connettore: Connettore
++  nodi: Nodo[]
++}
++
++export type Nodo = Condizione | Gruppo
++
++/** Un campo filtrabile, come lo dichiara il modulo. */
++export type CampoFiltrabile = {
++  chiave: string
++  etichetta: string
++  tipo: TipoCampo
++  /** Valori ammessi, per i campi a elenco. */
++  opzioni?: readonly string[]
++}
++
++export const GRUPPO_VUOTO: Gruppo = { tipo: "gruppo", connettore: "e", nodi: [] }
++
++/**
++ * Tetti tecnici, non funzionali.
++ *
++ * L'annidamento e' libero per chi compone un filtro dall'interfaccia: a
++ * dieci livelli non ci arriva nessuno. Servono contro un albero costruito
++ * ad arte e spedito all'endpoint, che senza un limite terrebbe occupato il
++ * server a tradurre ricorsivamente il nulla.
++ */
++export const PROFONDITA_MASSIMA = 10
++export const CONDIZIONI_MASSIME = 100
++
++export type EsitoValidazione =
++  | { ok: true; gruppo: Gruppo }
++  | { ok: false; errore: string }
++
++function valoreSemplice(valore: unknown): valore is string | number | boolean {
++  return (
++    typeof valore === "string" || typeof valore === "number" || typeof valore === "boolean"
++  )
++}
++
++/**
++ * Controlla un albero ricevuto dall'esterno e ne restituisce una copia
++ * ripulita: solo campi presenti nel catalogo, solo operatori compatibili
++ * con il loro tipo, solo valori semplici.
++ *
++ * Non corregge in silenzio: un campo sconosciuto o un operatore incompatibile
++ * fanno fallire tutto. Scartare la condizione e proseguire darebbe all'utente
++ * una lista filtrata in modo diverso da quello che ha chiesto, senza dirglielo.
++ */
++export function validaAlbero(
++  grezzo: unknown,
++  catalogo: readonly CampoFiltrabile[],
++): EsitoValidazione {
++  const perChiave = new Map(catalogo.map((campo) => [campo.chiave, campo]))
++  let condizioni = 0
++
++  function nodo(valore: unknown, profondita: number): Nodo | string {
++    if (profondita > PROFONDITA_MASSIMA) return "Filtro annidato troppo in profondita'"
++    if (!valore || typeof valore !== "object") return "Nodo del filtro non valido"
++
++    const oggetto = valore as Record<string, unknown>
++
++    if (oggetto.tipo === "gruppo") {
++      const connettore = oggetto.connettore
++      if (connettore !== "e" && connettore !== "o") return "Connettore non valido"
++      if (!Array.isArray(oggetto.nodi)) return "Gruppo senza nodi"
++
++      const nodi: Nodo[] = []
++      for (const figlio of oggetto.nodi) {
++        const esito = nodo(figlio, profondita + 1)
++        if (typeof esito === "string") return esito
++        nodi.push(esito)
++      }
++      return { tipo: "gruppo", connettore, nodi }
++    }
++
++    if (oggetto.tipo !== "condizione") return "Nodo del filtro non riconosciuto"
++
++    condizioni += 1
++    if (condizioni > CONDIZIONI_MASSIME) return "Troppe condizioni nel filtro"
++
++    const campo = typeof oggetto.campo === "string" ? perChiave.get(oggetto.campo) : undefined
++    if (!campo) return `Campo non filtrabile: ${String(oggetto.campo)}`
++
++    const operatore = oggetto.operatore as Operatore
++    if (!OPERATORI_PER_TIPO[campo.tipo].includes(operatore)) {
++      return `Operatore non valido per ${campo.etichetta}`
++    }
++
++    const valori = Array.isArray(oggetto.valori) ? oggetto.valori.filter(valoreSemplice) : []
++
++    if (operatoreSenzaValore(operatore)) {
++      return { tipo: "condizione", campo: campo.chiave, operatore, valori: [] }
++    }
++
++    if (!valori.length) return `Manca il valore per ${campo.etichetta}`
++    if ((operatore === "fra") && valori.length !== 2) {
++      return `${campo.etichetta}: servono due valori`
++    }
++    // Un campo a elenco accetta solo i suoi valori: cosi' non si puo'
++    // interrogare il database con un valore inventato.
++    if (campo.opzioni) {
++      const ammessi = new Set(campo.opzioni)
++      for (const valore of valori) {
++        if (!ammessi.has(String(valore))) {
++          return `${campo.etichetta}: valore non ammesso`
++        }
++      }
++    }
++
++    return { tipo: "condizione", campo: campo.chiave, operatore, valori }
++  }
++
++  const esito = nodo(grezzo, 0)
++  if (typeof esito === "string") return { ok: false, errore: esito }
++  if (esito.tipo !== "gruppo") return { ok: false, errore: "Il filtro deve partire da un gruppo" }
++  return { ok: true, gruppo: esito }
++}
++
++/** Quante condizioni contiene un filtro, per il contatore accanto al pulsante. */
++export function contaCondizioni(nodo: Nodo): number {
++  if (nodo.tipo === "condizione") return 1
++  return nodo.nodi.reduce((somma, figlio) => somma + contaCondizioni(figlio), 0)
++}
++
++/**
++ * Toglie i gruppi rimasti senza condizioni.
++ *
++ * Comporre un filtro lascia spesso gruppi aperti e mai riempiti: tradotti
++ * cosi' come sono darebbero condizioni vuote, che il database interpreta
++ * come "nessun risultato" invece che "nessun vincolo".
++ */
++export function potaVuoti(gruppo: Gruppo): Gruppo {
++  const nodi: Nodo[] = []
++  for (const figlio of gruppo.nodi) {
++    if (figlio.tipo === "condizione") {
++      nodi.push(figlio)
++      continue
++    }
++    const potato = potaVuoti(figlio)
++    if (potato.nodi.length) nodi.push(potato)
++  }
++  return { ...gruppo, nodi }
++}
+diff --git a/lib/filtri/traduci.ts b/lib/filtri/traduci.ts
+new file mode 100644
+index 0000000..7317e6a
+--- /dev/null
++++ b/lib/filtri/traduci.ts
+@@ -0,0 +1,174 @@
++import {
++  operatoreSenzaValore,
++  type CampoFiltrabile,
++  type Condizione,
++  type Gruppo,
++  type Nodo,
++} from "./albero"
++
++/**
++ * Dall'albero del filtro all'interrogazione.
++ *
++ * PostgREST esprime E/O annidati con una stringa: `and(a.eq.1,or(b.eq.2,c.eq.3))`.
++ * Il filtro resta quindi una sola interrogazione al database, senza scaricare
++ * le righe e scartarle in memoria — su diecimila lead la differenza si vede.
++ *
++ * Il rischio sta nei valori: finiscono dentro quella stringa, dove virgole e
++ * parentesi hanno significato. Un valore che le contiene, se lasciato
++ * passare, cambia la struttura della condizione. Per questo ogni valore
++ * viene racchiuso fra virgolette e le virgolette interne raddoppiate — e i
++ * nomi di colonna non arrivano mai dall'esterno, ma dal catalogo.
++ */
++
++export type EsitoTraduzione =
++  | { ok: true; espressione: string | null }
++  | { ok: false; errore: string }
++
++/**
++ * Un valore dentro l'espressione PostgREST.
++ *
++ * Le virgolette delimitano il valore, quindi virgole e parentesi al suo
++ * interno smettono di essere separatori. Le virgolette che il valore
++ * contiene davvero si raddoppiano, altrimenti chiuderebbero il valore a
++ * meta' e il resto verrebbe letto come sintassi.
++ */
++function valoreSicuro(valore: string | number | boolean): string {
++  if (typeof valore === "boolean") return valore ? "true" : "false"
++  if (typeof valore === "number") {
++    if (!Number.isFinite(valore)) return "0"
++    return String(valore)
++  }
++  return `"${valore.replace(/"/g, '""')}"`
++}
++
++/** Come sopra, ma per i valori dentro `in.(...)`, che vuole le parentesi. */
++function elencoSicuro(valori: (string | number | boolean)[]): string {
++  return `(${valori.map((valore) => valoreSicuro(valore)).join(",")})`
++}
++
++function giorniFa(giorni: number): string {
++  const data = new Date()
++  data.setDate(data.getDate() - giorni)
++  return data.toISOString()
++}
++
++function condizione(
++  nodo: Condizione,
++  colonnaPer: (chiave: string) => string | null,
++): string | null {
++  const colonna = colonnaPer(nodo.campo)
++  // Nessuna colonna: e' un campo su una tabella collegata, tradotto altrove.
++  if (!colonna) return null
++
++  const [primo, secondo] = nodo.valori
++  if (!operatoreSenzaValore(nodo.operatore) && primo === undefined) return null
++
++  switch (nodo.operatore) {
++    case "contiene":
++      return `${colonna}.ilike.${valoreSicuro(`%${String(primo)}%`)}`
++    case "non_contiene":
++      return `${colonna}.not.ilike.${valoreSicuro(`%${String(primo)}%`)}`
++    case "inizia_con":
++      return `${colonna}.ilike.${valoreSicuro(`${String(primo)}%`)}`
++    case "uguale":
++      return `${colonna}.eq.${valoreSicuro(primo!)}`
++    case "diverso":
++      return `${colonna}.neq.${valoreSicuro(primo!)}`
++    case "uno_di":
++      return `${colonna}.in.${elencoSicuro(nodo.valori)}`
++    case "nessuno_di":
++      return `${colonna}.not.in.${elencoSicuro(nodo.valori)}`
++    case "maggiore":
++    case "dopo":
++      return `${colonna}.gt.${valoreSicuro(primo!)}`
++    case "minore":
++    case "prima":
++      return `${colonna}.lt.${valoreSicuro(primo!)}`
++    case "fra":
++      // Estremi inclusi: chi scrive "fra 10 e 20" si aspetta che 10 e 20 ci
++      // siano.
++      return `and(${colonna}.gte.${valoreSicuro(primo!)},${colonna}.lte.${valoreSicuro(secondo!)})`
++    case "ultimi_giorni":
++      return `${colonna}.gte.${valoreSicuro(giorniFa(Number(primo) || 0))}`
++    case "vero":
++      return `${colonna}.is.true`
++    case "falso":
++      // Un booleano non compilato vale "no" per chi guarda la scheda: senza
++      // questo, filtrare "e' no" perderebbe tutte le righe mai toccate.
++      return `or(${colonna}.is.false,${colonna}.is.null)`
++    case "vuoto":
++      return `${colonna}.is.null`
++    case "non_vuoto":
++      return `${colonna}.not.is.null`
++    default:
++      return null
++  }
++}
++
++function nodoTradotto(
++  nodo: Nodo,
++  colonnaPer: (chiave: string) => string | null,
++): string | null {
++  if (nodo.tipo === "condizione") return condizione(nodo, colonnaPer)
++
++  const pezzi = nodo.nodi
++    .map((figlio) => nodoTradotto(figlio, colonnaPer))
++    .filter((pezzo): pezzo is string => pezzo !== null)
++
++  if (!pezzi.length) return null
++  // Un gruppo con un solo figlio non ha bisogno di involucro: `and(x)` e `x`
++  // dicono la stessa cosa, e senza involucro l'espressione resta leggibile.
++  if (pezzi.length === 1) return pezzi[0]
++
++  return `${nodo.connettore === "o" ? "or" : "and"}(${pezzi.join(",")})`
++}
++
++/**
++ * Traduce un albero gia' validato.
++ *
++ * Torna `null` quando non c'e' nulla da filtrare: un filtro vuoto non deve
++ * diventare una condizione impossibile, deve semplicemente non esserci.
++ */
++export function traduciAlbero(
++  gruppo: Gruppo,
++  catalogo: readonly CampoFiltrabile[],
++  colonnaPerCampo: Record<string, string>,
++): EsitoTraduzione {
++  const conosciuti = new Set(catalogo.map((campo) => campo.chiave))
++
++  const colonnaPer = (chiave: string): string | null => {
++    // Doppia rete: la chiave deve stare nel catalogo E avere una colonna
++    // dichiarata. Nessun nome di colonna arriva mai da fuori.
++    if (!conosciuti.has(chiave)) return null
++    return colonnaPerCampo[chiave] ?? null
++  }
++
++  try {
++    return { ok: true, espressione: nodoTradotto(gruppo, colonnaPer) }
++  } catch (errore) {
++    return {
++      ok: false,
++      errore: errore instanceof Error ? errore.message : "Filtro non traducibile",
++    }
++  }
++}
++
++/**
++ * Le condizioni sui collegati ("ha attivita' aperte"), che non sono colonne
++ * del record ma domande su altre tabelle.
++ *
++ * Restano fuori dall'espressione e vengono raccolte qui: chi interroga il
++ * database le risolve con una lettura a parte e restringe per identificativo.
++ */
++export function condizioniCollegate(gruppo: Gruppo): Condizione[] {
++  const trovate: Condizione[] = []
++  function visita(nodo: Nodo) {
++    if (nodo.tipo === "condizione") {
++      if (nodo.operatore === "presente" || nodo.operatore === "assente") trovate.push(nodo)
++      return
++    }
++    nodo.nodi.forEach(visita)
++  }
++  visita(gruppo)
++  return trovate
++}
+diff --git a/supabase/migrations/20260909f_filtri_salvati.sql b/supabase/migrations/20260909f_filtri_salvati.sql
+new file mode 100644
+index 0000000..c94ee08
+--- /dev/null
++++ b/supabase/migrations/20260909f_filtri_salvati.sql
+@@ -0,0 +1,76 @@
++-- Filtri salvati, condivisi fra tutti gli utenti.
++--
++-- Su Zoho i filtri salvati sono personali e non condivisibili: chi ne
++-- costruisce uno utile non puo' passarlo ai colleghi. Qui sono di tutti fin
++-- dall'inizio — e' la ragione principale per cui li rifacciamo invece di
++-- importarli.
++--
++-- La definizione e' l'albero del filtro in jsonb: gruppi con connettore E/O
++-- e condizioni, annidati liberamente. Non si traduce qui in SQL: la
++-- traduzione avviene a ogni lettura, cosi' un filtro salvato resta valido
++-- anche se cambia il modo in cui interroghiamo il database.
++
++begin;
++
++create table if not exists public.crm_filtri_salvati (
++  id uuid primary key default gen_random_uuid(),
++  modulo text not null,
++  nome text not null,
++  definizione jsonb not null,
++  creato_da uuid references public.utenti(id) on delete set null,
++  creato_il timestamptz not null default now(),
++  modificato_da uuid references public.utenti(id) on delete set null,
++  modificato_il timestamptz,
++  constraint crm_filtri_salvati_nome_non_vuoto check (length(btrim(nome)) > 0),
++  constraint crm_filtri_salvati_definizione_oggetto
++    check (jsonb_typeof(definizione) = 'object'),
++  -- Due filtri con lo stesso nome nello stesso modulo renderebbero l'elenco
++  -- illeggibile: chi salva sceglie un nome libero, ma non un doppione.
++  constraint crm_filtri_salvati_nome_unico unique (modulo, nome)
++);
++
++create index if not exists crm_filtri_salvati_modulo_idx
++  on public.crm_filtri_salvati (modulo, nome);
++
++comment on table public.crm_filtri_salvati is
++  'Filtri salvati condivisi. definizione = albero del filtro (gruppi E/O annidati).';
++
++-- ---------------------------------------------------------------------
++-- Policy
++-- ---------------------------------------------------------------------
++-- Lettura a chiunque sia autenticato: sono condivisi per definizione, e un
++-- filtro non contiene dati, solo criteri. Cosa poi si veda applicandolo
++-- resta deciso dalle policy delle tabelle interrogate.
++alter table public.crm_filtri_salvati enable row level security;
++
++drop policy if exists crm_filtri_salvati_select on public.crm_filtri_salvati;
++create policy crm_filtri_salvati_select
++  on public.crm_filtri_salvati for select to authenticated
++  using (true);
++
++-- L'autore non e' negoziabile, come per le note: impedisce di creare un
++-- filtro a nome di un altro passando da PostgREST diretto.
++drop policy if exists crm_filtri_salvati_insert on public.crm_filtri_salvati;
++create policy crm_filtri_salvati_insert
++  on public.crm_filtri_salvati for insert to authenticated
++  with check (creato_da = (select public.current_utente_id()));
++
++-- Modifica ed eliminazione a chi l'ha creato; il controllo per gli
++-- amministratori sta nell'applicazione, che usa la chiave di servizio.
++drop policy if exists crm_filtri_salvati_update on public.crm_filtri_salvati;
++create policy crm_filtri_salvati_update
++  on public.crm_filtri_salvati for update to authenticated
++  using (creato_da = (select public.current_utente_id()))
++  with check (creato_da = (select public.current_utente_id()));
++
++drop policy if exists crm_filtri_salvati_delete on public.crm_filtri_salvati;
++create policy crm_filtri_salvati_delete
++  on public.crm_filtri_salvati for delete to authenticated
++  using (creato_da = (select public.current_utente_id()));
++
++grant select, insert, update, delete on public.crm_filtri_salvati to authenticated;
++revoke all on public.crm_filtri_salvati from anon;
++
++notify pgrst, 'reload schema';
++
++commit;

@@ -229,6 +229,7 @@ function BloccoRenderer({
 
       <GrigliaCampi
         attiva={Boolean(onRiordinaCampi)}
+        contesto={`campi-${blocco.blockKey}`}
         sensori={sensoriCampi}
         idCampi={campi.map((c) => c.id)}
         onFine={fineTrascinaCampi}
@@ -342,6 +343,7 @@ function ContenitoreCampo({
  */
 function GrigliaCampi({
   attiva,
+  contesto,
   sensori,
   idCampi,
   onFine,
@@ -349,6 +351,15 @@ function GrigliaCampi({
   children,
 }: {
   attiva: boolean
+  /**
+   * Identificatore stabile del contesto di trascinamento.
+   *
+   * dnd-kit numera da solo le proprie etichette di accessibilita'
+   * ("DndDescribedBy-1", "-2", ...): con il rendering lato server il
+   * conteggio riparte nel browser e i due HTML non coincidono, con un errore
+   * di idratazione. Un id esplicito e derivato dai dati elimina il problema.
+   */
+  contesto: string
   sensori: ReturnType<typeof useSensors>
   idCampi: string[]
   onFine: (evento: DragEndEvent) => void
@@ -358,7 +369,7 @@ function GrigliaCampi({
   if (!attiva) return <div className={className}>{children}</div>
 
   return (
-    <DndContext sensors={sensori} collisionDetection={closestCenter} onDragEnd={onFine}>
+    <DndContext id={contesto} sensors={sensori} collisionDetection={closestCenter} onDragEnd={onFine}>
       <SortableContext items={idCampi} strategy={rectSortingStrategy}>
         <div className={className}>{children}</div>
       </SortableContext>
@@ -517,7 +528,12 @@ function BlocchiTrascinabili({
   }
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={fineTrascinamento}>
+    <DndContext
+      id={`blocchi-${pagina.pageKey}`}
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={fineTrascinamento}
+    >
       <SortableContext items={blocchi.map((b) => b.id)} strategy={verticalListSortingStrategy}>
         <div className="flex flex-col gap-3">{contenuto}</div>
       </SortableContext>

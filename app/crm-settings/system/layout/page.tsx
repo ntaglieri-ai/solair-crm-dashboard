@@ -263,6 +263,7 @@ export default function LayoutSchedePage() {
         </div>
       ) : (
         <DndContext
+          id={`layout-pagine-${modulo}`}
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragEnd={fineTrascinaPagine}
@@ -460,6 +461,7 @@ function RigaPagina({
             <p className="text-xs text-muted-foreground">Nessun blocco in questa pagina.</p>
           ) : (
             <DndContext
+              id={`layout-blocchi-${pagina.pageKey}`}
               sensors={sensors}
               collisionDetection={closestCenter}
               onDragEnd={fineTrascinaBlocchi}
@@ -622,6 +624,7 @@ function RigaBlocco({
         <p className="px-1 py-2 text-xs text-muted-foreground">Nessun campo in questo blocco.</p>
       ) : (
         <DndContext
+          id={`layout-campi-${blocco.blockKey}`}
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragEnd={fineTrascinaCampi}

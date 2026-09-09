@@ -1,0 +1,596 @@
+diff --git a/lib/crm-settings/__tests__/formula-eval-zoho-reale.test.ts b/lib/crm-settings/__tests__/formula-eval-zoho-reale.test.ts
+new file mode 100644
+index 0000000..c593861
+--- /dev/null
++++ b/lib/crm-settings/__tests__/formula-eval-zoho-reale.test.ts
+@@ -0,0 +1,89 @@
++import { describe, expect, it } from "vitest"
++import { valutaFormula, type ValoreFormula } from "../formula-eval"
++
++/**
++ * Confronto con i numeri realmente calcolati da Zoho.
++ *
++ * I valori attesi non sono inventati: vengono dalla stampa della scheda del
++ * cliente Mario Spadaro esportata da Zoho l'8 settembre 2026, dove compaiono
++ * sia i campi di partenza sia il risultato che Zoho ha prodotto.
++ *
++ * E' la verifica piu' forte disponibile sulla traduzione delle formule: se
++ * il valutatore desse numeri diversi da questi, la migrazione porterebbe
++ * importi sbagliati sulle pratiche vere. Quando Zoho sara' spento questi casi
++ * restano l'unica testimonianza del comportamento originale.
++ */
++
++function valori(record: Record<string, ValoreFormula>) {
++  return new Map(Object.entries(record))
++}
++
++function calcola(expr: string, record: Record<string, ValoreFormula>): number {
++  const esito = valutaFormula(expr, valori(record))
++  if (!esito.ok) throw new Error(esito.errore)
++  return Number(esito.valore)
++}
++
++describe("scheda Mario Spadaro, valori calcolati da Zoho", () => {
++  // Dati dell'impianto come risultano sulla scheda.
++  const impianto = {
++    "Nr. Moduli": 27,
++    "Potenza Moduli (Wp)": 455,
++    "Nr. Inverter": 2,
++    "Potenza Inverter": 5,
++    "Nr. Batterie": 1,
++    "Capacità Batterie": 23,
++  }
++
++  it("Tot Potenza DC: Zoho mostra 12,29", () => {
++    const nostro = calcola("{Nr. Moduli}*{Potenza Moduli (Wp)}/1000", impianto)
++    expect(Number(nostro.toFixed(2))).toBe(12.29)
++  })
++
++  it("Tot Potenza AC (KW): Zoho mostra 10", () => {
++    expect(calcola("{Nr. Inverter}*{Potenza Inverter}", impianto)).toBe(10)
++  })
++
++  it("Totale Storage: Zoho mostra 23", () => {
++    expect(calcola("{Capacità Batterie}*{Nr. Batterie}", impianto)).toBe(23)
++  })
++
++  // Parte economica: contratto da 19.790 € con modalita' 50-50.
++  const economico = {
++    "Importo Contrattuale": 19790,
++    "Sconto COMBO": null,
++    "Importo Finanziamento": 0,
++    "Modalità di Pagamento": "50-50",
++  }
++
++  it("1° Tranche: Zoho mostra 9.895", () => {
++    const expr =
++      "If({Modalità di Pagamento}=='30-50-20',({Importo Contrattuale}-{Sconto COMBO})*0.3,If({Modalità di Pagamento}=='50-50',({Importo Contrattuale}-{Sconto COMBO})*0.5,If({Modalità di Pagamento}=='100% Finanziamento',0,{Importo Contrattuale}-{Sconto COMBO}-{Importo Finanziamento})))"
++    expect(calcola(expr, economico)).toBe(9895)
++  })
++
++  it("2°Tranche: Zoho mostra 0", () => {
++    const expr =
++      "If({Modalità di Pagamento}=='30-50-20',({Importo Contrattuale}-{Sconto COMBO})*0.5,If({Modalità di Pagamento}=='50-50',0,If({Modalità di Pagamento}=='100% Finanziamento',0,0)))"
++    expect(calcola(expr, economico)).toBe(0)
++  })
++
++  it("Saldo: Zoho mostra 9.895", () => {
++    const expr =
++      "If({Modalità di Pagamento}=='30-50-20',({Importo Contrattuale}-{Sconto COMBO})*0.2,If({Modalità di Pagamento}=='50-50',({Importo Contrattuale}-{Sconto COMBO})*0.5,If({Modalità di Pagamento}=='100% Finanziamento',0,0)))"
++    expect(calcola(expr, economico)).toBe(9895)
++  })
++
++  it("Importo Finanziamento: Zoho mostra 0", () => {
++    const expr =
++      "If({Modalità di Pagamento}=='100% Finanziamento',({Importo Contrattuale}-{Sconto COMBO}),If({Modalità di Pagamento}=='Finanziamento Parziale',{Importo Contrattuale}-{Sconto COMBO}-{Bonifico Parziale},0))"
++    expect(calcola(expr, economico)).toBe(0)
++  })
++
++  it("lo Sconto COMBO vuoto non azzera gli importi", () => {
++    // Sulla scheda lo sconto e' vuoto: se un campo non compilato non valesse
++    // zero, la prima tranche verrebbe NaN invece di 9.895.
++    expect(economico["Sconto COMBO"]).toBeNull()
++    expect(calcola("{Importo Contrattuale}-{Sconto COMBO}", economico)).toBe(19790)
++  })
++})
+diff --git a/lib/crm-settings/__tests__/formula-eval.test.ts b/lib/crm-settings/__tests__/formula-eval.test.ts
+new file mode 100644
+index 0000000..d430006
+--- /dev/null
++++ b/lib/crm-settings/__tests__/formula-eval.test.ts
+@@ -0,0 +1,151 @@
++import { describe, expect, it } from "vitest"
++import { dipendenzeFormula, valutaFormula, type ValoreFormula } from "../formula-eval"
++
++function valori(record: Record<string, ValoreFormula>) {
++  return new Map(Object.entries(record))
++}
++
++/** Le formule reali del modulo Clienti, come tradotte dall'export Zoho. */
++const SALDO =
++  "If({Modalità di Pagamento}=='30-50-20',({Importo Contrattuale}-{Sconto COMBO})*0.2,If({Modalità di Pagamento}=='50-50',({Importo Contrattuale}-{Sconto COMBO})*0.5,If({Modalità di Pagamento}=='100% Finanziamento',0,0)))"
++
++const PRIMA_TRANCHE =
++  "If({Modalità di Pagamento}=='30-50-20',({Importo Contrattuale}-{Sconto COMBO})*0.3,If({Modalità di Pagamento}=='50-50',({Importo Contrattuale}-{Sconto COMBO})*0.5,If({Modalità di Pagamento}=='100% Finanziamento',0,{Importo Contrattuale}-{Sconto COMBO}-{Importo Finanziamento})))"
++
++const IMPORTO_FINANZIAMENTO =
++  "If({Modalità di Pagamento}=='100% Finanziamento',({Importo Contrattuale}-{Sconto COMBO}),If({Modalità di Pagamento}=='Finanziamento Parziale',{Importo Contrattuale}-{Sconto COMBO}-{Bonifico Parziale},0))"
++
++describe("aritmetica", () => {
++  it("somma, sottrae, moltiplica e divide", () => {
++    const v = valori({ a: 10, b: 4 })
++    expect(valutaFormula("{a}+{b}", v)).toEqual({ ok: true, valore: 14 })
++    expect(valutaFormula("{a}-{b}", v)).toEqual({ ok: true, valore: 6 })
++    expect(valutaFormula("{a}*{b}", v)).toEqual({ ok: true, valore: 40 })
++    expect(valutaFormula("{a}/{b}", v)).toEqual({ ok: true, valore: 2.5 })
++  })
++
++  it("rispetta la precedenza degli operatori", () => {
++    // Senza precedenza corretta verrebbe 18 invece di 14.
++    expect(valutaFormula("2+3*4", valori({}))).toEqual({ ok: true, valore: 14 })
++    expect(valutaFormula("(2+3)*4", valori({}))).toEqual({ ok: true, valore: 20 })
++  })
++
++  it("gestisce il meno unario", () => {
++    expect(valutaFormula("-{a}+5", valori({ a: 3 }))).toEqual({ ok: true, valore: 2 })
++  })
++
++  it("tratta un campo vuoto o assente come zero, come fa Zoho", () => {
++    // Un importo non compilato non deve azzerare la formula ne' produrre NaN.
++    expect(valutaFormula("{a}+{b}", valori({ a: 10, b: null }))).toEqual({ ok: true, valore: 10 })
++    expect(valutaFormula("{a}+{mai visto}", valori({ a: 10 }))).toEqual({ ok: true, valore: 10 })
++    expect(valutaFormula("{a}+{b}", valori({ a: 10, b: "" }))).toEqual({ ok: true, valore: 10 })
++  })
++
++  it("non produce Infinity dividendo per zero", () => {
++    expect(valutaFormula("{a}/{b}", valori({ a: 10, b: 0 }))).toEqual({ ok: true, valore: null })
++  })
++})
++
++describe("Tot Potenza DC", () => {
++  const expr = "{Nr. Moduli}*{Potenza Moduli (Wp)}/1000"
++
++  it("calcola i kWp dai moduli", () => {
++    // Il caso reale visto sulla scheda di Mario Spadaro: 27 moduli da 455 Wp.
++    const esito = valutaFormula(expr, valori({ "Nr. Moduli": 27, "Potenza Moduli (Wp)": 455 }))
++    expect(esito.ok).toBe(true)
++    if (esito.ok) expect(esito.valore).toBeCloseTo(12.285, 3)
++  })
++
++  it("torna zero quando i moduli non sono ancora stati indicati", () => {
++    expect(valutaFormula(expr, valori({}))).toEqual({ ok: true, valore: 0 })
++  })
++})
++
++describe("formule condizionali sulla modalita' di pagamento", () => {
++  const base = { "Importo Contrattuale": 20000, "Sconto COMBO": 0, "Importo Finanziamento": 0 }
++
++  it("30-50-20 ripartisce 30/50/20", () => {
++    const v = valori({ ...base, "Modalità di Pagamento": "30-50-20" })
++    expect(valutaFormula(PRIMA_TRANCHE, v)).toEqual({ ok: true, valore: 6000 })
++    expect(valutaFormula(SALDO, v)).toEqual({ ok: true, valore: 4000 })
++  })
++
++  it("50-50 mette meta' sulla prima tranche e meta' sul saldo", () => {
++    const v = valori({ ...base, "Modalità di Pagamento": "50-50" })
++    expect(valutaFormula(PRIMA_TRANCHE, v)).toEqual({ ok: true, valore: 10000 })
++    expect(valutaFormula(SALDO, v)).toEqual({ ok: true, valore: 10000 })
++  })
++
++  it("100% Finanziamento azzera tranche e saldo", () => {
++    const v = valori({ ...base, "Modalità di Pagamento": "100% Finanziamento" })
++    expect(valutaFormula(PRIMA_TRANCHE, v)).toEqual({ ok: true, valore: 0 })
++    expect(valutaFormula(SALDO, v)).toEqual({ ok: true, valore: 0 })
++    expect(valutaFormula(IMPORTO_FINANZIAMENTO, v)).toEqual({ ok: true, valore: 20000 })
++  })
++
++  it("Finanziamento Parziale sottrae il bonifico gia' versato", () => {
++    const v = valori({ ...base, "Modalità di Pagamento": "Finanziamento Parziale", "Bonifico Parziale": 5000 })
++    expect(valutaFormula(IMPORTO_FINANZIAMENTO, v)).toEqual({ ok: true, valore: 15000 })
++  })
++
++  it("una modalita' non prevista dalle formule finisce nel ramo finale", () => {
++    // "10-20-50-20" e "20-60-20" esistono nel picklist Zoho ma non nelle
++    // formule: la prima tranche prende tutto e il saldo resta zero. E' il
++    // comportamento di Zoho, replicato senza correzioni.
++    const v = valori({ ...base, "Modalità di Pagamento": "10-20-50-20" })
++    expect(valutaFormula(PRIMA_TRANCHE, v)).toEqual({ ok: true, valore: 20000 })
++    expect(valutaFormula(SALDO, v)).toEqual({ ok: true, valore: 0 })
++  })
++
++  it("tiene conto dello sconto COMBO", () => {
++    const v = valori({ ...base, "Sconto COMBO": 2000, "Modalità di Pagamento": "50-50" })
++    expect(valutaFormula(PRIMA_TRANCHE, v)).toEqual({ ok: true, valore: 9000 })
++  })
++
++  it("confronta le stringhe senza convertirle in numero", () => {
++    // '30-50-20' letto come numero darebbe NaN e il confronto fallirebbe.
++    const v = valori({ ...base, "Modalità di Pagamento": "30-50-20" })
++    expect(valutaFormula(SALDO, v)).toEqual({ ok: true, valore: 4000 })
++  })
++})
++
++describe("sicurezza e robustezza", () => {
++  it("non esegue codice: le espressioni sono interpretate, non valutate", () => {
++    // Se ci fosse un eval() dietro, questa cambierebbe stato invece di
++    // essere respinta.
++    const esito = valutaFormula("process.exit(1)", valori({}))
++    expect(esito.ok).toBe(false)
++  })
++
++  it("rifiuta funzioni diverse da If", () => {
++    const esito = valutaFormula("SUM({a},{b})", valori({ a: 1, b: 2 }))
++    expect(esito.ok).toBe(false)
++    if (!esito.ok) expect(esito.errore).toContain("SUM")
++  })
++
++  it("segnala parentesi e delimitatori non chiusi senza lanciare", () => {
++    expect(valutaFormula("({a}+{b}", valori({ a: 1, b: 2 })).ok).toBe(false)
++    expect(valutaFormula("{a", valori({})).ok).toBe(false)
++    expect(valutaFormula("'testo", valori({})).ok).toBe(false)
++  })
++
++  it("segnala espressioni vuote o incomplete", () => {
++    expect(valutaFormula("", valori({})).ok).toBe(false)
++    expect(valutaFormula("{a} +", valori({ a: 1 })).ok).toBe(false)
++    expect(valutaFormula("{a} {b}", valori({ a: 1, b: 2 })).ok).toBe(false)
++  })
++})
++
++describe("dipendenzeFormula", () => {
++  it("elenca i campi usati, senza ripetizioni", () => {
++    expect(dipendenzeFormula(SALDO)).toEqual([
++      "Modalità di Pagamento",
++      "Importo Contrattuale",
++      "Sconto COMBO",
++    ])
++  })
++
++  it("torna vuoto su un'espressione malformata invece di lanciare", () => {
++    expect(dipendenzeFormula("{a")).toEqual([])
++  })
++})
+diff --git a/lib/crm-settings/formula-eval.ts b/lib/crm-settings/formula-eval.ts
+new file mode 100644
+index 0000000..c98fc39
+--- /dev/null
++++ b/lib/crm-settings/formula-eval.ts
+@@ -0,0 +1,338 @@
++/**
++ * Valutazione delle formule dei campi calcolati.
++ *
++ * Le espressioni arrivano dalla configurazione del layout, che un admin puo'
++ * modificare da interfaccia. Per questo NON si usa eval() ne' new Function():
++ * significherebbe eseguire codice arbitrario scritto da chi ha accesso alla
++ * pagina Layout, con i permessi del server. Qui c'e' un parser che riconosce
++ * soltanto il linguaggio descritto sotto, e tutto il resto e' errore.
++ *
++ * Linguaggio riconosciuto, ricalcato su quello che Zoho usa davvero nelle
++ * formule del modulo Clienti:
++ *
++ *   {Nome Campo}              riferimento a un altro campo
++ *   123  1.5  0.35            numeri
++ *   'testo'  "testo"          stringhe
++ *   + - * /                   aritmetica
++ *   ( )                       raggruppamento
++ *   == !=                     confronto
++ *   If(cond, allora, altrimenti)
++ *
++ * Volutamente niente altro: ogni costrutto in piu' andrebbe prima trovato
++ * davvero in una formula Zoho, poi implementato con il suo comportamento
++ * verificato — non aggiunto per simmetria.
++ */
++
++export type ValoreFormula = number | string | boolean | null
++
++export type EsitoValutazione =
++  | { ok: true; valore: ValoreFormula }
++  | { ok: false; errore: string }
++
++/* ------------------------------------------------------------------ lexer */
++
++type Token =
++  | { tipo: "numero"; valore: number }
++  | { tipo: "stringa"; valore: string }
++  | { tipo: "campo"; nome: string }
++  | { tipo: "identificatore"; nome: string }
++  | { tipo: "operatore"; valore: string }
++  | { tipo: "fine" }
++
++function tokenizza(expr: string): Token[] | { errore: string } {
++  const token: Token[] = []
++  let i = 0
++
++  while (i < expr.length) {
++    const c = expr[i]
++
++    if (/\s/.test(c)) {
++      i += 1
++      continue
++    }
++
++    // {Nome Campo}
++    if (c === "{") {
++      const fine = expr.indexOf("}", i)
++      if (fine === -1) return { errore: "Riferimento a campo non chiuso" }
++      const nome = expr.slice(i + 1, fine).trim()
++      if (!nome) return { errore: "Riferimento a campo vuoto" }
++      token.push({ tipo: "campo", nome })
++      i = fine + 1
++      continue
++    }
++
++    // 'testo' oppure "testo"
++    if (c === "'" || c === '"') {
++      const fine = expr.indexOf(c, i + 1)
++      if (fine === -1) return { errore: "Stringa non chiusa" }
++      token.push({ tipo: "stringa", valore: expr.slice(i + 1, fine) })
++      i = fine + 1
++      continue
++    }
++
++    if (/[0-9]/.test(c)) {
++      let j = i
++      while (j < expr.length && /[0-9.]/.test(expr[j])) j += 1
++      const testo = expr.slice(i, j)
++      const numero = Number(testo)
++      if (!Number.isFinite(numero)) return { errore: `Numero non valido: ${testo}` }
++      token.push({ tipo: "numero", valore: numero })
++      i = j
++      continue
++    }
++
++    if (/[A-Za-z_]/.test(c)) {
++      let j = i
++      while (j < expr.length && /[A-Za-z0-9_]/.test(expr[j])) j += 1
++      token.push({ tipo: "identificatore", nome: expr.slice(i, j) })
++      i = j
++      continue
++    }
++
++    if (expr.startsWith("==", i) || expr.startsWith("!=", i)) {
++      token.push({ tipo: "operatore", valore: expr.slice(i, i + 2) })
++      i += 2
++      continue
++    }
++
++    if ("+-*/(),".includes(c)) {
++      token.push({ tipo: "operatore", valore: c })
++      i += 1
++      continue
++    }
++
++    return { errore: `Carattere non riconosciuto: ${c}` }
++  }
++
++  token.push({ tipo: "fine" })
++  return token
++}
++
++/* ----------------------------------------------------------------- parser */
++
++type Nodo =
++  | { tipo: "numero"; valore: number }
++  | { tipo: "stringa"; valore: string }
++  | { tipo: "campo"; nome: string }
++  | { tipo: "binario"; op: string; sinistra: Nodo; destra: Nodo }
++  | { tipo: "negazione"; operando: Nodo }
++  | { tipo: "se"; condizione: Nodo; allora: Nodo; altrimenti: Nodo }
++
++class ErroreParsing extends Error {}
++
++/**
++ * Discesa ricorsiva. Precedenze, dalla piu' bassa: confronto, addizione,
++ * moltiplicazione, unario, primario.
++ */
++function analizza(token: Token[]): Nodo {
++  let posizione = 0
++
++  const corrente = () => token[posizione]
++
++  function consuma(valore: string) {
++    const t = corrente()
++    if (t.tipo !== "operatore" || t.valore !== valore) {
++      throw new ErroreParsing(`Atteso '${valore}'`)
++    }
++    posizione += 1
++  }
++
++  function confronto(): Nodo {
++    let sinistra = addizione()
++    while (corrente().tipo === "operatore") {
++      const t = corrente() as { tipo: "operatore"; valore: string }
++      if (t.valore !== "==" && t.valore !== "!=") break
++      posizione += 1
++      sinistra = { tipo: "binario", op: t.valore, sinistra, destra: addizione() }
++    }
++    return sinistra
++  }
++
++  function addizione(): Nodo {
++    let sinistra = moltiplicazione()
++    while (corrente().tipo === "operatore") {
++      const t = corrente() as { tipo: "operatore"; valore: string }
++      if (t.valore !== "+" && t.valore !== "-") break
++      posizione += 1
++      sinistra = { tipo: "binario", op: t.valore, sinistra, destra: moltiplicazione() }
++    }
++    return sinistra
++  }
++
++  function moltiplicazione(): Nodo {
++    let sinistra = unario()
++    while (corrente().tipo === "operatore") {
++      const t = corrente() as { tipo: "operatore"; valore: string }
++      if (t.valore !== "*" && t.valore !== "/") break
++      posizione += 1
++      sinistra = { tipo: "binario", op: t.valore, sinistra, destra: unario() }
++    }
++    return sinistra
++  }
++
++  function unario(): Nodo {
++    const t = corrente()
++    if (t.tipo === "operatore" && t.valore === "-") {
++      posizione += 1
++      return { tipo: "negazione", operando: unario() }
++    }
++    return primario()
++  }
++
++  function primario(): Nodo {
++    const t = corrente()
++
++    if (t.tipo === "numero") {
++      posizione += 1
++      return { tipo: "numero", valore: t.valore }
++    }
++
++    if (t.tipo === "stringa") {
++      posizione += 1
++      return { tipo: "stringa", valore: t.valore }
++    }
++
++    if (t.tipo === "campo") {
++      posizione += 1
++      return { tipo: "campo", nome: t.nome }
++    }
++
++    if (t.tipo === "identificatore") {
++      // L'unica funzione riconosciuta. Zoho la scrive "If"; il confronto e'
++      // senza distinzione di maiuscole per tolleranza.
++      if (t.nome.toLowerCase() !== "if") {
++        throw new ErroreParsing(`Funzione non riconosciuta: ${t.nome}`)
++      }
++      posizione += 1
++      consuma("(")
++      const condizione = confronto()
++      consuma(",")
++      const allora = confronto()
++      consuma(",")
++      const altrimenti = confronto()
++      consuma(")")
++      return { tipo: "se", condizione, allora, altrimenti }
++    }
++
++    if (t.tipo === "operatore" && t.valore === "(") {
++      posizione += 1
++      const dentro = confronto()
++      consuma(")")
++      return dentro
++    }
++
++    throw new ErroreParsing("Espressione incompleta")
++  }
++
++  const radice = confronto()
++  if (corrente().tipo !== "fine") {
++    throw new ErroreParsing("Contenuto in eccesso alla fine dell'espressione")
++  }
++  return radice
++}
++
++/* -------------------------------------------------------------- valutazione */
++
++/**
++ * Un campo vuoto vale 0 nei calcoli.
++ *
++ * E' il comportamento di Zoho, dove un importo non compilato non azzera la
++ * formula ma partecipa come zero. Cambiarlo qui vorrebbe dire che le stesse
++ * pratiche darebbero numeri diversi prima e dopo la migrazione.
++ */
++function comeNumero(valore: ValoreFormula): number {
++  if (typeof valore === "number") return valore
++  if (typeof valore === "boolean") return valore ? 1 : 0
++  if (valore === null || valore === "") return 0
++  const numero = Number(String(valore).replace(",", "."))
++  return Number.isFinite(numero) ? numero : 0
++}
++
++function uguali(a: ValoreFormula, b: ValoreFormula): boolean {
++  // Confronto fra testi quando almeno uno dei due e' testo: le formule Zoho
++  // confrontano la modalita' di pagamento con stringhe come '30-50-20', che
++  // non vanno convertite in numero.
++  if (typeof a === "string" || typeof b === "string") {
++    return String(a ?? "") === String(b ?? "")
++  }
++  return comeNumero(a) === comeNumero(b)
++}
++
++function valuta(nodo: Nodo, valori: Map<string, ValoreFormula>): ValoreFormula {
++  switch (nodo.tipo) {
++    case "numero":
++      return nodo.valore
++    case "stringa":
++      return nodo.valore
++    case "campo": {
++      // Un campo assente si comporta come vuoto: la scheda deve mostrare un
++      // numero anche quando un dato non e' stato compilato.
++      const valore = valori.get(nodo.nome)
++      return valore === undefined ? null : valore
++    }
++    case "negazione":
++      return -comeNumero(valuta(nodo.operando, valori))
++    case "se":
++      return valuta(nodo.condizione, valori)
++        ? valuta(nodo.allora, valori)
++        : valuta(nodo.altrimenti, valori)
++    case "binario": {
++      const sinistra = valuta(nodo.sinistra, valori)
++      const destra = valuta(nodo.destra, valori)
++      switch (nodo.op) {
++        case "==":
++          return uguali(sinistra, destra)
++        case "!=":
++          return !uguali(sinistra, destra)
++        case "+":
++          return comeNumero(sinistra) + comeNumero(destra)
++        case "-":
++          return comeNumero(sinistra) - comeNumero(destra)
++        case "*":
++          return comeNumero(sinistra) * comeNumero(destra)
++        case "/": {
++          const divisore = comeNumero(destra)
++          // Divisione per zero: null invece di Infinity, cosi' la scheda
++          // mostra un campo vuoto e non un valore assurdo.
++          return divisore === 0 ? null : comeNumero(sinistra) / divisore
++        }
++        default:
++          return null
++      }
++    }
++  }
++}
++
++/**
++ * Calcola una formula sui valori di un record.
++ *
++ * Non lancia mai: un errore torna come esito negativo, perche' una formula
++ * scritta male in configurazione non deve far fallire il caricamento di una
++ * scheda intera.
++ */
++export function valutaFormula(
++  expr: string,
++  valori: Map<string, ValoreFormula>,
++): EsitoValutazione {
++  const token = tokenizza(expr)
++  if ("errore" in token) return { ok: false, errore: token.errore }
++
++  try {
++    const albero = analizza(token)
++    return { ok: true, valore: valuta(albero, valori) }
++  } catch (errore) {
++    return {
++      ok: false,
++      errore: errore instanceof ErroreParsing ? errore.message : "Formula non valutabile",
++    }
++  }
++}
++
++/** I campi da cui dipende una formula, per sapere cosa serve avere in mano. */
++export function dipendenzeFormula(expr: string): string[] {
++  const token = tokenizza(expr)
++  if ("errore" in token) return []
++  const nomi = token.filter((t) => t.tipo === "campo").map((t) => (t as { nome: string }).nome)
++  return [...new Set(nomi)]
++}

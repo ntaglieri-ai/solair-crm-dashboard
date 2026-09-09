@@ -1,0 +1,425 @@
+diff --git a/lib/crm-settings/__tests__/formule-zoho-clienti.test.ts b/lib/crm-settings/__tests__/formule-zoho-clienti.test.ts
+new file mode 100644
+index 0000000..8bb0f3a
+--- /dev/null
++++ b/lib/crm-settings/__tests__/formule-zoho-clienti.test.ts
+@@ -0,0 +1,68 @@
++import { describe, expect, it } from "vitest"
++import { validaFormula } from "../layout-validate"
++
++/**
++ * Le formule realmente configurate su Zoho per il modulo Clienti, estratte da
++ * GET /crm/v8/settings/layouts?module=Contacts e tradotte nella sintassi
++ * {Etichetta} (solo i riferimenti: operatori e struttura restano identici).
++ *
++ * Stanno qui come rete: la validazione e' volutamente permissiva, e una
++ * stretta futura fatta senza avere queste sotto gli occhi le rifiuterebbe.
++ * Quattro usano If() annidati con confronti su stringhe — esattamente il
++ * caso che una whitelist aritmetica avrebbe bloccato.
++ */
++const FORMULE_ZOHO_CLIENTI: Array<[string, string]> = [
++  ["di cui FTV", "{Tot Contratto}-{di cui CT3}"],
++  ["Bonifico1", "{Fattura 1}*0.35"],
++  ["Bonifico2", "{Fattura2}*0.35"],
++  ["IncentivoAtteso", "{FatturaPDC}-{BonificoPDC}"],
++  ["Tot Potenza DC", "{Nr. Moduli}*{Potenza Moduli (Wp)}/1000"],
++  ["Tot Potenza AC (KW)", "{Nr. Inverter}*{Potenza Inverter}"],
++  ["Totale Storage", "{Capacità Batterie}*{Nr. Batterie}"],
++  [
++    "1° Tranche",
++    "If({Modalità di Pagamento}=='30-50-20',({Importo Contrattuale}-{Sconto COMBO})*0.3,If({Modalità di Pagamento}=='50-50',({Importo Contrattuale}-{Sconto COMBO})*0.5,If({Modalità di Pagamento}=='100% Finanziamento',0,{Importo Contrattuale}-{Sconto COMBO}-{Importo Finanziamento})))",
++  ],
++  [
++    "2°Tranche",
++    "If({Modalità di Pagamento}=='30-50-20',({Importo Contrattuale}-{Sconto COMBO})*0.5,If({Modalità di Pagamento}=='50-50',0,If({Modalità di Pagamento}=='100% Finanziamento',0,0)))",
++  ],
++  [
++    "Saldo",
++    "If({Modalità di Pagamento}=='30-50-20',({Importo Contrattuale}-{Sconto COMBO})*0.2,If({Modalità di Pagamento}=='50-50',({Importo Contrattuale}-{Sconto COMBO})*0.5,If({Modalità di Pagamento}=='100% Finanziamento',0,0)))",
++  ],
++  [
++    "Importo Finanziamento",
++    "If({Modalità di Pagamento}=='100% Finanziamento',({Importo Contrattuale}-{Sconto COMBO}),If({Modalità di Pagamento}=='Finanziamento Parziale',{Importo Contrattuale}-{Sconto COMBO}-{Bonifico Parziale},0))",
++  ],
++]
++
++describe("formule reali del modulo Clienti", () => {
++  it.each(FORMULE_ZOHO_CLIENTI)("%s passa la validazione", (_nome, expr) => {
++    expect(validaFormula({ expr }).ok).toBe(true)
++  })
++
++  it("estrae i campi da cui dipende una formula condizionale", () => {
++    const saldo = FORMULE_ZOHO_CLIENTI.find(([nome]) => nome === "Saldo")![1]
++    const esito = validaFormula({ expr: saldo })
++    expect(esito.ok).toBe(true)
++    if (esito.ok) {
++      expect(esito.riferimenti).toEqual([
++        "Modalità di Pagamento",
++        "Importo Contrattuale",
++        "Sconto COMBO",
++      ])
++    }
++  })
++
++  it("conserva l'originale Zoho accanto alla traduzione", () => {
++    // Zoho chiude: senza l'originale, una traduzione sbagliata non sarebbe
++    // piu' verificabile contro la fonte.
++    const esito = validaFormula({
++      expr: "{Fattura 1}*0.35",
++      origine_zoho: "${Fattura_1}*0.35",
++    })
++    expect(esito.ok).toBe(true)
++    if (esito.ok) expect(esito.formula.origine_zoho).toBe("${Fattura_1}*0.35")
++  })
++})
+diff --git a/scripts/migrations/seed-layout-da-zoho.mjs b/scripts/migrations/seed-layout-da-zoho.mjs
+new file mode 100644
+index 0000000..42935a5
+--- /dev/null
++++ b/scripts/migrations/seed-layout-da-zoho.mjs
+@@ -0,0 +1,345 @@
++#!/usr/bin/env node
++// Popola le tabelle del layout (crm_layout_pagine / _blocchi / _campi) a
++// partire dall'export dei layout Zoho.
++//
++//   node scripts/migrations/seed-layout-da-zoho.mjs --file layout-clienti.json
++//   node scripts/migrations/seed-layout-da-zoho.mjs --file layout-clienti.json --apply
++//
++// Senza --apply non scrive nulla: stampa cosa farebbe.
++//
++// Variabili richieste (in .env.local, con --env-file):
++//   NEXT_PUBLIC_SUPABASE_URL
++//   SUPABASE_SERVICE_ROLE_KEY
++//
++// L'export si ottiene da:
++//   GET /crm/v8/settings/layouts?module=Contacts
++// NON da settings/fields: quello non restituisce le espressioni delle
++// formule, l'endpoint layouts si.
++//
++// Idempotente: rilanciarlo aggiorna quello che c'e' invece di duplicare.
++
++import { readFileSync } from "node:fs"
++import { createClient } from "@supabase/supabase-js"
++
++/* -------------------------------------------------------------------------
++ * Mappatura sezioni Zoho -> pagine del nostro CRM.
++ *
++ * Le 18 sezioni Zoho non diventano 18 voci di navbar: confluiscono nelle
++ * macro-voci concordate, come blocchi al loro interno. L'ordine dei blocchi
++ * dentro una pagina segue l'ordine di questo elenco.
++ * ---------------------------------------------------------------------- */
++const PAGINE = [
++  {
++    key: "anagrafica",
++    label: "Anagrafica",
++    sezioni: ["Informazioni Clienti", "Informazioni indirizzo", "Riepilogo Visite"],
++  },
++  { key: "documenti", label: "Documenti", componente: "allegati", sezioni: [] },
++  {
++    key: "iter-burocratico",
++    label: "Iter burocratico",
++    sezioni: ["Pratiche Enel", "GSE", "Dati catastali"],
++  },
++  {
++    key: "impianto",
++    label: "Impianto",
++    sezioni: ["Informazioni Tecniche FTV", "Zavorre", "Info Tecniche Termico"],
++  },
++  {
++    key: "pagamenti",
++    label: "Pagamenti & Note Commerciali",
++    sezioni: [
++      "Note Commerciale",
++      "Dati Amministrativi Fotovoltaico",
++      "Dati Amministrativi CT3.0",
++      "Provvigioni",
++    ],
++  },
++  {
++    key: "logistica",
++    label: "Logistica",
++    sezioni: ["Stanziamento materiali", "Iter ordinario"],
++  },
++  { key: "comunicazioni", label: "Comunicazioni", sezioni: ["Servizio clienti"] },
++  { key: "note-cliente", label: "Note cliente", componente: "note", sezioni: [] },
++  { key: "email", label: "E-mail", componente: "email", sezioni: [] },
++  { key: "note-interne", label: "Note interne", componente: "note-interne", sezioni: [] },
++  { key: "calendario", label: "Calendario", componente: "calendario", sezioni: [] },
++  { key: "attivita", label: "Attività", componente: "attivita", sezioni: [] },
++]
++
++/**
++ * Sezioni Zoho deliberatamente escluse.
++ *
++ * "Immagine Clienti" e "Prova sottomodulo" sono vuote su Zoho; le altre due
++ * voci non sono campi dato.
++ */
++const SEZIONI_IGNORATE = new Set(["Immagine Clienti", "Prova sottomodulo"])
++
++/**
++ * Campi Zoho senza corrispondenza nel nostro CRM, saltati con motivo
++ * esplicito invece che in silenzio.
++ */
++const CAMPI_IGNORATI = {
++  "Nome e cognome": "calcolato da Zoho (Nome + Cognome), qui restano separati",
++  "Record Status": "campo interno Zoho",
++  "Layout installazione": "upload immagine, non un campo dato",
++}
++
++function argomento(nome, predefinito = null) {
++  const trovato = process.argv.find((a) => a.startsWith(`--${nome}=`))
++  if (trovato) return trovato.slice(nome.length + 3)
++  return process.argv.includes(`--${nome}`) ? true : predefinito
++}
++
++function richiediEnv(nome) {
++  const valore = process.env[nome]
++  if (!valore) {
++    console.error(`Variabile d'ambiente mancante: ${nome}`)
++    process.exit(1)
++  }
++  return valore
++}
++
++/* -------------------------------------------------------------------------
++ * Traduzione delle formule.
++ *
++ * Si tocca SOLO la sintassi dei riferimenti: ${Api_Name} diventa
++ * {Etichetta Campo}. Operatori, If() annidati, confronti e costanti restano
++ * carattere per carattere come su Zoho. Nessuna semplificazione: quattro
++ * formule usano If() con confronti sulla modalita' di pagamento, e alcuni
++ * rami tornano zero — e' cosi' che sono state configurate, e vanno replicate
++ * cosi'.
++ *
++ * L'originale Zoho viene conservato accanto alla traduzione: quando un
++ * numero non torna si confronta senza dover riaprire Zoho, che nel frattempo
++ * potrebbe non esserci piu'.
++ * ---------------------------------------------------------------------- */
++function traduciFormula(expression, etichettaPerApiName) {
++  if (!expression) return null
++  const expr = expression.replace(/\$\{([A-Za-z0-9_]+)\}/g, (intero, apiName) => {
++    const etichetta = etichettaPerApiName.get(apiName)
++    // Riferimento a un campo che non e' nel layout: si lascia il nome API,
++    // cosi' resta visibile che va risolto a mano invece di sparire.
++    return etichetta ? `{${etichetta}}` : intero
++  })
++  return { expr, origine_zoho: expression }
++}
++
++/** Tipo Zoho -> tipo del nostro catalogo campi. */
++function tipoDaZoho(campo) {
++  const perData = {
++    text: "text",
++    textarea: "textarea",
++    email: "email",
++    phone: "phone",
++    website: "url",
++    date: "date",
++    datetime: "datetime",
++    boolean: "boolean",
++    picklist: "select",
++    multiselectpicklist: "multiselect",
++    lookup: "lookup",
++    ownerlookup: "lookup",
++    userlookup: "lookup",
++    currency: "currency",
++    double: "decimal",
++    integer: "number",
++    bigint: "number",
++    percent: "percent",
++  }
++  if (campo.data_type === "formula") {
++    // Per un campo calcolato il tipo e' quello del risultato.
++    return perData[campo.formula?.return_type] ?? "decimal"
++  }
++  return perData[campo.data_type] ?? "text"
++}
++
++async function main() {
++  const percorso = argomento("file")
++  if (typeof percorso !== "string") {
++    console.error("Indicare il file: --file=layout-clienti.json")
++    process.exit(1)
++  }
++  const modulo = argomento("modulo", "clienti")
++  const applica = argomento("apply", false) === true
++
++  const supabase = createClient(
++    richiediEnv("NEXT_PUBLIC_SUPABASE_URL"),
++    richiediEnv("SUPABASE_SERVICE_ROLE_KEY"),
++    { auth: { persistSession: false } },
++  )
++
++  const esportazione = JSON.parse(readFileSync(percorso, "utf8"))
++  const layout = esportazione.layouts?.[0]
++  if (!layout) {
++    console.error("Nessun layout nel file indicato")
++    process.exit(1)
++  }
++
++  const sezioni = layout.sections ?? []
++  const sezionePerNome = new Map(sezioni.map((s) => [s.display_label, s]))
++
++  // api_name -> etichetta, per tradurre i riferimenti nelle formule.
++  const etichettaPerApiName = new Map()
++  for (const s of sezioni) {
++    for (const f of s.fields ?? []) etichettaPerApiName.set(f.api_name, f.field_label)
++  }
++
++  console.log(
++    `Modulo: ${modulo} | sezioni nel file: ${sezioni.length} | modalita': ${applica ? "SCRITTURA" : "prova (nessuna scrittura)"}`,
++  )
++  console.log()
++
++  const nonMappate = sezioni
++    .map((s) => s.display_label)
++    .filter(
++      (nome) =>
++        !SEZIONI_IGNORATE.has(nome) && !PAGINE.some((p) => p.sezioni.includes(nome)),
++    )
++  if (nonMappate.length) {
++    console.log("Sezioni Zoho non assegnate a nessuna pagina (saltate):")
++    for (const nome of nonMappate) console.log("   -", nome)
++    console.log()
++  }
++
++  let totalePagine = 0
++  let totaleBlocchi = 0
++  let totaleCampi = 0
++  let totaleFormule = 0
++  const saltati = []
++
++  for (const [indicePagina, definizione] of PAGINE.entries()) {
++    let paginaId = null
++
++    if (applica) {
++      const { data, error } = await supabase
++        .from("crm_layout_pagine")
++        .upsert(
++          {
++            modulo,
++            page_key: definizione.key,
++            label: definizione.label,
++            componente: definizione.componente ?? null,
++            ordinamento: indicePagina,
++          },
++          { onConflict: "modulo,page_key" },
++        )
++        .select("id")
++        .single()
++
++      if (error) {
++        console.error(`Pagina ${definizione.key}: ${error.message}`)
++        process.exit(1)
++      }
++      paginaId = data.id
++    }
++    totalePagine += 1
++
++    const blocchi = definizione.sezioni
++      .map((nome) => sezionePerNome.get(nome))
++      .filter(Boolean)
++
++    console.log(
++      `${definizione.label}${definizione.componente ? `  [componente: ${definizione.componente}]` : ""}`,
++    )
++
++    for (const [indiceBlocco, sezione] of blocchi.entries()) {
++      const campi = (sezione.fields ?? []).filter((f) => !CAMPI_IGNORATI[f.field_label])
++      for (const f of sezione.fields ?? []) {
++        if (CAMPI_IGNORATI[f.field_label]) {
++          saltati.push(`${f.field_label} — ${CAMPI_IGNORATI[f.field_label]}`)
++        }
++      }
++
++      const blockKey = sezione.display_label
++        .toLowerCase()
++        .normalize("NFD")
++        .replace(/[\u0300-\u036f]/g, "")
++        .replace(/[^a-z0-9]+/g, "-")
++        .replace(/^-+|-+$/g, "")
++        .slice(0, 63)
++
++      let bloccoId = null
++      if (applica) {
++        const { data, error } = await supabase
++          .from("crm_layout_blocchi")
++          .upsert(
++            {
++              pagina_id: paginaId,
++              block_key: blockKey,
++              label: sezione.display_label,
++              colonne: 2,
++              ordinamento: indiceBlocco,
++            },
++            { onConflict: "pagina_id,block_key" },
++          )
++          .select("id")
++          .single()
++
++        if (error) {
++          console.error(`Blocco ${blockKey}: ${error.message}`)
++          process.exit(1)
++        }
++        bloccoId = data.id
++      }
++      totaleBlocchi += 1
++
++      const conFormula = campi.filter((f) => f.data_type === "formula").length
++      totaleFormule += conFormula
++      console.log(
++        `   ${sezione.display_label}: ${campi.length} campi${conFormula ? `, di cui ${conFormula} calcolati` : ""}`,
++      )
++
++      for (const [indiceCampo, campo] of campi.entries()) {
++        const formula =
++          campo.data_type === "formula"
++            ? traduciFormula(campo.formula?.expression, etichettaPerApiName)
++            : null
++
++        if (applica) {
++          const { error } = await supabase.from("crm_layout_campi").upsert(
++            {
++              blocco_id: bloccoId,
++              origine: "system",
++              field_key: campo.field_label,
++              ordinamento: indiceCampo,
++              // Un campo calcolato non e' scrivibile: il valore arriva dalla
++              // formula. Su Zoho sono nascosti in creazione e modifica.
++              sola_lettura: campo.data_type === "formula",
++              formato:
++                campo.decimal_place != null ? { decimali: campo.decimal_place } : {},
++              formula,
++            },
++            { onConflict: "blocco_id,origine,field_key" },
++          )
++
++          if (error) {
++            console.error(`Campo ${campo.field_label}: ${error.message}`)
++            process.exit(1)
++          }
++        }
++        totaleCampi += 1
++      }
++    }
++    console.log()
++  }
++
++  if (saltati.length) {
++    console.log("Campi Zoho saltati:")
++    for (const riga of [...new Set(saltati)]) console.log("   -", riga)
++    console.log()
++  }
++
++  console.log(
++    `Completato: ${totalePagine} pagine, ${totaleBlocchi} blocchi, ${totaleCampi} campi (${totaleFormule} con formula).`,
++  )
++  if (!applica) {
++    console.log("Nessuna scrittura effettuata. Rilancia con --apply per applicare.")
++  }
++}
++
++main().catch((errore) => {
++  console.error(errore)
++  process.exit(1)
++})

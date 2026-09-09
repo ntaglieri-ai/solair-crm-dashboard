@@ -1,0 +1,554 @@
+diff --git a/app/(dashboard)/leads/[id]/page.tsx b/app/(dashboard)/leads/[id]/page.tsx
+index 72a363f..39457bb 100644
+--- a/app/(dashboard)/leads/[id]/page.tsx
++++ b/app/(dashboard)/leads/[id]/page.tsx
+@@ -7,29 +7,52 @@ import { LeadDetailContent } from "@/components/leads/lead-detail-content"
+ import { LeadIntelligencePanel } from "@/components/leads/lead-intelligence-panel"
+ import { requirePage } from "@/lib/permissions/server"
+ import { listEmailLog } from "@/lib/email/email-log"
++import { createClient } from "@/lib/supabase/server"
++import { loadLayout, loadOrdinePersonale } from "@/lib/crm-settings/layout-server"
++import {
++  applicaOrdineBlocchi,
++  applicaOrdineCampi,
++  applicaOrdinePersonale,
++  soloVisibili,
++} from "@/lib/crm-settings/layout"
+ 
+ export default async function LeadDetailPage({
+   params,
+ }: {
+   params: Promise<{ id: string }>
+ }) {
+-  await requirePage("lead")
+-
++  // requirePage carica gia' lo snapshot dei permessi, memorizzato per
++  // richiesta: riusarlo qui non costa una seconda lettura.
++  const permissions = await requirePage("lead")
+   const { id } = await params
+-  const lead = await getLeadById(id)
++  const supabase = await createClient()
++  const utenteId = permissions.snapshot.subject.userId
++
++  // In parallelo: le tre letture non dipendono l'una dall'altra, e
++  // incatenarle aggiungerebbe un giro di rete verso il database per ciascuna.
++  const [lead, emailLog, pagine, ordine] = await Promise.all([
++    getLeadById(id),
++    listEmailLog("lead", id),
++    loadLayout(supabase, "lead"),
++    utenteId
++      ? loadOrdinePersonale(supabase, utenteId, "lead")
++      : Promise.resolve({ pagine: [], blocchi: {}, campi: {} }),
++  ])
++
+   if (!lead) notFound()
+ 
+-  // Se il lead e' stato convertito, recupera il nome del cliente collegato
+-  // per la sezione "Record collegati" (altrimenti mostrerebbe solo l'id).
++  // Il nome del cliente collegato serve solo a lead convertiti, e dipende da
++  // un valore del lead: qui la lettura in sequenza e' inevitabile, ma scatta
++  // di rado.
+   const clienteCollegatoId = lead["Account convertito"]
+-  const clienteCollegato = clienteCollegatoId
+-    ? await getClienteById(clienteCollegatoId)
+-    : null
++  const clienteCollegato = clienteCollegatoId ? await getClienteById(clienteCollegatoId) : null
+ 
+-  // Storico invii reali. Letto qui e passato ai due consumatori (pannello e
+-  // sezione E-mail) invece che fatto fetchare a ciascuno: e' la stessa lista,
+-  // e la policy di SELECT su crm_email_log eredita gia' lo scoping di leads.
+-  const emailLog = await listEmailLog("lead", id)
++  const layout = soloVisibili(
++    applicaOrdineCampi(
++      applicaOrdineBlocchi(applicaOrdinePersonale(pagine, ordine.pagine), ordine.blocchi),
++      ordine.campi,
++    ),
++  )
+ 
+   return (
+     <div className="flex flex-col gap-6">
+@@ -41,6 +64,7 @@ export default async function LeadDetailPage({
+           lead={lead}
+           clienteCollegatoNome={clienteCollegato?.["Nome Clienti"]}
+           emailLog={emailLog}
++          layout={layout}
+         />
+         <LeadIntelligencePanel lead={lead} emailLog={emailLog} />
+       </div>
+diff --git a/components/leads/lead-detail-content.tsx b/components/leads/lead-detail-content.tsx
+index d9dd7f6..f5dc6d6 100644
+--- a/components/leads/lead-detail-content.tsx
++++ b/components/leads/lead-detail-content.tsx
+@@ -1,7 +1,8 @@
+ "use client"
+ 
+-import { useEffect, useState } from "react"
++import { useEffect, useState, type ReactNode } from "react"
+ import Link from "next/link"
++import { useRouter } from "next/navigation"
+ import { toast } from "sonner"
+ import { useTags } from "@/lib/tag-store"
+ import {
+@@ -30,6 +31,10 @@ import {
+ import { CalendarioRecordSection } from "@/components/calendario/calendario-record-section"
+ import { Button } from "@/components/ui/button"
+ import { EmailHistorySection } from "@/components/shared/email-history-section"
++import { LayoutRenderer, type RisolviModifica } from "@/components/shared/layout-renderer"
++import type { LayoutPagina } from "@/lib/crm-settings/layout"
++import { ancoraPagina, paginePiene } from "@/lib/crm-settings/layout-render"
++import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
+ import { NoteAttachmentList, RichNoteComposer, RichNoteText } from "@/components/shared/rich-note"
+ import type { NoteAttachment, NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
+ import { Badge } from "@/components/ui/badge"
+@@ -1044,11 +1049,13 @@ export function LeadDetailContent({
+   lead,
+   clienteCollegatoNome,
+   emailLog,
++  layout = [],
+ }: {
+   lead: Lead
+   clienteCollegatoNome?: string | null
+   /** Storico invii reali (crm_email_log), risolto lato server dalla pagina. */
+   emailLog: EmailLogEntry[]
++  layout?: LayoutPagina[]
+ }) {
+   const [openTasks, setOpenTasks] = useState<Task[]>(() =>
+     (lead.compiti ?? []).filter((task) => !task.completato).map(taskFromLeadTask),
+@@ -1093,6 +1100,10 @@ export function LeadDetailContent({
+     ])
+   }
+ 
++  // Con un layout configurato la scheda si disegna da quello; senza, resta
++  // il rendering scritto qui sotto come via di riserva.
++  const paginePronte = paginePiene(layout)
++
+   const counts: Record<string, number> = {
+     "section-note": lead.attivita.filter((activity) => activity.tipo === "nota").length,
+     "section-attivita-aperte": openTasks.length,
+@@ -1101,6 +1112,23 @@ export function LeadDetailContent({
+     "section-record": lead["Account convertito"] ? 1 : 0,
+   }
+ 
++  if (paginePronte.length > 0) {
++    return (
++      <LeadDaLayout
++        lead={lead}
++        emailLog={emailLog}
++        clienteCollegatoNome={clienteCollegatoNome}
++        layout={paginePronte}
++        openTasks={openTasks}
++        onToggleTask={toggleOpenTask}
++        onNuovoCompito={() => setTaskDialogOpen(true)}
++        taskDialogOpen={taskDialogOpen}
++        onTaskDialogOpenChange={setTaskDialogOpen}
++        onTaskCreated={handleTaskCreated}
++      />
++    )
++  }
++
+   return (
+     <div className="flex min-w-0 flex-1 flex-col gap-1">
+       <RelatedNav counts={counts} customFields={lead.customFields ?? []} />
+@@ -1252,3 +1280,176 @@ export function LeadDetailContent({
+     </div>
+   )
+ }
++
++/* -------------------------------------------------------------------------
++ * Scheda Lead disegnata dal layout configurato.
++ *
++ * Stessa impostazione della scheda Cliente: i campi arrivano dalla
++ * configurazione, mentre i pezzi che non sono campi (note, allegati,
++ * attivita', calendario, record collegati, sequenza temporale) restano i
++ * componenti gia' esistenti, agganciati alla pagina che li dichiara.
++ * ---------------------------------------------------------------------- */
++
++/** Colonna e tipo di ogni campo Lead, per la modifica inline. */
++const LEAD_CAMPO_PER_APP_FIELD = new Map(
++  LEAD_RECORD_FIELDS.map((campo) => [campo.appField as string, campo]),
++)
++
++function LeadDaLayout({
++  lead,
++  emailLog,
++  clienteCollegatoNome,
++  layout,
++  openTasks,
++  onToggleTask,
++  onNuovoCompito,
++  taskDialogOpen,
++  onTaskDialogOpenChange,
++  onTaskCreated,
++}: {
++  lead: Lead
++  emailLog: EmailLogEntry[]
++  clienteCollegatoNome?: string | null
++  layout: LayoutPagina[]
++  openTasks: Task[]
++  onToggleTask: (id: string) => void
++  onNuovoCompito: () => void
++  taskDialogOpen: boolean
++  onTaskDialogOpenChange: (open: boolean) => void
++  onTaskCreated: (compito: Compito) => void
++}) {
++  const router = useRouter()
++
++  const salvaOrdine = (corpo: Record<string, unknown>) => {
++    void fetch("/api/layout/ordine-personale", {
++      method: "PUT",
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify({ modulo: "lead", ...corpo }),
++    }).catch(() => {})
++  }
++
++  const componenti: Record<string, ReactNode> = {
++    note: <NoteSection lead={lead} />,
++    "documenti-obbligatori": (
++      <AllegatiSection
++        recordTipo="lead"
++        recordId={lead.id}
++        nomeRecord={lead["Nome Lead"]}
++        sottocartella={DOCUMENTI_OBBLIGATORI_FOLDER}
++        titolo="Documenti obbligatori per la conversione"
++        onChanged={notificaDocumentiObbligatoriCambiati}
++      />
++    ),
++    allegati: (
++      <AllegatiSection recordTipo="lead" recordId={lead.id} nomeRecord={lead["Nome Lead"]} />
++    ),
++    "attivita-aperte": (
++      <div className="flex flex-col gap-3">
++        <div className="flex justify-end">
++          <Button size="sm" variant="outline" className="h-7 bg-card text-xs" onClick={onNuovoCompito}>
++            <IconPlus size={14} stroke={1.8} data-icon="inline-start" />
++            Compito
++          </Button>
++        </div>
++        <AttivitaAperte tasks={openTasks} onToggle={onToggleTask} />
++      </div>
++    ),
++    "attivita-chiuse": <AttivitaChiuse lead={lead} />,
++    email: (
++      <EmailHistorySection
++        emailLog={emailLog}
++        emptyLabel="Nessuna email inviata a questo lead dal CRM."
++        recordTipo="lead"
++        recordId={lead.id}
++        nomeRecord={lead["Nome Lead"]}
++      />
++    ),
++    calendario: (
++      <CalendarioRecordSection
++        recordTipo="lead"
++        recordId={lead.id}
++        nomeRecord={lead["Nome Lead"]}
++      />
++    ),
++    "record-collegati": (
++      <RecordCollegati lead={lead} clienteCollegatoNome={clienteCollegatoNome} />
++    ),
++    timeline: <SequenzaTemporale lead={lead} />,
++  }
++
++  const risolviModifica: RisolviModifica = (fieldKey) => {
++    const campo = LEAD_CAMPO_PER_APP_FIELD.get(fieldKey)
++    if (!campo) return null
++
++    const value = (lead as unknown as Record<string, unknown>)[fieldKey]
++    // Solo valori semplici: un oggetto o una lista non sono modificabili
++    // da un campo di testo.
++    if (
++      value !== null &&
++      value !== undefined &&
++      typeof value !== "string" &&
++      typeof value !== "number" &&
++      typeof value !== "boolean"
++    ) {
++      return null
++    }
++
++    return {
++      module: "lead",
++      field: campo.column,
++      endpoint: `/api/leads/${lead.id}`,
++      patchKey: fieldKey,
++      value,
++      type:
++        campo.type === "boolean"
++          ? "boolean"
++          : campo.type === "numeric"
++            ? "number"
++            : campo.type === "timestamp"
++              ? "date"
++              : fieldKey === "E-mail"
++                ? "email"
++                : /telefono|mobile/i.test(fieldKey)
++                  ? "tel"
++                  : "text",
++    }
++  }
++
++  return (
++    <div className="flex min-w-0 flex-1 flex-col gap-1">
++      <nav className="flex items-center gap-1 overflow-x-auto border-b border-border bg-background pb-3 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible lg:sticky lg:top-[var(--detail-header-h,0px)] lg:z-10 lg:pt-2">
++        {layout.map((pagina) => (
++          <button
++            key={pagina.id}
++            type="button"
++            onClick={() =>
++              document
++                .getElementById(ancoraPagina(pagina.pageKey))
++                ?.scrollIntoView({ behavior: "smooth", block: "start" })
++            }
++            className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
++          >
++            {pagina.label}
++          </button>
++        ))}
++      </nav>
++
++      <LayoutRenderer
++        pagine={layout}
++        record={lead as unknown as Record<string, unknown>}
++        risolviModifica={risolviModifica}
++        componenti={componenti}
++        onRiordinaBlocchi={(pageKey, ordine) => salvaOrdine({ blocchi: { [pageKey]: ordine } })}
++        onRiordinaCampi={(blockKey, ordine) => salvaOrdine({ campi: { [blockKey]: ordine } })}
++        onSalvato={() => router.refresh()}
++      />
++
++      <QuickCompitoDialog
++        open={taskDialogOpen}
++        onOpenChange={onTaskDialogOpenChange}
++        correlato={{ tipo: "lead", id: lead.id, nome: lead["Nome Lead"] }}
++        onCreated={onTaskCreated}
++      />
++    </div>
++  )
++}
+diff --git a/scripts/migrations/seed-layout-da-zoho.mjs b/scripts/migrations/seed-layout-da-zoho.mjs
+index 42935a5..4e4819b 100644
+--- a/scripts/migrations/seed-layout-da-zoho.mjs
++++ b/scripts/migrations/seed-layout-da-zoho.mjs
+@@ -28,45 +28,84 @@ import { createClient } from "@supabase/supabase-js"
+  * macro-voci concordate, come blocchi al loro interno. L'ordine dei blocchi
+  * dentro una pagina segue l'ordine di questo elenco.
+  * ---------------------------------------------------------------------- */
+-const PAGINE = [
+-  {
+-    key: "anagrafica",
+-    label: "Anagrafica",
+-    sezioni: ["Informazioni Clienti", "Informazioni indirizzo", "Riepilogo Visite"],
+-  },
+-  { key: "documenti", label: "Documenti", componente: "allegati", sezioni: [] },
+-  {
+-    key: "iter-burocratico",
+-    label: "Iter burocratico",
+-    sezioni: ["Pratiche Enel", "GSE", "Dati catastali"],
+-  },
+-  {
+-    key: "impianto",
+-    label: "Impianto",
+-    sezioni: ["Informazioni Tecniche FTV", "Zavorre", "Info Tecniche Termico"],
+-  },
+-  {
+-    key: "pagamenti",
+-    label: "Pagamenti & Note Commerciali",
+-    sezioni: [
+-      "Note Commerciale",
+-      "Dati Amministrativi Fotovoltaico",
+-      "Dati Amministrativi CT3.0",
+-      "Provvigioni",
+-    ],
+-  },
+-  {
+-    key: "logistica",
+-    label: "Logistica",
+-    sezioni: ["Stanziamento materiali", "Iter ordinario"],
+-  },
+-  { key: "comunicazioni", label: "Comunicazioni", sezioni: ["Servizio clienti"] },
+-  { key: "note-cliente", label: "Note cliente", componente: "note", sezioni: [] },
+-  { key: "email", label: "E-mail", componente: "email", sezioni: [] },
+-  { key: "note-interne", label: "Note interne", componente: "note-interne", sezioni: [] },
+-  { key: "calendario", label: "Calendario", componente: "calendario", sezioni: [] },
+-  { key: "attivita", label: "Attività", componente: "attivita", sezioni: [] },
+-]
++const PAGINE_PER_MODULO = {
++  clienti: [
++    {
++      key: "anagrafica",
++      label: "Anagrafica",
++      sezioni: ["Informazioni Clienti", "Informazioni indirizzo", "Riepilogo Visite"],
++    },
++    { key: "documenti", label: "Documenti", componente: "allegati", sezioni: [] },
++    {
++      key: "iter-burocratico",
++      label: "Iter burocratico",
++      sezioni: ["Pratiche Enel", "GSE", "Dati catastali"],
++    },
++    {
++      key: "impianto",
++      label: "Impianto",
++      sezioni: ["Informazioni Tecniche FTV", "Zavorre", "Info Tecniche Termico"],
++    },
++    {
++      key: "pagamenti",
++      label: "Pagamenti & Note Commerciali",
++      sezioni: [
++        "Note Commerciale",
++        "Dati Amministrativi Fotovoltaico",
++        "Dati Amministrativi CT3.0",
++        "Provvigioni",
++      ],
++    },
++    {
++      key: "logistica",
++      label: "Logistica",
++      sezioni: ["Stanziamento materiali", "Iter ordinario"],
++    },
++    { key: "comunicazioni", label: "Comunicazioni", sezioni: ["Servizio clienti"] },
++    { key: "note-cliente", label: "Note cliente", componente: "note", sezioni: [] },
++    { key: "email", label: "E-mail", componente: "email", sezioni: [] },
++    { key: "note-interne", label: "Note interne", componente: "note-interne", sezioni: [] },
++    { key: "calendario", label: "Calendario", componente: "calendario", sezioni: [] },
++    { key: "attivita", label: "Attività", componente: "attivita", sezioni: [] },
++  ],
++
++  // Lead: stessa impostazione dei Clienti — le sezioni Zoho diventano
++  // blocchi dentro le voci di navigazione gia' in uso sulla scheda.
++  lead: [
++    { key: "info", label: "Informazioni principali", sezioni: ["Informazioni Lead"] },
++    { key: "indirizzo", label: "Indirizzo", sezioni: ["Informazioni indirizzo"] },
++    {
++      key: "descrizione",
++      label: "Descrizione",
++      sezioni: ["Informazioni sulla descrizione"],
++    },
++    { key: "sopralluogo", label: "Sopralluogo", sezioni: ["Sopralluogo precontrattuale"] },
++    { key: "note", label: "Note", componente: "note", sezioni: [] },
++    {
++      key: "documenti-obbligatori",
++      label: "Documenti obbligatori",
++      componente: "documenti-obbligatori",
++      sezioni: [],
++    },
++    { key: "allegati", label: "Allegati", componente: "allegati", sezioni: [] },
++    {
++      key: "attivita-aperte",
++      label: "Attività aperte",
++      componente: "attivita-aperte",
++      sezioni: [],
++    },
++    {
++      key: "attivita-chiuse",
++      label: "Attività chiuse",
++      componente: "attivita-chiuse",
++      sezioni: [],
++    },
++    { key: "email", label: "E-mail", componente: "email", sezioni: [] },
++    { key: "calendario", label: "Calendario", componente: "calendario", sezioni: [] },
++    { key: "record", label: "Record collegati", componente: "record-collegati", sezioni: [] },
++    { key: "timeline", label: "Sequenza temporale", componente: "timeline", sezioni: [] },
++  ],
++}
+ 
+ /**
+  * Sezioni Zoho deliberatamente escluse.
+@@ -74,18 +113,44 @@ const PAGINE = [
+  * "Immagine Clienti" e "Prova sottomodulo" sono vuote su Zoho; le altre due
+  * voci non sono campi dato.
+  */
+-const SEZIONI_IGNORATE = new Set(["Immagine Clienti", "Prova sottomodulo"])
++const SEZIONI_IGNORATE = new Set([
++  "Immagine Clienti",
++  "Immagine Lead",
++  "Prova sottomodulo",
++  // Sul Lead il tracciamento delle visite non ha corrispondenza nel nostro
++  // database: gli otto campi resterebbero sempre vuoti.
++  "Riepilogo visite",
++])
+ 
+ /**
+  * Campi Zoho senza corrispondenza nel nostro CRM, saltati con motivo
+  * esplicito invece che in silenzio.
+  */
+-const CAMPI_IGNORATI = {
+-  "Nome e cognome": "calcolato da Zoho (Nome + Cognome), qui restano separati",
+-  "Record Status": "campo interno Zoho",
+-  "Layout installazione": "upload immagine, non un campo dato",
++const CAMPI_IGNORATI_PER_MODULO = {
++  clienti: {
++    "Nome e cognome": "calcolato da Zoho (Nome + Cognome), qui restano separati",
++    "Record Status": "campo interno Zoho",
++    "Layout installazione": "upload immagine, non un campo dato",
++  },
++  // Sul Lead il record applicativo ha meno campi: quelli elencati qui non
++  // esistono, e includerli lascerebbe in scheda caselle sempre vuote.
++  lead: {
++    "Nome e cognome": "calcolato da Zoho (Nome + Cognome), qui restano separati",
++    "Record Status": "campo interno Zoho",
++    "ID record": "identificatore Zoho, non un dato della scheda",
++    Locked: "flag interno Zoho",
++    "è convertito": "stato interno della conversione, gia' rappresentato altrove",
++    "Data/ora convertita": "gestita dal nostro flusso di conversione",
++    "Orario del registro delle modifiche": "campo interno Zoho",
++    "Ora dell’ultimo arricchimento": "arricchimento dati Zia, non in uso",
++    "Stato arricchito": "arricchimento dati Zia, non in uso",
++    "Ora  iscrizione annullata": "campo interno Zoho",
++    Saluti: "non presente sul record Lead",
++    "N. di dipendenti": "non presente sul record Lead",
++  },
+ }
+ 
++
+ function argomento(nome, predefinito = null) {
+   const trovato = process.argv.find((a) => a.startsWith(`--${nome}=`))
+   if (trovato) return trovato.slice(nome.length + 3)
+@@ -126,34 +191,6 @@ function traduciFormula(expression, etichettaPerApiName) {
+   return { expr, origine_zoho: expression }
+ }
+ 
+-/** Tipo Zoho -> tipo del nostro catalogo campi. */
+-function tipoDaZoho(campo) {
+-  const perData = {
+-    text: "text",
+-    textarea: "textarea",
+-    email: "email",
+-    phone: "phone",
+-    website: "url",
+-    date: "date",
+-    datetime: "datetime",
+-    boolean: "boolean",
+-    picklist: "select",
+-    multiselectpicklist: "multiselect",
+-    lookup: "lookup",
+-    ownerlookup: "lookup",
+-    userlookup: "lookup",
+-    currency: "currency",
+-    double: "decimal",
+-    integer: "number",
+-    bigint: "number",
+-    percent: "percent",
+-  }
+-  if (campo.data_type === "formula") {
+-    // Per un campo calcolato il tipo e' quello del risultato.
+-    return perData[campo.formula?.return_type] ?? "decimal"
+-  }
+-  return perData[campo.data_type] ?? "text"
+-}
+ 
+ async function main() {
+   const percorso = argomento("file")
+@@ -162,6 +199,12 @@ async function main() {
+     process.exit(1)
+   }
+   const modulo = argomento("modulo", "clienti")
++  const PAGINE = PAGINE_PER_MODULO[modulo]
++  const CAMPI_IGNORATI = CAMPI_IGNORATI_PER_MODULO[modulo] ?? {}
++  if (!PAGINE) {
++    console.error(`Nessuna mappatura definita per il modulo "${modulo}"`)
++    process.exit(1)
++  }
+   const applica = argomento("apply", false) === true
+ 
+   const supabase = createClient(

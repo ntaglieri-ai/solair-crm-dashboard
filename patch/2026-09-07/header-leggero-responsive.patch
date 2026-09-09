@@ -1,0 +1,396 @@
+diff --git a/components/clienti/cliente-detail-content.tsx b/components/clienti/cliente-detail-content.tsx
+index b06f4f8..8e29509 100644
+--- a/components/clienti/cliente-detail-content.tsx
++++ b/components/clienti/cliente-detail-content.tsx
+@@ -438,9 +438,14 @@ function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
+         <div className="flex flex-col gap-4">
+           <CopyField label="Cellulare" value={cliente.Cellulare} icon={IconPhone} />
+           <CopyField label="Altro telefono" value={cliente["Altro telefono"]} icon={IconPhone} />
++          {/* Sede, Proprietario e Installatore: prima erano pillole
++              nell'header, tolte per alleggerirlo (report Nando). Restano
++              qui, dove stavano gia' anche gli altri dati anagrafici. */}
++          <DataField label="Sede">{val(cliente.Sede)}</DataField>
+           <DataField label="Clienti Proprietario">
+             {ownerName}
+           </DataField>
++          <DataField label="Installatore">{val(cliente.Installatore)}</DataField>
+           <DataField label="Origine Lead">{val(cliente["Origine Lead"])}</DataField>
+           <DataField label="Creato da">
+             {val(cliente["Creato da"])}
+@@ -448,6 +453,7 @@ function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
+               <span className="text-muted-foreground"> · {cliente["Ora creazione"]}</span>
+             ) : null}
+           </DataField>
++          <DataField label="Ultimo aggiornamento">{val(cliente["Ora modifica"])}</DataField>
+         </div>
+       </div>
+ 
+diff --git a/components/clienti/cliente-detail-header.tsx b/components/clienti/cliente-detail-header.tsx
+index 740edc2..73495d8 100644
+--- a/components/clienti/cliente-detail-header.tsx
++++ b/components/clienti/cliente-detail-header.tsx
+@@ -10,10 +10,6 @@ import {
+   Trash2,
+   Copy,
+   FileDown,
+-  Building2,
+-  UserCircle,
+-  Wrench,
+-  CalendarDays,
+   Plus,
+ } from "lucide-react"
+ import { Button } from "@/components/ui/button"
+@@ -43,15 +39,9 @@ import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
+ import { ClienteTagBadges, ClienteTagAssignPopover } from "./cliente-tag-controls"
+ import { useClienteTags } from "@/lib/cliente-tag-store"
+ import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
+-import { displayClienteOwner } from "@/lib/clienti/owner-display"
+ import { option } from "@/lib/crm-settings/column-values"
+ import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
+ 
+-function val(v: string | number | null | undefined): string {
+-  if (v === null || v === undefined || v === "") return "—"
+-  return String(v)
+-}
+-
+ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
+   const router = useRouter()
+   const [showDelete, setShowDelete] = useState(false)
+@@ -60,7 +50,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
+   const permissions = usePermissions()
+   const [editOpen, setEditOpen] = useState(false)
+   const nome = cliente["Nome Clienti"]
+-  const { ownerNames, installers } = useClienteTags()
++  const { installers } = useClienteTags()
+   const { data: statoOptions } = useStatoClienteQuery()
+   const sedeOptions = useColumnValueOptions(
+     "Clienti",
+@@ -68,7 +58,6 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
+     SEDE_LABELS.map((value) => option(value)),
+     { includeFallback: true },
+   ).options
+-  const ownerName = displayClienteOwner(cliente, ownerNames, "Non assegnato")
+ 
+   return (
+     <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card px-4 py-3 shadow-[0_18px_45px_-32px_rgb(15_23_42/0.55)]">
+@@ -83,31 +72,20 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
+         <span className="truncate font-semibold text-foreground">{nome}</span>
+       </nav>
+ 
+-      {/* Titolo + azioni */}
++      {/* Titolo + azioni: nome, stato e pulsanti sulla stessa riga. E' la
++          riga che resta ancorata in alto durante lo scroll (vedi
++          StickyDetailHeader), quindi va tenuta bassa — niente altro qui. */}
+       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+-        {/* Nome, stato e tag stanno sulla stessa riga: e' la riga che resta
+-            ancorata in alto durante lo scroll, quindi va tenuta bassa. */}
+         <div className="flex min-w-0 flex-wrap items-center gap-2">
+           <ClienteAvatar nome={nome} className="size-10 shrink-0 text-sm shadow-sm ring-2 ring-secondary" />
+           <h1 className="min-w-0 truncate text-xl font-black leading-tight text-foreground sm:text-2xl">
+             {nome}
+           </h1>
+-          <StatoClienteBadge stato={cliente.Stato} />
+-          <div className="flex flex-wrap items-center gap-1.5">
+-            <ClienteTagBadges clienteId={cliente.id} empty="" animate />
+-            <ClienteTagAssignPopover
+-              clienteId={cliente.id}
+-              trigger={
+-                <button
+-                  type="button"
+-                  aria-label="Aggiungi tag"
+-                  className="flex size-5 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
+-                >
+-                  <Plus size={14} strokeWidth={2} />
+-                </button>
+-              }
+-            />
+-          </div>
++          {/* Su schermi molto stretti il badge stato cede il posto al nome:
++              torna visibile da 'sm' in su. */}
++          <span className="hidden sm:inline-flex">
++            <StatoClienteBadge stato={cliente.Stato} />
++          </span>
+         </div>
+ 
+         <div className="flex flex-wrap items-center gap-2 no-print">
+@@ -195,27 +173,23 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
+         </div>
+       </div>
+ 
+-      {/* Riga info rapida */}
+-      <div className="flex flex-wrap items-center gap-1.5 text-xs text-foreground">
+-        <span className="inline-flex min-h-6 items-center gap-1 rounded-md bg-navy/10 px-2 font-semibold text-navy">
+-          <Building2 className="size-3" />
+-          {val(cliente.Sede)}
+-        </span>
+-        <span className="inline-flex min-h-6 items-center gap-1 rounded-md bg-info/10 px-2 font-semibold text-info">
+-          <UserCircle className="size-3" />
+-          {ownerName}
+-        </span>
+-        <span className="inline-flex min-h-6 items-center gap-1 rounded-md bg-warning/15 px-2 font-semibold text-warning">
+-          <Wrench className="size-3" />
+-          {val(cliente.Installatore)}
+-        </span>
+-        <span className="inline-flex min-h-6 items-center gap-1 rounded-md bg-teal/10 px-2 font-semibold text-teal">
+-          <CalendarDays className="size-3" />
+-          {val(cliente["Ora creazione"])}
+-        </span>
+-        <span className="ml-auto inline-flex min-h-6 items-center rounded-md bg-muted px-2 text-xs font-semibold text-muted-foreground">
+-          Ultimo aggiornamento: {val(cliente["Ora modifica"])}
+-        </span>
++      {/* Tag: riga propria sotto al nome, come su Zoho. Nascosta sotto 'sm'
++          insieme al badge stato — su mobile restano solo nome + azione
++          primaria + menu, il resto e' a un tap di distanza. */}
++      <div className="hidden flex-wrap items-center gap-1.5 sm:flex">
++        <ClienteTagBadges clienteId={cliente.id} empty="" animate />
++        <ClienteTagAssignPopover
++          clienteId={cliente.id}
++          trigger={
++            <button
++              type="button"
++              aria-label="Aggiungi tag"
++              className="flex size-5 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
++            >
++              <Plus size={14} strokeWidth={2} />
++            </button>
++          }
++        />
+       </div>
+       </div>
+ 
+diff --git a/components/leads/lead-detail-content.tsx b/components/leads/lead-detail-content.tsx
+index b95abb3..d9dd7f6 100644
+--- a/components/leads/lead-detail-content.tsx
++++ b/components/leads/lead-detail-content.tsx
+@@ -319,6 +319,10 @@ const PRIORITY_TONE: Record<string, string> = {
+ function InfoPrincipali({ lead }: { lead: Lead }) {
+   const [showMore, setShowMore] = useState(false)
+   const endpoint = `/api/leads/${lead.id}`
++  const { ownerNames: leadOwnerNames } = useTags()
++  const leadOwnerName = lead["Lead Proprietario"]
++    ? leadOwnerNames[lead["Lead Proprietario"]] ?? "Utente non disponibile"
++    : "Non assegnato"
+   const configuredStatoOptions = useColumnValueOptions(
+     "Lead",
+     "stato_lead",
+@@ -407,6 +411,11 @@ function InfoPrincipali({ lead }: { lead: Lead }) {
+         </button>
+         {showMore ? (
+           <div className="mt-4 grid grid-cols-1 gap-x-8 gap-y-4 border-t border-border pt-4 sm:grid-cols-2 animate-in fade-in duration-200">
++            {/* Sede, Proprietario e Origine Lead: prima erano pillole
++                nell'header, tolte per alleggerirlo (report Nando). */}
++            <DataField label="Sede">{val(lead.Sede)}</DataField>
++            <DataField label="Lead Proprietario">{val(leadOwnerName)}</DataField>
++            <DataField label="Origine Lead">{val(lead["Origine Lead"])}</DataField>
+             <DataField label="Stato email" edit={{ module: "lead", field: "stato_email", endpoint, patchKey: "Stato", value: lead.Stato }}>
+               {val(lead.Stato)}
+             </DataField>
+diff --git a/components/leads/lead-detail-header.tsx b/components/leads/lead-detail-header.tsx
+index 9743653..b9e1ed1 100644
+--- a/components/leads/lead-detail-header.tsx
++++ b/components/leads/lead-detail-header.tsx
+@@ -11,10 +11,6 @@ import {
+   MoreHorizontal,
+   Trash2,
+   XCircle,
+-  Building2,
+-  UserCircle,
+-  Megaphone,
+-  CalendarDays,
+   Copy,
+ } from "lucide-react"
+ import { Button } from "@/components/ui/button"
+@@ -51,6 +47,9 @@ import {
+ /**
+  * Stato del gate accanto al pulsante "Converti a cliente": dice sempre a che
+  * punto si e', cosi' un pulsante disabilitato non resta senza spiegazione.
++ * Compatto apposta (pillola, non frase) per restare attaccato al pulsante
++ * invece di andare a capo per conto suo — il testo esteso resta nel
++ * 'title' per chi passa il mouse sopra.
+  */
+ function GateDocumentiLabel({
+   stato,
+@@ -58,7 +57,11 @@ function GateDocumentiLabel({
+   stato: ReturnType<typeof useDocumentiObbligatori>
+ }) {
+   if (stato.isPending) {
+-    return <span className="text-xs text-muted-foreground">Verifica documenti…</span>
++    return (
++      <span className="inline-flex min-h-6 items-center rounded-md bg-muted px-1.5 text-[11px] font-semibold text-muted-foreground">
++        …
++      </span>
++    )
+   }
+ 
+   // Nextcloud irraggiungibile: il conteggio non e' noto. Non blocca piu' la
+@@ -66,29 +69,32 @@ function GateDocumentiLabel({
+   // informativo.
+   if (stato.isError || !stato.data) {
+     return (
+-      <span className="text-xs text-destructive">
+-        Conteggio documenti non disponibile — conversione consentita
++      <span
++        className="inline-flex min-h-6 items-center rounded-md bg-destructive/10 px-1.5 text-[11px] font-semibold text-destructive"
++        title="Conteggio documenti non disponibile — conversione consentita"
++      >
++        —/—
+       </span>
+     )
+   }
+ 
+   const { count, richiesti, completo } = stato.data
+-  if (completo) {
+-    return (
+-      <span className="text-xs text-success">
+-        {richiesti} documenti caricati
+-      </span>
+-    )
+-  }
+   return (
+-    <span className="text-xs text-muted-foreground">
+-      Documenti caricati: {count}/{richiesti} — conversione consentita
++    <span
++      className={
++        completo
++          ? "inline-flex min-h-6 items-center rounded-md bg-success/10 px-1.5 text-[11px] font-semibold text-success"
++          : "inline-flex min-h-6 items-center rounded-md bg-muted px-1.5 text-[11px] font-semibold text-muted-foreground"
++      }
++      title={completo ? `${richiesti} documenti caricati` : `Documenti caricati: ${count}/${richiesti} — conversione consentita`}
++    >
++      {count}/{richiesti}
+     </span>
+   )
+ }
+ 
+ export function LeadDetailHeader({ lead }: { lead: Lead }) {
+-  const { ownerNames, installers } = useTags()
++  const { installers } = useTags()
+   const router = useRouter()
+   const [showDelete, setShowDelete] = useState(false)
+   const [deleting, setDeleting] = useState(false)
+@@ -127,10 +133,6 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [lead.id])
+ 
+-  const ownerName = lead["Lead Proprietario"]
+-    ? ownerNames[lead["Lead Proprietario"]] ?? "Utente non disponibile"
+-    : "Non assegnato"
+-
+   return (
+     <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card px-4 py-3 shadow-[0_18px_45px_-32px_rgb(15_23_42/0.55)]">
+       <div className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,var(--navy),var(--teal),var(--info),var(--warning))]" />
+@@ -144,47 +146,38 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
+         <span className="truncate font-semibold text-foreground">{nome}</span>
+       </nav>
+ 
+-      {/* Titolo + azioni */}
++      {/* Titolo + azioni: nome, stato, punteggio e pulsanti sulla stessa
++          riga. E' la riga che resta ancorata in alto durante lo scroll
++          (StickyDetailHeader), quindi va tenuta bassa — niente altro qui. */}
+       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+-        {/* Nome, stato, punteggio e tag stanno sulla stessa riga: e' la riga
+-            che resta ancorata in alto durante lo scroll, quindi va tenuta
+-            bassa. */}
+         <div className="flex min-w-0 flex-wrap items-center gap-2">
+           <LeadAvatar nome={nome} className="size-10 shrink-0 text-sm shadow-sm ring-2 ring-secondary" />
+           <h1 className="min-w-0 truncate text-xl font-black leading-tight text-foreground sm:text-2xl">
+             {nome}
+           </h1>
+-          <StatoLeadBadge stato={lead["Stato Lead"]} />
+-          <ScoreBar score={lead.Valutazione} />
+-          <div className="flex flex-wrap items-center gap-1.5">
+-            <LeadTagBadges leadId={lead.id} animate />
+-            <TagAssignPopover
+-              leadId={lead.id}
+-              trigger={
+-                <button
+-                  type="button"
+-                  aria-label="Aggiungi tag"
+-                  className="flex size-5 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
+-                >
+-                  <IconPlus size={14} stroke={2} />
+-                </button>
+-              }
+-            />
+-          </div>
++          {/* Su schermi molto stretti badge e punteggio cedono il posto al
++              nome: tornano visibili da 'sm' in su. */}
++          <span className="hidden items-center gap-2 sm:inline-flex">
++            <StatoLeadBadge stato={lead["Stato Lead"]} />
++            <ScoreBar score={lead.Valutazione} />
++          </span>
+         </div>
+ 
+         <div className="flex flex-wrap items-center gap-2 no-print">
+-          {/* Il conteggio sta a sinistra del pulsante: spiega perche' e'
+-              disabilitato senza spostare la riga delle azioni. */}
+-          <GateDocumentiLabel stato={documenti} />
+-          <Button
+-            className="h-9 bg-teal px-3 text-sm font-bold text-teal-foreground shadow-sm hover:bg-teal/90"
+-            disabled={giaConvertito}
+-            onClick={() => setShowConvert(true)}
+-          >
+-            <UserCheck data-icon="inline-start" />
+-            {giaConvertito ? "Già convertito" : "Converti a cliente"}
+-          </Button>
++          {/* Pulsante e badge documenti come un unico blocco: cosi' vanno a
++              capo insieme invece che il badge da solo, e il badge resta
++              sempre a fianco di cio' che spiega. */}
++          <div className="inline-flex items-center gap-1.5">
++            <Button
++              className="h-9 bg-teal px-3 text-sm font-bold text-teal-foreground shadow-sm hover:bg-teal/90"
++              disabled={giaConvertito}
++              onClick={() => setShowConvert(true)}
++            >
++              <UserCheck data-icon="inline-start" />
++              {giaConvertito ? "Già convertito" : "Converti a cliente"}
++            </Button>
++            {!giaConvertito ? <GateDocumentiLabel stato={documenti} /> : null}
++          </div>
+           <Button
+             variant="outline"
+             className="h-9 bg-card px-3 text-sm font-semibold shadow-sm"
+@@ -235,27 +228,22 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
+         </div>
+       </div>
+ 
+-      {/* Riga info rapida */}
+-      <div className="flex flex-wrap items-center gap-1.5 text-xs text-foreground">
+-        <span className="inline-flex min-h-6 items-center gap-1 rounded-md bg-navy/10 px-2 font-semibold text-navy">
+-          <Building2 className="size-3" />
+-          {lead.Sede}
+-        </span>
+-        <span className="inline-flex min-h-6 items-center gap-1 rounded-md bg-info/10 px-2 font-semibold text-info">
+-          <UserCircle className="size-3" />
+-          {ownerName}
+-        </span>
+-        <span className="inline-flex min-h-6 items-center gap-1 rounded-md bg-warning/15 px-2 font-semibold text-warning">
+-          <Megaphone className="size-3" />
+-          {lead["Origine Lead"]}
+-        </span>
+-        <span className="inline-flex min-h-6 items-center gap-1 rounded-md bg-teal/10 px-2 font-semibold text-teal">
+-          <CalendarDays className="size-3" />
+-          {lead["Ora creazione"]}
+-        </span>
+-        <span className="ml-auto inline-flex min-h-6 items-center rounded-md bg-muted px-2 text-xs font-semibold text-muted-foreground">
+-          Ultimo aggiornamento: {lead["Ora ultima attività"]}
+-        </span>
++      {/* Tag: riga propria sotto al nome, come su Zoho e come sull'header
++          Cliente. Nascosta sotto 'sm' insieme a badge/punteggio. */}
++      <div className="hidden flex-wrap items-center gap-1.5 sm:flex">
++        <LeadTagBadges leadId={lead.id} animate />
++        <TagAssignPopover
++          leadId={lead.id}
++          trigger={
++            <button
++              type="button"
++              aria-label="Aggiungi tag"
++              className="flex size-5 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
++            >
++              <IconPlus size={14} stroke={2} />
++            </button>
++          }
++        />
+       </div>
+       </div>
+ 

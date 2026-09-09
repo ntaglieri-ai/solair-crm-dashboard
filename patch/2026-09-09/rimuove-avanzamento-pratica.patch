@@ -1,0 +1,123 @@
+diff --git a/components/clienti/cliente-intelligence-panel.tsx b/components/clienti/cliente-intelligence-panel.tsx
+index 8eea470..cc55ce1 100644
+--- a/components/clienti/cliente-intelligence-panel.tsx
++++ b/components/clienti/cliente-intelligence-panel.tsx
+@@ -1,8 +1,6 @@
+ "use client"
+ 
+ import {
+-  IconCircleCheck,
+-  IconCircle,
+   IconPlus,
+   IconPhone,
+   IconMail,
+@@ -37,101 +35,6 @@ function euro(n: number): string {
+ 
+ /* ---------- Step iter ---------- */
+ 
+-interface IterStep {
+-  label: string
+-  done: boolean
+-}
+-
+-function iterSteps(cliente: ClienteRecord): IterStep[] {
+-  return [
+-    { label: "GSE", done: Boolean(cliente["Inserimento pratica GSE"]) },
+-    {
+-      label: "E-Distribuzione",
+-      done: Boolean(cliente["Inserimento pratica E-Distribuzione"]),
+-    },
+-    {
+-      label: "Sopralluogo",
+-      done: cliente["Stato sopralluogo"] === "Completato",
+-    },
+-    { label: "TICA", done: cliente["Stato TICA"] === "Accettata" },
+-    { label: "Iter Enel", done: Boolean(cliente["Data iter Enel Concluso"]) },
+-  ]
+-}
+-
+-function ProgressCircle({ pct }: { pct: number }) {
+-  const r = 26
+-  const c = 2 * Math.PI * r
+-  const offset = c - (pct / 100) * c
+-  return (
+-    <div className="relative flex size-[60px] items-center justify-center">
+-      <svg className="size-[60px] -rotate-90" viewBox="0 0 60 60">
+-        <circle cx="30" cy="30" r={r} fill="none" stroke="var(--muted)" strokeWidth="6" />
+-        <circle
+-          cx="30"
+-          cy="30"
+-          r={r}
+-          fill="none"
+-          stroke="var(--teal)"
+-          strokeWidth="6"
+-          strokeLinecap="round"
+-          strokeDasharray={c}
+-          strokeDashoffset={offset}
+-          className="transition-[stroke-dashoffset] duration-700 ease-out"
+-        />
+-      </svg>
+-      <span className="absolute text-sm font-bold tabular-nums text-teal">
+-        {pct}%
+-      </span>
+-    </div>
+-  )
+-}
+-
+-function AvanzamentoCard({ cliente }: { cliente: ClienteRecord }) {
+-  const steps = iterSteps(cliente)
+-  const done = steps.filter((s) => s.done).length
+-  const pct = Math.round((done / steps.length) * 100)
+-  return (
+-    <Card>
+-      <CardHeader>
+-        <CardTitle className="text-[13px]">Avanzamento pratica</CardTitle>
+-      </CardHeader>
+-      <CardContent className="flex flex-col gap-4">
+-        <div className="flex items-center gap-4">
+-          <ProgressCircle pct={pct} />
+-          <div className="flex flex-col">
+-            <span className="text-2xl font-bold tabular-nums text-foreground">
+-              {done}
+-              <span className="text-sm font-normal text-muted-foreground">
+-                /{steps.length}
+-              </span>
+-            </span>
+-            <span className="text-xs text-muted-foreground">Step completati</span>
+-          </div>
+-        </div>
+-        <ul className="flex flex-col gap-2">
+-          {steps.map((s) => (
+-            <li key={s.label} className="flex items-center gap-2.5">
+-              {s.done ? (
+-                <IconCircleCheck size={16} stroke={1.8} className="shrink-0 text-success" />
+-              ) : (
+-                <IconCircle size={16} stroke={1.8} className="shrink-0 text-muted-foreground/50" />
+-              )}
+-              <span
+-                className={cn(
+-                  "text-xs",
+-                  s.done ? "text-foreground" : "text-muted-foreground",
+-                )}
+-              >
+-                {s.label}
+-              </span>
+-            </li>
+-          ))}
+-        </ul>
+-      </CardContent>
+-    </Card>
+-  )
+-}
+-
+ function RiepilogoEconomicoCard({ cliente }: { cliente: ClienteRecord }) {
+   const tot = parseImporto(cliente["Tot Contratto"] ?? cliente["Importo Contrattuale"])
+   const incassato = parseImporto(cliente.Bonifico1) + parseImporto(cliente.Bonifico2)
+@@ -374,7 +277,6 @@ function ContattiRapidiCard({ cliente }: { cliente: ClienteRecord }) {
+ export function ClienteIntelligencePanel({ cliente }: { cliente: ClienteRecord }) {
+   return (
+     <aside className="flex w-full flex-col gap-4 lg:sticky lg:top-[calc(var(--detail-header-h,5rem)+1rem)] lg:w-[340px] lg:shrink-0">
+-      <AvanzamentoCard cliente={cliente} />
+       <RiepilogoEconomicoCard cliente={cliente} />
+       <ProvvigioniCard cliente={cliente} />
+       <ProssimeAttivitaCard cliente={cliente} />

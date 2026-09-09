@@ -1,0 +1,91 @@
+diff --git a/app/(dashboard)/clienti/[id]/page.tsx b/app/(dashboard)/clienti/[id]/page.tsx
+index 7748018..76b75b9 100644
+--- a/app/(dashboard)/clienti/[id]/page.tsx
++++ b/app/(dashboard)/clienti/[id]/page.tsx
+@@ -7,31 +7,48 @@ import { ClienteIntelligencePanel } from "@/components/clienti/cliente-intellige
+ import { requirePage } from "@/lib/permissions/server"
+ import { listEmailLog } from "@/lib/email/email-log"
+ import { createClient } from "@/lib/supabase/server"
+-import { loadLayoutPerUtente } from "@/lib/crm-settings/layout-server"
+-import { getCurrentPermissions } from "@/lib/permissions/server"
+-import { soloVisibili } from "@/lib/crm-settings/layout"
++import { loadLayout, loadOrdinePersonale } from "@/lib/crm-settings/layout-server"
++import {
++  applicaOrdineBlocchi,
++  applicaOrdineCampi,
++  applicaOrdinePersonale,
++  soloVisibili,
++} from "@/lib/crm-settings/layout"
+ 
+ export default async function ClienteDetailPage({
+   params,
+ }: {
+   params: Promise<{ id: string }>
+ }) {
+-  await requirePage("clienti")
+-
++  // requirePage carica gia' lo snapshot dei permessi, memorizzato per
++  // richiesta: riusarlo qui non costa una seconda lettura.
++  const permissions = await requirePage("clienti")
+   const { id } = await params
+-  const cliente = await getClienteById(id)
++  const supabase = await createClient()
++  const utenteId = permissions.snapshot.subject.userId
++
++  // Tutto in parallelo. Le quattro letture non dipendono l'una dall'altra, e
++  // incatenarle aggiungerebbe un giro di rete verso il database per ciascuna
++  // — su una scheda che si apre decine di volte al giorno si sente.
++  const [cliente, emailLog, pagine, ordine] = await Promise.all([
++    getClienteById(id),
++    listEmailLog("cliente", id),
++    loadLayout(supabase, "clienti"),
++    utenteId
++      ? loadOrdinePersonale(supabase, utenteId, "clienti")
++      : Promise.resolve({ pagine: [], blocchi: {}, campi: {} }),
++  ])
+ 
+   if (!cliente) notFound()
+-  const emailLog = await listEmailLog("cliente", id)
+ 
+   // Layout configurabile: se ci sono pagine configurate la scheda si disegna
+-  // da queste, altrimenti resta il rendering scritto nel codice. Il loader
+-  // torna array vuoto quando le tabelle non ci sono o la lettura fallisce,
+-  // quindi un problema sul layout non lascia la scheda inaccessibile.
+-  const supabase = await createClient()
+-  const permissions = await getCurrentPermissions()
++  // da queste, altrimenti resta il rendering scritto nel codice. Il riordino
++  // personale si applica qui, sui dati gia' in memoria, senza altre letture.
+   const layout = soloVisibili(
+-    await loadLayoutPerUtente(supabase, "clienti", permissions.snapshot.subject.userId),
++    applicaOrdineCampi(
++      applicaOrdineBlocchi(applicaOrdinePersonale(pagine, ordine.pagine), ordine.blocchi),
++      ordine.campi,
++    ),
+   )
+ 
+   return (
+diff --git a/lib/crm-settings/layout-server.ts b/lib/crm-settings/layout-server.ts
+index c3399fc..34a010b 100644
+--- a/lib/crm-settings/layout-server.ts
++++ b/lib/crm-settings/layout-server.ts
+@@ -230,9 +230,17 @@ export async function loadLayoutPerUtente(
+   modulo: string,
+   utenteId: string | null,
+ ): Promise<LayoutPagina[]> {
+-  const pagine = await loadLayout(supabase, modulo)
+-  if (!pagine.length || !utenteId) return pagine
+-  const ordine = await loadOrdinePersonale(supabase, utenteId, modulo)
++  // Le due letture non dipendono l'una dall'altra: incatenarle aggiungerebbe
++  // un giro di rete verso il database senza motivo.
++  const [pagine, ordine] = await Promise.all([
++    loadLayout(supabase, modulo),
++    utenteId
++      ? loadOrdinePersonale(supabase, utenteId, modulo)
++      : Promise.resolve<OrdinePersonale>({ pagine: [], blocchi: {}, campi: {} }),
++  ])
++
++  if (!pagine.length) return pagine
++
+   return applicaOrdineCampi(
+     applicaOrdineBlocchi(applicaOrdinePersonale(pagine, ordine.pagine), ordine.blocchi),
+     ordine.campi,

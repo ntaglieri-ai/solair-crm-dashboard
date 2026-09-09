@@ -1,0 +1,24 @@
+diff --git a/scripts/migrations/backfill-zoho-clienti-allegati.mjs b/scripts/migrations/backfill-zoho-clienti-allegati.mjs
+index e5333ce..01f8f54 100644
+--- a/scripts/migrations/backfill-zoho-clienti-allegati.mjs
++++ b/scripts/migrations/backfill-zoho-clienti-allegati.mjs
+@@ -117,6 +117,11 @@ async function zohoJson(url, token) {
+     const body = await res.text().catch(() => "")
+     throw httpError(`Zoho HTTP ${res.status}${body ? `: ${body.slice(0, 220)}` : ""}`, res)
+   }
++  // Zoho risponde 204 (corpo vuoto) quando il record non ha allegati, invece
++  // di 200 con {data: []}. res.json() su un corpo vuoto lancia "Unexpected
++  // end of JSON input" — qui lo trattiamo come "nessun dato" invece di farlo
++  // esplodere.
++  if (res.status === 204) return null
+   return res.json()
+ }
+ 
+@@ -179,6 +184,7 @@ async function listZohoAttachments({ apiDomain, moduleName, recordId, token }) {
+     const payload = await conRetry(`Zoho list ${recordId} pagina ${page}`, () =>
+       zohoJson(url, token),
+     )
++    if (!payload) break // 204: nessun allegato per questo record
+     attachments.push(...(payload.data ?? []))
+     if (!payload.info?.more_records) break
+   }

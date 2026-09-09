@@ -1,0 +1,154 @@
+diff --git a/components/clienti/cliente-detail-content.tsx b/components/clienti/cliente-detail-content.tsx
+index a6457c6..794dace 100644
+--- a/components/clienti/cliente-detail-content.tsx
++++ b/components/clienti/cliente-detail-content.tsx
+@@ -1699,6 +1699,14 @@ function ClienteDaLayout({
+   vediNoteInterne: boolean
+ }) {
+   const router = useRouter()
++  const { ownerNames } = useClienteTags()
++
++  // Il proprietario e' salvato come id utente: senza questo la scheda
++  // mostrerebbe l'UUID al posto del nome, come faceva gia' la versione
++  // scritta a mano tramite displayClienteOwner.
++  const valoriVisualizzati: Record<string, ReactNode> = {
++    "Clienti Proprietario": displayClienteOwner(cliente, ownerNames, "Non assegnato"),
++  }
+ 
+   // Le note interne restano soggette al permesso: una pagina configurata non
+   // deve poter aggirare un controllo di accesso.
+@@ -1755,6 +1763,7 @@ function ClienteDaLayout({
+           record={cliente as unknown as Record<string, unknown>}
+           risolviModifica={risolviModifica}
+           componenti={componenti}
++          valoriVisualizzati={valoriVisualizzati}
+           onSalvato={() => router.refresh()}
+         />
+       </div>
+diff --git a/components/shared/layout-renderer.tsx b/components/shared/layout-renderer.tsx
+index fe9ed24..83a99ee 100644
+--- a/components/shared/layout-renderer.tsx
++++ b/components/shared/layout-renderer.tsx
+@@ -49,6 +49,7 @@ export function LayoutRenderer({
+   record,
+   risolviModifica,
+   componenti,
++  valoriVisualizzati,
+   onSalvato,
+ }: {
+   pagine: LayoutPagina[]
+@@ -59,6 +60,12 @@ export function LayoutRenderer({
+    * dove vanno, il modulo dice come sono fatti.
+    */
+   componenti?: Record<string, ReactNode>
++  /**
++   * Valori gia' pronti per la lettura, per i campi che nel database
++   * contengono un riferimento invece del testo da mostrare: il proprietario,
++   * per esempio, e' salvato come id utente e va letto come nome.
++   */
++  valoriVisualizzati?: Record<string, ReactNode>
+   onSalvato?: () => void
+ }) {
+   const valori = mappaValori(record)
+@@ -85,6 +92,7 @@ export function LayoutRenderer({
+                 record={record}
+                 valori={valori}
+                 risolviModifica={risolviModifica}
++                valoriVisualizzati={valoriVisualizzati}
+                 onSalvato={onSalvato}
+               />
+             ))}
+@@ -100,12 +108,14 @@ function BloccoRenderer({
+   record,
+   valori,
+   risolviModifica,
++  valoriVisualizzati,
+   onSalvato,
+ }: {
+   blocco: LayoutBlocco
+   record: Record<string, unknown>
+   valori: ReturnType<typeof mappaValori>
+   risolviModifica?: RisolviModifica
++  valoriVisualizzati?: Record<string, ReactNode>
+   onSalvato?: () => void
+ }) {
+   if (blocco.campi.length === 0) return null
+@@ -134,6 +144,7 @@ function BloccoRenderer({
+             record={record}
+             valori={valori}
+             risolviModifica={risolviModifica}
++            valoriVisualizzati={valoriVisualizzati}
+             onSalvato={onSalvato}
+           />
+         ))}
+@@ -147,15 +158,18 @@ function CampoRenderer({
+   record,
+   valori,
+   risolviModifica,
++  valoriVisualizzati,
+   onSalvato,
+ }: {
+   campo: LayoutCampo
+   record: Record<string, unknown>
+   valori: ReturnType<typeof mappaValori>
+   risolviModifica?: RisolviModifica
++  valoriVisualizzati?: Record<string, ReactNode>
+   onSalvato?: () => void
+ }) {
+   const etichetta = campo.labelOverride ?? campo.fieldKey
++  const giaPronto = valoriVisualizzati?.[campo.fieldKey]
+   const esito = valoreCampo(campo, record, valori)
+   const larghezza = cn(
+     campo.span === 2 && "sm:col-span-2",
+@@ -195,6 +209,7 @@ function CampoRenderer({
+           label={etichetta}
+           type={modifica.type as never}
+           emptyLabel={campo.formato.placeholder ?? "—"}
++          displayValue={giaPronto}
+           onSaved={onSalvato}
+         />
+       </div>
+@@ -211,7 +226,7 @@ function CampoRenderer({
+           <Sigma className="size-3 text-info" aria-label="Campo calcolato" />
+         ) : null}
+       </span>
+-      <div className="text-[13px] text-foreground">{testo}</div>
++      <div className="text-[13px] text-foreground">{giaPronto ?? testo}</div>
+     </div>
+   )
+ }
+diff --git a/lib/crm-settings/__tests__/layout-render.test.ts b/lib/crm-settings/__tests__/layout-render.test.ts
+index 26c8237..4fbaf5b 100644
+--- a/lib/crm-settings/__tests__/layout-render.test.ts
++++ b/lib/crm-settings/__tests__/layout-render.test.ts
+@@ -110,6 +110,13 @@ describe("formattaValore", () => {
+     expect(formattaValore(false, {})).toBe("No")
+   })
+ 
++  it("riconosce i booleani salvati come testo dall'import Zoho", () => {
++    // Nel database diversi campi valgono "true"/"false" come stringa:
++    // senza questo la scheda mostrava "true" al posto di "Sì".
++    expect(formattaValore("true", {})).toBe("Sì")
++    expect(formattaValore("false", {})).toBe("No")
++  })
++
+   it("usa il segnaposto per i valori vuoti", () => {
+     expect(formattaValore(null, {})).toBe("—")
+     expect(formattaValore("", {})).toBe("—")
+diff --git a/lib/crm-settings/layout-render.ts b/lib/crm-settings/layout-render.ts
+index fa67446..8052750 100644
+--- a/lib/crm-settings/layout-render.ts
++++ b/lib/crm-settings/layout-render.ts
+@@ -77,6 +77,12 @@ export function formattaValore(
+   if (valore === null || valore === undefined || valore === "") return vuoto
+   if (typeof valore === "boolean") return valore ? "Sì" : "No"
+ 
++  // Diversi campi booleani arrivano dal database come testo ("true"/"false"):
++  // e' un residuo dell'import Zoho, dove le colonne erano stringhe. Senza
++  // questo la scheda mostrerebbe "true" al posto di "Sì".
++  if (valore === "true") return "Sì"
++  if (valore === "false") return "No"
++
+   if (typeof valore === "number") {
+     if (!Number.isFinite(valore)) return vuoto
+     const decimali = formato.decimali

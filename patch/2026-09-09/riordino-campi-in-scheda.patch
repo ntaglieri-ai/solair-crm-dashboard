@@ -1,0 +1,720 @@
+diff --git a/app/api/layout/ordine-personale/route.ts b/app/api/layout/ordine-personale/route.ts
+index 06cba5f..89a277c 100644
+--- a/app/api/layout/ordine-personale/route.ts
++++ b/app/api/layout/ordine-personale/route.ts
+@@ -18,12 +18,12 @@ const MAX_ELEMENTI = 200
+ function elencoDiChiavi(value: unknown): string[] {
+   if (!Array.isArray(value)) return []
+   return value
+-    .filter((v): v is string => typeof v === "string" && v.length > 0 && v.length <= 63)
++    .filter((v): v is string => typeof v === "string" && v.length > 0 && v.length <= 120)
+     .slice(0, MAX_ELEMENTI)
+ }
+ 
+ export async function PUT(request: Request) {
+-  let body: { modulo?: unknown; pagine?: unknown; blocchi?: unknown }
++  let body: { modulo?: unknown; pagine?: unknown; blocchi?: unknown; campi?: unknown }
+   try {
+     body = await request.json()
+   } catch {
+@@ -42,22 +42,54 @@ export async function PUT(request: Request) {
+ 
+   const pagine = elencoDiChiavi(body.pagine)
+ 
+-  const blocchi: Record<string, string[]> = {}
+-  if (body.blocchi && typeof body.blocchi === "object" && !Array.isArray(body.blocchi)) {
+-    for (const [pageKey, elenco] of Object.entries(body.blocchi as Record<string, unknown>)) {
+-      if (typeof pageKey !== "string" || pageKey.length > 63) continue
++  /** Mappa contenitore -> elenco ordinato, scartando chiavi implausibili. */
++  const mappaDiElenchi = (grezzo: unknown): Record<string, string[]> => {
++    const risultato: Record<string, string[]> = {}
++    if (!grezzo || typeof grezzo !== "object" || Array.isArray(grezzo)) return risultato
++    for (const [chiave, elenco] of Object.entries(grezzo as Record<string, unknown>)) {
++      if (typeof chiave !== "string" || chiave.length > 120) continue
+       const chiavi = elencoDiChiavi(elenco)
+-      if (chiavi.length) blocchi[pageKey] = chiavi
++      if (chiavi.length) risultato[chiave] = chiavi
+     }
++    return risultato
+   }
+ 
++  const blocchi = mappaDiElenchi(body.blocchi)
++  const campi = mappaDiElenchi(body.campi)
++
+   const supabase = await createClient()
++
++  // Fusione con quanto gia' salvato invece di sostituzione: la scheda manda
++  // solo la preferenza appena cambiata (un blocco spostato, un campo
++  // spostato), e sovrascrivere l'intera riga cancellerebbe le altre due.
++  const { data: corrente } = await supabase
++    .from("crm_layout_ordine_utente")
++    .select("ordine, ordine_blocchi, ordine_campi")
++    .eq("utente_id", utenteId)
++    .eq("modulo", body.modulo)
++    .maybeSingle()
++
++  const salvato = (corrente ?? {}) as {
++    ordine?: unknown
++    ordine_blocchi?: unknown
++    ordine_campi?: unknown
++  }
++  const oggetto = (grezzo: unknown): Record<string, string[]> =>
++    grezzo && typeof grezzo === "object" && !Array.isArray(grezzo)
++      ? (grezzo as Record<string, string[]>)
++      : {}
++
+   const { error } = await supabase.from("crm_layout_ordine_utente").upsert(
+     {
+       utente_id: utenteId,
+       modulo: body.modulo,
+-      ordine: pagine,
+-      ordine_blocchi: blocchi,
++      ordine: body.pagine === undefined
++        ? Array.isArray(salvato.ordine)
++          ? salvato.ordine
++          : []
++        : pagine,
++      ordine_blocchi: { ...oggetto(salvato.ordine_blocchi), ...blocchi },
++      ordine_campi: { ...oggetto(salvato.ordine_campi), ...campi },
+       updated_at: new Date().toISOString(),
+     },
+     { onConflict: "utente_id,modulo" },
+diff --git a/components/clienti/cliente-detail-content.tsx b/components/clienti/cliente-detail-content.tsx
+index 2b82f34..5a239d7 100644
+--- a/components/clienti/cliente-detail-content.tsx
++++ b/components/clienti/cliente-detail-content.tsx
+@@ -1705,13 +1705,17 @@ function ClienteDaLayout({
+   // utente e non cambia la scheda agli altri. Un errore qui non deve
+   // disturbare il lavoro — al massimo l'ordine torna quello dell'admin al
+   // prossimo caricamento.
+-  const riordinaBlocchi = (pageKey: string, ordine: string[]) => {
++  const salvaOrdine = (corpo: Record<string, unknown>) => {
+     void fetch("/api/layout/ordine-personale", {
+       method: "PUT",
+       headers: { "Content-Type": "application/json" },
+-      body: JSON.stringify({ modulo: "clienti", blocchi: { [pageKey]: ordine } }),
++      body: JSON.stringify({ modulo: "clienti", ...corpo }),
+     }).catch(() => {})
+   }
++  const riordinaBlocchi = (pageKey: string, ordine: string[]) =>
++    salvaOrdine({ blocchi: { [pageKey]: ordine } })
++  const riordinaCampi = (blockKey: string, ordine: string[]) =>
++    salvaOrdine({ campi: { [blockKey]: ordine } })
+ 
+   // Il proprietario e' salvato come id utente: senza questo la scheda
+   // mostrerebbe l'UUID al posto del nome, come faceva gia' la versione
+@@ -1794,6 +1798,7 @@ function ClienteDaLayout({
+           componenti={componenti}
+           valoriVisualizzati={valoriVisualizzati}
+           onRiordinaBlocchi={riordinaBlocchi}
++          onRiordinaCampi={riordinaCampi}
+           onSalvato={() => router.refresh()}
+         />
+       </div>
+@@ -1814,13 +1819,16 @@ function NavDaLayout({ pagine }: { pagine: LayoutPagina[] }) {
+     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+ 
+   return (
+-    <nav className="flex flex-wrap items-center gap-1 border-b border-border bg-background pb-3 lg:sticky lg:top-[var(--detail-header-h,0px)] lg:z-10 lg:pt-2">
++    // Su schermi stretti le voci scorrono in orizzontale su una riga sola:
++    // andando a capo, con dodici sezioni, la navbar mangerebbe mezzo schermo
++    // prima ancora di arrivare ai dati.
++    <nav className="flex items-center gap-1 overflow-x-auto border-b border-border bg-background pb-3 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible lg:sticky lg:top-[var(--detail-header-h,0px)] lg:z-10 lg:pt-2">
+       {pagine.map((pagina) => (
+         <button
+           key={pagina.id}
+           type="button"
+           onClick={() => vai(ancoraPagina(pagina.pageKey))}
+-          className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
++          className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+         >
+           {pagina.label}
+         </button>
+diff --git a/components/shared/layout-renderer.tsx b/components/shared/layout-renderer.tsx
+index f941821..f4a78ac 100644
+--- a/components/shared/layout-renderer.tsx
++++ b/components/shared/layout-renderer.tsx
+@@ -5,6 +5,7 @@ import {
+   DndContext,
+   closestCenter,
+   PointerSensor,
++  TouchSensor,
+   useSensor,
+   useSensors,
+   type DragEndEvent,
+@@ -13,6 +14,7 @@ import {
+   SortableContext,
+   useSortable,
+   arrayMove,
++  rectSortingStrategy,
+   verticalListSortingStrategy,
+ } from "@dnd-kit/sortable"
+ import { CSS } from "@dnd-kit/utilities"
+@@ -68,6 +70,7 @@ export function LayoutRenderer({
+   componenti,
+   valoriVisualizzati,
+   onRiordinaBlocchi,
++  onRiordinaCampi,
+   onSalvato,
+ }: {
+   pagine: LayoutPagina[]
+@@ -90,6 +93,11 @@ export function LayoutRenderer({
+    * Assente = trascinamento disattivato.
+    */
+   onRiordinaBlocchi?: (pageKey: string, ordine: string[]) => void
++  /**
++   * Riordino personale dei campi dentro un blocco: riceve la chiave del
++   * blocco e il nuovo ordine dei campi.
++   */
++  onRiordinaCampi?: (blockKey: string, ordine: string[]) => void
+   onSalvato?: () => void
+ }) {
+   // Valori appena modificati, prima che il server rimandi il record
+@@ -129,6 +137,7 @@ export function LayoutRenderer({
+             risolviModifica={risolviModifica}
+             valoriVisualizzati={valoriVisualizzati}
+             onRiordinaBlocchi={onRiordinaBlocchi}
++            onRiordinaCampi={onRiordinaCampi}
+             onSalvato={salvato}
+           />
+         </section>
+@@ -144,6 +153,7 @@ function BloccoRenderer({
+   risolviModifica,
+   valoriVisualizzati,
+   trascinabile,
++  onRiordinaCampi,
+   onSalvato,
+ }: {
+   blocco: LayoutBlocco
+@@ -152,15 +162,40 @@ function BloccoRenderer({
+   risolviModifica?: RisolviModifica
+   valoriVisualizzati?: Record<string, ReactNode>
+   trascinabile?: boolean
++  onRiordinaCampi?: (blockKey: string, ordine: string[]) => void
+   onSalvato?: (fieldKey: string, nuovoValore: unknown) => void
+ }) {
+   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+     id: blocco.id,
+     disabled: !trascinabile,
+   })
++  const [campi, setCampi] = useState(blocco.campi)
++  const sensoriCampi = useSensoriTrascinamento()
++
++  // Il blocco puo' arrivare aggiornato dall'alto (ricarica dopo un
++  // salvataggio): l'ordine locale vale finche' i campi sono gli stessi.
++  if (
++    blocco.campi.length !== campi.length ||
++    blocco.campi.some((c) => !campi.some((l) => l.id === c.id))
++  ) {
++    setCampi(blocco.campi)
++  }
+ 
+   if (blocco.campi.length === 0) return null
+ 
++  function fineTrascinaCampi(evento: DragEndEvent) {
++    const { active, over } = evento
++    if (!over || active.id === over.id) return
++    const da = campi.findIndex((c) => c.id === active.id)
++    const a = campi.findIndex((c) => c.id === over.id)
++    const nuovi = arrayMove(campi, da, a)
++    setCampi(nuovi)
++    onRiordinaCampi?.(
++      blocco.blockKey,
++      nuovi.map((c) => c.fieldKey),
++    )
++  }
++
+   return (
+     <div
+       ref={setNodeRef}
+@@ -175,7 +210,7 @@ function BloccoRenderer({
+           {trascinabile ? (
+             <button
+               type="button"
+-              className="cursor-grab text-muted-foreground/60 transition-colors hover:text-foreground active:cursor-grabbing"
++              className="cursor-grab touch-none p-0.5 text-muted-foreground/60 transition-colors hover:text-foreground active:cursor-grabbing"
+               aria-label={`Trascina per spostare il riquadro ${blocco.label}`}
+               title="Trascina per spostare questo riquadro"
+               {...attributes}
+@@ -192,7 +227,11 @@ function BloccoRenderer({
+         </div>
+       ) : null}
+ 
+-      <div
++      <GrigliaCampi
++        attiva={Boolean(onRiordinaCampi)}
++        sensori={sensoriCampi}
++        idCampi={campi.map((c) => c.id)}
++        onFine={fineTrascinaCampi}
+         className={cn(
+           "grid gap-x-8 gap-y-4",
+           blocco.colonne === 1 && "grid-cols-1",
+@@ -201,7 +240,7 @@ function BloccoRenderer({
+           blocco.colonne >= 4 && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
+         )}
+       >
+-        {blocco.campi.map((campo) => (
++        {campi.map((campo) => (
+           <CampoRenderer
+             key={campo.id}
+             campo={campo}
+@@ -209,20 +248,131 @@ function BloccoRenderer({
+             valori={valori}
+             risolviModifica={risolviModifica}
+             valoriVisualizzati={valoriVisualizzati}
++            trascinabile={Boolean(onRiordinaCampi)}
+             onSalvato={onSalvato}
+           />
+         ))}
+-      </div>
++      </GrigliaCampi>
++    </div>
++  )
++}
++
++/**
++ * Sensori del trascinamento.
++ *
++ * Su mouse basta un piccolo spostamento. Su touch serve una pressione
++ * prolungata: senza, ogni tentativo di scorrere la pagina partendo da un
++ * campo verrebbe interpretato come trascinamento, e la scheda diventerebbe
++ * inservibile proprio dove lo spazio e' poco.
++ */
++function useSensoriTrascinamento() {
++  return useSensors(
++    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
++    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
++  )
++}
++
++/**
++ * Involucro di un campo: tiene il riferimento per il trascinamento e la
++ * maniglia, comuni ai tre modi in cui un campo puo' essere disegnato (errore
++ * di formula, modificabile, sola lettura).
++ *
++ * Definito qui fuori e non dentro il render del campo: un componente creato
++ * a ogni ridisegno verrebbe rimontato da capo, perdendo lo stato di
++ * modifica in corso.
++ */
++function ContenitoreCampo({
++  campo,
++  etichetta,
++  trascinabile,
++  className,
++  children,
++}: {
++  campo: LayoutCampo
++  etichetta: string
++  trascinabile?: boolean
++  className?: string
++  children: ReactNode
++}) {
++  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
++    id: campo.id,
++    disabled: !trascinabile,
++  })
++  const larghezza = cn(
++    campo.span === 2 && "sm:col-span-2",
++    campo.span === 3 && "sm:col-span-2 lg:col-span-3",
++    campo.span >= 4 && "sm:col-span-2 lg:col-span-4",
++  )
++
++  return (
++    <div
++      ref={setNodeRef}
++      style={{ transform: CSS.Transform.toString(transform), transition }}
++      className={cn(
++        "group/campo relative",
++        larghezza,
++        // Lo spazio per la maniglia si aggiunge solo quando serve, cosi' i
++        // campi non trascinabili restano allineati come prima.
++        trascinabile && "pl-4",
++        isDragging && "z-10 opacity-80",
++        className,
++      )}
++    >
++      {trascinabile ? (
++        <button
++          type="button"
++          className="absolute left-0 top-0.5 cursor-grab touch-none p-0.5 text-muted-foreground/40 transition-opacity hover:text-foreground focus-visible:opacity-100 active:cursor-grabbing sm:opacity-0 sm:group-hover/campo:opacity-100"
++          aria-label={`Trascina per spostare il campo ${etichetta}`}
++          {...attributes}
++          {...listeners}
++        >
++          <GripVertical className="size-3.5" />
++        </button>
++      ) : null}
++      {children}
+     </div>
+   )
+ }
+ 
++/**
++ * La griglia dei campi, ordinabile quando il riordino personale e' attivo.
++ * Strategia rettangolare e non verticale: i campi stanno su piu' colonne, e
++ * con quella verticale il segnaposto durante il trascinamento finirebbe nel
++ * posto sbagliato.
++ */
++function GrigliaCampi({
++  attiva,
++  sensori,
++  idCampi,
++  onFine,
++  className,
++  children,
++}: {
++  attiva: boolean
++  sensori: ReturnType<typeof useSensors>
++  idCampi: string[]
++  onFine: (evento: DragEndEvent) => void
++  className: string
++  children: ReactNode
++}) {
++  if (!attiva) return <div className={className}>{children}</div>
++
++  return (
++    <DndContext sensors={sensori} collisionDetection={closestCenter} onDragEnd={onFine}>
++      <SortableContext items={idCampi} strategy={rectSortingStrategy}>
++        <div className={className}>{children}</div>
++      </SortableContext>
++    </DndContext>
++  )
++}
++
+ function CampoRenderer({
+   campo,
+   record,
+   valori,
+   risolviModifica,
+   valoriVisualizzati,
++  trascinabile,
+   onSalvato,
+ }: {
+   campo: LayoutCampo
+@@ -230,22 +380,20 @@ function CampoRenderer({
+   valori: ReturnType<typeof mappaValori>
+   risolviModifica?: RisolviModifica
+   valoriVisualizzati?: Record<string, ReactNode>
++  trascinabile?: boolean
+   onSalvato?: (fieldKey: string, nuovoValore: unknown) => void
+ }) {
++  // Il riferimento per il trascinamento e la larghezza in colonne stanno in
++  // ContenitoreCampo, che avvolge tutti e tre i modi di disegnare il campo.
+   const etichetta = campo.labelOverride ?? campo.fieldKey
+   const giaPronto = valoriVisualizzati?.[campo.fieldKey]
+   const esito = valoreCampo(campo, record, valori)
+-  const larghezza = cn(
+-    campo.span === 2 && "sm:col-span-2",
+-    campo.span === 3 && "sm:col-span-2 lg:col-span-3",
+-    campo.span >= 4 && "sm:col-span-2 lg:col-span-4",
+-  )
+ 
+   // Una formula scritta male non deve far sparire il campo in silenzio: si
+   // vede che c'e' un problema, e resta chiaro quale.
+   if (esito.stato === "errore") {
+     return (
+-      <div className={cn("flex flex-col gap-0.5", larghezza)}>
++      <ContenitoreCampo campo={campo} etichetta={etichetta} trascinabile={trascinabile} className="flex flex-col gap-0.5">
+         <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+           {etichetta}
+         </span>
+@@ -256,7 +404,7 @@ function CampoRenderer({
+           <AlertTriangle className="size-3.5 shrink-0" />
+           Formula non valida
+         </span>
+-      </div>
++      </ContenitoreCampo>
+     )
+   }
+ 
+@@ -271,7 +419,7 @@ function CampoRenderer({
+ 
+   if (modifica) {
+     return (
+-      <div className={larghezza}>
++      <ContenitoreCampo campo={campo} etichetta={etichetta} trascinabile={trascinabile}>
+         <InlineEditableField
+           {...modifica}
+           label={etichetta}
+@@ -280,12 +428,12 @@ function CampoRenderer({
+           displayValue={giaPronto ?? testo}
+           onSaved={(nuovoValore) => onSalvato?.(campo.fieldKey, nuovoValore)}
+         />
+-      </div>
++      </ContenitoreCampo>
+     )
+   }
+ 
+   return (
+-    <div className={cn("flex flex-col gap-0.5", larghezza)}>
++    <ContenitoreCampo campo={campo} etichetta={etichetta} trascinabile={trascinabile} className="flex flex-col gap-0.5">
+       <span className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+         {etichetta}
+         {esito.stato === "calcolato" ? (
+@@ -293,7 +441,7 @@ function CampoRenderer({
+         ) : null}
+       </span>
+       <div className="text-[13px] text-foreground">{giaPronto ?? testo}</div>
+-    </div>
++    </ContenitoreCampo>
+   )
+ }
+ 
+@@ -311,6 +459,7 @@ function BlocchiTrascinabili({
+   risolviModifica,
+   valoriVisualizzati,
+   onRiordinaBlocchi,
++  onRiordinaCampi,
+   onSalvato,
+ }: {
+   pagina: LayoutPagina
+@@ -319,12 +468,11 @@ function BlocchiTrascinabili({
+   risolviModifica?: RisolviModifica
+   valoriVisualizzati?: Record<string, ReactNode>
+   onRiordinaBlocchi?: (pageKey: string, ordine: string[]) => void
++  onRiordinaCampi?: (blockKey: string, ordine: string[]) => void
+   onSalvato?: (fieldKey: string, nuovoValore: unknown) => void
+ }) {
+   const [blocchi, setBlocchi] = useState(pagina.blocchi)
+-  const sensors = useSensors(
+-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+-  )
++  const sensors = useSensoriTrascinamento()
+ 
+   // La pagina puo' cambiare sotto (ricarica dopo un salvataggio): l'ordine
+   // locale vale solo finche' coincide per composizione con quello ricevuto.
+@@ -346,6 +494,7 @@ function BlocchiTrascinabili({
+       risolviModifica={risolviModifica}
+       valoriVisualizzati={valoriVisualizzati}
+       trascinabile={Boolean(onRiordinaBlocchi)}
++      onRiordinaCampi={onRiordinaCampi}
+       onSalvato={onSalvato}
+     />
+   ))
+diff --git a/lib/crm-settings/__tests__/layout.test.ts b/lib/crm-settings/__tests__/layout.test.ts
+index 94411ea..c5ff457 100644
+--- a/lib/crm-settings/__tests__/layout.test.ts
++++ b/lib/crm-settings/__tests__/layout.test.ts
+@@ -1,6 +1,7 @@
+ import { describe, expect, it } from "vitest"
+ import {
+   applicaOrdineBlocchi,
++  applicaOrdineCampi,
+   applicaOrdinePersonale,
+   campiDuplicati,
+   campoModificabile,
+@@ -242,3 +243,66 @@ describe("applicaOrdineBlocchi", () => {
+     expect(pagine[0].blocchi.map((b) => b.blockKey)).toEqual(originale)
+   })
+ })
++
++describe("applicaOrdineCampi", () => {
++  function conCampi(chiavi: string[]): LayoutPagina {
++    return {
++      id: "p-impianto",
++      pageKey: "impianto",
++      label: "Impianto",
++      icona: null,
++      ordinamento: 0,
++      visible: true,
++      componente: null,
++      blocchi: [
++        {
++          id: "b-ftv",
++          blockKey: "ftv",
++          label: "FTV",
++          mostraTitolo: true,
++          colonne: 2,
++          ordinamento: 0,
++          visible: true,
++          campi: chiavi.map((fieldKey, indice) => campo(fieldKey, { ordinamento: indice })),
++        },
++      ],
++    }
++  }
++
++  const pagine = [conCampi(["Nr. Moduli", "COD- MODULI", "Nr. Inverter"])]
++
++  it("senza preferenza lascia l'ordine dell'admin", () => {
++    const risultato = applicaOrdineCampi(pagine, {})
++    expect(risultato[0].blocchi[0].campi.map((c) => c.fieldKey)).toEqual([
++      "Nr. Moduli",
++      "COD- MODULI",
++      "Nr. Inverter",
++    ])
++  })
++
++  it("riordina i campi del blocco indicato", () => {
++    const risultato = applicaOrdineCampi(pagine, {
++      ftv: ["Nr. Inverter", "Nr. Moduli", "COD- MODULI"],
++    })
++    expect(risultato[0].blocchi[0].campi.map((c) => c.fieldKey)).toEqual([
++      "Nr. Inverter",
++      "Nr. Moduli",
++      "COD- MODULI",
++    ])
++  })
++
++  it("mette in coda i campi non elencati", () => {
++    const risultato = applicaOrdineCampi(pagine, { ftv: ["Nr. Inverter"] })
++    expect(risultato[0].blocchi[0].campi.map((c) => c.fieldKey)).toEqual([
++      "Nr. Inverter",
++      "Nr. Moduli",
++      "COD- MODULI",
++    ])
++  })
++
++  it("non muta le pagine ricevute", () => {
++    const originale = pagine[0].blocchi[0].campi.map((c) => c.fieldKey)
++    applicaOrdineCampi(pagine, { ftv: ["Nr. Inverter", "Nr. Moduli", "COD- MODULI"] })
++    expect(pagine[0].blocchi[0].campi.map((c) => c.fieldKey)).toEqual(originale)
++  })
++})
+diff --git a/lib/crm-settings/layout-server.ts b/lib/crm-settings/layout-server.ts
+index efd8057..c3399fc 100644
+--- a/lib/crm-settings/layout-server.ts
++++ b/lib/crm-settings/layout-server.ts
+@@ -1,6 +1,7 @@
+ import type { createClient } from "@/lib/supabase/server"
+ import {
+   applicaOrdineBlocchi,
++  applicaOrdineCampi,
+   applicaOrdinePersonale,
+   type LayoutBlocco,
+   type LayoutCampo,
+@@ -180,6 +181,7 @@ export async function loadLayout(
+ export type OrdinePersonale = {
+   pagine: string[]
+   blocchi: Record<string, string[]>
++  campi: Record<string, string[]>
+ }
+ 
+ export async function loadOrdinePersonale(
+@@ -187,32 +189,39 @@ export async function loadOrdinePersonale(
+   utenteId: string,
+   modulo: string,
+ ): Promise<OrdinePersonale> {
+-  const vuoto: OrdinePersonale = { pagine: [], blocchi: {} }
++  const vuoto: OrdinePersonale = { pagine: [], blocchi: {}, campi: {} }
+ 
+   const { data, error } = await supabase
+     .from("crm_layout_ordine_utente")
+-    .select("ordine, ordine_blocchi")
++    .select("ordine, ordine_blocchi, ordine_campi")
+     .eq("utente_id", utenteId)
+     .eq("modulo", modulo)
+     .maybeSingle()
+ 
+   if (error || !data) return vuoto
+-  const riga = data as { ordine: unknown; ordine_blocchi: unknown }
++  const riga = data as { ordine: unknown; ordine_blocchi: unknown; ordine_campi: unknown }
+ 
+-  const pagine = Array.isArray(riga.ordine)
+-    ? riga.ordine.filter((key): key is string => typeof key === "string")
+-    : []
+-
+-  const blocchi: Record<string, string[]> = {}
+-  if (riga.ordine_blocchi && typeof riga.ordine_blocchi === "object" && !Array.isArray(riga.ordine_blocchi)) {
+-    for (const [pageKey, elenco] of Object.entries(riga.ordine_blocchi as Record<string, unknown>)) {
++  /** jsonb -> mappa chiave -> elenco di stringhe, scartando il resto. */
++  const mappaDiElenchi = (grezzo: unknown): Record<string, string[]> => {
++    const risultato: Record<string, string[]> = {}
++    if (!grezzo || typeof grezzo !== "object" || Array.isArray(grezzo)) return risultato
++    for (const [chiave, elenco] of Object.entries(grezzo as Record<string, unknown>)) {
+       if (Array.isArray(elenco)) {
+-        blocchi[pageKey] = elenco.filter((key): key is string => typeof key === "string")
++        risultato[chiave] = elenco.filter((v): v is string => typeof v === "string")
+       }
+     }
++    return risultato
+   }
+ 
+-  return { pagine, blocchi }
++  const pagine = Array.isArray(riga.ordine)
++    ? riga.ordine.filter((key): key is string => typeof key === "string")
++    : []
++
++  return {
++    pagine,
++    blocchi: mappaDiElenchi(riga.ordine_blocchi),
++    campi: mappaDiElenchi(riga.ordine_campi),
++  }
+ }
+ 
+ /** Layout del modulo gia' riordinato secondo la preferenza dell'utente. */
+@@ -224,5 +233,8 @@ export async function loadLayoutPerUtente(
+   const pagine = await loadLayout(supabase, modulo)
+   if (!pagine.length || !utenteId) return pagine
+   const ordine = await loadOrdinePersonale(supabase, utenteId, modulo)
+-  return applicaOrdineBlocchi(applicaOrdinePersonale(pagine, ordine.pagine), ordine.blocchi)
++  return applicaOrdineCampi(
++    applicaOrdineBlocchi(applicaOrdinePersonale(pagine, ordine.pagine), ordine.blocchi),
++    ordine.campi,
++  )
+ }
+diff --git a/lib/crm-settings/layout.ts b/lib/crm-settings/layout.ts
+index 6fdf629..674de3b 100644
+--- a/lib/crm-settings/layout.ts
++++ b/lib/crm-settings/layout.ts
+@@ -173,6 +173,37 @@ export function applicaOrdineBlocchi(
+   })
+ }
+ 
++/**
++ * Applica l'ordine personale dei campi dentro ciascun blocco.
++ *
++ * Stessa regola degli altri due livelli: gli elencati per primi, i restanti
++ * in coda nell'ordine dell'admin, cosi' un campo aggiunto dopo il
++ * salvataggio della preferenza non sparisce.
++ */
++export function applicaOrdineCampi(
++  pagine: LayoutPagina[],
++  ordinePerBlocco: Record<string, string[]>,
++): LayoutPagina[] {
++  return pagine.map((pagina) => ({
++    ...pagina,
++    blocchi: pagina.blocchi.map((blocco) => {
++      const ordine = ordinePerBlocco[blocco.blockKey]
++      if (!ordine?.length) return blocco
++
++      const posizione = new Map(ordine.map((key, indice) => [key, indice]))
++      const campi = [...blocco.campi].sort((a, b) => {
++        const pa = posizione.get(a.fieldKey)
++        const pb = posizione.get(b.fieldKey)
++        if (pa !== undefined && pb !== undefined) return pa - pb
++        if (pa !== undefined) return -1
++        if (pb !== undefined) return 1
++        return a.ordinamento - b.ordinamento
++      })
++      return { ...blocco, campi }
++    }),
++  }))
++}
++
+ /**
+  * Solo cio' che va disegnato: pagine e blocchi nascosti spariscono con tutto
+  * il loro contenuto, i campi nascosti spariscono singolarmente.
+diff --git a/supabase/migrations/20260909c_ordine_campi_utente.sql b/supabase/migrations/20260909c_ordine_campi_utente.sql
+new file mode 100644
+index 0000000..3d99458
+--- /dev/null
++++ b/supabase/migrations/20260909c_ordine_campi_utente.sql
+@@ -0,0 +1,18 @@
++-- Ordine personale dei campi dentro un blocco.
++--
++-- Completa le due preferenze gia' presenti (ordine delle pagine e dei
++-- blocchi): un utente puo' spostare anche i singoli campi dentro un riquadro,
++-- e la disposizione resta sua.
++--
++--   { "informazioni-tecniche-ftv": ["Nr. Moduli", "COD- MODULI", ...], ... }
++--
++-- La chiave e' il block_key, il valore l'elenco dei field_key nell'ordine
++-- voluto. I campi non elencati seguono in coda nell'ordine dell'admin, cosi'
++-- un campo aggiunto dopo compare comunque invece di sparire.
++
++begin;
++
++alter table public.crm_layout_ordine_utente
++  add column if not exists ordine_campi jsonb not null default '{}'::jsonb;
++
++commit;

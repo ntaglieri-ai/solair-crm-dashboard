@@ -1,0 +1,206 @@
+diff --git a/components/clienti/cliente-detail-content.tsx b/components/clienti/cliente-detail-content.tsx
+index 794dace..daaccf1 100644
+--- a/components/clienti/cliente-detail-content.tsx
++++ b/components/clienti/cliente-detail-content.tsx
+@@ -1744,6 +1744,23 @@ function ClienteDaLayout({
+   const risolviModifica: RisolviModifica = (fieldKey) => {
+     const edit = clienteInlineEdit(cliente, fieldKey)
+     if (!edit) return null
++
++    // Il proprietario e' salvato come id utente: come campo di testo si
++    // modificherebbe incollando un UUID a mano. Diventa un elenco di nomi,
++    // mentre il valore scritto resta l'id.
++    if (fieldKey === "Clienti Proprietario") {
++      return {
++        module: edit.module,
++        field: edit.field,
++        endpoint: edit.endpoint,
++        patchKey: edit.patchKey,
++        value: edit.value,
++        type: "select",
++        options: Object.keys(ownerNames),
++        optionLabels: ownerNames,
++      }
++    }
++
+     return {
+       module: edit.module,
+       field: edit.field,
+diff --git a/components/shared/inline-edit-field.tsx b/components/shared/inline-edit-field.tsx
+index 751cdd3..d114cbf 100644
+--- a/components/shared/inline-edit-field.tsx
++++ b/components/shared/inline-edit-field.tsx
+@@ -40,7 +40,12 @@ export type InlineEditableValueProps = {
+   displayValue?: ReactNode
+   className?: string
+   valueClassName?: string
+-  onSaved?: () => void
++  /**
++   * Riceve il valore appena salvato. Serve a chi mostra campi calcolati:
++   * router.refresh() ricarica dal server, ma nel frattempo la formula
++   * resterebbe ferma al valore vecchio.
++   */
++  onSaved?: (nuovoValore: unknown) => void
+ }
+ 
+ function displayText(
+@@ -132,7 +137,7 @@ function InlineEditableValueInner(props: InlineEditableValueProps) {
+       setDraft(initialEditValue({ ...freshField, value: outgoing }))
+       setEditing(false)
+       toast.success("Campo aggiornato")
+-      props.onSaved?.()
++      props.onSaved?.(outgoing)
+       router.refresh()
+     } catch (error) {
+       toast.error(error instanceof Error ? error.message : "Salvataggio non riuscito")
+diff --git a/components/shared/layout-renderer.tsx b/components/shared/layout-renderer.tsx
+index 83a99ee..8202dc3 100644
+--- a/components/shared/layout-renderer.tsx
++++ b/components/shared/layout-renderer.tsx
+@@ -1,6 +1,6 @@
+ "use client"
+ 
+-import type { ReactNode } from "react"
++import { useCallback, useState, type ReactNode } from "react"
+ import { AlertTriangle, Sigma } from "lucide-react"
+ import { cn } from "@/lib/utils"
+ import { InlineEditableField } from "@/components/shared/inline-edit-field"
+@@ -42,6 +42,7 @@ export type RisolviModifica = (
+   value: unknown
+   type?: string
+   options?: string[]
++  optionLabels?: Record<string, string>
+ } | null
+ 
+ export function LayoutRenderer({
+@@ -68,7 +69,21 @@ export function LayoutRenderer({
+   valoriVisualizzati?: Record<string, ReactNode>
+   onSalvato?: () => void
+ }) {
+-  const valori = mappaValori(record)
++  // Valori appena modificati, prima che il server rimandi il record
++  // aggiornato. Senza, un campo calcolato resterebbe fermo al numero vecchio
++  // per tutta la durata del giro di rete: cambi il numero di batterie e il
++  // totale si aggiorna un istante dopo.
++  const [modificati, setModificati] = useState<Record<string, unknown>>({})
++  const recordVivo = { ...record, ...modificati }
++  const valori = mappaValori(recordVivo)
++
++  const salvato = useCallback(
++    (fieldKey: string, nuovoValore: unknown) => {
++      setModificati((precedenti) => ({ ...precedenti, [fieldKey]: nuovoValore }))
++      onSalvato?.()
++    },
++    [onSalvato],
++  )
+ 
+   return (
+     <div className="flex flex-col gap-4">
+@@ -89,11 +104,11 @@ export function LayoutRenderer({
+               <BloccoRenderer
+                 key={blocco.id}
+                 blocco={blocco}
+-                record={record}
++                record={recordVivo}
+                 valori={valori}
+                 risolviModifica={risolviModifica}
+                 valoriVisualizzati={valoriVisualizzati}
+-                onSalvato={onSalvato}
++                onSalvato={salvato}
+               />
+             ))}
+           </div>
+@@ -116,7 +131,7 @@ function BloccoRenderer({
+   valori: ReturnType<typeof mappaValori>
+   risolviModifica?: RisolviModifica
+   valoriVisualizzati?: Record<string, ReactNode>
+-  onSalvato?: () => void
++  onSalvato?: (fieldKey: string, nuovoValore: unknown) => void
+ }) {
+   if (blocco.campi.length === 0) return null
+ 
+@@ -166,7 +181,7 @@ function CampoRenderer({
+   valori: ReturnType<typeof mappaValori>
+   risolviModifica?: RisolviModifica
+   valoriVisualizzati?: Record<string, ReactNode>
+-  onSalvato?: () => void
++  onSalvato?: (fieldKey: string, nuovoValore: unknown) => void
+ }) {
+   const etichetta = campo.labelOverride ?? campo.fieldKey
+   const giaPronto = valoriVisualizzati?.[campo.fieldKey]
+@@ -200,6 +215,10 @@ function CampoRenderer({
+   // modificabile sia per sapere come formattarlo quando non lo e'.
+   const configurazione = risolviModifica?.(campo.fieldKey) ?? null
+   const modifica = campoScrivibile(campo) ? configurazione : null
++  // Stessa formattazione per il campo modificabile e per quello in sola
++  // lettura: senza, un booleano mostrava "Sì" da fermo e "true" da
++  // modificabile, e una data restava in forma ISO.
++  const testo = formattaValore(esito.valore, campo.formato, configurazione?.type)
+ 
+   if (modifica) {
+     return (
+@@ -209,15 +228,13 @@ function CampoRenderer({
+           label={etichetta}
+           type={modifica.type as never}
+           emptyLabel={campo.formato.placeholder ?? "—"}
+-          displayValue={giaPronto}
+-          onSaved={onSalvato}
++          displayValue={giaPronto ?? testo}
++          onSaved={(nuovoValore) => onSalvato?.(campo.fieldKey, nuovoValore)}
+         />
+       </div>
+     )
+   }
+ 
+-  const testo = formattaValore(esito.valore, campo.formato, configurazione?.type)
+-
+   return (
+     <div className={cn("flex flex-col gap-0.5", larghezza)}>
+       <span className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+diff --git a/lib/crm-settings/__tests__/layout-render.test.ts b/lib/crm-settings/__tests__/layout-render.test.ts
+index 4fbaf5b..b798203 100644
+--- a/lib/crm-settings/__tests__/layout-render.test.ts
++++ b/lib/crm-settings/__tests__/layout-render.test.ts
+@@ -117,6 +117,18 @@ describe("formattaValore", () => {
+     expect(formattaValore("false", {})).toBe("No")
+   })
+ 
++  it("mostra le date in forma leggibile, senza ora a mezzanotte", () => {
++    // Il database restituisce ISO completo: "2026-08-27T00:00:00+00:00" e'
++    // una data senza orario indicato, e mostrarne l'ora non aggiunge nulla.
++    expect(formattaValore("2026-08-27T00:00:00+00:00", {})).toBe("27/08/2026")
++    expect(formattaValore("2026-07-28T12:00:00+00:00", {})).toBe("28/07/2026 12:00")
++    expect(formattaValore("2026-06-15", {})).toBe("15/06/2026")
++  })
++
++  it("non scambia per data un testo che comincia con dei numeri", () => {
++    expect(formattaValore("30-50-20", {})).toBe("30-50-20")
++  })
++
+   it("usa il segnaposto per i valori vuoti", () => {
+     expect(formattaValore(null, {})).toBe("—")
+     expect(formattaValore("", {})).toBe("—")
+diff --git a/lib/crm-settings/layout-render.ts b/lib/crm-settings/layout-render.ts
+index 8052750..dce3370 100644
+--- a/lib/crm-settings/layout-render.ts
++++ b/lib/crm-settings/layout-render.ts
+@@ -83,6 +83,19 @@ export function formattaValore(
+   if (valore === "true") return "Sì"
+   if (valore === "false") return "No"
+ 
++  // Date e timestamp arrivano in forma ISO ("2026-07-28T12:00:00+00:00").
++  // Mostrarli cosi' com'e' costringe a decifrare fuso e millisecondi per
++  // leggere un giorno: si stampa la data, e l'ora solo quando non e'
++  // mezzanotte, cioe' quando qualcuno l'ha davvero indicata.
++  if (typeof valore === "string") {
++    const iso = valore.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/)
++    if (iso) {
++      const [, anno, mese, giorno, ore, minuti] = iso
++      const data = `${giorno}/${mese}/${anno}`
++      return ore && !(ore === "00" && minuti === "00") ? `${data} ${ore}:${minuti}` : data
++    }
++  }
++
+   if (typeof valore === "number") {
+     if (!Number.isFinite(valore)) return vuoto
+     const decimali = formato.decimali

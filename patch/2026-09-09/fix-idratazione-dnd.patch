@@ -1,0 +1,87 @@
+diff --git a/app/crm-settings/system/layout/page.tsx b/app/crm-settings/system/layout/page.tsx
+index 13c522f..771695f 100644
+--- a/app/crm-settings/system/layout/page.tsx
++++ b/app/crm-settings/system/layout/page.tsx
+@@ -263,6 +263,7 @@ export default function LayoutSchedePage() {
+         </div>
+       ) : (
+         <DndContext
++          id={`layout-pagine-${modulo}`}
+           sensors={sensors}
+           collisionDetection={closestCenter}
+           onDragEnd={fineTrascinaPagine}
+@@ -460,6 +461,7 @@ function RigaPagina({
+             <p className="text-xs text-muted-foreground">Nessun blocco in questa pagina.</p>
+           ) : (
+             <DndContext
++              id={`layout-blocchi-${pagina.pageKey}`}
+               sensors={sensors}
+               collisionDetection={closestCenter}
+               onDragEnd={fineTrascinaBlocchi}
+@@ -622,6 +624,7 @@ function RigaBlocco({
+         <p className="px-1 py-2 text-xs text-muted-foreground">Nessun campo in questo blocco.</p>
+       ) : (
+         <DndContext
++          id={`layout-campi-${blocco.blockKey}`}
+           sensors={sensors}
+           collisionDetection={closestCenter}
+           onDragEnd={fineTrascinaCampi}
+diff --git a/components/shared/layout-renderer.tsx b/components/shared/layout-renderer.tsx
+index f4a78ac..1e2f2e3 100644
+--- a/components/shared/layout-renderer.tsx
++++ b/components/shared/layout-renderer.tsx
+@@ -229,6 +229,7 @@ function BloccoRenderer({
+ 
+       <GrigliaCampi
+         attiva={Boolean(onRiordinaCampi)}
++        contesto={`campi-${blocco.blockKey}`}
+         sensori={sensoriCampi}
+         idCampi={campi.map((c) => c.id)}
+         onFine={fineTrascinaCampi}
+@@ -342,6 +343,7 @@ function ContenitoreCampo({
+  */
+ function GrigliaCampi({
+   attiva,
++  contesto,
+   sensori,
+   idCampi,
+   onFine,
+@@ -349,6 +351,15 @@ function GrigliaCampi({
+   children,
+ }: {
+   attiva: boolean
++  /**
++   * Identificatore stabile del contesto di trascinamento.
++   *
++   * dnd-kit numera da solo le proprie etichette di accessibilita'
++   * ("DndDescribedBy-1", "-2", ...): con il rendering lato server il
++   * conteggio riparte nel browser e i due HTML non coincidono, con un errore
++   * di idratazione. Un id esplicito e derivato dai dati elimina il problema.
++   */
++  contesto: string
+   sensori: ReturnType<typeof useSensors>
+   idCampi: string[]
+   onFine: (evento: DragEndEvent) => void
+@@ -358,7 +369,7 @@ function GrigliaCampi({
+   if (!attiva) return <div className={className}>{children}</div>
+ 
+   return (
+-    <DndContext sensors={sensori} collisionDetection={closestCenter} onDragEnd={onFine}>
++    <DndContext id={contesto} sensors={sensori} collisionDetection={closestCenter} onDragEnd={onFine}>
+       <SortableContext items={idCampi} strategy={rectSortingStrategy}>
+         <div className={className}>{children}</div>
+       </SortableContext>
+@@ -517,7 +528,12 @@ function BlocchiTrascinabili({
+   }
+ 
+   return (
+-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={fineTrascinamento}>
++    <DndContext
++      id={`blocchi-${pagina.pageKey}`}
++      sensors={sensors}
++      collisionDetection={closestCenter}
++      onDragEnd={fineTrascinamento}
++    >
+       <SortableContext items={blocchi.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+         <div className="flex flex-col gap-3">{contenuto}</div>
+       </SortableContext>

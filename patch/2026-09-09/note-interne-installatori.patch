@@ -1,0 +1,1490 @@
+diff --git a/app/api/clienti/[id]/notes/route.ts b/app/api/clienti/[id]/notes/route.ts
+index 077efd2..791fa86 100644
+--- a/app/api/clienti/[id]/notes/route.ts
++++ b/app/api/clienti/[id]/notes/route.ts
+@@ -91,7 +91,6 @@ export async function POST(
+   }
+   const notificationFailures = await notifyMentionedUsers({
+     recipients: resolved.recipients,
+-    authorId: guard.permissions.snapshot.subject.userId,
+     authorName: guard.permissions.snapshot.subject.nome ?? "Un utente CRM",
+     text,
+     recordLabel: "un cliente",
+diff --git a/app/api/compiti/[id]/notes/route.ts b/app/api/compiti/[id]/notes/route.ts
+index 5b514bd..44703c8 100644
+--- a/app/api/compiti/[id]/notes/route.ts
++++ b/app/api/compiti/[id]/notes/route.ts
+@@ -79,7 +79,6 @@ export async function POST(
+   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+   const notificationFailures = await notifyMentionedUsers({
+     recipients: resolved.recipients,
+-    authorId: guard.permissions.snapshot.subject.userId,
+     authorName: guard.permissions.snapshot.subject.nome ?? "Un utente CRM",
+     text,
+     recordLabel: "un compito",
+diff --git a/app/api/installatori/[id]/note-interne/[notaId]/route.ts b/app/api/installatori/[id]/note-interne/[notaId]/route.ts
+new file mode 100644
+index 0000000..7b3c20d
+--- /dev/null
++++ b/app/api/installatori/[id]/note-interne/[notaId]/route.ts
+@@ -0,0 +1,176 @@
++import { NextResponse } from "next/server"
++import { createClient } from "@/lib/supabase/server"
++import { requireApiNoteInterne } from "@/lib/notes/note-interne-guard"
++import { NOTE_INTERNE_INSTALLATORI as CONFIG } from "@/lib/notes/note-interne-config"
++import { notaInternaInput } from "@/lib/clienti/note-interne-input"
++import { resolveInternalMentions, notifyInternalMentions } from "@/lib/notes/note-interne-mentions-server"
++import { uploadNoteFiles } from "@/lib/notes/note-files"
++import type { NoteAttachment, NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
++
++type Params = { params: Promise<{ id: string; notaId: string }> }
++type NotaInternaPayload = { contenuto: string; menzioni?: NoteMentionDraft[]; files: File[] }
++
++function safeMentions(value: unknown): NoteMentionDraft[] {
++  return Array.isArray(value)
++    ? value.flatMap((item) => {
++        if (
++          !item ||
++          typeof item.userId !== "string" ||
++          typeof item.start !== "number" ||
++          typeof item.end !== "number"
++        ) {
++          return []
++        }
++        return [{ userId: item.userId, start: item.start, end: item.end }]
++      })
++    : []
++}
++
++async function parseNotaInternaPayload(request: Request): Promise<NotaInternaPayload | null> {
++  const contentType = request.headers.get("content-type") ?? ""
++  if (contentType.includes("multipart/form-data")) {
++    const formData = await request.formData().catch(() => null)
++    if (!formData) return null
++    const rawMentions = formData.get("menzioni") ?? formData.get("mentions")
++    let mentions: unknown
++    if (typeof rawMentions === "string" && rawMentions.trim()) {
++      try {
++        mentions = JSON.parse(rawMentions)
++      } catch {
++        mentions = []
++      }
++    }
++    const contenuto = formData.get("contenuto") ?? formData.get("text")
++    return {
++      contenuto: typeof contenuto === "string" ? contenuto : "",
++      menzioni: safeMentions(mentions),
++      files: formData.getAll("files").filter((item): item is File => item instanceof File),
++    }
++  }
++
++  const body = (await request.json().catch(() => null)) as
++    | { contenuto?: unknown; text?: unknown; menzioni?: unknown; mentions?: unknown }
++    | null
++  const contenuto = typeof body?.contenuto === "string"
++    ? body.contenuto
++    : typeof body?.text === "string"
++      ? body.text
++      : ""
++  const rawMentions = body && ("menzioni" in body || "mentions" in body)
++    ? body.menzioni ?? body.mentions
++    : undefined
++  return {
++    contenuto,
++    menzioni: rawMentions === undefined ? undefined : safeMentions(rawMentions),
++    files: [],
++  }
++}
++
++async function installatoreNomeRecord(
++  supabase: Awaited<ReturnType<typeof createClient>>,
++  installatoreId: string,
++) {
++  const { data } = await supabase
++    .from("installatori")
++    .select("nome")
++    .eq("id", installatoreId)
++    .maybeSingle()
++  return (data?.nome as string | null) || CONFIG.etichetta
++}
++
++export async function PATCH(request: Request, { params }: Params) {
++  const { id, notaId } = await params
++  const guard = await requireApiNoteInterne(CONFIG, id)
++  if (guard.response) return guard.response
++
++  const payload = await parseNotaInternaPayload(request)
++  const parsed = notaInternaInput.safeParse({ contenuto: payload?.contenuto, menzioni: payload?.menzioni })
++  if (!parsed.success) return NextResponse.json({ error: "Nota vuota o menzioni non valide" }, { status: 400 })
++  const { contenuto } = parsed.data
++
++  const supabase = await createClient()
++  const { data: previous, error: readError } = await supabase.from(CONFIG.tabella)
++    .select("contenuto,menzioni,allegati,modificato_il").eq("id", notaId).eq(CONFIG.colonnaRecord, id).eq("eliminato", false).maybeSingle()
++  if (readError) return NextResponse.json({ error: readError.message }, { status: 500 })
++  if (!previous) return NextResponse.json({ error: "Nota non trovata" }, { status: 404 })
++  // Client precedenti senza metadati non devono cancellare menzioni in silenzio.
++  if (parsed.data.menzioni === undefined && previous.menzioni?.length && contenuto !== previous.contenuto) {
++    return NextResponse.json({ error: "Ricarica la pagina per modificare una nota con menzioni" }, { status: 409 })
++  }
++  let menzioni: NoteMention[]
++  try {
++    menzioni = parsed.data.menzioni === undefined ? (previous.menzioni ?? [])
++      : await resolveInternalMentions(CONFIG, id, contenuto, parsed.data.menzioni)
++  } catch (error) {
++    return NextResponse.json({ error: error instanceof Error ? error.message : "Verifica menzioni non riuscita" }, { status: 400 })
++  }
++  const modificatoIl = new Date().toISOString()
++  let update = supabase.from(CONFIG.tabella).update({
++    contenuto, menzioni,
++    modificato_da: guard.permissions.snapshot.subject.userId,
++    modificato_il: modificatoIl,
++  }).eq("id", notaId).eq(CONFIG.colonnaRecord, id).eq("eliminato", false)
++  // Due modifiche concorrenti non devono produrre doppie notifiche/perdita dati.
++  update = previous.modificato_il ? update.eq("modificato_il", previous.modificato_il) : update.is("modificato_il", null)
++  const { data, error } = await update.select("id").maybeSingle()
++
++  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
++  // Una UPDATE negata dalla RLS torna 0 righe senza errore (vedi
++  // permessi_ruoli_write_policies): senza questo controllo la chiamata
++  // risponderebbe 200 su una nota mai toccata.
++  if (!data) return NextResponse.json({ error: "Nota modificata o non più disponibile. Ricarica le note prima di riprovare." }, { status: 409 })
++
++  const notificationFailures = await notifyInternalMentions({
++    text: contenuto, config: CONFIG, recordId: id, mentions: menzioni, previous: previous.menzioni ?? [],
++    authorId: guard.permissions.snapshot.subject.userId,
++    authorName: guard.permissions.snapshot.subject.nome ?? "Utente CRM",
++  })
++  const currentAllegati = (previous.allegati ?? []) as NoteAttachment[]
++  const uploaded = await uploadNoteFiles({
++    recordTipo: CONFIG.recordTipo,
++    recordId: id,
++    nomeRecord: payload?.files.length ? await installatoreNomeRecord(supabase, id) : CONFIG.etichetta,
++    noteId: notaId,
++    files: payload?.files ?? [],
++  })
++  const allegati = uploaded.allegati.length > 0 ? [...currentAllegati, ...uploaded.allegati] : currentAllegati
++  if (uploaded.allegati.length > 0) {
++    await supabase
++      .from(CONFIG.tabella)
++      .update({ allegati })
++      .eq("id", notaId)
++      .eq(CONFIG.colonnaRecord, id)
++      .eq("eliminato", false)
++  }
++  return NextResponse.json({
++    ok: true,
++    contenuto,
++    menzioni,
++    allegati,
++    modificato_il: modificatoIl,
++    notificationFailures,
++    attachmentFailures: uploaded.falliti,
++  })
++}
++
++/** Soft delete: la riga resta, con `eliminato` e `eliminato_il` valorizzati. */
++export async function DELETE(_request: Request, { params }: Params) {
++  const { id, notaId } = await params
++  const guard = await requireApiNoteInterne(CONFIG, id)
++  if (guard.response) return guard.response
++
++  const supabase = await createClient()
++  const { data, error } = await supabase
++    .from(CONFIG.tabella)
++    .update({ eliminato: true, eliminato_il: new Date().toISOString() })
++    .eq("id", notaId)
++    .eq(CONFIG.colonnaRecord, id)
++    .eq("eliminato", false)
++    .select("id")
++    .maybeSingle()
++
++  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
++  if (!data) return NextResponse.json({ error: "Nota non trovata" }, { status: 404 })
++
++  return NextResponse.json({ ok: true })
++}
+diff --git a/app/api/installatori/[id]/note-interne/mention-users/route.ts b/app/api/installatori/[id]/note-interne/mention-users/route.ts
+new file mode 100644
+index 0000000..6480c99
+--- /dev/null
++++ b/app/api/installatori/[id]/note-interne/mention-users/route.ts
+@@ -0,0 +1,16 @@
++import { NextResponse } from "next/server"
++import { requireApiNoteInterne } from "@/lib/notes/note-interne-guard"
++import { NOTE_INTERNE_INSTALLATORI as CONFIG } from "@/lib/notes/note-interne-config"
++import { internalMentionUsers } from "@/lib/notes/note-interne-mentions-server"
++
++export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
++  const { id } = await params
++  const guard = await requireApiNoteInterne(CONFIG, id)
++  if (guard.response) return guard.response
++  try {
++    const users = await internalMentionUsers(CONFIG, id)
++    return NextResponse.json({ users: users.map(({ id, nome }) => ({ id, nome })) }, { headers: { "Cache-Control": "no-store" } })
++  } catch {
++    return NextResponse.json({ error: "Verifica destinatari non disponibile" }, { status: 503 })
++  }
++}
+diff --git a/app/api/installatori/[id]/note-interne/route.ts b/app/api/installatori/[id]/note-interne/route.ts
+new file mode 100644
+index 0000000..4f26a63
+--- /dev/null
++++ b/app/api/installatori/[id]/note-interne/route.ts
+@@ -0,0 +1,202 @@
++import { NextResponse } from "next/server"
++import { createClient } from "@/lib/supabase/server"
++import { requireApiNoteInterne } from "@/lib/notes/note-interne-guard"
++import { NOTE_INTERNE_INSTALLATORI as CONFIG } from "@/lib/notes/note-interne-config"
++import type { NotaInterna } from "@/lib/clienti/note-interne"
++import { notaInternaInput } from "@/lib/clienti/note-interne-input"
++import { resolveInternalMentions, notifyInternalMentions } from "@/lib/notes/note-interne-mentions-server"
++import { uploadNoteFiles } from "@/lib/notes/note-files"
++import type { NoteMentionDraft } from "@/lib/notes/mentions"
++
++const COLUMNS =
++  "id,contenuto,formato,menzioni,allegati,creato_da,creato_il,modificato_da,modificato_il"
++
++type NotaRow = Omit<NotaInterna, "creato_da_nome" | "modificato_da_nome">
++type NotaInternaPayload = { contenuto: string; menzioni?: NoteMentionDraft[]; files: File[] }
++
++function safeMentions(value: unknown): NoteMentionDraft[] {
++  return Array.isArray(value)
++    ? value.flatMap((item) => {
++        if (
++          !item ||
++          typeof item.userId !== "string" ||
++          typeof item.start !== "number" ||
++          typeof item.end !== "number"
++        ) {
++          return []
++        }
++        return [{ userId: item.userId, start: item.start, end: item.end }]
++      })
++    : []
++}
++
++async function parseNotaInternaPayload(request: Request): Promise<NotaInternaPayload | null> {
++  const contentType = request.headers.get("content-type") ?? ""
++  if (contentType.includes("multipart/form-data")) {
++    const formData = await request.formData().catch(() => null)
++    if (!formData) return null
++    const rawMentions = formData.get("menzioni") ?? formData.get("mentions")
++    let mentions: unknown
++    if (typeof rawMentions === "string" && rawMentions.trim()) {
++      try {
++        mentions = JSON.parse(rawMentions)
++      } catch {
++        mentions = []
++      }
++    }
++    const contenuto = formData.get("contenuto") ?? formData.get("text")
++    return {
++      contenuto: typeof contenuto === "string" ? contenuto : "",
++      menzioni: safeMentions(mentions),
++      files: formData.getAll("files").filter((item): item is File => item instanceof File),
++    }
++  }
++
++  const body = (await request.json().catch(() => null)) as
++    | { contenuto?: unknown; text?: unknown; menzioni?: unknown; mentions?: unknown }
++    | null
++  const contenuto = typeof body?.contenuto === "string"
++    ? body.contenuto
++    : typeof body?.text === "string"
++      ? body.text
++      : ""
++  const rawMentions = body && ("menzioni" in body || "mentions" in body)
++    ? body.menzioni ?? body.mentions
++    : undefined
++  return {
++    contenuto,
++    menzioni: rawMentions === undefined ? undefined : safeMentions(rawMentions),
++    files: [],
++  }
++}
++
++/**
++ * Le note portano solo gli id degli autori: il nome va risolto a parte.
++ * Una join PostgREST su `utenti` non e' praticabile — la tabella non ha
++ * FK dichiarata verso utenti in entrambe le direzioni e il resto del
++ * progetto risolve i proprietari cosi' (vedi lib/scadenze/repository).
++ */
++async function autoriNomi(
++  supabase: Awaited<ReturnType<typeof createClient>>,
++  rows: NotaRow[],
++) {
++  const ids = [
++    ...new Set(
++      rows
++        .flatMap((row) => [row.creato_da, row.modificato_da])
++        .filter((id): id is string => Boolean(id)),
++    ),
++  ]
++  if (ids.length === 0) return new Map<string, string>()
++
++  const { data } = await supabase.from("utenti").select("id,nome").in("id", ids)
++  return new Map((data ?? []).map((user) => [user.id as string, user.nome as string]))
++}
++
++function withAutori(rows: NotaRow[], nomi: Map<string, string>): NotaInterna[] {
++  return rows.map((row) => ({
++    ...row,
++    creato_da_nome: row.creato_da ? (nomi.get(row.creato_da) ?? null) : null,
++    modificato_da_nome: row.modificato_da ? (nomi.get(row.modificato_da) ?? null) : null,
++  }))
++}
++
++async function installatoreNomeRecord(
++  supabase: Awaited<ReturnType<typeof createClient>>,
++  installatoreId: string,
++) {
++  const { data } = await supabase
++    .from("installatori")
++    .select("nome")
++    .eq("id", installatoreId)
++    .maybeSingle()
++  return (data?.nome as string | null) || CONFIG.etichetta
++}
++
++export async function GET(
++  _request: Request,
++  { params }: { params: Promise<{ id: string }> },
++) {
++  const { id } = await params
++  const guard = await requireApiNoteInterne(CONFIG, id)
++  if (guard.response) return guard.response
++
++  const supabase = await createClient()
++  const { data, error } = await supabase
++    .from(CONFIG.tabella)
++    .select(COLUMNS)
++    .eq(CONFIG.colonnaRecord, id)
++    .eq("eliminato", false)
++    .order("creato_il", { ascending: false })
++
++  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
++
++  const rows = (data ?? []) as NotaRow[]
++  return NextResponse.json({ note: withAutori(rows, await autoriNomi(supabase, rows)) })
++}
++
++export async function POST(
++  request: Request,
++  { params }: { params: Promise<{ id: string }> },
++) {
++  const { id } = await params
++  const guard = await requireApiNoteInterne(CONFIG, id)
++  if (guard.response) return guard.response
++
++  const payload = await parseNotaInternaPayload(request)
++  const contenuto = payload?.contenuto || (payload?.files.length ? "Allegato alla nota interna" : "")
++  const parsed = notaInternaInput.safeParse({ contenuto, menzioni: payload?.menzioni })
++  if (!parsed.success) return NextResponse.json({ error: "Nota vuota o menzioni non valide" }, { status: 400 })
++
++  const autoreId = guard.permissions.snapshot.subject.userId
++  // La policy di insert impone creato_da = current_utente_id(): senza id
++  // utente l'insert verrebbe respinto dalla RLS con un 42501 opaco.
++  // Meglio dirlo qui.
++  if (!autoreId) {
++    return NextResponse.json(
++      { error: "Utente non collegato a un'anagrafica: impossibile firmare la nota." },
++      { status: 409 },
++    )
++  }
++
++  let menzioni
++  try {
++    menzioni = await resolveInternalMentions(CONFIG, id, contenuto, parsed.data.menzioni ?? [])
++  } catch (error) {
++    return NextResponse.json({ error: error instanceof Error ? error.message : "Verifica menzioni non riuscita" }, { status: 400 })
++  }
++  const supabase = await createClient()
++  const { data, error } = await supabase
++    .from(CONFIG.tabella)
++    .insert({ [CONFIG.colonnaRecord]: id, contenuto, formato: "markdown", menzioni, creato_da: autoreId })
++    .select(COLUMNS)
++    .single()
++
++  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
++  const uploaded = await uploadNoteFiles({
++    recordTipo: CONFIG.recordTipo,
++    recordId: id,
++    nomeRecord: payload?.files.length
++      ? await installatoreNomeRecord(supabase, id)
++      : CONFIG.etichetta,
++    noteId: data.id,
++    files: payload?.files ?? [],
++  })
++  if (uploaded.allegati.length > 0) {
++    const { data: updated, error: updateError } = await supabase
++      .from(CONFIG.tabella)
++      .update({ allegati: uploaded.allegati })
++      .eq("id", data.id)
++      .select(COLUMNS)
++      .single()
++    if (!updateError && updated) data.allegati = updated.allegati
++  }
++
++  const rows = [data as NotaRow]
++  const [nota] = withAutori(rows, await autoriNomi(supabase, rows))
++  const notificationFailures = await notifyInternalMentions({
++    config: CONFIG, text: contenuto, recordId: id, mentions: menzioni, authorId: autoreId,
++    authorName: guard.permissions.snapshot.subject.nome ?? "Utente CRM",
++  })
++  return NextResponse.json({ ...nota, notificationFailures }, { status: 201 })
++}
+diff --git a/app/api/installatori/[id]/notes/route.ts b/app/api/installatori/[id]/notes/route.ts
+index 22e0c00..93ed35b 100644
+--- a/app/api/installatori/[id]/notes/route.ts
++++ b/app/api/installatori/[id]/notes/route.ts
+@@ -90,7 +90,6 @@ export async function POST(
+   }
+   const notificationFailures = await notifyMentionedUsers({
+     recipients: resolved.recipients,
+-    authorId: guard.permissions.snapshot.subject.userId,
+     authorName: guard.permissions.snapshot.subject.nome ?? "Un utente CRM",
+     text,
+     recordLabel: "un installatore",
+diff --git a/app/api/leads/[id]/notes/route.ts b/app/api/leads/[id]/notes/route.ts
+index 26e0ca6..f1d172d 100644
+--- a/app/api/leads/[id]/notes/route.ts
++++ b/app/api/leads/[id]/notes/route.ts
+@@ -56,7 +56,6 @@ export async function POST(
+   }
+   const notificationFailures = await notifyMentionedUsers({
+     recipients: resolved.recipients,
+-    authorId: guard.permissions.snapshot.subject.userId,
+     authorName: guard.permissions.snapshot.subject.nome ?? "Un utente CRM",
+     text,
+     recordLabel: "un lead",
+diff --git a/components/clienti/cliente-detail-content.tsx b/components/clienti/cliente-detail-content.tsx
+index 5a239d7..c9713a2 100644
+--- a/components/clienti/cliente-detail-content.tsx
++++ b/components/clienti/cliente-detail-content.tsx
+@@ -1654,7 +1654,13 @@ export function ClienteDetailContent({
+ 
+       {vediNoteInterne ? (
+         <Section id="section-note-interne" title="Note interne" icon={IconLock}>
+-          <NoteInterneSection clienteId={cliente.id} nomeRecord={cliente["Nome Clienti"]} />
++          <NoteInterneSection
++        recordId={cliente.id}
++            nomeRecord={cliente["Nome Clienti"]}
++            basePath={`/api/clienti/${cliente.id}/note-interne`}
++            azione="clienti.note_interne.view"
++            recordTipo="cliente"
++          />
+         </Section>
+       ) : null}
+ 
+@@ -1743,7 +1749,13 @@ function ClienteDaLayout({
+       />
+     ),
+     "note-interne": (
+-      <NoteInterneSection clienteId={cliente.id} nomeRecord={cliente["Nome Clienti"]} />
++      <NoteInterneSection
++        recordId={cliente.id}
++            nomeRecord={cliente["Nome Clienti"]}
++            basePath={`/api/clienti/${cliente.id}/note-interne`}
++            azione="clienti.note_interne.view"
++            recordTipo="cliente"
++          />
+     ),
+     calendario: (
+       <CalendarioRecordSection
+diff --git a/components/clienti/note-interne-section.tsx b/components/clienti/note-interne-section.tsx
+index 64bb140..cd2422b 100644
+--- a/components/clienti/note-interne-section.tsx
++++ b/components/clienti/note-interne-section.tsx
+@@ -25,14 +25,16 @@ function NotaCard({
+   onSave,
+   onDelete,
+   usersUrl,
+-  clienteId,
++  recordId,
++  recordTipo,
+   nomeRecord,
+ }: {
+   nota: NotaInterna
+   onSave: (id: string, contenuto: string, menzioni: NoteMentionDraft[], files: File[]) => Promise<void>
+   onDelete: (id: string) => Promise<void>
+   usersUrl: string
+-  clienteId: string
++  recordId: string
++  recordTipo: "cliente" | "installatore"
+   nomeRecord: string
+ }) {
+   const [editing, setEditing] = useState(false)
+@@ -125,8 +127,8 @@ function NotaCard({
+             />
+             <NoteAttachmentList
+               allegati={nota.allegati}
+-              recordTipo="cliente"
+-              recordId={clienteId}
++              recordTipo={recordTipo}
++              recordId={recordId}
+               nomeRecord={nomeRecord}
+             />
+             <div className="flex justify-end gap-2">
+@@ -154,8 +156,8 @@ function NotaCard({
+             <RichNoteText text={nota.contenuto} mentions={nota.menzioni} className="text-[13px] text-foreground" />
+             <NoteAttachmentList
+               allegati={nota.allegati}
+-              recordTipo="cliente"
+-              recordId={clienteId}
++              recordTipo={recordTipo}
++              recordId={recordId}
+               nomeRecord={nomeRecord}
+             />
+           </>
+@@ -174,9 +176,32 @@ function NotaCard({
+  * cortesia, non una difesa. Il muro e' la RLS su cliente_note_interne,
+  * e le route rispondono 404.
+  */
+-export function NoteInterneSection({ clienteId, nomeRecord }: { clienteId: string; nomeRecord: string }) {
++/**
++ * Sezione delle note interne, condivisa fra i moduli che le hanno.
++ *
++ * Il modulo passa la base delle proprie route e l'azione che ne governa la
++ * lettura: il resto — composizione, menzioni, allegati, modifica e
++ * cancellazione — e' identico, e tenerne due copie significherebbe
++ * correggere ogni difetto due volte.
++ */
++export function NoteInterneSection({
++  recordId,
++  nomeRecord,
++  basePath,
++  azione,
++  recordTipo,
++}: {
++  recordId: string
++  nomeRecord: string
++  /** Base delle route, es. "/api/clienti/<id>/note-interne". */
++  basePath: string
++  /** Azione che abilita la lettura, es. "clienti.note_interne.view". */
++  azione: string
++  recordTipo: "cliente" | "installatore"
++}) {
+   const permissions = usePermissions()
+-  const abilitato = canAccessNoteInterne(permissions.snapshot.subject.ruoloCode) && permissions.canAction("clienti.note_interne.view")
++  const abilitato =
++    canAccessNoteInterne(permissions.snapshot.subject.ruoloCode) && permissions.canAction(azione)
+ 
+   const [note, setNote] = useState<NotaInterna[]>([])
+   const [loading, setLoading] = useState(true)
+@@ -184,12 +209,12 @@ export function NoteInterneSection({ clienteId, nomeRecord }: { clienteId: strin
+   const [nuoveMenzioni, setNuoveMenzioni] = useState<NoteMentionDraft[]>([])
+   const [nuoviFiles, setNuoviFiles] = useState<File[]>([])
+   const [saving, setSaving] = useState(false)
+-  const usersUrl = `/api/clienti/${clienteId}/note-interne/mention-users`
++  const usersUrl = `${basePath}/mention-users`
+ 
+   useEffect(() => {
+     if (!abilitato) return
+     let current = true
+-    fetch(`/api/clienti/${clienteId}/note-interne`, { cache: "no-store" })
++    fetch(basePath, { cache: "no-store" })
+       .then(async (res) => {
+         if (!res.ok) throw new Error()
+         const payload = await res.json() as { note: NotaInterna[] }
+@@ -198,7 +223,7 @@ export function NoteInterneSection({ clienteId, nomeRecord }: { clienteId: strin
+       .catch(() => { if (current) toast.error("Impossibile caricare le note interne") })
+       .finally(() => { if (current) setLoading(false) })
+     return () => { current = false }
+-  }, [abilitato, clienteId])
++  }, [abilitato, basePath])
+ 
+   if (!abilitato) return null
+ 
+@@ -211,7 +236,7 @@ export function NoteInterneSection({ clienteId, nomeRecord }: { clienteId: strin
+       formData.append("contenuto", contenuto)
+       formData.append("menzioni", JSON.stringify(nuoveMenzioni))
+       nuoviFiles.forEach((file) => formData.append("files", file))
+-      const res = await fetch(`/api/clienti/${clienteId}/note-interne`, {
++      const res = await fetch(basePath, {
+         method: "POST",
+         body: formData,
+       })
+@@ -236,7 +261,7 @@ export function NoteInterneSection({ clienteId, nomeRecord }: { clienteId: strin
+     formData.append("contenuto", contenuto)
+     formData.append("menzioni", JSON.stringify(menzioni))
+     files.forEach((file) => formData.append("files", file))
+-    const res = await fetch(`/api/clienti/${clienteId}/note-interne/${id}`, {
++    const res = await fetch(`${basePath}/${id}`, {
+       method: "PATCH",
+       body: formData,
+     })
+@@ -266,7 +291,7 @@ export function NoteInterneSection({ clienteId, nomeRecord }: { clienteId: strin
+   }
+ 
+   const elimina = async (id: string) => {
+-    const res = await fetch(`/api/clienti/${clienteId}/note-interne/${id}`, {
++    const res = await fetch(`${basePath}/${id}`, {
+       method: "DELETE",
+     })
+     if (!res.ok) {
+@@ -296,7 +321,8 @@ export function NoteInterneSection({ clienteId, nomeRecord }: { clienteId: strin
+               onSave={salva}
+               onDelete={elimina}
+               usersUrl={usersUrl}
+-              clienteId={clienteId}
++              recordId={recordId}
++              recordTipo={recordTipo}
+               nomeRecord={nomeRecord}
+             />
+           ))}
+diff --git a/components/installatori/installatore-detail-content.tsx b/components/installatori/installatore-detail-content.tsx
+index b66ead1..a6a090e 100644
+--- a/components/installatori/installatore-detail-content.tsx
++++ b/components/installatori/installatore-detail-content.tsx
+@@ -6,6 +6,9 @@ import { AllegatiSection } from "@/components/shared/allegati-section"
+ import { EmailHistorySection } from "@/components/shared/email-history-section"
+ import { CalendarioRecordSection } from "@/components/calendario/calendario-record-section"
+ import { InstallatoreNoteSection } from "@/components/installatori/installatore-note-section"
++import { NoteInterneSection } from "@/components/clienti/note-interne-section"
++import { canAccessNoteInterne } from "@/lib/clienti/note-interne"
++import { usePermissions } from "@/lib/permissions/provider"
+ import { LayoutRenderer, type RisolviModifica } from "@/components/shared/layout-renderer"
+ import type { LayoutPagina } from "@/lib/crm-settings/layout"
+ import { ancoraPagina } from "@/lib/crm-settings/layout-render"
+@@ -45,8 +48,21 @@ export function InstallatoreDetailContent({
+   layout: LayoutPagina[]
+ }) {
+   const router = useRouter()
++  const permissions = usePermissions()
+   const endpoint = `/api/installatori/${installatore.id}`
+ 
++  // Le note interne restano soggette al ruolo: una pagina configurata non
++  // deve poter aggirare un controllo di accesso. La RLS e' comunque
++  // l'ultimo controllo, questa e' la parte che evita di disegnare una
++  // sezione che tornerebbe sempre vuota.
++  const vediNoteInterne =
++    canAccessNoteInterne(permissions.snapshot.subject.ruoloCode) &&
++    permissions.canAction("installatori.note_interne.view")
++
++  const pagineVisibili = vediNoteInterne
++    ? layout
++    : layout.filter((pagina) => pagina.componente !== "note-interne")
++
+   const salvaOrdine = (corpo: Record<string, unknown>) => {
+     void fetch("/api/layout/ordine-personale", {
+       method: "PUT",
+@@ -69,6 +85,15 @@ export function InstallatoreDetailContent({
+         nomeRecord={installatore.nome}
+       />
+     ),
++    "note-interne": (
++      <NoteInterneSection
++        recordId={installatore.id}
++        nomeRecord={installatore.nome}
++        basePath={`/api/installatori/${installatore.id}/note-interne`}
++        azione="installatori.note_interne.view"
++        recordTipo="installatore"
++      />
++    ),
+     email: (
+       <EmailHistorySection
+         emailLog={emailLog}
+@@ -121,7 +146,7 @@ export function InstallatoreDetailContent({
+   return (
+     <div className="flex min-w-0 flex-1 flex-col gap-1">
+       <nav className="flex items-center gap-1 overflow-x-auto border-b border-border bg-background pb-3 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible">
+-        {layout.map((pagina) => (
++        {pagineVisibili.map((pagina) => (
+           <button
+             key={pagina.id}
+             type="button"
+@@ -138,7 +163,7 @@ export function InstallatoreDetailContent({
+       </nav>
+ 
+       <LayoutRenderer
+-        pagine={layout}
++        pagine={pagineVisibili}
+         record={installatore as unknown as Record<string, unknown>}
+         risolviModifica={risolviModifica}
+         componenti={componenti}
+diff --git a/lib/clienti/__tests__/note-interne-mentions.test.ts b/lib/clienti/__tests__/note-interne-mentions.test.ts
+index e13dbeb..a2ef80c 100644
+--- a/lib/clienti/__tests__/note-interne-mentions.test.ts
++++ b/lib/clienti/__tests__/note-interne-mentions.test.ts
+@@ -87,11 +87,17 @@ describe("internal mention validation and notifications", () => {
+       body: notification.text,
+     })
+   })
+-  it("does not re-notify existing mentions or the author", async () => {
++  it("does not re-notify who was already mentioned before an edit", async () => {
+     expect(await notifyInternalMentions({ ...notification, previous: [mention] })).toBe(0)
+-    expect(await notifyInternalMentions({ ...notification, authorId: id })).toBe(0)
+     expect(notify).not.toHaveBeenCalled()
+   })
++  it("notifies the author who mentions themselves", async () => {
++    // Regola cambiata su richiesta: menzionarsi e' un modo di lasciarsi un
++    // promemoria, e l'avviso deve arrivare. Chi non si menziona non riceve
++    // nulla comunque, quindi non diventa rumore.
++    expect(await notifyInternalMentions({ ...notification, authorId: id })).toBe(0)
++    expect(notify).toHaveBeenCalledTimes(1)
++  })
+   it("rechecks access before email and warns if revoked", async () => {
+     database({ utenti: [{ ...user, attivo: false }] })
+     expect(await notifyInternalMentions(notification)).toBe(1)
+diff --git a/lib/clienti/note-interne-guard.ts b/lib/clienti/note-interne-guard.ts
+index ee7b394..67132fa 100644
+--- a/lib/clienti/note-interne-guard.ts
++++ b/lib/clienti/note-interne-guard.ts
+@@ -1,30 +1,13 @@
+-import { NextResponse } from "next/server"
+-import { getCurrentPermissions } from "@/lib/permissions/server"
+-import { canAccessOwnedRecord } from "@/lib/permissions/data-scope"
+-import { canAccessNoteInterne } from "./note-interne"
++import { NOTE_INTERNE_CLIENTI } from "@/lib/notes/note-interne-config"
++import { requireApiNoteInterne as requireApiNoteInterneGenerico } from "@/lib/notes/note-interne-guard"
+ 
+ /**
+- * Guard delle route delle note interne.
++ * Guard delle note interne del Cliente.
+  *
+- * Risponde 404, non 403: il requisito e' "zero tracce per gli altri
+- * ruoli", e un 403 confermerebbe che a quell'indirizzo c'e' qualcosa.
+- * Un agente che curiosa l'endpoint vede la stessa risposta che vedrebbe
+- * per una rotta inesistente.
++ * La logica sta in @/lib/notes/note-interne-guard, condivisa con
++ * Installatori: qui resta solo l'aggancio alla configurazione del modulo,
++ * cosi' le route del Cliente non cambiano.
+  */
+-export async function requireApiNoteInterne(clienteId?: string) {
+-  const permissions = await getCurrentPermissions()
+-  const allowedRecord = !clienteId || await canAccessOwnedRecord(
+-    permissions.snapshot,
+-    "clienti",
+-    "clienti",
+-    "clienti_proprietario_id",
+-    clienteId,
+-  )
+-  if (!canAccessNoteInterne(permissions.snapshot.subject.ruoloCode) || !permissions.canAction("clienti.note_interne.view") || !allowedRecord) {
+-    return {
+-      permissions,
+-      response: NextResponse.json({ error: "Not found" }, { status: 404 }),
+-    }
+-  }
+-  return { permissions, response: null }
++export function requireApiNoteInterne(clienteId?: string) {
++  return requireApiNoteInterneGenerico(NOTE_INTERNE_CLIENTI, clienteId)
+ }
+diff --git a/lib/clienti/note-interne-mentions-server.ts b/lib/clienti/note-interne-mentions-server.ts
+index 84604b1..c4a30ba 100644
+--- a/lib/clienti/note-interne-mentions-server.ts
++++ b/lib/clienti/note-interne-mentions-server.ts
+@@ -1,137 +1,55 @@
+-import { createAdminClient } from "@/lib/supabase/admin"
+-import { buildDefaultPermissionSnapshot } from "@/lib/permissions/constants"
+-import { createPermissionEngine } from "@/lib/permissions/engine"
+-import { applyUiPermission } from "@/lib/permissions/load-permissions"
+-import { NOTE_INTERNE_ROLES } from "./note-interne"
+-import { sanitizeNoteMentions, type NoteMention, type NoteMentionDraft } from "@/lib/notes/mentions"
+-import { sendDirectEmail } from "@/lib/email/mailer"
++import { NOTE_INTERNE_CLIENTI } from "@/lib/notes/note-interne-config"
++import {
++  canMentionInternalUser as canMentionInternalUserGenerico,
++  internalMentionUsers as internalMentionUsersGenerico,
++  resolveInternalMentions as resolveInternalMentionsGenerico,
++  notifyInternalMentions as notifyInternalMentionsGenerico,
++} from "@/lib/notes/note-interne-mentions-server"
++import type { NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
+ 
+-type UiPermission = { chiave: string; abilitato: boolean | null }
+-type Candidate = {
+-  id: string; nome: string; email: string | null; attivo: boolean; auth_user_id: string | null
+-  ruolo: string | null; ruolo_id: string | null
+-}
+-type Role = { id: string; code: string | null; nome: string | null }
+-type Action = { azione: string; abilitato: boolean | null }
+-type Page = { pagina: string; accesso: string | boolean | null }
+-type RecordPermission = { modulo: string; azione: string; abilitato: boolean | null }
++/**
++ * Note interne del Cliente.
++ *
++ * La logica sta in @/lib/notes/note-interne-mentions-server, condivisa con
++ * Installatori: e' codice di sicurezza, e due copie che divergono sono
++ * peggio di una sola parametrica. Qui resta solo l'aggancio alla
++ * configurazione del modulo, cosi' le route del Cliente non cambiano.
++ */
+ 
+-/** Intersezione del gate SQL, permessi applicativi e perimetro proprietario/team.
+- * Nessuna impersonificazione del destinatario e nessun ampliamento della RLS.
++/**
++ * Esposta per i test gia' esistenti: verificano il gate del Cliente senza
++ * sapere della configurazione per modulo, e continuano a valere invariati.
+  */
+-export function canMentionInternalUser(params: {
+-  user: Candidate; role?: Role; ui: UiPermission[]; actions: Action[]
+-  pages: Page[]; records: RecordPermission[]; ownerId: string | null; teamOwner: boolean
+-}) {
+-  const { user, role, ui, actions, pages, records, ownerId, teamOwner } = params
+-  // Lo stesso coalesce del gate SQL; un ruolo custom non eredita accesso dal nome legacy.
+-  const roleCode = (role?.code ?? role?.nome ?? user.ruolo ?? "").toUpperCase()
+-  if (!user.attivo || !user.auth_user_id || !user.nome || !NOTE_INTERNE_ROLES.includes(roleCode)) return false
+-  const snapshot = buildDefaultPermissionSnapshot({ userId: user.id, ruoloCode: roleCode })
+-  const defaultScope = snapshot.scopes.clienti
+-  const explicit = ui.filter((row) => row.abilitato && row.chiave.startsWith("scope:clienti:"))
+-  // Configurazioni ambigue: fail closed, non scegliere arbitrariamente lo scope più ampio.
+-  if (new Set(explicit.map((row) => row.chiave)).size > 1) return false
+-  const hasScopes = ui.some((row) => row.abilitato && row.chiave.startsWith("scope:"))
+-  for (const row of ui) {
+-    if (hasScopes && row.chiave === "visibilita_sedi") continue
+-    applyUiPermission(snapshot, row)
+-  }
+-  for (const row of actions) snapshot.actions[row.azione] = row.abilitato === true
+-  for (const row of pages) snapshot.pages[row.pagina] = row.accesso === true || row.accesso === "rw"
+-    ? "rw" : row.accesso === "r" ? "r" : "no_access"
+-  for (const row of records) {
+-    snapshot.records[row.modulo] ??= {}
+-    snapshot.records[row.modulo][row.azione] = row.abilitato === true
+-  }
+-  const permissions = createPermissionEngine(snapshot)
+-  if (!permissions.canAction("clienti.note_interne.view") || !permissions.canPage("clienti") || !permissions.canRecord("clienti", "view")) return false
+-  if (permissions.isSuperadmin) return true
+-  const inScope = (scope: string) => scope === "all" || (
+-    Boolean(ownerId) && (scope === "team" ? ownerId === user.id || teamOwner
+-      : ["own", "assigned", "own_sede"].includes(scope) && ownerId === user.id)
+-  )
+-  // Il DB ignora visibilita_sedi legacy: richiediamo ENTRAMBI gli scope.
+-  const dbScope = explicit[0]?.chiave.split(":")[2] ?? defaultScope
+-  return inScope(permissions.getScope("clienti")) && inScope(dbScope)
++export function canMentionInternalUser(
++  params: Omit<Parameters<typeof canMentionInternalUserGenerico>[0], "config">,
++) {
++  return canMentionInternalUserGenerico({ ...params, config: NOTE_INTERNE_CLIENTI })
+ }
+ 
+-/** Chiamare solo dopo requireApiNoteInterne(clienteId). Le letture privilegiate
+- * servono a verificare i permessi del DESTINATARIO, non quelli del mittente.
+- * Nessuna cache: revoche di ruolo/team devono avere effetto al salvataggio.
+- */
+-export async function internalMentionUsers(clienteId: string) {
+-  const admin = createAdminClient()
+-  if (!admin) throw new Error("Verifica destinatari non disponibile")
+-  const results = await Promise.all([
+-    admin.from("clienti").select("clienti_proprietario_id").eq("id", clienteId).maybeSingle(),
+-    admin.from("utenti").select("id,nome,email,attivo,auth_user_id,ruolo,ruolo_id").eq("attivo", true),
+-    admin.from("ruoli").select("id,code,nome"),
+-    admin.from("permessi_ui").select("ruolo_id,chiave,abilitato")
+-      .or("chiave.like.scope:%,chiave.eq.visibilita_sedi,chiave.eq.clienti.note_interne.view"),
+-    admin.from("permessi_azione").select("ruolo_id,azione,abilitato").eq("azione", "clienti.note_interne.view"),
+-    admin.from("permessi_pagina").select("ruolo_id,pagina,accesso").eq("pagina", "clienti"),
+-    admin.from("permessi_record").select("ruolo_id,modulo,azione,abilitato").eq("modulo", "clienti").eq("azione", "view"),
+-    admin.from("team_direttori").select("team_id,utente_id"),
+-    admin.from("team_agenti").select("team_id,utente_id"),
+-  ])
+-  if (results.some((result) => result.error)) throw new Error("Verifica destinatari non disponibile")
+-  // PostgREST limita normalmente le risposte a 1000 righe: non applicare default
+-  // permissivi se un elenco di autorizzazioni potrebbe essere stato troncato.
+-  if (results.some((result) => Array.isArray(result.data) && result.data.length >= 1000)) {
+-    throw new Error("Verifica destinatari incompleta")
+-  }
+-  const [cliente, users, roles, ui, actions, pages, records, directors, agents] = results
+-  if (!cliente.data) return []
+-  const ownerId = cliente.data.clienti_proprietario_id as string | null
+-  const ownerTeams = new Set((agents.data ?? []).filter((row) => row.utente_id === ownerId).map((row) => row.team_id))
+-  return ((users.data ?? []) as Candidate[]).filter((user) => canMentionInternalUser({
+-    user,
+-    role: (roles.data as Role[]).find((role) => role.id === user.ruolo_id),
+-    ui: (ui.data ?? []).filter((row) => row.ruolo_id === user.ruolo_id),
+-    actions: (actions.data ?? []).filter((row) => row.ruolo_id === user.ruolo_id),
+-    pages: (pages.data ?? []).filter((row) => row.ruolo_id === user.ruolo_id),
+-    records: (records.data ?? []).filter((row) => row.ruolo_id === user.ruolo_id),
+-    ownerId,
+-    teamOwner: (directors.data ?? []).some((row) => row.utente_id === user.id && ownerTeams.has(row.team_id)),
+-  })).map(({ id, nome, email }) => ({ id, nome, email })).sort((a, b) => a.nome.localeCompare(b.nome, "it"))
++export function internalMentionUsers(clienteId: string) {
++  return internalMentionUsersGenerico(NOTE_INTERNE_CLIENTI, clienteId)
+ }
+ 
+-export async function resolveInternalMentions(clienteId: string, text: string, drafts: NoteMentionDraft[]) {
+-  if (!drafts.length) return []
+-  const users = await internalMentionUsers(clienteId)
+-  const mentions = sanitizeNoteMentions(text, drafts, users)
+-  if (mentions.some((mention, i) => i > 0 && mention.start < mentions[i - 1].end)) {
+-    throw new Error("Menzioni sovrapposte: rimuovile e seleziona nuovamente gli utenti")
+-  }
+-  // Non salvare in silenzio una menzione il cui destinatario ha perso accesso.
+-  if (drafts.some((draft) => !mentions.some((m) => m.userId === draft.userId && m.start === draft.start && m.end === draft.end))) {
+-    throw new Error("Una menzione non è valida o il destinatario non può leggere queste note. Rimuovila e seleziona nuovamente l’utente.")
+-  }
+-  return mentions
++export function resolveInternalMentions(
++  clienteId: string,
++  text: string,
++  drafts: NoteMentionDraft[],
++) {
++  return resolveInternalMentionsGenerico(NOTE_INTERNE_CLIENTI, clienteId, text, drafts)
+ }
+ 
+-export async function notifyInternalMentions(params: {
+-  text: string; clienteId: string; mentions: NoteMention[]; previous?: NoteMention[]
+-  authorId: string | null; authorName: string
++export function notifyInternalMentions(params: {
++  text: string
++  clienteId: string
++  mentions: NoteMention[]
++  previous?: NoteMention[]
++  authorId: string | null
++  authorName: string
+ }) {
+-  const previousIds = new Set((params.previous ?? []).map((mention) => mention.userId))
+-  const ids = new Set(params.mentions.map((mention) => mention.userId).filter((id) => id !== params.authorId && !previousIds.has(id)))
+-  if (!ids.size) return 0
+-  try {
+-    // Il testo scritto viene inviato solo dopo il salvataggio e un nuovo
+-    // controllo dei destinatari. Nessun avviso sostitutivo o link automatico.
+-    const users = await internalMentionUsers(params.clienteId)
+-    const recipients = users.flatMap((user) => ids.has(user.id) && user.email ? [{ ...user, email: user.email }] : [])
+-    const results = await Promise.allSettled(recipients.map((recipient) => sendDirectEmail({
+-      to: recipient.email,
+-      subject: `${params.authorName} ti ha menzionato in una nota interna`,
+-      body: params.text,
+-    })))
+-    const failures = results.filter((result) => result.status === "rejected" || !result.value.ok).length
+-    return failures + ids.size - recipients.length
+-  } catch {
+-    // La nota è già salvata: un errore email non deve provocare reinserimenti.
+-    return ids.size
+-  }
++  const { clienteId, ...resto } = params
++  return notifyInternalMentionsGenerico({
++    ...resto,
++    config: NOTE_INTERNE_CLIENTI,
++    recordId: clienteId,
++  })
+ }
+diff --git a/lib/email/__tests__/transactional-mailer.test.ts b/lib/email/__tests__/transactional-mailer.test.ts
+index 417e791..2ef7296 100644
+--- a/lib/email/__tests__/transactional-mailer.test.ts
++++ b/lib/email/__tests__/transactional-mailer.test.ts
+@@ -34,13 +34,16 @@ describe("existing transactional emails (no network)", () => {
+     expect(mail.html).toContain("&lt;Mario&gt;")
+     expect(mail.text).toContain("https://crm.example.test/login")
+   })
+-  it("sends mention notifications, escapes markup and excludes the author", async () => {
++  it("sends mention notifications to everyone mentioned, author included, escaping markup", async () => {
++    // L'autore riceve l'avviso se si menziona: e' un modo di lasciarsi un
++    // promemoria. Prima veniva escluso, ma la scelta e' cambiata su
++    // richiesta; chi non si menziona non riceve nulla comunque.
+     const failed = await notifyMentionedUsers({ recipients: [
+       { id: "author", nome: "Author", email: "author@example.test" },
+       { id: "other", nome: "Other", email: "recipient@example.test" },
+-    ], authorId: "author", authorName: "Author", text: "<script>bad</script>", recordLabel: "Test", recordUrl: "https://crm.example.test/clienti/test" })
++    ], authorName: "Author", text: "<script>bad</script>", recordLabel: "Test", recordUrl: "https://crm.example.test/clienti/test" })
+     expect(failed).toBe(0)
+-    expect(mocks.sendMail).toHaveBeenCalledTimes(1)
++    expect(mocks.sendMail).toHaveBeenCalledTimes(2)
+     expect(mocks.sendMail.mock.calls[0][0].html).toContain("&lt;script&gt;")
+   })
+   it("reports SMTP failure rather than success", async () => {
+diff --git a/lib/notes/__tests__/note-interne-mentions.test.ts b/lib/notes/__tests__/note-interne-mentions.test.ts
+new file mode 100644
+index 0000000..91f80d6
+--- /dev/null
++++ b/lib/notes/__tests__/note-interne-mentions.test.ts
+@@ -0,0 +1,41 @@
++import { describe, expect, it } from "vitest"
++import { destinatariMenzioni } from "../note-interne-mentions-server"
++import type { NoteMention } from "../mentions"
++
++function menzione(userId: string, start = 0): NoteMention {
++  return { userId, name: userId, start, end: start + 5 }
++}
++
++describe("destinatariMenzioni", () => {
++  it("avvisa chi e' menzionato", () => {
++    const destinatari = destinatariMenzioni([menzione("anna"), menzione("bruno", 10)])
++    expect([...destinatari]).toEqual(["anna", "bruno"])
++  })
++
++  it("non avvisa nessuno quando la nota non menziona nessuno", () => {
++    // Scrivere una nota non deve mandare email a nessuno: e' la differenza
++    // fra un avviso e il rumore.
++    expect(destinatariMenzioni([]).size).toBe(0)
++  })
++
++  it("avvisa anche l'autore che menziona se stesso", () => {
++    // Menzionarsi e' un modo di lasciarsi un promemoria: l'avviso arriva
++    // come per gli altri.
++    expect(destinatariMenzioni([menzione("anna")]).has("anna")).toBe(true)
++  })
++
++  it("non riavvisa chi era gia' menzionato prima della modifica", () => {
++    // Correggere un refuso in una nota non deve far ripartire l'email a chi
++    // l'aveva gia' ricevuta.
++    const destinatari = destinatariMenzioni(
++      [menzione("anna"), menzione("bruno", 10)],
++      [menzione("anna")],
++    )
++    expect([...destinatari]).toEqual(["bruno"])
++  })
++
++  it("non ripete lo stesso destinatario menzionato due volte", () => {
++    const destinatari = destinatariMenzioni([menzione("anna"), menzione("anna", 20)])
++    expect([...destinatari]).toEqual(["anna"])
++  })
++})
+diff --git a/lib/notes/mentions-server.ts b/lib/notes/mentions-server.ts
+index f20cd2a..0c21442 100644
+--- a/lib/notes/mentions-server.ts
++++ b/lib/notes/mentions-server.ts
+@@ -34,15 +34,16 @@ export async function resolveNoteMentions(
+ 
+ export async function notifyMentionedUsers(params: {
+   recipients: Array<{ id: string; nome: string; email: string }>
+-  authorId: string | null
+   authorName: string
+   text: string
+   recordLabel: string
+   recordUrl: string
+ }) {
+-  const recipients = params.recipients.filter((recipient) => recipient.id !== params.authorId)
++  // L'autore non viene escluso: menzionare se stessi e' un modo di
++  // lasciarsi un promemoria, e l'avviso deve arrivare come per gli altri.
++  // Chi non si menziona non riceve nulla, quindi non diventa rumore.
+   const results = await Promise.all(
+-    recipients.map((recipient) =>
++    params.recipients.map((recipient) =>
+       sendMentionNotificationEmail({
+         to: recipient.email,
+         recipientName: recipient.nome,
+diff --git a/lib/notes/note-interne-config.ts b/lib/notes/note-interne-config.ts
+new file mode 100644
+index 0000000..7a08ca9
+--- /dev/null
++++ b/lib/notes/note-interne-config.ts
+@@ -0,0 +1,52 @@
++import type { FieldModuleKey } from "@/lib/permissions/field-catalog"
++
++/**
++ * Le note interne, descritte per modulo.
++ *
++ * Nascono sul Cliente e servono anche su Installatori. Invece di duplicare
++ * il codice — che qui e' codice di sicurezza, e due copie divergono — il
++ * comportamento resta uno solo e cambia solo questa descrizione.
++ *
++ * Ogni modulo dice: dove stanno le sue note, a quale record appartengono,
++ * chi ne e' il proprietario e quale permesso governa la lettura.
++ */
++export type NoteInterneConfig = {
++  /** Modulo dei permessi ("clienti", "installatori"). */
++  modulo: FieldModuleKey
++  /** Tabella delle note interne del modulo. */
++  tabella: string
++  /** Colonna che collega la nota al record. */
++  colonnaRecord: string
++  /** Tabella del record a cui la nota appartiene. */
++  tabellaRecord: string
++  /** Colonna del proprietario sul record, per il perimetro di visibilita'. */
++  colonnaProprietario: string
++  /** Azione che abilita la lettura delle note interne. */
++  azione: string
++  /** Tipo di record per gli allegati su Nextcloud. */
++  recordTipo: "cliente" | "installatore"
++  /** Etichetta usata quando il nome del record non e' recuperabile. */
++  etichetta: string
++}
++
++export const NOTE_INTERNE_CLIENTI: NoteInterneConfig = {
++  modulo: "clienti",
++  tabella: "cliente_note_interne",
++  colonnaRecord: "cliente_id",
++  tabellaRecord: "clienti",
++  colonnaProprietario: "clienti_proprietario_id",
++  azione: "clienti.note_interne.view",
++  recordTipo: "cliente",
++  etichetta: "Cliente",
++}
++
++export const NOTE_INTERNE_INSTALLATORI: NoteInterneConfig = {
++  modulo: "installatori",
++  tabella: "installatore_note_interne",
++  colonnaRecord: "installatore_id",
++  tabellaRecord: "installatori",
++  colonnaProprietario: "proprietario_id",
++  azione: "installatori.note_interne.view",
++  recordTipo: "installatore",
++  etichetta: "Installatore",
++}
+diff --git a/lib/notes/note-interne-guard.ts b/lib/notes/note-interne-guard.ts
+new file mode 100644
+index 0000000..6d04574
+--- /dev/null
++++ b/lib/notes/note-interne-guard.ts
+@@ -0,0 +1,49 @@
++import { NextResponse } from "next/server"
++import { getCurrentPermissions } from "@/lib/permissions/server"
++import { canAccessOwnedRecord } from "@/lib/permissions/data-scope"
++import { canAccessNoteInterne } from "@/lib/clienti/note-interne"
++import type { NoteInterneConfig } from "./note-interne-config"
++
++/**
++ * Guard delle route delle note interne.
++ *
++ * Tre condizioni insieme: il ruolo deve rientrare nel tetto ammesso, il
++ * permesso di lettura deve essere concesso, e il record deve rientrare nel
++ * perimetro di visibilita' di chi chiede.
++ *
++ * Il ruolo e il permesso non sono la stessa cosa e servono entrambi. Il
++ * permesso e' l'interruttore: si toglie dalla pagina Permessi e l'accesso
++ * cade. L'elenco di ruoli e' il tetto, allineato al gate SQL: impedisce
++ * che una concessione sbagliata in configurazione apra le note riservate a
++ * chi non deve vederle mai.
++ *
++ * Risponde 404 e non 403: a chi non ha accesso, queste note non devono
++ * risultare nemmeno esistenti — un 403 confermerebbe che c'e' qualcosa da
++ * vedere. La RLS resta comunque l'ultimo controllo.
++ */
++export async function requireApiNoteInterne(config: NoteInterneConfig, recordId?: string) {
++  const permissions = await getCurrentPermissions()
++
++  const allowedRecord =
++    !recordId ||
++    (await canAccessOwnedRecord(
++      permissions.snapshot,
++      config.modulo,
++      config.tabellaRecord,
++      config.colonnaProprietario,
++      recordId,
++    ))
++
++  if (
++    !canAccessNoteInterne(permissions.snapshot.subject.ruoloCode) ||
++    !permissions.canAction(config.azione) ||
++    !allowedRecord
++  ) {
++    return {
++      permissions,
++      response: NextResponse.json({ error: "Not found" }, { status: 404 }),
++    }
++  }
++
++  return { permissions, response: null }
++}
+diff --git a/lib/notes/note-interne-mentions-server.ts b/lib/notes/note-interne-mentions-server.ts
+new file mode 100644
+index 0000000..dcd86f0
+--- /dev/null
++++ b/lib/notes/note-interne-mentions-server.ts
+@@ -0,0 +1,170 @@
++import { createAdminClient } from "@/lib/supabase/admin"
++import { NOTE_INTERNE_ROLES } from "@/lib/clienti/note-interne"
++import { buildDefaultPermissionSnapshot } from "@/lib/permissions/constants"
++import { createPermissionEngine } from "@/lib/permissions/engine"
++import { applyUiPermission } from "@/lib/permissions/load-permissions"
++import type { NoteInterneConfig } from "./note-interne-config"
++import { sanitizeNoteMentions, type NoteMention, type NoteMentionDraft } from "@/lib/notes/mentions"
++import { sendDirectEmail } from "@/lib/email/mailer"
++
++type UiPermission = { chiave: string; abilitato: boolean | null }
++type Candidate = {
++  id: string; nome: string; email: string | null; attivo: boolean; auth_user_id: string | null
++  ruolo: string | null; ruolo_id: string | null
++}
++type Role = { id: string; code: string | null; nome: string | null }
++type Action = { azione: string; abilitato: boolean | null }
++type Page = { pagina: string; accesso: string | boolean | null }
++type RecordPermission = { modulo: string; azione: string; abilitato: boolean | null }
++
++/** Intersezione del gate SQL, permessi applicativi e perimetro proprietario/team.
++ * Nessuna impersonificazione del destinatario e nessun ampliamento della RLS.
++ */
++export function canMentionInternalUser(params: {
++  config: NoteInterneConfig
++  user: Candidate; role?: Role; ui: UiPermission[]; actions: Action[]
++  pages: Page[]; records: RecordPermission[]; ownerId: string | null; teamOwner: boolean
++}) {
++  const { config, user, role, ui, actions, pages, records, ownerId, teamOwner } = params
++  const modulo = config.modulo
++  // Lo stesso coalesce del gate SQL; un ruolo custom non eredita accesso dal nome legacy.
++  const roleCode = (role?.code ?? role?.nome ?? user.ruolo ?? "").toUpperCase()
++  if (!user.attivo || !user.auth_user_id || !user.nome || !NOTE_INTERNE_ROLES.includes(roleCode)) return false
++  const snapshot = buildDefaultPermissionSnapshot({ userId: user.id, ruoloCode: roleCode })
++  const defaultScope = snapshot.scopes[modulo]
++  const explicit = ui.filter((row) => row.abilitato && row.chiave.startsWith(`scope:${modulo}:`))
++  // Configurazioni ambigue: fail closed, non scegliere arbitrariamente lo scope più ampio.
++  if (new Set(explicit.map((row) => row.chiave)).size > 1) return false
++  const hasScopes = ui.some((row) => row.abilitato && row.chiave.startsWith("scope:"))
++  for (const row of ui) {
++    if (hasScopes && row.chiave === "visibilita_sedi") continue
++    applyUiPermission(snapshot, row)
++  }
++  for (const row of actions) snapshot.actions[row.azione] = row.abilitato === true
++  for (const row of pages) snapshot.pages[row.pagina] = row.accesso === true || row.accesso === "rw"
++    ? "rw" : row.accesso === "r" ? "r" : "no_access"
++  for (const row of records) {
++    snapshot.records[row.modulo] ??= {}
++    snapshot.records[row.modulo][row.azione] = row.abilitato === true
++  }
++  const permissions = createPermissionEngine(snapshot)
++  if (!permissions.canAction(config.azione) || !permissions.canPage(modulo) || !permissions.canRecord(modulo, "view")) return false
++  if (permissions.isSuperadmin) return true
++  const inScope = (scope: string) => scope === "all" || (
++    Boolean(ownerId) && (scope === "team" ? ownerId === user.id || teamOwner
++      : ["own", "assigned", "own_sede"].includes(scope) && ownerId === user.id)
++  )
++  // Il DB ignora visibilita_sedi legacy: richiediamo ENTRAMBI gli scope.
++  const dbScope = explicit[0]?.chiave.split(":")[2] ?? defaultScope
++  return inScope(permissions.getScope(modulo)) && inScope(dbScope)
++}
++
++/** Chiamare solo dopo requireApiNoteInterne(clienteId). Le letture privilegiate
++ * servono a verificare i permessi del DESTINATARIO, non quelli del mittente.
++ * Nessuna cache: revoche di ruolo/team devono avere effetto al salvataggio.
++ */
++export async function internalMentionUsers(config: NoteInterneConfig, recordId: string) {
++  const admin = createAdminClient()
++  if (!admin) throw new Error("Verifica destinatari non disponibile")
++  const results = await Promise.all([
++    admin.from(config.tabellaRecord).select(config.colonnaProprietario).eq("id", recordId).maybeSingle(),
++    admin.from("utenti").select("id,nome,email,attivo,auth_user_id,ruolo,ruolo_id").eq("attivo", true),
++    admin.from("ruoli").select("id,code,nome"),
++    admin.from("permessi_ui").select("ruolo_id,chiave,abilitato")
++      .or(`chiave.like.scope:%,chiave.eq.visibilita_sedi,chiave.eq.${config.azione}`),
++    admin.from("permessi_azione").select("ruolo_id,azione,abilitato").eq("azione", config.azione),
++    admin.from("permessi_pagina").select("ruolo_id,pagina,accesso").eq("pagina", config.modulo),
++    admin.from("permessi_record").select("ruolo_id,modulo,azione,abilitato").eq("modulo", config.modulo).eq("azione", "view"),
++    admin.from("team_direttori").select("team_id,utente_id"),
++    admin.from("team_agenti").select("team_id,utente_id"),
++  ])
++  if (results.some((result) => result.error)) throw new Error("Verifica destinatari non disponibile")
++  // PostgREST limita normalmente le risposte a 1000 righe: non applicare default
++  // permissivi se un elenco di autorizzazioni potrebbe essere stato troncato.
++  if (results.some((result) => Array.isArray(result.data) && result.data.length >= 1000)) {
++    throw new Error("Verifica destinatari incompleta")
++  }
++  const [record, users, roles, ui, actions, pages, records, directors, agents] = results
++  if (!record.data) return []
++  const ownerId =
++    ((record.data as unknown as Record<string, unknown>)[config.colonnaProprietario] as
++      | string
++      | null) ?? null
++  const ownerTeams = new Set((agents.data ?? []).filter((row) => row.utente_id === ownerId).map((row) => row.team_id))
++  return ((users.data ?? []) as Candidate[]).filter((user) => canMentionInternalUser({
++    config,
++    user,
++    role: (roles.data as Role[]).find((role) => role.id === user.ruolo_id),
++    ui: (ui.data ?? []).filter((row) => row.ruolo_id === user.ruolo_id),
++    actions: (actions.data ?? []).filter((row) => row.ruolo_id === user.ruolo_id),
++    pages: (pages.data ?? []).filter((row) => row.ruolo_id === user.ruolo_id),
++    records: (records.data ?? []).filter((row) => row.ruolo_id === user.ruolo_id),
++    ownerId,
++    teamOwner: (directors.data ?? []).some((row) => row.utente_id === user.id && ownerTeams.has(row.team_id)),
++  })).map(({ id, nome, email }) => ({ id, nome, email })).sort((a, b) => a.nome.localeCompare(b.nome, "it"))
++}
++
++export async function resolveInternalMentions(
++  config: NoteInterneConfig,
++  recordId: string,
++  text: string,
++  drafts: NoteMentionDraft[],
++) {
++  if (!drafts.length) return []
++  const users = await internalMentionUsers(config, recordId)
++  const mentions = sanitizeNoteMentions(text, drafts, users)
++  if (mentions.some((mention, i) => i > 0 && mention.start < mentions[i - 1].end)) {
++    throw new Error("Menzioni sovrapposte: rimuovile e seleziona nuovamente gli utenti")
++  }
++  // Non salvare in silenzio una menzione il cui destinatario ha perso accesso.
++  if (drafts.some((draft) => !mentions.some((m) => m.userId === draft.userId && m.start === draft.start && m.end === draft.end))) {
++    throw new Error("Una menzione non è valida o il destinatario non può leggere queste note. Rimuovila e seleziona nuovamente l’utente.")
++  }
++  return mentions
++}
++
++/**
++ * Chi va avvisato per una nota.
++ *
++ * Solo gli utenti menzionati: scrivere una nota senza menzionare nessuno
++ * non manda email a nessuno.
++ *
++ * L'autore NON viene escluso: menzionare se stessi e' un modo di lasciarsi
++ * un promemoria, e l'avviso deve arrivare come per gli altri. Chi non si
++ * menziona non riceve nulla, quindi non diventa rumore.
++ *
++ * Restano fuori i gia' menzionati in una versione precedente: modificare
++ * una nota non deve far ripartire l'avviso a chi l'aveva gia' ricevuto.
++ */
++export function destinatariMenzioni(
++  mentions: NoteMention[],
++  previous: NoteMention[] = [],
++): Set<string> {
++  const gia = new Set(previous.map((mention) => mention.userId))
++  return new Set(mentions.map((mention) => mention.userId).filter((id) => !gia.has(id)))
++}
++
++export async function notifyInternalMentions(params: {
++  config: NoteInterneConfig
++  text: string; recordId: string; mentions: NoteMention[]; previous?: NoteMention[]
++  authorId: string | null; authorName: string
++}) {
++  const ids = destinatariMenzioni(params.mentions, params.previous)
++  if (!ids.size) return 0
++  try {
++    // Il testo scritto viene inviato solo dopo il salvataggio e un nuovo
++    // controllo dei destinatari. Nessun avviso sostitutivo o link automatico.
++    const users = await internalMentionUsers(params.config, params.recordId)
++    const recipients = users.flatMap((user) => ids.has(user.id) && user.email ? [{ ...user, email: user.email }] : [])
++    const results = await Promise.allSettled(recipients.map((recipient) => sendDirectEmail({
++      to: recipient.email,
++      subject: `${params.authorName} ti ha menzionato in una nota interna`,
++      body: params.text,
++    })))
++    const failures = results.filter((result) => result.status === "rejected" || !result.value.ok).length
++    return failures + ids.size - recipients.length
++  } catch {
++    // La nota è già salvata: un errore email non deve provocare reinserimenti.
++    return ids.size
++  }
++}
+diff --git a/lib/permissions/constants.ts b/lib/permissions/constants.ts
+index 04fd6e6..2d332c7 100644
+--- a/lib/permissions/constants.ts
++++ b/lib/permissions/constants.ts
+@@ -105,6 +105,7 @@ export const ACTION_KEYS = [
+   "dashboard.system_status.view",
+   "calendario.events.manage_all",
+   "clienti.note_interne.view",
++  "installatori.note_interne.view",
+   "crm_settings.account.audit.view",
+   "crm_settings.account.session.view",
+   "crm_settings.account.users.manage",
+@@ -303,6 +304,7 @@ export function buildDefaultPermissionSnapshot(params?: {
+       "dashboard.system_status.view",
+       "calendario.events.manage_all",
+       "clienti.note_interne.view",
++      "installatori.note_interne.view",
+       "crm_settings.account.users.manage",
+       "crm_settings.account.roles.manage",
+       "lead.columns.customize_own",
+@@ -369,6 +371,7 @@ export function buildDefaultPermissionSnapshot(params?: {
+       "dashboard.economic.view",
+       "calendario.events.manage_all",
+       "clienti.note_interne.view",
++      "installatori.note_interne.view",
+       "lead.columns.customize_own",
+       "lead.tags.edit",
+       "clienti.tags.edit",
+diff --git a/scripts/migrations/seed-layout-da-zoho.mjs b/scripts/migrations/seed-layout-da-zoho.mjs
+index 722d1e9..a1d0dd4 100644
+--- a/scripts/migrations/seed-layout-da-zoho.mjs
++++ b/scripts/migrations/seed-layout-da-zoho.mjs
+@@ -159,6 +159,7 @@ const PAGINE_PER_MODULO = {
+     },
+     { key: "allegati", label: "Allegati", componente: "allegati", blocchi: [] },
+     { key: "note", label: "Note", componente: "note", blocchi: [] },
++    { key: "note-interne", label: "Note interne", componente: "note-interne", blocchi: [] },
+     { key: "email", label: "E-mail", componente: "email", blocchi: [] },
+     { key: "calendario", label: "Calendario", componente: "calendario", blocchi: [] },
+   ],
+diff --git a/supabase/migrations/20260909d_installatore_note_interne.sql b/supabase/migrations/20260909d_installatore_note_interne.sql
+new file mode 100644
+index 0000000..44aa1ad
+--- /dev/null
++++ b/supabase/migrations/20260909d_installatore_note_interne.sql
+@@ -0,0 +1,102 @@
++-- =====================================================================
++-- Note interne sulle schede installatore.
++--
++-- Stessa impostazione di cliente_note_interne (migration 20260827): una
++-- tabella separata dalle note normali, riservata alla direzione, con la
++-- RLS come vero controllo e la UI che si limita a non disegnare la
++-- sezione. Le colonne che sul Cliente sono arrivate dopo (menzioni,
++-- formato, allegati) nascono qui gia' presenti.
++--
++-- Requisito: visibili SOLO a SUPERADMIN / ADMIN / DIRECTOR. Per gli
++-- agenti la tabella deve risultare vuota, non negata: nessuna traccia.
++--
++-- Il gate note_interne_can_access() e' gia' definito e non e' legato al
++-- Cliente: si riusa cosi' com'e', invece di crearne un secondo che
++-- potrebbe divergere.
++-- =====================================================================
++
++begin;
++
++create table if not exists public.installatore_note_interne (
++  id uuid primary key default gen_random_uuid(),
++  installatore_id uuid not null references public.installatori(id) on delete cascade,
++  contenuto text not null,
++  formato text not null default 'markdown',
++  menzioni jsonb not null default '[]'::jsonb,
++  allegati jsonb not null default '[]'::jsonb,
++  creato_da uuid references public.utenti(id) on delete set null,
++  creato_il timestamptz not null default now(),
++  modificato_da uuid references public.utenti(id) on delete set null,
++  modificato_il timestamptz,
++  eliminato boolean not null default false,
++  eliminato_il timestamptz,
++  constraint installatore_note_interne_contenuto_non_vuoto
++    check (length(btrim(contenuto)) > 0),
++  constraint installatore_note_interne_formato_check
++    check (formato in ('plain', 'markdown')),
++  constraint installatore_note_interne_menzioni_array
++    check (jsonb_typeof(menzioni) = 'array'),
++  constraint installatore_note_interne_allegati_array
++    check (jsonb_typeof(allegati) = 'array'),
++  -- I due campi del soft delete si muovono insieme: una riga eliminata
++  -- senza data (o viceversa) perderebbe meta' dell'informazione.
++  constraint installatore_note_interne_eliminato_coerente
++    check ((eliminato and eliminato_il is not null) or (not eliminato and eliminato_il is null))
++);
++
++-- Le note vive di un installatore, in ordine di inserimento: e' l'unica
++-- query di lettura dell'app. Indice parziale, cosi' le eliminate non
++-- gonfiano l'indice.
++create index if not exists installatore_note_interne_installatore_idx
++  on public.installatore_note_interne (installatore_id, creato_il desc)
++  where not eliminato;
++
++comment on table public.installatore_note_interne is
++  'Note interne di direzione sulle schede installatore. Visibili solo a SUPERADMIN/ADMIN/DIRECTOR (RLS). Soft delete via eliminato/eliminato_il.';
++
++-- ---------------------------------------------------------------------
++-- Policy
++-- ---------------------------------------------------------------------
++-- Stesso gate delle note interne cliente. Le chiamate sono wrappate in
++-- (select ...) per essere valutate una volta per statement invece che
++-- per riga.
++alter table public.installatore_note_interne enable row level security;
++
++drop policy if exists installatore_note_interne_select on public.installatore_note_interne;
++create policy installatore_note_interne_select
++  on public.installatore_note_interne for select to authenticated
++  using ((select public.note_interne_can_access()));
++
++-- L'autore non e' negoziabile: impedisce di firmare una nota riservata a
++-- nome di un altro passando da PostgREST diretto.
++drop policy if exists installatore_note_interne_insert on public.installatore_note_interne;
++create policy installatore_note_interne_insert
++  on public.installatore_note_interne for insert to authenticated
++  with check (
++    (select public.note_interne_can_access())
++    and creato_da = (select public.current_utente_id())
++    and exists (
++      select 1 from public.installatori i
++      where i.id = installatore_note_interne.installatore_id
++    )
++  );
++
++drop policy if exists installatore_note_interne_update on public.installatore_note_interne;
++create policy installatore_note_interne_update
++  on public.installatore_note_interne for update to authenticated
++  using ((select public.note_interne_can_access()))
++  with check ((select public.note_interne_can_access()));
++
++-- DELETE fisica concessa allo stesso gruppo, ma l'app non la usa: dalla
++-- scheda si fa il soft delete.
++drop policy if exists installatore_note_interne_delete on public.installatore_note_interne;
++create policy installatore_note_interne_delete
++  on public.installatore_note_interne for delete to authenticated
++  using ((select public.note_interne_can_access()));
++
++grant select, insert, update, delete on public.installatore_note_interne to authenticated;
++revoke all on public.installatore_note_interne from anon;
++
++notify pgrst, 'reload schema';
++
++commit;

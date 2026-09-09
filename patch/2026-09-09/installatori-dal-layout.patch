@@ -1,0 +1,568 @@
+diff --git a/app/(dashboard)/installatori/[id]/page.tsx b/app/(dashboard)/installatori/[id]/page.tsx
+index 99ce9e3..ca2cb7a 100644
+--- a/app/(dashboard)/installatori/[id]/page.tsx
++++ b/app/(dashboard)/installatori/[id]/page.tsx
+@@ -8,11 +8,21 @@ import { Badge } from "@/components/ui/badge"
+ import { InstallatoreDetailActions } from "@/components/installatori/installatore-detail-actions"
+ import { InstallatoreTagBadges } from "@/components/installatori/installatore-tag-controls"
+ import { InstallatoreNoteSection } from "@/components/installatori/installatore-note-section"
++import { InstallatoreDetailContent } from "@/components/installatori/installatore-detail-content"
+ import { AllegatiSection } from "@/components/shared/allegati-section"
+ import { EmailHistorySection } from "@/components/shared/email-history-section"
+ import { CalendarioRecordSection } from "@/components/calendario/calendario-record-section"
+ import { InlineEditableField } from "@/components/shared/inline-edit-field"
+ import { listEmailLog } from "@/lib/email/email-log"
++import { createClient } from "@/lib/supabase/server"
++import { loadLayout, loadOrdinePersonale } from "@/lib/crm-settings/layout-server"
++import {
++  applicaOrdineBlocchi,
++  applicaOrdineCampi,
++  applicaOrdinePersonale,
++  soloVisibili,
++} from "@/lib/crm-settings/layout"
++import { paginePiene } from "@/lib/crm-settings/layout-render"
+ 
+ function value(text: string | null) {
+   return text?.trim() || "—"
+@@ -31,13 +41,35 @@ export default async function InstallatoreDetailPage({
+ }: {
+   params: Promise<{ id: string }>
+ }) {
+-  await requirePage("installatori")
++  // requirePage carica gia' lo snapshot dei permessi, memorizzato per
++  // richiesta: riusarlo qui non costa una seconda lettura.
++  const permissions = await requirePage("installatori")
+   const { id } = await params
+-  const installatore = await getInstallatoreById(id)
++  const supabase = await createClient()
++  const utenteId = permissions.snapshot.subject.userId
++
++  // In parallelo: le letture non dipendono l'una dall'altra.
++  const [installatore, emailLog, pagine, ordine] = await Promise.all([
++    getInstallatoreById(id),
++    listEmailLog("installatore", id),
++    loadLayout(supabase, "installatori"),
++    utenteId
++      ? loadOrdinePersonale(supabase, utenteId, "installatori")
++      : Promise.resolve({ pagine: [], blocchi: {}, campi: {} }),
++  ])
++
+   if (!installatore) notFound()
+   const endpoint = `/api/installatori/${installatore.id}`
+   const canaleOptions = Object.keys(CANALE_PREFERITO_LABELS)
+-  const emailLog = await listEmailLog("installatore", id)
++
++  const layout = paginePiene(
++    soloVisibili(
++      applicaOrdineCampi(
++        applicaOrdineBlocchi(applicaOrdinePersonale(pagine, ordine.pagine), ordine.blocchi),
++        ordine.campi,
++      ),
++    ),
++  )
+ 
+   return (
+     <div className="flex flex-col gap-6">
+@@ -62,83 +94,93 @@ export default async function InstallatoreDetailPage({
+         <InstallatoreDetailActions installatore={installatore} />
+       </header>
+ 
+-      <section className="border-y border-border py-5">
+-        <dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+-          <InlineEditableField module="installatori" field="nome" label="Nome" endpoint={endpoint} patchKey="nome" value={installatore.nome} />
+-          <InlineEditableField module="installatori" field="email" label="Email" endpoint={endpoint} patchKey="email" value={installatore.email} type="email" />
+-          <InlineEditableField module="installatori" field="email_secondaria" label="Email secondaria" endpoint={endpoint} patchKey="email_secondaria" value={installatore.email_secondaria} type="email" />
+-          <InlineEditableField module="installatori" field="telefono" label="Telefono" endpoint={endpoint} patchKey="telefono" value={installatore.telefono} type="tel" />
+-          <InlineEditableField module="installatori" field="tag" label="Tag" endpoint={endpoint} patchKey="tag" value={installatore.tag} />
+-          <InlineEditableField module="installatori" field="attivo" label="Attivo" endpoint={endpoint} patchKey="attivo" value={installatore.attivo} type="boolean" />
+-          <InlineEditableField
+-            module="installatori"
+-            field="canale_preferito"
+-            label="Canale preferito"
+-            endpoint={endpoint}
+-            patchKey="canale_preferito"
+-            value={installatore.canale_preferito}
+-            type="select"
+-            options={canaleOptions}
+-            optionLabels={CANALE_PREFERITO_LABELS}
+-          />
+-          <div>
+-            <dt className="text-xs font-medium text-muted-foreground">
+-              Proprietario
+-            </dt>
+-            <dd className="mt-1 text-sm text-foreground">
+-              {value(installatore.proprietario_nome)}
+-            </dd>
+-          </div>
+-          <div>
+-            <dt className="text-xs font-medium text-muted-foreground">Creato</dt>
+-            <dd className="mt-1 text-sm text-foreground">
+-              {formatDate(installatore.created_at)}
+-            </dd>
+-          </div>
+-          <div>
+-            <dt className="text-xs font-medium text-muted-foreground">Aggiornato</dt>
+-            <dd className="mt-1 text-sm text-foreground">
+-              {formatDate(installatore.updated_at)}
+-            </dd>
+-          </div>
+-          <div className="sm:col-span-2 lg:col-span-3">
+-            <InlineEditableField module="installatori" field="note" label="Note" endpoint={endpoint} patchKey="note" value={installatore.note} type="textarea" />
+-          </div>
+-        </dl>
+-      </section>
+-
+-      <section className="border-b border-border pb-5">
+-        <AllegatiSection
+-          recordTipo="installatore"
+-          recordId={installatore.id}
+-          nomeRecord={installatore.nome}
+-        />
+-      </section>
+-
+-      <section className="border-b border-border pb-5">
+-        <h2 className="mb-3 text-[13px] font-bold text-navy">Note</h2>
+-        <InstallatoreNoteSection installatoreId={installatore.id} nomeRecord={installatore.nome} />
+-      </section>
+-
+-      <section className="border-b border-border pb-5">
+-        <h2 className="mb-3 text-[13px] font-bold text-navy">E-mail</h2>
+-        <EmailHistorySection
++      {layout.length > 0 ? (
++        <InstallatoreDetailContent
++          installatore={installatore}
+           emailLog={emailLog}
+-          emptyLabel="Nessuna email inviata a questo installatore dal CRM."
+-          recordTipo="installatore"
+-          recordId={installatore.id}
+-          nomeRecord={installatore.nome}
+-        />
+-      </section>
+-
+-      <section className="border-b border-border pb-5">
+-        <h2 className="mb-3 text-[13px] font-bold text-navy">Calendario</h2>
+-        <CalendarioRecordSection
+-          recordTipo="installatore"
+-          recordId={installatore.id}
+-          nomeRecord={installatore.nome}
++          layout={layout}
+         />
+-      </section>
++      ) : (
++        <>
++      <section className="border-y border-border py-5">
++          <dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
++            <InlineEditableField module="installatori" field="nome" label="Nome" endpoint={endpoint} patchKey="nome" value={installatore.nome} />
++            <InlineEditableField module="installatori" field="email" label="Email" endpoint={endpoint} patchKey="email" value={installatore.email} type="email" />
++            <InlineEditableField module="installatori" field="email_secondaria" label="Email secondaria" endpoint={endpoint} patchKey="email_secondaria" value={installatore.email_secondaria} type="email" />
++            <InlineEditableField module="installatori" field="telefono" label="Telefono" endpoint={endpoint} patchKey="telefono" value={installatore.telefono} type="tel" />
++            <InlineEditableField module="installatori" field="tag" label="Tag" endpoint={endpoint} patchKey="tag" value={installatore.tag} />
++            <InlineEditableField module="installatori" field="attivo" label="Attivo" endpoint={endpoint} patchKey="attivo" value={installatore.attivo} type="boolean" />
++            <InlineEditableField
++              module="installatori"
++              field="canale_preferito"
++              label="Canale preferito"
++              endpoint={endpoint}
++              patchKey="canale_preferito"
++              value={installatore.canale_preferito}
++              type="select"
++              options={canaleOptions}
++              optionLabels={CANALE_PREFERITO_LABELS}
++            />
++            <div>
++              <dt className="text-xs font-medium text-muted-foreground">
++                Proprietario
++              </dt>
++              <dd className="mt-1 text-sm text-foreground">
++                {value(installatore.proprietario_nome)}
++              </dd>
++            </div>
++            <div>
++              <dt className="text-xs font-medium text-muted-foreground">Creato</dt>
++              <dd className="mt-1 text-sm text-foreground">
++                {formatDate(installatore.created_at)}
++              </dd>
++            </div>
++            <div>
++              <dt className="text-xs font-medium text-muted-foreground">Aggiornato</dt>
++              <dd className="mt-1 text-sm text-foreground">
++                {formatDate(installatore.updated_at)}
++              </dd>
++            </div>
++            <div className="sm:col-span-2 lg:col-span-3">
++              <InlineEditableField module="installatori" field="note" label="Note" endpoint={endpoint} patchKey="note" value={installatore.note} type="textarea" />
++            </div>
++          </dl>
++        </section>
++  
++        <section className="border-b border-border pb-5">
++          <AllegatiSection
++            recordTipo="installatore"
++            recordId={installatore.id}
++            nomeRecord={installatore.nome}
++          />
++        </section>
++  
++        <section className="border-b border-border pb-5">
++          <h2 className="mb-3 text-[13px] font-bold text-navy">Note</h2>
++          <InstallatoreNoteSection installatoreId={installatore.id} nomeRecord={installatore.nome} />
++        </section>
++  
++        <section className="border-b border-border pb-5">
++          <h2 className="mb-3 text-[13px] font-bold text-navy">E-mail</h2>
++          <EmailHistorySection
++            emailLog={emailLog}
++            emptyLabel="Nessuna email inviata a questo installatore dal CRM."
++            recordTipo="installatore"
++            recordId={installatore.id}
++            nomeRecord={installatore.nome}
++          />
++        </section>
++  
++        <section className="border-b border-border pb-5">
++          <h2 className="mb-3 text-[13px] font-bold text-navy">Calendario</h2>
++          <CalendarioRecordSection
++            recordTipo="installatore"
++            recordId={installatore.id}
++            nomeRecord={installatore.nome}
++          />
++        </section>
++      </>
++      )}
+     </div>
+   )
+ }
+diff --git a/components/installatori/installatore-detail-content.tsx b/components/installatori/installatore-detail-content.tsx
+new file mode 100644
+index 0000000..b66ead1
+--- /dev/null
++++ b/components/installatori/installatore-detail-content.tsx
+@@ -0,0 +1,151 @@
++"use client"
++
++import type { ReactNode } from "react"
++import { useRouter } from "next/navigation"
++import { AllegatiSection } from "@/components/shared/allegati-section"
++import { EmailHistorySection } from "@/components/shared/email-history-section"
++import { CalendarioRecordSection } from "@/components/calendario/calendario-record-section"
++import { InstallatoreNoteSection } from "@/components/installatori/installatore-note-section"
++import { LayoutRenderer, type RisolviModifica } from "@/components/shared/layout-renderer"
++import type { LayoutPagina } from "@/lib/crm-settings/layout"
++import { ancoraPagina } from "@/lib/crm-settings/layout-render"
++import { CANALE_PREFERITO_LABELS } from "@/lib/installatori/api-types"
++import type { InstallatoreRecord } from "@/lib/installatori/repository"
++import type { EmailLogEntry } from "@/lib/email/email-log"
++
++/**
++ * Scheda Installatore disegnata dal layout configurato.
++ *
++ * A differenza di Cliente e Lead, il layout di questo modulo non deriva
++ * dall'export Zoho: il modulo Zoho ha meno campi di quanti la scheda ne
++ * mostri gia', e mancano proprio quelli che contano per le automazioni
++ * (canale preferito, stato attivo). I blocchi sono quindi descritti nello
++ * script di popolamento, e le chiavi sono quelle del record applicativo.
++ */
++
++/** Come si modifica ciascun campo: colonna del database e tipo del controllo. */
++const CAMPI: Record<string, { column: string; type: string }> = {
++  nome: { column: "nome", type: "text" },
++  email: { column: "email", type: "email" },
++  email_secondaria: { column: "email_secondaria", type: "email" },
++  telefono: { column: "telefono", type: "tel" },
++  tag: { column: "tag", type: "text" },
++  attivo: { column: "attivo", type: "boolean" },
++  canale_preferito: { column: "canale_preferito", type: "select" },
++  note: { column: "note", type: "textarea" },
++}
++
++export function InstallatoreDetailContent({
++  installatore,
++  emailLog,
++  layout,
++}: {
++  installatore: InstallatoreRecord
++  emailLog: EmailLogEntry[]
++  layout: LayoutPagina[]
++}) {
++  const router = useRouter()
++  const endpoint = `/api/installatori/${installatore.id}`
++
++  const salvaOrdine = (corpo: Record<string, unknown>) => {
++    void fetch("/api/layout/ordine-personale", {
++      method: "PUT",
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify({ modulo: "installatori", ...corpo }),
++    }).catch(() => {})
++  }
++
++  const componenti: Record<string, ReactNode> = {
++    allegati: (
++      <AllegatiSection
++        recordTipo="installatore"
++        recordId={installatore.id}
++        nomeRecord={installatore.nome}
++      />
++    ),
++    note: (
++      <InstallatoreNoteSection
++        installatoreId={installatore.id}
++        nomeRecord={installatore.nome}
++      />
++    ),
++    email: (
++      <EmailHistorySection
++        emailLog={emailLog}
++        emptyLabel="Nessuna email inviata a questo installatore dal CRM."
++        recordTipo="installatore"
++        recordId={installatore.id}
++        nomeRecord={installatore.nome}
++      />
++    ),
++    calendario: (
++      <CalendarioRecordSection
++        recordTipo="installatore"
++        recordId={installatore.id}
++        nomeRecord={installatore.nome}
++      />
++    ),
++  }
++
++  const risolviModifica: RisolviModifica = (fieldKey) => {
++    const campo = CAMPI[fieldKey]
++    if (!campo) return null
++
++    const value = (installatore as unknown as Record<string, unknown>)[fieldKey]
++
++    // Il canale preferito guida l'inoltro della scheda sopralluogo: resta una
++    // scelta fra valori previsti, non testo libero.
++    if (fieldKey === "canale_preferito") {
++      return {
++        module: "installatori",
++        field: campo.column,
++        endpoint,
++        patchKey: campo.column,
++        value,
++        type: "select",
++        options: Object.keys(CANALE_PREFERITO_LABELS),
++        optionLabels: CANALE_PREFERITO_LABELS,
++      }
++    }
++
++    return {
++      module: "installatori",
++      field: campo.column,
++      endpoint,
++      patchKey: campo.column,
++      value,
++      type: campo.type,
++    }
++  }
++
++  return (
++    <div className="flex min-w-0 flex-1 flex-col gap-1">
++      <nav className="flex items-center gap-1 overflow-x-auto border-b border-border bg-background pb-3 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible">
++        {layout.map((pagina) => (
++          <button
++            key={pagina.id}
++            type="button"
++            onClick={() =>
++              document
++                .getElementById(ancoraPagina(pagina.pageKey))
++                ?.scrollIntoView({ behavior: "smooth", block: "start" })
++            }
++            className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
++          >
++            {pagina.label}
++          </button>
++        ))}
++      </nav>
++
++      <LayoutRenderer
++        pagine={layout}
++        record={installatore as unknown as Record<string, unknown>}
++        risolviModifica={risolviModifica}
++        componenti={componenti}
++        onRiordinaBlocchi={(pageKey, ordine) => salvaOrdine({ blocchi: { [pageKey]: ordine } })}
++        onRiordinaCampi={(blockKey, ordine) => salvaOrdine({ campi: { [blockKey]: ordine } })}
++        onSalvato={() => router.refresh()}
++      />
++    </div>
++  )
++}
+diff --git a/scripts/migrations/seed-layout-da-zoho.mjs b/scripts/migrations/seed-layout-da-zoho.mjs
+index 4e4819b..722d1e9 100644
+--- a/scripts/migrations/seed-layout-da-zoho.mjs
++++ b/scripts/migrations/seed-layout-da-zoho.mjs
+@@ -105,6 +105,63 @@ const PAGINE_PER_MODULO = {
+     { key: "record", label: "Record collegati", componente: "record-collegati", sezioni: [] },
+     { key: "timeline", label: "Sequenza temporale", componente: "timeline", sezioni: [] },
+   ],
++
++  // Installatori non deriva dall'export Zoho.
++  //
++  // Il modulo Zoho ha 17 campi, di cui 6 interni: quello che resta e' meno
++  // di quanto la scheda mostra gia' oggi, che ha in piu' canale preferito,
++  // stato attivo e note — campi nostri, legati alle automazioni di invio
++  // scheda sopralluogo. Rispecchiare Zoho qui toglierebbe invece di
++  // aggiungere, quindi i blocchi sono descritti direttamente.
++  //
++  // Le chiavi sono quelle del record applicativo (nome, email, ...), non
++  // etichette Zoho: e' cosi' che questo modulo espone i suoi campi.
++  installatori: [
++    {
++      key: "anagrafica",
++      label: "Anagrafica",
++      blocchi: [
++        {
++          key: "contatti",
++          label: "Contatti",
++          campi: [
++            { key: "nome", label: "Nome" },
++            { key: "email", label: "E-mail" },
++            { key: "email_secondaria", label: "E-mail secondaria" },
++            { key: "telefono", label: "Telefono" },
++          ],
++        },
++        {
++          key: "stato-assegnazione",
++          label: "Stato e assegnazione",
++          campi: [
++            { key: "attivo", label: "Attivo" },
++            { key: "canale_preferito", label: "Canale preferito" },
++            { key: "tag", label: "Tag" },
++            { key: "proprietario_nome", label: "Proprietario", solaLettura: true },
++          ],
++        },
++        {
++          key: "annotazioni",
++          label: "Annotazioni",
++          colonne: 1,
++          campi: [{ key: "note", label: "Note", span: 1 }],
++        },
++        {
++          key: "registro",
++          label: "Registro",
++          campi: [
++            { key: "created_at", label: "Creato", solaLettura: true },
++            { key: "updated_at", label: "Aggiornato", solaLettura: true },
++          ],
++        },
++      ],
++    },
++    { key: "allegati", label: "Allegati", componente: "allegati", blocchi: [] },
++    { key: "note", label: "Note", componente: "note", blocchi: [] },
++    { key: "email", label: "E-mail", componente: "email", blocchi: [] },
++    { key: "calendario", label: "Calendario", componente: "calendario", blocchi: [] },
++  ],
+ }
+ 
+ /**
+@@ -194,10 +251,6 @@ function traduciFormula(expression, etichettaPerApiName) {
+ 
+ async function main() {
+   const percorso = argomento("file")
+-  if (typeof percorso !== "string") {
+-    console.error("Indicare il file: --file=layout-clienti.json")
+-    process.exit(1)
+-  }
+   const modulo = argomento("modulo", "clienti")
+   const PAGINE = PAGINE_PER_MODULO[modulo]
+   const CAMPI_IGNORATI = CAMPI_IGNORATI_PER_MODULO[modulo] ?? {}
+@@ -213,14 +266,24 @@ async function main() {
+     { auth: { persistSession: false } },
+   )
+ 
+-  const esportazione = JSON.parse(readFileSync(percorso, "utf8"))
+-  const layout = esportazione.layouts?.[0]
+-  if (!layout) {
+-    console.error("Nessun layout nel file indicato")
+-    process.exit(1)
+-  }
++  // I moduli descritti a mano (vedi installatori) non hanno un export da
++  // leggere: i loro blocchi stanno gia' nella mappatura.
++  const daDefinizione = PAGINE.some((pagina) => Array.isArray(pagina.blocchi))
+ 
+-  const sezioni = layout.sections ?? []
++  let sezioni = []
++  if (!daDefinizione) {
++    if (typeof percorso !== "string") {
++      console.error("Indicare il file: --file=layout-clienti.json")
++      process.exit(1)
++    }
++    const esportazione = JSON.parse(readFileSync(percorso, "utf8"))
++    const layout = esportazione.layouts?.[0]
++    if (!layout) {
++      console.error("Nessun layout nel file indicato")
++      process.exit(1)
++    }
++    sezioni = layout.sections ?? []
++  }
+   const sezionePerNome = new Map(sezioni.map((s) => [s.display_label, s]))
+ 
+   // api_name -> etichetta, per tradurre i riferimenti nelle formule.
+@@ -279,9 +342,23 @@ async function main() {
+     }
+     totalePagine += 1
+ 
+-    const blocchi = definizione.sezioni
+-      .map((nome) => sezionePerNome.get(nome))
+-      .filter(Boolean)
++    // Blocchi presi dall'export Zoho oppure dichiarati nella mappatura,
++    // normalizzati nella stessa forma per il resto del ciclo.
++    const blocchi = daDefinizione
++      ? (definizione.blocchi ?? []).map((b) => ({
++          display_label: b.label,
++          block_key: b.key,
++          colonne: b.colonne ?? 2,
++          fields: b.campi.map((c) => ({
++            field_label: c.label,
++            field_key: c.key,
++            sola_lettura: c.solaLettura === true,
++            span: c.span ?? 1,
++          })),
++        }))
++      : (definizione.sezioni ?? [])
++          .map((nome) => sezionePerNome.get(nome))
++          .filter(Boolean)
+ 
+     console.log(
+       `${definizione.label}${definizione.componente ? `  [componente: ${definizione.componente}]` : ""}`,
+@@ -295,7 +372,7 @@ async function main() {
+         }
+       }
+ 
+-      const blockKey = sezione.display_label
++      const blockKey = sezione.block_key ?? sezione.display_label
+         .toLowerCase()
+         .normalize("NFD")
+         .replace(/[\u0300-\u036f]/g, "")
+@@ -312,7 +389,7 @@ async function main() {
+               pagina_id: paginaId,
+               block_key: blockKey,
+               label: sezione.display_label,
+-              colonne: 2,
++              colonne: sezione.colonne ?? 2,
+               ordinamento: indiceBlocco,
+             },
+             { onConflict: "pagina_id,block_key" },
+@@ -345,11 +422,18 @@ async function main() {
+             {
+               blocco_id: bloccoId,
+               origine: "system",
+-              field_key: campo.field_label,
++              field_key: campo.field_key ?? campo.field_label,
++              // L'etichetta si registra solo quando differisce dalla chiave,
++              // altrimenti si userebbe comunque quella nativa.
++              label_override:
++                campo.field_key && campo.field_key !== campo.field_label
++                  ? campo.field_label
++                  : null,
+               ordinamento: indiceCampo,
++              span: campo.span ?? 1,
+               // Un campo calcolato non e' scrivibile: il valore arriva dalla
+               // formula. Su Zoho sono nascosti in creazione e modifica.
+-              sola_lettura: campo.data_type === "formula",
++              sola_lettura: campo.sola_lettura === true || campo.data_type === "formula",
+               formato:
+                 campo.decimal_place != null ? { decimali: campo.decimal_place } : {},
+               formula,

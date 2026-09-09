@@ -174,6 +174,37 @@ export function applicaOrdineBlocchi(
 }
 
 /**
+ * Applica l'ordine personale dei campi dentro ciascun blocco.
+ *
+ * Stessa regola degli altri due livelli: gli elencati per primi, i restanti
+ * in coda nell'ordine dell'admin, cosi' un campo aggiunto dopo il
+ * salvataggio della preferenza non sparisce.
+ */
+export function applicaOrdineCampi(
+  pagine: LayoutPagina[],
+  ordinePerBlocco: Record<string, string[]>,
+): LayoutPagina[] {
+  return pagine.map((pagina) => ({
+    ...pagina,
+    blocchi: pagina.blocchi.map((blocco) => {
+      const ordine = ordinePerBlocco[blocco.blockKey]
+      if (!ordine?.length) return blocco
+
+      const posizione = new Map(ordine.map((key, indice) => [key, indice]))
+      const campi = [...blocco.campi].sort((a, b) => {
+        const pa = posizione.get(a.fieldKey)
+        const pb = posizione.get(b.fieldKey)
+        if (pa !== undefined && pb !== undefined) return pa - pb
+        if (pa !== undefined) return -1
+        if (pb !== undefined) return 1
+        return a.ordinamento - b.ordinamento
+      })
+      return { ...blocco, campi }
+    }),
+  }))
+}
+
+/**
  * Solo cio' che va disegnato: pagine e blocchi nascosti spariscono con tutto
  * il loro contenuto, i campi nascosti spariscono singolarmente.
  */

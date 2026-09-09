@@ -1705,13 +1705,17 @@ function ClienteDaLayout({
   // utente e non cambia la scheda agli altri. Un errore qui non deve
   // disturbare il lavoro — al massimo l'ordine torna quello dell'admin al
   // prossimo caricamento.
-  const riordinaBlocchi = (pageKey: string, ordine: string[]) => {
+  const salvaOrdine = (corpo: Record<string, unknown>) => {
     void fetch("/api/layout/ordine-personale", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ modulo: "clienti", blocchi: { [pageKey]: ordine } }),
+      body: JSON.stringify({ modulo: "clienti", ...corpo }),
     }).catch(() => {})
   }
+  const riordinaBlocchi = (pageKey: string, ordine: string[]) =>
+    salvaOrdine({ blocchi: { [pageKey]: ordine } })
+  const riordinaCampi = (blockKey: string, ordine: string[]) =>
+    salvaOrdine({ campi: { [blockKey]: ordine } })
 
   // Il proprietario e' salvato come id utente: senza questo la scheda
   // mostrerebbe l'UUID al posto del nome, come faceva gia' la versione
@@ -1794,6 +1798,7 @@ function ClienteDaLayout({
           componenti={componenti}
           valoriVisualizzati={valoriVisualizzati}
           onRiordinaBlocchi={riordinaBlocchi}
+          onRiordinaCampi={riordinaCampi}
           onSalvato={() => router.refresh()}
         />
       </div>
@@ -1814,13 +1819,16 @@ function NavDaLayout({ pagine }: { pagine: LayoutPagina[] }) {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })
 
   return (
-    <nav className="flex flex-wrap items-center gap-1 border-b border-border bg-background pb-3 lg:sticky lg:top-[var(--detail-header-h,0px)] lg:z-10 lg:pt-2">
+    // Su schermi stretti le voci scorrono in orizzontale su una riga sola:
+    // andando a capo, con dodici sezioni, la navbar mangerebbe mezzo schermo
+    // prima ancora di arrivare ai dati.
+    <nav className="flex items-center gap-1 overflow-x-auto border-b border-border bg-background pb-3 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible lg:sticky lg:top-[var(--detail-header-h,0px)] lg:z-10 lg:pt-2">
       {pagine.map((pagina) => (
         <button
           key={pagina.id}
           type="button"
           onClick={() => vai(ancoraPagina(pagina.pageKey))}
-          className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
         >
           {pagina.label}
         </button>

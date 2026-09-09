@@ -18,12 +18,12 @@ const MAX_ELEMENTI = 200
 function elencoDiChiavi(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value
-    .filter((v): v is string => typeof v === "string" && v.length > 0 && v.length <= 63)
+    .filter((v): v is string => typeof v === "string" && v.length > 0 && v.length <= 120)
     .slice(0, MAX_ELEMENTI)
 }
 
 export async function PUT(request: Request) {
-  let body: { modulo?: unknown; pagine?: unknown; blocchi?: unknown }
+  let body: { modulo?: unknown; pagine?: unknown; blocchi?: unknown; campi?: unknown }
   try {
     body = await request.json()
   } catch {
@@ -42,22 +42,54 @@ export async function PUT(request: Request) {
 
   const pagine = elencoDiChiavi(body.pagine)
 
-  const blocchi: Record<string, string[]> = {}
-  if (body.blocchi && typeof body.blocchi === "object" && !Array.isArray(body.blocchi)) {
-    for (const [pageKey, elenco] of Object.entries(body.blocchi as Record<string, unknown>)) {
-      if (typeof pageKey !== "string" || pageKey.length > 63) continue
+  /** Mappa contenitore -> elenco ordinato, scartando chiavi implausibili. */
+  const mappaDiElenchi = (grezzo: unknown): Record<string, string[]> => {
+    const risultato: Record<string, string[]> = {}
+    if (!grezzo || typeof grezzo !== "object" || Array.isArray(grezzo)) return risultato
+    for (const [chiave, elenco] of Object.entries(grezzo as Record<string, unknown>)) {
+      if (typeof chiave !== "string" || chiave.length > 120) continue
       const chiavi = elencoDiChiavi(elenco)
-      if (chiavi.length) blocchi[pageKey] = chiavi
+      if (chiavi.length) risultato[chiave] = chiavi
     }
+    return risultato
   }
 
+  const blocchi = mappaDiElenchi(body.blocchi)
+  const campi = mappaDiElenchi(body.campi)
+
   const supabase = await createClient()
+
+  // Fusione con quanto gia' salvato invece di sostituzione: la scheda manda
+  // solo la preferenza appena cambiata (un blocco spostato, un campo
+  // spostato), e sovrascrivere l'intera riga cancellerebbe le altre due.
+  const { data: corrente } = await supabase
+    .from("crm_layout_ordine_utente")
+    .select("ordine, ordine_blocchi, ordine_campi")
+    .eq("utente_id", utenteId)
+    .eq("modulo", body.modulo)
+    .maybeSingle()
+
+  const salvato = (corrente ?? {}) as {
+    ordine?: unknown
+    ordine_blocchi?: unknown
+    ordine_campi?: unknown
+  }
+  const oggetto = (grezzo: unknown): Record<string, string[]> =>
+    grezzo && typeof grezzo === "object" && !Array.isArray(grezzo)
+      ? (grezzo as Record<string, string[]>)
+      : {}
+
   const { error } = await supabase.from("crm_layout_ordine_utente").upsert(
     {
       utente_id: utenteId,
       modulo: body.modulo,
-      ordine: pagine,
-      ordine_blocchi: blocchi,
+      ordine: body.pagine === undefined
+        ? Array.isArray(salvato.ordine)
+          ? salvato.ordine
+          : []
+        : pagine,
+      ordine_blocchi: { ...oggetto(salvato.ordine_blocchi), ...blocchi },
+      ordine_campi: { ...oggetto(salvato.ordine_campi), ...campi },
       updated_at: new Date().toISOString(),
     },
     { onConflict: "utente_id,modulo" },

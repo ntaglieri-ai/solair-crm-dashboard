@@ -5,6 +5,7 @@ import {
   DndContext,
   closestCenter,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -13,6 +14,7 @@ import {
   SortableContext,
   useSortable,
   arrayMove,
+  rectSortingStrategy,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
@@ -68,6 +70,7 @@ export function LayoutRenderer({
   componenti,
   valoriVisualizzati,
   onRiordinaBlocchi,
+  onRiordinaCampi,
   onSalvato,
 }: {
   pagine: LayoutPagina[]
@@ -90,6 +93,11 @@ export function LayoutRenderer({
    * Assente = trascinamento disattivato.
    */
   onRiordinaBlocchi?: (pageKey: string, ordine: string[]) => void
+  /**
+   * Riordino personale dei campi dentro un blocco: riceve la chiave del
+   * blocco e il nuovo ordine dei campi.
+   */
+  onRiordinaCampi?: (blockKey: string, ordine: string[]) => void
   onSalvato?: () => void
 }) {
   // Valori appena modificati, prima che il server rimandi il record
@@ -129,6 +137,7 @@ export function LayoutRenderer({
             risolviModifica={risolviModifica}
             valoriVisualizzati={valoriVisualizzati}
             onRiordinaBlocchi={onRiordinaBlocchi}
+            onRiordinaCampi={onRiordinaCampi}
             onSalvato={salvato}
           />
         </section>
@@ -144,6 +153,7 @@ function BloccoRenderer({
   risolviModifica,
   valoriVisualizzati,
   trascinabile,
+  onRiordinaCampi,
   onSalvato,
 }: {
   blocco: LayoutBlocco
@@ -152,14 +162,39 @@ function BloccoRenderer({
   risolviModifica?: RisolviModifica
   valoriVisualizzati?: Record<string, ReactNode>
   trascinabile?: boolean
+  onRiordinaCampi?: (blockKey: string, ordine: string[]) => void
   onSalvato?: (fieldKey: string, nuovoValore: unknown) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: blocco.id,
     disabled: !trascinabile,
   })
+  const [campi, setCampi] = useState(blocco.campi)
+  const sensoriCampi = useSensoriTrascinamento()
+
+  // Il blocco puo' arrivare aggiornato dall'alto (ricarica dopo un
+  // salvataggio): l'ordine locale vale finche' i campi sono gli stessi.
+  if (
+    blocco.campi.length !== campi.length ||
+    blocco.campi.some((c) => !campi.some((l) => l.id === c.id))
+  ) {
+    setCampi(blocco.campi)
+  }
 
   if (blocco.campi.length === 0) return null
+
+  function fineTrascinaCampi(evento: DragEndEvent) {
+    const { active, over } = evento
+    if (!over || active.id === over.id) return
+    const da = campi.findIndex((c) => c.id === active.id)
+    const a = campi.findIndex((c) => c.id === over.id)
+    const nuovi = arrayMove(campi, da, a)
+    setCampi(nuovi)
+    onRiordinaCampi?.(
+      blocco.blockKey,
+      nuovi.map((c) => c.fieldKey),
+    )
+  }
 
   return (
     <div
@@ -175,7 +210,7 @@ function BloccoRenderer({
           {trascinabile ? (
             <button
               type="button"
-              className="cursor-grab text-muted-foreground/60 transition-colors hover:text-foreground active:cursor-grabbing"
+              className="cursor-grab touch-none p-0.5 text-muted-foreground/60 transition-colors hover:text-foreground active:cursor-grabbing"
               aria-label={`Trascina per spostare il riquadro ${blocco.label}`}
               title="Trascina per spostare questo riquadro"
               {...attributes}
@@ -192,7 +227,11 @@ function BloccoRenderer({
         </div>
       ) : null}
 
-      <div
+      <GrigliaCampi
+        attiva={Boolean(onRiordinaCampi)}
+        sensori={sensoriCampi}
+        idCampi={campi.map((c) => c.id)}
+        onFine={fineTrascinaCampi}
         className={cn(
           "grid gap-x-8 gap-y-4",
           blocco.colonne === 1 && "grid-cols-1",
@@ -201,7 +240,7 @@ function BloccoRenderer({
           blocco.colonne >= 4 && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
         )}
       >
-        {blocco.campi.map((campo) => (
+        {campi.map((campo) => (
           <CampoRenderer
             key={campo.id}
             campo={campo}
@@ -209,11 +248,121 @@ function BloccoRenderer({
             valori={valori}
             risolviModifica={risolviModifica}
             valoriVisualizzati={valoriVisualizzati}
+            trascinabile={Boolean(onRiordinaCampi)}
             onSalvato={onSalvato}
           />
         ))}
-      </div>
+      </GrigliaCampi>
     </div>
+  )
+}
+
+/**
+ * Sensori del trascinamento.
+ *
+ * Su mouse basta un piccolo spostamento. Su touch serve una pressione
+ * prolungata: senza, ogni tentativo di scorrere la pagina partendo da un
+ * campo verrebbe interpretato come trascinamento, e la scheda diventerebbe
+ * inservibile proprio dove lo spazio e' poco.
+ */
+function useSensoriTrascinamento() {
+  return useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+  )
+}
+
+/**
+ * Involucro di un campo: tiene il riferimento per il trascinamento e la
+ * maniglia, comuni ai tre modi in cui un campo puo' essere disegnato (errore
+ * di formula, modificabile, sola lettura).
+ *
+ * Definito qui fuori e non dentro il render del campo: un componente creato
+ * a ogni ridisegno verrebbe rimontato da capo, perdendo lo stato di
+ * modifica in corso.
+ */
+function ContenitoreCampo({
+  campo,
+  etichetta,
+  trascinabile,
+  className,
+  children,
+}: {
+  campo: LayoutCampo
+  etichetta: string
+  trascinabile?: boolean
+  className?: string
+  children: ReactNode
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: campo.id,
+    disabled: !trascinabile,
+  })
+  const larghezza = cn(
+    campo.span === 2 && "sm:col-span-2",
+    campo.span === 3 && "sm:col-span-2 lg:col-span-3",
+    campo.span >= 4 && "sm:col-span-2 lg:col-span-4",
+  )
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "group/campo relative",
+        larghezza,
+        // Lo spazio per la maniglia si aggiunge solo quando serve, cosi' i
+        // campi non trascinabili restano allineati come prima.
+        trascinabile && "pl-4",
+        isDragging && "z-10 opacity-80",
+        className,
+      )}
+    >
+      {trascinabile ? (
+        <button
+          type="button"
+          className="absolute left-0 top-0.5 cursor-grab touch-none p-0.5 text-muted-foreground/40 transition-opacity hover:text-foreground focus-visible:opacity-100 active:cursor-grabbing sm:opacity-0 sm:group-hover/campo:opacity-100"
+          aria-label={`Trascina per spostare il campo ${etichetta}`}
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-3.5" />
+        </button>
+      ) : null}
+      {children}
+    </div>
+  )
+}
+
+/**
+ * La griglia dei campi, ordinabile quando il riordino personale e' attivo.
+ * Strategia rettangolare e non verticale: i campi stanno su piu' colonne, e
+ * con quella verticale il segnaposto durante il trascinamento finirebbe nel
+ * posto sbagliato.
+ */
+function GrigliaCampi({
+  attiva,
+  sensori,
+  idCampi,
+  onFine,
+  className,
+  children,
+}: {
+  attiva: boolean
+  sensori: ReturnType<typeof useSensors>
+  idCampi: string[]
+  onFine: (evento: DragEndEvent) => void
+  className: string
+  children: ReactNode
+}) {
+  if (!attiva) return <div className={className}>{children}</div>
+
+  return (
+    <DndContext sensors={sensori} collisionDetection={closestCenter} onDragEnd={onFine}>
+      <SortableContext items={idCampi} strategy={rectSortingStrategy}>
+        <div className={className}>{children}</div>
+      </SortableContext>
+    </DndContext>
   )
 }
 
@@ -223,6 +372,7 @@ function CampoRenderer({
   valori,
   risolviModifica,
   valoriVisualizzati,
+  trascinabile,
   onSalvato,
 }: {
   campo: LayoutCampo
@@ -230,22 +380,20 @@ function CampoRenderer({
   valori: ReturnType<typeof mappaValori>
   risolviModifica?: RisolviModifica
   valoriVisualizzati?: Record<string, ReactNode>
+  trascinabile?: boolean
   onSalvato?: (fieldKey: string, nuovoValore: unknown) => void
 }) {
+  // Il riferimento per il trascinamento e la larghezza in colonne stanno in
+  // ContenitoreCampo, che avvolge tutti e tre i modi di disegnare il campo.
   const etichetta = campo.labelOverride ?? campo.fieldKey
   const giaPronto = valoriVisualizzati?.[campo.fieldKey]
   const esito = valoreCampo(campo, record, valori)
-  const larghezza = cn(
-    campo.span === 2 && "sm:col-span-2",
-    campo.span === 3 && "sm:col-span-2 lg:col-span-3",
-    campo.span >= 4 && "sm:col-span-2 lg:col-span-4",
-  )
 
   // Una formula scritta male non deve far sparire il campo in silenzio: si
   // vede che c'e' un problema, e resta chiaro quale.
   if (esito.stato === "errore") {
     return (
-      <div className={cn("flex flex-col gap-0.5", larghezza)}>
+      <ContenitoreCampo campo={campo} etichetta={etichetta} trascinabile={trascinabile} className="flex flex-col gap-0.5">
         <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           {etichetta}
         </span>
@@ -256,7 +404,7 @@ function CampoRenderer({
           <AlertTriangle className="size-3.5 shrink-0" />
           Formula non valida
         </span>
-      </div>
+      </ContenitoreCampo>
     )
   }
 
@@ -271,7 +419,7 @@ function CampoRenderer({
 
   if (modifica) {
     return (
-      <div className={larghezza}>
+      <ContenitoreCampo campo={campo} etichetta={etichetta} trascinabile={trascinabile}>
         <InlineEditableField
           {...modifica}
           label={etichetta}
@@ -280,12 +428,12 @@ function CampoRenderer({
           displayValue={giaPronto ?? testo}
           onSaved={(nuovoValore) => onSalvato?.(campo.fieldKey, nuovoValore)}
         />
-      </div>
+      </ContenitoreCampo>
     )
   }
 
   return (
-    <div className={cn("flex flex-col gap-0.5", larghezza)}>
+    <ContenitoreCampo campo={campo} etichetta={etichetta} trascinabile={trascinabile} className="flex flex-col gap-0.5">
       <span className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         {etichetta}
         {esito.stato === "calcolato" ? (
@@ -293,7 +441,7 @@ function CampoRenderer({
         ) : null}
       </span>
       <div className="text-[13px] text-foreground">{giaPronto ?? testo}</div>
-    </div>
+    </ContenitoreCampo>
   )
 }
 
@@ -311,6 +459,7 @@ function BlocchiTrascinabili({
   risolviModifica,
   valoriVisualizzati,
   onRiordinaBlocchi,
+  onRiordinaCampi,
   onSalvato,
 }: {
   pagina: LayoutPagina
@@ -319,12 +468,11 @@ function BlocchiTrascinabili({
   risolviModifica?: RisolviModifica
   valoriVisualizzati?: Record<string, ReactNode>
   onRiordinaBlocchi?: (pageKey: string, ordine: string[]) => void
+  onRiordinaCampi?: (blockKey: string, ordine: string[]) => void
   onSalvato?: (fieldKey: string, nuovoValore: unknown) => void
 }) {
   const [blocchi, setBlocchi] = useState(pagina.blocchi)
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-  )
+  const sensors = useSensoriTrascinamento()
 
   // La pagina puo' cambiare sotto (ricarica dopo un salvataggio): l'ordine
   // locale vale solo finche' coincide per composizione con quello ricevuto.
@@ -346,6 +494,7 @@ function BlocchiTrascinabili({
       risolviModifica={risolviModifica}
       valoriVisualizzati={valoriVisualizzati}
       trascinabile={Boolean(onRiordinaBlocchi)}
+      onRiordinaCampi={onRiordinaCampi}
       onSalvato={onSalvato}
     />
   ))

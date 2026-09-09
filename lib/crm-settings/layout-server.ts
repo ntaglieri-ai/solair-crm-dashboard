@@ -1,6 +1,7 @@
 import type { createClient } from "@/lib/supabase/server"
 import {
   applicaOrdineBlocchi,
+  applicaOrdineCampi,
   applicaOrdinePersonale,
   type LayoutBlocco,
   type LayoutCampo,
@@ -180,6 +181,7 @@ export async function loadLayout(
 export type OrdinePersonale = {
   pagine: string[]
   blocchi: Record<string, string[]>
+  campi: Record<string, string[]>
 }
 
 export async function loadOrdinePersonale(
@@ -187,32 +189,39 @@ export async function loadOrdinePersonale(
   utenteId: string,
   modulo: string,
 ): Promise<OrdinePersonale> {
-  const vuoto: OrdinePersonale = { pagine: [], blocchi: {} }
+  const vuoto: OrdinePersonale = { pagine: [], blocchi: {}, campi: {} }
 
   const { data, error } = await supabase
     .from("crm_layout_ordine_utente")
-    .select("ordine, ordine_blocchi")
+    .select("ordine, ordine_blocchi, ordine_campi")
     .eq("utente_id", utenteId)
     .eq("modulo", modulo)
     .maybeSingle()
 
   if (error || !data) return vuoto
-  const riga = data as { ordine: unknown; ordine_blocchi: unknown }
+  const riga = data as { ordine: unknown; ordine_blocchi: unknown; ordine_campi: unknown }
+
+  /** jsonb -> mappa chiave -> elenco di stringhe, scartando il resto. */
+  const mappaDiElenchi = (grezzo: unknown): Record<string, string[]> => {
+    const risultato: Record<string, string[]> = {}
+    if (!grezzo || typeof grezzo !== "object" || Array.isArray(grezzo)) return risultato
+    for (const [chiave, elenco] of Object.entries(grezzo as Record<string, unknown>)) {
+      if (Array.isArray(elenco)) {
+        risultato[chiave] = elenco.filter((v): v is string => typeof v === "string")
+      }
+    }
+    return risultato
+  }
 
   const pagine = Array.isArray(riga.ordine)
     ? riga.ordine.filter((key): key is string => typeof key === "string")
     : []
 
-  const blocchi: Record<string, string[]> = {}
-  if (riga.ordine_blocchi && typeof riga.ordine_blocchi === "object" && !Array.isArray(riga.ordine_blocchi)) {
-    for (const [pageKey, elenco] of Object.entries(riga.ordine_blocchi as Record<string, unknown>)) {
-      if (Array.isArray(elenco)) {
-        blocchi[pageKey] = elenco.filter((key): key is string => typeof key === "string")
-      }
-    }
+  return {
+    pagine,
+    blocchi: mappaDiElenchi(riga.ordine_blocchi),
+    campi: mappaDiElenchi(riga.ordine_campi),
   }
-
-  return { pagine, blocchi }
 }
 
 /** Layout del modulo gia' riordinato secondo la preferenza dell'utente. */
@@ -224,5 +233,8 @@ export async function loadLayoutPerUtente(
   const pagine = await loadLayout(supabase, modulo)
   if (!pagine.length || !utenteId) return pagine
   const ordine = await loadOrdinePersonale(supabase, utenteId, modulo)
-  return applicaOrdineBlocchi(applicaOrdinePersonale(pagine, ordine.pagine), ordine.blocchi)
+  return applicaOrdineCampi(
+    applicaOrdineBlocchi(applicaOrdinePersonale(pagine, ordine.pagine), ordine.blocchi),
+    ordine.campi,
+  )
 }

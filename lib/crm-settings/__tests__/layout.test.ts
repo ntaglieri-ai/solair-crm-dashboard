@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   applicaOrdineBlocchi,
+  applicaOrdineCampi,
   applicaOrdinePersonale,
   campiDuplicati,
   campoModificabile,
@@ -240,5 +241,68 @@ describe("applicaOrdineBlocchi", () => {
     const originale = pagine[0].blocchi.map((b) => b.blockKey)
     applicaOrdineBlocchi(pagine, { impianto: ["zavorre", "ftv", "termico"] })
     expect(pagine[0].blocchi.map((b) => b.blockKey)).toEqual(originale)
+  })
+})
+
+describe("applicaOrdineCampi", () => {
+  function conCampi(chiavi: string[]): LayoutPagina {
+    return {
+      id: "p-impianto",
+      pageKey: "impianto",
+      label: "Impianto",
+      icona: null,
+      ordinamento: 0,
+      visible: true,
+      componente: null,
+      blocchi: [
+        {
+          id: "b-ftv",
+          blockKey: "ftv",
+          label: "FTV",
+          mostraTitolo: true,
+          colonne: 2,
+          ordinamento: 0,
+          visible: true,
+          campi: chiavi.map((fieldKey, indice) => campo(fieldKey, { ordinamento: indice })),
+        },
+      ],
+    }
+  }
+
+  const pagine = [conCampi(["Nr. Moduli", "COD- MODULI", "Nr. Inverter"])]
+
+  it("senza preferenza lascia l'ordine dell'admin", () => {
+    const risultato = applicaOrdineCampi(pagine, {})
+    expect(risultato[0].blocchi[0].campi.map((c) => c.fieldKey)).toEqual([
+      "Nr. Moduli",
+      "COD- MODULI",
+      "Nr. Inverter",
+    ])
+  })
+
+  it("riordina i campi del blocco indicato", () => {
+    const risultato = applicaOrdineCampi(pagine, {
+      ftv: ["Nr. Inverter", "Nr. Moduli", "COD- MODULI"],
+    })
+    expect(risultato[0].blocchi[0].campi.map((c) => c.fieldKey)).toEqual([
+      "Nr. Inverter",
+      "Nr. Moduli",
+      "COD- MODULI",
+    ])
+  })
+
+  it("mette in coda i campi non elencati", () => {
+    const risultato = applicaOrdineCampi(pagine, { ftv: ["Nr. Inverter"] })
+    expect(risultato[0].blocchi[0].campi.map((c) => c.fieldKey)).toEqual([
+      "Nr. Inverter",
+      "Nr. Moduli",
+      "COD- MODULI",
+    ])
+  })
+
+  it("non muta le pagine ricevute", () => {
+    const originale = pagine[0].blocchi[0].campi.map((c) => c.fieldKey)
+    applicaOrdineCampi(pagine, { ftv: ["Nr. Inverter", "Nr. Moduli", "COD- MODULI"] })
+    expect(pagine[0].blocchi[0].campi.map((c) => c.fieldKey)).toEqual(originale)
   })
 })

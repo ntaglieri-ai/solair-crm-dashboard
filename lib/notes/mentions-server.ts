@@ -34,15 +34,15 @@ export async function resolveNoteMentions(
 
 export async function notifyMentionedUsers(params: {
   recipients: Array<{ id: string; nome: string; email: string }>
-  authorId: string | null
   authorName: string
   text: string
   recordLabel: string
   recordUrl: string
 }) {
-  const recipients = params.recipients.filter((recipient) => recipient.id !== params.authorId)
+  // L'autore non viene escluso: menzionare se stessi e' un modo di
+  // lasciarsi un promemoria. Chi non si menziona non riceve nulla.
   const results = await Promise.all(
-    recipients.map((recipient) =>
+    params.recipients.map((recipient) =>
       sendMentionNotificationEmail({
         to: recipient.email,
         recipientName: recipient.nome,

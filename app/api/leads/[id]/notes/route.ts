@@ -56,7 +56,6 @@ export async function POST(
   }
   const notificationFailures = await notifyMentionedUsers({
     recipients: resolved.recipients,
-    authorId: guard.permissions.snapshot.subject.userId,
     authorName: guard.permissions.snapshot.subject.nome ?? "Un utente CRM",
     text,
     recordLabel: "un lead",

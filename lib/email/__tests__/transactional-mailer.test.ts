@@ -34,13 +34,13 @@ describe("existing transactional emails (no network)", () => {
     expect(mail.html).toContain("&lt;Mario&gt;")
     expect(mail.text).toContain("https://crm.example.test/login")
   })
-  it("sends mention notifications, escapes markup and excludes the author", async () => {
+  it("sends mention notifications to everyone mentioned, author included, escaping markup", async () => {
     const failed = await notifyMentionedUsers({ recipients: [
       { id: "author", nome: "Author", email: "author@example.test" },
       { id: "other", nome: "Other", email: "recipient@example.test" },
-    ], authorId: "author", authorName: "Author", text: "<script>bad</script>", recordLabel: "Test", recordUrl: "https://crm.example.test/clienti/test" })
+    ], authorName: "Author", text: "<script>bad</script>", recordLabel: "Test", recordUrl: "https://crm.example.test/clienti/test" })
     expect(failed).toBe(0)
-    expect(mocks.sendMail).toHaveBeenCalledTimes(1)
+    expect(mocks.sendMail).toHaveBeenCalledTimes(2)
     expect(mocks.sendMail.mock.calls[0][0].html).toContain("&lt;script&gt;")
   })
   it("reports SMTP failure rather than success", async () => {

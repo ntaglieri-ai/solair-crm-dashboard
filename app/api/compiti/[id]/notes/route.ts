@@ -79,7 +79,6 @@ export async function POST(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const notificationFailures = await notifyMentionedUsers({
     recipients: resolved.recipients,
-    authorId: guard.permissions.snapshot.subject.userId,
     authorName: guard.permissions.snapshot.subject.nome ?? "Un utente CRM",
     text,
     recordLabel: "un compito",

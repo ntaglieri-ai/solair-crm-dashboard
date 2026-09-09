@@ -123,13 +123,33 @@ export async function resolveInternalMentions(
   return mentions
 }
 
+/**
+ * Chi va avvisato per una nota.
+ *
+ * Solo gli utenti menzionati: scrivere una nota senza menzionare nessuno
+ * non manda email a nessuno.
+ *
+ * L'autore NON viene escluso: menzionare se stessi e' un modo di lasciarsi
+ * un promemoria, e l'avviso deve arrivare come per gli altri. Chi non si
+ * menziona non riceve nulla, quindi non diventa rumore.
+ *
+ * Restano fuori i gia' menzionati in una versione precedente: correggere
+ * un refuso non deve far ripartire l'avviso a chi l'aveva gia' ricevuto.
+ */
+export function destinatariMenzioni(
+  mentions: NoteMention[],
+  previous: NoteMention[] = [],
+): Set<string> {
+  const gia = new Set(previous.map((mention) => mention.userId))
+  return new Set(mentions.map((mention) => mention.userId).filter((id) => !gia.has(id)))
+}
+
 export async function notifyInternalMentions(params: {
   config: NoteInterneConfig
   text: string; recordId: string; mentions: NoteMention[]; previous?: NoteMention[]
   authorId: string | null; authorName: string
 }) {
-  const previousIds = new Set((params.previous ?? []).map((mention) => mention.userId))
-  const ids = new Set(params.mentions.map((mention) => mention.userId).filter((id) => id !== params.authorId && !previousIds.has(id)))
+  const ids = destinatariMenzioni(params.mentions, params.previous)
   if (!ids.size) return 0
   try {
     // Il testo scritto viene inviato solo dopo il salvataggio e un nuovo

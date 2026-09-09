@@ -87,10 +87,16 @@ describe("internal mention validation and notifications", () => {
       body: notification.text,
     })
   })
-  it("does not re-notify existing mentions or the author", async () => {
+  it("does not re-notify who was already mentioned before an edit", async () => {
     expect(await notifyInternalMentions({ ...notification, previous: [mention] })).toBe(0)
-    expect(await notifyInternalMentions({ ...notification, authorId: id })).toBe(0)
     expect(notify).not.toHaveBeenCalled()
+  })
+  it("notifies the author who mentions themselves", async () => {
+    // Regola cambiata su richiesta: menzionarsi e' un modo di lasciarsi un
+    // promemoria, e l'avviso deve arrivare. Chi non si menziona non riceve
+    // nulla comunque, quindi non diventa rumore.
+    expect(await notifyInternalMentions({ ...notification, authorId: id })).toBe(0)
+    expect(notify).toHaveBeenCalledTimes(1)
   })
   it("rechecks access before email and warns if revoked", async () => {
     database({ utenti: [{ ...user, attivo: false }] })

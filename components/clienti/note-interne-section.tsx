@@ -74,7 +74,7 @@ function NotaCard({
             </span>
           ) : null}
           {!editing ? (
-            <div className="ml-auto flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+            <div className="ml-auto flex items-center gap-0.5 text-muted-foreground/70 transition-colors hover:text-foreground group-hover:text-muted-foreground">
               <Button
                 variant="ghost"
                 size="icon"

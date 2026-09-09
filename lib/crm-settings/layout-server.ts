@@ -230,9 +230,17 @@ export async function loadLayoutPerUtente(
   modulo: string,
   utenteId: string | null,
 ): Promise<LayoutPagina[]> {
-  const pagine = await loadLayout(supabase, modulo)
-  if (!pagine.length || !utenteId) return pagine
-  const ordine = await loadOrdinePersonale(supabase, utenteId, modulo)
+  // Le due letture non dipendono l'una dall'altra: incatenarle aggiungerebbe
+  // un giro di rete verso il database senza motivo.
+  const [pagine, ordine] = await Promise.all([
+    loadLayout(supabase, modulo),
+    utenteId
+      ? loadOrdinePersonale(supabase, utenteId, modulo)
+      : Promise.resolve<OrdinePersonale>({ pagine: [], blocchi: {}, campi: {} }),
+  ])
+
+  if (!pagine.length) return pagine
+
   return applicaOrdineCampi(
     applicaOrdineBlocchi(applicaOrdinePersonale(pagine, ordine.pagine), ordine.blocchi),
     ordine.campi,

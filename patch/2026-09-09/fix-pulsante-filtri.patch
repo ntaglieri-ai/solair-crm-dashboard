@@ -1,0 +1,54 @@
+diff --git a/components/leads/advanced-filters.tsx b/components/leads/advanced-filters.tsx
+index d0a5c44..1ebbf75 100644
+--- a/components/leads/advanced-filters.tsx
++++ b/components/leads/advanced-filters.tsx
+@@ -601,14 +601,41 @@ export function AdvancedFilters({
+   )
+ 
+   if (inline) {
+-    // Il pannello e' una colonna della pagina: quando e' chiuso non occupa
+-    // spazio, quando e' aperto la lista si stringe accanto a lui.
+-    if (!aperto || !inlineContainer) return null
+-    return createPortal(
+-      <aside className="flex h-full w-[340px] shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+-        {contenutoPannello}
+-      </aside>,
+-      inlineContainer,
++    // Due pezzi in due posti: il pulsante resta nella barra dove il
++    // componente e' montato, il pannello viene portato accanto alla tabella.
++    // Disegnarne uno solo — com'era in una prima versione — faceva sparire
++    // il pulsante insieme al pannello chiuso.
++    const pulsante = trigger ? (
++      trigger({ onClick: () => onOpenInlineChange?.(!aperto), count: totalAppliedCount })
++    ) : (
++      <Button
++        variant="outline"
++        size="icon"
++        className="relative bg-card"
++        aria-label="Filtri avanzati"
++        onClick={() => onOpenInlineChange?.(!aperto)}
++      >
++        <Filter />
++        {totalAppliedCount > 0 ? (
++          <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-teal px-1 text-[10px] font-bold tabular-nums text-teal-foreground">
++            {totalAppliedCount}
++          </span>
++        ) : null}
++      </Button>
++    )
++
++    return (
++      <>
++        {pulsante}
++        {aperto && inlineContainer
++          ? createPortal(
++              <aside className="flex h-full w-[340px] shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
++                {contenutoPannello}
++              </aside>,
++              inlineContainer,
++            )
++          : null}
++      </>
+     )
+   }
+ 

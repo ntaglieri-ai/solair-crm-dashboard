@@ -20,3 +20,9 @@ tsconfig.tsbuildinfo
 # Supabase CLI linked-project cache
 supabase/.temp/
 .env*
+
+# Scarti degli script di migrazione: log dei dry-run ed elenchi di
+# record falliti. Utili sul momento, inutili nel repo.
+dry-run-*.txt
+apply-*.txt
+falliti-*.txt

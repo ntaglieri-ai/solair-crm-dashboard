@@ -1,0 +1,1471 @@
+diff --git a/app/api/crm-settings/layout/route.ts b/app/api/crm-settings/layout/route.ts
+new file mode 100644
+index 0000000..a00f28b
+--- /dev/null
++++ b/app/api/crm-settings/layout/route.ts
+@@ -0,0 +1,455 @@
++import { NextResponse } from "next/server"
++import { createClient } from "@/lib/supabase/server"
++import { requireApiPage } from "@/lib/permissions/server"
++import { loadLayout } from "@/lib/crm-settings/layout-server"
++import { campiDuplicati } from "@/lib/crm-settings/layout"
++import {
++  chiaveDaEtichetta,
++  formulaAutoReferenziale,
++  intInRange,
++  isChiaveValida,
++  isEtichettaValida,
++  isLayoutModulo,
++  normalizzaFormato,
++  validaFormula,
++} from "@/lib/crm-settings/layout-validate"
++
++/**
++ * Configurazione del layout delle schede record.
++ *
++ * Sola lettura per chiunque possa aprire la pagina; scrittura riservata a chi
++ * ha accesso rw — in pratica ADMIN e SUPERADMIN, gli unici a cui la pagina e'
++ * concessa in lib/permissions/constants.ts.
++ *
++ * Il client manda proposte, non fatti: chiavi, etichette, riferimenti e
++ * formule vengono ricontrollati qui (lib/crm-settings/layout-validate.ts)
++ * prima di toccare il database.
++ */
++
++const PAGE_KEY = "crm_settings.system.layout"
++
++function erroreSchema(error: { message?: string; code?: string }) {
++  const message = error.message ?? "Operazione layout non riuscita"
++  if (
++    error.code === "42P01" ||
++    message.toLowerCase().includes("does not exist") ||
++    message.toLowerCase().includes("schema cache")
++  ) {
++    return "Tabelle layout non presenti su Supabase. Applica supabase/migrations/20260909_crm_layout_config.sql."
++  }
++  return message
++}
++
++/** Scrittura consentita solo con accesso rw sulla pagina. */
++async function guardScrittura() {
++  const guard = await requireApiPage(PAGE_KEY)
++  if (guard.response) return guard.response
++  if (guard.permissions.pageAccess(PAGE_KEY) !== "rw") {
++    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
++  }
++  return null
++}
++
++export async function GET(request: Request) {
++  const { searchParams } = new URL(request.url)
++  const modulo = searchParams.get("modulo") ?? ""
++  if (!isLayoutModulo(modulo)) {
++    return NextResponse.json({ error: "Modulo non valido" }, { status: 400 })
++  }
++
++  const guard = await requireApiPage(PAGE_KEY)
++  if (guard.response) return guard.response
++
++  const supabase = await createClient()
++  const pagine = await loadLayout(supabase, modulo)
++  return NextResponse.json({ pagine })
++}
++
++type CorpoPost = {
++  modulo?: unknown
++  tipo?: unknown
++  // pagina
++  label?: unknown
++  icona?: unknown
++  componente?: unknown
++  // blocco
++  paginaId?: unknown
++  colonne?: unknown
++  mostraTitolo?: unknown
++  // campo
++  bloccoId?: unknown
++  origine?: unknown
++  fieldKey?: unknown
++  span?: unknown
++  formato?: unknown
++  formula?: unknown
++}
++
++/**
++ * Crea una pagina, un blocco o un campo, a seconda di `tipo`.
++ *
++ * Un endpoint solo invece di tre: le tre entita' condividono modulo, guard,
++ * gestione errori e calcolo dell'ordinamento, e tenerle separate
++ * significherebbe ripetere tutto tre volte.
++ */
++export async function POST(request: Request) {
++  const forbidden = await guardScrittura()
++  if (forbidden) return forbidden
++
++  let body: CorpoPost
++  try {
++    body = (await request.json()) as CorpoPost
++  } catch {
++    return NextResponse.json({ error: "Corpo richiesta non valido" }, { status: 400 })
++  }
++
++  const { modulo, tipo, label } = body
++  if (!isLayoutModulo(modulo)) {
++    return NextResponse.json({ error: "Modulo non valido" }, { status: 400 })
++  }
++
++  const supabase = await createClient()
++
++  if (tipo === "pagina") {
++    if (!isEtichettaValida(label)) {
++      return NextResponse.json({ error: "Etichetta non valida" }, { status: 400 })
++    }
++    const pageKey = chiaveDaEtichetta(label)
++    if (!isChiaveValida(pageKey)) {
++      return NextResponse.json({ error: "Etichetta senza caratteri utilizzabili" }, { status: 400 })
++    }
++
++    // In coda alle esistenti: una pagina nuova non deve scavalcare quelle
++    // gia' sistemate dall'admin.
++    const { data: ultima } = await supabase
++      .from("crm_layout_pagine")
++      .select("ordinamento")
++      .eq("modulo", modulo)
++      .order("ordinamento", { ascending: false })
++      .limit(1)
++      .maybeSingle()
++
++    const { data, error } = await supabase
++      .from("crm_layout_pagine")
++      .insert({
++        modulo,
++        page_key: pageKey,
++        label: (label as string).trim(),
++        icona: typeof body.icona === "string" ? body.icona.slice(0, 60) : null,
++        componente: typeof body.componente === "string" ? body.componente.slice(0, 60) : null,
++        ordinamento: ((ultima as { ordinamento: number } | null)?.ordinamento ?? -1) + 1,
++      })
++      .select("id")
++      .single()
++
++    if (error) {
++      // Chiave gia' presente: l'admin ha creato due pagine con lo stesso nome.
++      if (error.code === "23505") {
++        return NextResponse.json({ error: "Esiste gia' una pagina con questo nome" }, { status: 409 })
++      }
++      return NextResponse.json({ error: erroreSchema(error) }, { status: 500 })
++    }
++    return NextResponse.json({ id: (data as { id: string }).id, pageKey })
++  }
++
++  if (tipo === "blocco") {
++    if (typeof body.paginaId !== "string" || !body.paginaId) {
++      return NextResponse.json({ error: "Pagina non indicata" }, { status: 400 })
++    }
++    if (!isEtichettaValida(label)) {
++      return NextResponse.json({ error: "Etichetta non valida" }, { status: 400 })
++    }
++    const blockKey = chiaveDaEtichetta(label)
++    if (!isChiaveValida(blockKey)) {
++      return NextResponse.json({ error: "Etichetta senza caratteri utilizzabili" }, { status: 400 })
++    }
++
++    // La pagina deve appartenere al modulo dichiarato: senza questo controllo
++    // si potrebbe agganciare un blocco alla pagina di un altro modulo
++    // passandone l'id.
++    const { data: pagina } = await supabase
++      .from("crm_layout_pagine")
++      .select("id")
++      .eq("id", body.paginaId)
++      .eq("modulo", modulo)
++      .maybeSingle()
++
++    if (!pagina) {
++      return NextResponse.json({ error: "Pagina inesistente" }, { status: 404 })
++    }
++
++    const { data: ultimo } = await supabase
++      .from("crm_layout_blocchi")
++      .select("ordinamento")
++      .eq("pagina_id", body.paginaId)
++      .order("ordinamento", { ascending: false })
++      .limit(1)
++      .maybeSingle()
++
++    const { data, error } = await supabase
++      .from("crm_layout_blocchi")
++      .insert({
++        pagina_id: body.paginaId,
++        block_key: blockKey,
++        label: (label as string).trim(),
++        mostra_titolo: body.mostraTitolo !== false,
++        colonne: intInRange(body.colonne, 1, 4) ?? 2,
++        ordinamento: ((ultimo as { ordinamento: number } | null)?.ordinamento ?? -1) + 1,
++      })
++      .select("id")
++      .single()
++
++    if (error) {
++      if (error.code === "23505") {
++        return NextResponse.json({ error: "Esiste gia' un blocco con questo nome" }, { status: 409 })
++      }
++      return NextResponse.json({ error: erroreSchema(error) }, { status: 500 })
++    }
++    return NextResponse.json({ id: (data as { id: string }).id, blockKey })
++  }
++
++  if (tipo === "campo") {
++    if (typeof body.bloccoId !== "string" || !body.bloccoId) {
++      return NextResponse.json({ error: "Blocco non indicato" }, { status: 400 })
++    }
++    const origine = body.origine === "custom" ? "custom" : "system"
++    if (typeof body.fieldKey !== "string" || !body.fieldKey.trim()) {
++      return NextResponse.json({ error: "Campo non indicato" }, { status: 400 })
++    }
++    const fieldKey = body.fieldKey.trim()
++
++    // Il blocco deve stare in una pagina di questo modulo, come sopra.
++    const { data: blocco } = await supabase
++      .from("crm_layout_blocchi")
++      .select("id, crm_layout_pagine!inner(modulo)")
++      .eq("id", body.bloccoId)
++      .eq("crm_layout_pagine.modulo", modulo)
++      .maybeSingle()
++
++    if (!blocco) {
++      return NextResponse.json({ error: "Blocco inesistente" }, { status: 404 })
++    }
++
++    let formula = null
++    let avviso: string | null = null
++    if (body.formula !== undefined && body.formula !== null) {
++      const esito = validaFormula(body.formula)
++      if (!esito.ok) {
++        return NextResponse.json({ error: esito.errore }, { status: 400 })
++      }
++      formula = esito.formula
++      // Una formula che dipende da se stessa non sara' calcolabile, ma il
++      // salvataggio non viene bloccato: se e' cosi' che arriva da Zoho, va
++      // importata comunque e sistemata dopo con il dato sotto gli occhi.
++      if (formulaAutoReferenziale(fieldKey, esito.riferimenti)) {
++        avviso = "La formula si riferisce al campo stesso: non sara' calcolabile."
++      }
++    }
++
++    // Lo stesso campo in due blocchi mostrerebbe il dato due volte: il
++    // vincolo attraversa blocco -> pagina, quindi non e' un unique di
++    // tabella e va verificato qui.
++    const esistente = await loadLayout(supabase, modulo)
++    const gia = esistente.some((pagina) =>
++      pagina.blocchi.some((b) =>
++        b.campi.some((c) => c.origine === origine && c.fieldKey === fieldKey),
++      ),
++    )
++    if (gia) {
++      return NextResponse.json(
++        { error: "Questo campo e' gia' presente in un altro blocco" },
++        { status: 409 },
++      )
++    }
++
++    const { data: ultimo } = await supabase
++      .from("crm_layout_campi")
++      .select("ordinamento")
++      .eq("blocco_id", body.bloccoId)
++      .order("ordinamento", { ascending: false })
++      .limit(1)
++      .maybeSingle()
++
++    const { data, error } = await supabase
++      .from("crm_layout_campi")
++      .insert({
++        blocco_id: body.bloccoId,
++        origine,
++        field_key: fieldKey,
++        label_override: isEtichettaValida(label) ? (label as string).trim() : null,
++        span: intInRange(body.span, 1, 4) ?? 1,
++        formato: normalizzaFormato(body.formato),
++        formula,
++        ordinamento: ((ultimo as { ordinamento: number } | null)?.ordinamento ?? -1) + 1,
++      })
++      .select("id")
++      .single()
++
++    if (error) {
++      if (error.code === "23505") {
++        return NextResponse.json({ error: "Campo gia' presente nel blocco" }, { status: 409 })
++      }
++      return NextResponse.json({ error: erroreSchema(error) }, { status: 500 })
++    }
++    return NextResponse.json({ id: (data as { id: string }).id, ...(avviso ? { avviso } : {}) })
++  }
++
++  return NextResponse.json({ error: "Tipo non riconosciuto" }, { status: 400 })
++}
++
++type CorpoPatch = {
++  modulo?: unknown
++  tipo?: unknown
++  id?: unknown
++  label?: unknown
++  visible?: unknown
++  colonne?: unknown
++  mostraTitolo?: unknown
++  span?: unknown
++  solaLettura?: unknown
++  formato?: unknown
++  formula?: unknown
++  /** Elenco ordinato di id: riordina fratelli dello stesso genitore. */
++  ordine?: unknown
++}
++
++const TABELLE = {
++  pagina: "crm_layout_pagine",
++  blocco: "crm_layout_blocchi",
++  campo: "crm_layout_campi",
++} as const
++
++export async function PATCH(request: Request) {
++  const forbidden = await guardScrittura()
++  if (forbidden) return forbidden
++
++  let body: CorpoPatch
++  try {
++    body = (await request.json()) as CorpoPatch
++  } catch {
++    return NextResponse.json({ error: "Corpo richiesta non valido" }, { status: 400 })
++  }
++
++  if (!isLayoutModulo(body.modulo)) {
++    return NextResponse.json({ error: "Modulo non valido" }, { status: 400 })
++  }
++  const tipo = body.tipo
++  if (tipo !== "pagina" && tipo !== "blocco" && tipo !== "campo") {
++    return NextResponse.json({ error: "Tipo non riconosciuto" }, { status: 400 })
++  }
++
++  const supabase = await createClient()
++  const tabella = TABELLE[tipo]
++  let avvisoFormula: string | null = null
++
++  // Riordino: un elenco di id nell'ordine voluto diventa l'ordinamento.
++  if (Array.isArray(body.ordine)) {
++    const ids = body.ordine.filter((value): value is string => typeof value === "string")
++    if (!ids.length) {
++      return NextResponse.json({ error: "Ordine vuoto" }, { status: 400 })
++    }
++    for (const [indice, id] of ids.entries()) {
++      const { error } = await supabase
++        .from(tabella)
++        .update({ ordinamento: indice, updated_at: new Date().toISOString() })
++        .eq("id", id)
++      if (error) {
++        return NextResponse.json({ error: erroreSchema(error) }, { status: 500 })
++      }
++    }
++    return NextResponse.json({ ok: true })
++  }
++
++  if (typeof body.id !== "string" || !body.id) {
++    return NextResponse.json({ error: "Elemento non indicato" }, { status: 400 })
++  }
++
++  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
++
++  if (body.label !== undefined) {
++    if (!isEtichettaValida(body.label)) {
++      return NextResponse.json({ error: "Etichetta non valida" }, { status: 400 })
++    }
++    // Sul campo si rinomina solo la visualizzazione: la chiave resta quella
++    // del dato sottostante, che non si muove.
++    if (tipo === "campo") patch.label_override = (body.label as string).trim()
++    else patch.label = (body.label as string).trim()
++  }
++
++  if (typeof body.visible === "boolean") patch.visible = body.visible
++
++  if (tipo === "blocco") {
++    const colonne = intInRange(body.colonne, 1, 4)
++    if (colonne !== null) patch.colonne = colonne
++    if (typeof body.mostraTitolo === "boolean") patch.mostra_titolo = body.mostraTitolo
++  }
++
++  if (tipo === "campo") {
++    const span = intInRange(body.span, 1, 4)
++    if (span !== null) patch.span = span
++    if (typeof body.solaLettura === "boolean") patch.sola_lettura = body.solaLettura
++    if (body.formato !== undefined) patch.formato = normalizzaFormato(body.formato)
++
++    if (body.formula !== undefined) {
++      if (body.formula === null) {
++        patch.formula = null
++      } else {
++        const esito = validaFormula(body.formula)
++        if (!esito.ok) {
++          return NextResponse.json({ error: esito.errore }, { status: 400 })
++        }
++        const { data: corrente } = await supabase
++          .from("crm_layout_campi")
++          .select("field_key")
++          .eq("id", body.id)
++          .maybeSingle()
++        const fieldKey = (corrente as { field_key: string } | null)?.field_key ?? ""
++        if (fieldKey && formulaAutoReferenziale(fieldKey, esito.riferimenti)) {
++          avvisoFormula = "La formula si riferisce al campo stesso: non sara' calcolabile."
++        }
++        patch.formula = esito.formula
++      }
++    }
++  }
++
++  const { error } = await supabase.from(tabella).update(patch).eq("id", body.id)
++  if (error) {
++    return NextResponse.json({ error: erroreSchema(error) }, { status: 500 })
++  }
++
++  // Rete di sicurezza: se una modifica avesse comunque prodotto un campo
++  // duplicato, l'admin lo sa subito invece di scoprirlo in scheda.
++  const duplicati = campiDuplicati(await loadLayout(supabase, body.modulo))
++  return NextResponse.json({
++    ok: true,
++    ...(duplicati.length ? { duplicati } : {}),
++    ...(avvisoFormula ? { avviso: avvisoFormula } : {}),
++  })
++}
++
++export async function DELETE(request: Request) {
++  const forbidden = await guardScrittura()
++  if (forbidden) return forbidden
++
++  const { searchParams } = new URL(request.url)
++  const tipo = searchParams.get("tipo")
++  const id = searchParams.get("id") ?? ""
++
++  if (tipo !== "pagina" && tipo !== "blocco" && tipo !== "campo") {
++    return NextResponse.json({ error: "Tipo non riconosciuto" }, { status: 400 })
++  }
++  if (!id) {
++    return NextResponse.json({ error: "Elemento non indicato" }, { status: 400 })
++  }
++
++  const supabase = await createClient()
++
++  // Le FK sono on delete cascade: eliminando una pagina spariscono i suoi
++  // blocchi e i loro campi. E' voluto — un blocco senza pagina non avrebbe
++  // dove comparire — ma vale la pena che l'interfaccia lo dica prima.
++  const { error } = await supabase.from(TABELLE[tipo]).delete().eq("id", id)
++  if (error) {
++    return NextResponse.json({ error: erroreSchema(error) }, { status: 500 })
++  }
++  return NextResponse.json({ ok: true })
++}
+diff --git a/app/crm-settings/system/layout/page.tsx b/app/crm-settings/system/layout/page.tsx
+new file mode 100644
+index 0000000..f77f22a
+--- /dev/null
++++ b/app/crm-settings/system/layout/page.tsx
+@@ -0,0 +1,612 @@
++"use client"
++
++import { useCallback, useEffect, useState } from "react"
++import {
++  ChevronDown,
++  ChevronRight,
++  Eye,
++  EyeOff,
++  Loader2,
++  Plus,
++  Sigma,
++  Trash2,
++} from "lucide-react"
++import { Button } from "@/components/ui/button"
++import { Input } from "@/components/ui/input"
++import { Label } from "@/components/ui/label"
++import {
++  Select,
++  SelectTrigger,
++  SelectValue,
++  SelectContent,
++  SelectItem,
++} from "@/components/ui/select"
++import {
++  Dialog,
++  DialogContent,
++  DialogHeader,
++  DialogTitle,
++  DialogDescription,
++  DialogFooter,
++} from "@/components/ui/dialog"
++import { SectionHeader } from "@/components/impostazioni/settings-ui"
++import { cn } from "@/lib/utils"
++import { usePermissions } from "@/lib/permissions/provider"
++import { CAMPO_TIPI, CAMPO_TIPO_LABEL } from "@/lib/system-settings-data"
++import type { LayoutBlocco, LayoutCampo, LayoutPagina } from "@/lib/crm-settings/layout"
++import { LAYOUT_MODULI, type LayoutModulo } from "@/lib/crm-settings/layout-validate"
++
++const MODULO_LABEL: Record<LayoutModulo, string> = {
++  clienti: "Clienti",
++  lead: "Lead",
++  installatori: "Installatori",
++}
++
++const PAGE_KEY = "crm_settings.system.layout"
++
++/**
++ * Chiave di rimontaggio del dialogo: cambia a ogni apertura diversa, cosi' il
++ * form riparte vuoto senza azzerare gli stati dentro un effect.
++ */
++function chiaveDialogo(dialogo: Dialogo): string {
++  if (!dialogo) return "chiuso"
++  if (dialogo.tipo === "pagina") return "pagina"
++  if (dialogo.tipo === "blocco") return `blocco:${dialogo.paginaId}`
++  return `campo:${dialogo.bloccoId}`
++}
++
++type Dialogo =
++  | { tipo: "pagina" }
++  | { tipo: "blocco"; paginaId: string; paginaLabel: string }
++  | { tipo: "campo"; bloccoId: string; bloccoLabel: string }
++  | null
++
++export default function LayoutSchedePage() {
++  const { pageAccess } = usePermissions()
++  const readonly = pageAccess(PAGE_KEY) !== "rw"
++
++  const [modulo, setModulo] = useState<LayoutModulo>("clienti")
++  const [pagine, setPagine] = useState<LayoutPagina[]>([])
++  const [caricamento, setCaricamento] = useState(true)
++  const [errore, setErrore] = useState<string | null>(null)
++  const [aperte, setAperte] = useState<Set<string>>(new Set())
++  const [dialogo, setDialogo] = useState<Dialogo>(null)
++
++  const carica = useCallback(async () => {
++    setCaricamento(true)
++    setErrore(null)
++    try {
++      const risposta = await fetch(`/api/crm-settings/layout?modulo=${modulo}`)
++      const dati = await risposta.json()
++      if (!risposta.ok) throw new Error(dati.error ?? "Caricamento non riuscito")
++      setPagine(dati.pagine ?? [])
++    } catch (e) {
++      setErrore(e instanceof Error ? e.message : "Caricamento non riuscito")
++      setPagine([])
++    } finally {
++      setCaricamento(false)
++    }
++  }, [modulo])
++
++  useEffect(() => {
++    // Differito come nella pagina Valori: carica() alza subito il flag di
++    // caricamento, e farlo in modo sincrono dentro l'effect innescherebbe un
++    // render a cascata.
++    queueMicrotask(() => void carica())
++  }, [carica])
++
++  /** Ogni scrittura ricarica: il server e' la fonte di verita' dell'ordine. */
++  const scrivi = useCallback(
++    async (init: RequestInit & { url?: string }) => {
++      setErrore(null)
++      try {
++        const risposta = await fetch(init.url ?? "/api/crm-settings/layout", init)
++        const dati = await risposta.json().catch(() => ({}))
++        if (!risposta.ok) throw new Error(dati.error ?? "Operazione non riuscita")
++        await carica()
++        return true
++      } catch (e) {
++        setErrore(e instanceof Error ? e.message : "Operazione non riuscita")
++        return false
++      }
++    },
++    [carica],
++  )
++
++  function alterna(id: string) {
++    setAperte((precedenti) => {
++      const nuove = new Set(precedenti)
++      if (nuove.has(id)) nuove.delete(id)
++      else nuove.add(id)
++      return nuove
++    })
++  }
++
++  async function cambiaVisibilita(tipo: string, id: string, visible: boolean) {
++    await scrivi({
++      method: "PATCH",
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify({ modulo, tipo, id, visible }),
++    })
++  }
++
++  async function elimina(tipo: string, id: string, avviso: string) {
++    if (!window.confirm(avviso)) return
++    await scrivi({
++      method: "DELETE",
++      url: `/api/crm-settings/layout?tipo=${tipo}&id=${id}`,
++    })
++  }
++
++  return (
++    <div className="flex flex-col gap-6">
++      <SectionHeader
++        title="Layout schede"
++        description="Pagine, blocchi e disposizione dei campi nelle schede record. La struttura definita qui vale per tutti; ogni utente puo' poi riordinare le pagine per se'."
++        action={
++          <div className="flex items-center gap-2">
++            <Select value={modulo} onValueChange={(v) => setModulo(v as LayoutModulo)}>
++              <SelectTrigger className="w-40">
++                <SelectValue />
++              </SelectTrigger>
++              <SelectContent>
++                {LAYOUT_MODULI.map((m) => (
++                  <SelectItem key={m} value={m}>
++                    {MODULO_LABEL[m]}
++                  </SelectItem>
++                ))}
++              </SelectContent>
++            </Select>
++            {!readonly ? (
++              <Button size="sm" onClick={() => setDialogo({ tipo: "pagina" })}>
++                <Plus data-icon="inline-start" />
++                Pagina
++              </Button>
++            ) : null}
++          </div>
++        }
++      />
++
++      {errore ? (
++        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
++          {errore}
++        </div>
++      ) : null}
++
++      {caricamento ? (
++        <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
++          <Loader2 className="size-4 animate-spin" />
++          Caricamento del layout…
++        </div>
++      ) : pagine.length === 0 ? (
++        <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
++          Nessuna pagina configurata per {MODULO_LABEL[modulo]}.
++          {!readonly ? " Aggiungine una per iniziare." : null}
++        </div>
++      ) : (
++        <div className="flex flex-col gap-3">
++          {pagine.map((pagina) => (
++            <RigaPagina
++              key={pagina.id}
++              pagina={pagina}
++              aperta={aperte.has(pagina.id)}
++              readonly={readonly}
++              onAlterna={() => alterna(pagina.id)}
++              onVisibilita={(v) => cambiaVisibilita("pagina", pagina.id, v)}
++              onElimina={() =>
++                elimina(
++                  "pagina",
++                  pagina.id,
++                  `Eliminare la pagina "${pagina.label}"? Spariranno anche i suoi blocchi e la disposizione dei campi al loro interno. I dati dei campi non vengono toccati.`,
++                )
++              }
++              onNuovoBlocco={() =>
++                setDialogo({ tipo: "blocco", paginaId: pagina.id, paginaLabel: pagina.label })
++              }
++              onBloccoVisibilita={(id, v) => cambiaVisibilita("blocco", id, v)}
++              onBloccoElimina={(id, label) =>
++                elimina(
++                  "blocco",
++                  id,
++                  `Eliminare il blocco "${label}"? I campi al suo interno tornano disponibili da riposizionare. I dati non vengono toccati.`,
++                )
++              }
++              onNuovoCampo={(bloccoId, bloccoLabel) =>
++                setDialogo({ tipo: "campo", bloccoId, bloccoLabel })
++              }
++              onCampoVisibilita={(id, v) => cambiaVisibilita("campo", id, v)}
++              onCampoElimina={(id, label) =>
++                elimina(
++                  "campo",
++                  id,
++                  `Togliere "${label}" dal layout? Il campo e il suo contenuto restano nel database, sparisce solo dalla scheda.`,
++                )
++              }
++            />
++          ))}
++        </div>
++      )}
++
++      <DialogoCreazione
++        key={chiaveDialogo(dialogo)}
++        dialogo={dialogo}
++        modulo={modulo}
++        onChiudi={() => setDialogo(null)}
++        onCrea={async (corpo) => {
++          const ok = await scrivi({
++            method: "POST",
++            headers: { "Content-Type": "application/json" },
++            body: JSON.stringify({ modulo, ...corpo }),
++          })
++          if (ok) setDialogo(null)
++        }}
++      />
++    </div>
++  )
++}
++
++function RigaPagina({
++  pagina,
++  aperta,
++  readonly,
++  onAlterna,
++  onVisibilita,
++  onElimina,
++  onNuovoBlocco,
++  onBloccoVisibilita,
++  onBloccoElimina,
++  onNuovoCampo,
++  onCampoVisibilita,
++  onCampoElimina,
++}: {
++  pagina: LayoutPagina
++  aperta: boolean
++  readonly: boolean
++  onAlterna: () => void
++  onVisibilita: (visible: boolean) => void
++  onElimina: () => void
++  onNuovoBlocco: () => void
++  onBloccoVisibilita: (id: string, visible: boolean) => void
++  onBloccoElimina: (id: string, label: string) => void
++  onNuovoCampo: (bloccoId: string, bloccoLabel: string) => void
++  onCampoVisibilita: (id: string, visible: boolean) => void
++  onCampoElimina: (id: string, label: string) => void
++}) {
++  const conteggio = pagina.blocchi.reduce((somma, b) => somma + b.campi.length, 0)
++
++  return (
++    <div
++      className={cn(
++        "rounded-xl border border-border bg-card",
++        !pagina.visible && "opacity-60",
++      )}
++    >
++      <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
++        <button
++          type="button"
++          onClick={onAlterna}
++          className="flex min-w-0 flex-1 items-center gap-2 text-left"
++        >
++          {aperta ? (
++            <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
++          ) : (
++            <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
++          )}
++          <span className="truncate text-sm font-semibold text-foreground">{pagina.label}</span>
++          <span className="shrink-0 text-xs text-muted-foreground">
++            {pagina.componente
++              ? "componente dedicato"
++              : `${pagina.blocchi.length} blocchi · ${conteggio} campi`}
++          </span>
++        </button>
++
++        {!readonly ? (
++          <div className="flex items-center gap-1">
++            {!pagina.componente ? (
++              <Button size="sm" variant="ghost" onClick={onNuovoBlocco}>
++                <Plus data-icon="inline-start" />
++                Blocco
++              </Button>
++            ) : null}
++            <BottoneVisibilita visible={pagina.visible} onCambia={onVisibilita} />
++            <Button size="icon" variant="ghost" aria-label="Elimina pagina" onClick={onElimina}>
++              <Trash2 className="size-4" />
++            </Button>
++          </div>
++        ) : null}
++      </div>
++
++      {aperta ? (
++        <div className="flex flex-col gap-2 border-t border-border px-3 py-3">
++          {pagina.componente ? (
++            <p className="text-xs text-muted-foreground">
++              Questa pagina mostra un componente dedicato ({pagina.componente}) e non contiene
++              campi configurabili.
++            </p>
++          ) : pagina.blocchi.length === 0 ? (
++            <p className="text-xs text-muted-foreground">Nessun blocco in questa pagina.</p>
++          ) : (
++            pagina.blocchi.map((blocco) => (
++              <RigaBlocco
++                key={blocco.id}
++                blocco={blocco}
++                readonly={readonly}
++                onVisibilita={(v) => onBloccoVisibilita(blocco.id, v)}
++                onElimina={() => onBloccoElimina(blocco.id, blocco.label)}
++                onNuovoCampo={() => onNuovoCampo(blocco.id, blocco.label)}
++                onCampoVisibilita={onCampoVisibilita}
++                onCampoElimina={onCampoElimina}
++              />
++            ))
++          )}
++        </div>
++      ) : null}
++    </div>
++  )
++}
++
++function RigaBlocco({
++  blocco,
++  readonly,
++  onVisibilita,
++  onElimina,
++  onNuovoCampo,
++  onCampoVisibilita,
++  onCampoElimina,
++}: {
++  blocco: LayoutBlocco
++  readonly: boolean
++  onVisibilita: (visible: boolean) => void
++  onElimina: () => void
++  onNuovoCampo: () => void
++  onCampoVisibilita: (id: string, visible: boolean) => void
++  onCampoElimina: (id: string, label: string) => void
++}) {
++  return (
++    <div
++      className={cn(
++        "rounded-lg border border-border/70 bg-secondary/30 p-2.5",
++        !blocco.visible && "opacity-60",
++      )}
++    >
++      <div className="flex flex-wrap items-center gap-2">
++        <span className="min-w-0 flex-1 truncate text-xs font-bold uppercase tracking-wide text-muted-foreground">
++          {blocco.label}
++        </span>
++        {!readonly ? (
++          <div className="flex items-center gap-1">
++            <Button size="sm" variant="ghost" onClick={onNuovoCampo}>
++              <Plus data-icon="inline-start" />
++              Campo
++            </Button>
++            <BottoneVisibilita visible={blocco.visible} onCambia={onVisibilita} />
++            <Button size="icon" variant="ghost" aria-label="Elimina blocco" onClick={onElimina}>
++              <Trash2 className="size-4" />
++            </Button>
++          </div>
++        ) : null}
++      </div>
++
++      {blocco.campi.length === 0 ? (
++        <p className="px-1 py-2 text-xs text-muted-foreground">Nessun campo in questo blocco.</p>
++      ) : (
++        <div
++          className={cn(
++            "mt-2 grid gap-1.5",
++            blocco.colonne === 1 && "grid-cols-1",
++            blocco.colonne === 2 && "grid-cols-1 sm:grid-cols-2",
++            blocco.colonne >= 3 && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
++          )}
++        >
++          {blocco.campi.map((campo) => (
++            <RigaCampo
++              key={campo.id}
++              campo={campo}
++              readonly={readonly}
++              onVisibilita={(v) => onCampoVisibilita(campo.id, v)}
++              onElimina={() =>
++                onCampoElimina(campo.id, campo.labelOverride ?? campo.fieldKey)
++              }
++            />
++          ))}
++        </div>
++      )}
++    </div>
++  )
++}
++
++function RigaCampo({
++  campo,
++  readonly,
++  onVisibilita,
++  onElimina,
++}: {
++  campo: LayoutCampo
++  readonly: boolean
++  onVisibilita: (visible: boolean) => void
++  onElimina: () => void
++}) {
++  const calcolato = campo.formula !== null
++
++  return (
++    <div
++      className={cn(
++        "flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1.5",
++        !campo.visible && "opacity-50",
++      )}
++    >
++      {calcolato ? (
++        <Sigma
++          className="size-3.5 shrink-0 text-info"
++          aria-label="Campo calcolato"
++        />
++      ) : null}
++      <span className="min-w-0 flex-1 truncate text-sm text-foreground">
++        {campo.labelOverride ?? campo.fieldKey}
++      </span>
++      {campo.origine === "custom" ? (
++        <span className="shrink-0 rounded bg-muted px-1 text-[10px] font-semibold uppercase text-muted-foreground">
++          custom
++        </span>
++      ) : null}
++      {!readonly ? (
++        <div className="flex shrink-0 items-center">
++          <BottoneVisibilita visible={campo.visible} onCambia={onVisibilita} />
++          <Button size="icon" variant="ghost" aria-label="Togli campo" onClick={onElimina}>
++            <Trash2 className="size-3.5" />
++          </Button>
++        </div>
++      ) : null}
++    </div>
++  )
++}
++
++function BottoneVisibilita({
++  visible,
++  onCambia,
++}: {
++  visible: boolean
++  onCambia: (visible: boolean) => void
++}) {
++  return (
++    <Button
++      size="icon"
++      variant="ghost"
++      aria-label={visible ? "Nascondi" : "Mostra"}
++      title={visible ? "Nascondi" : "Mostra"}
++      onClick={() => onCambia(!visible)}
++    >
++      {visible ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
++    </Button>
++  )
++}
++
++function DialogoCreazione({
++  dialogo,
++  modulo,
++  onChiudi,
++  onCrea,
++}: {
++  dialogo: Dialogo
++  modulo: LayoutModulo
++  onChiudi: () => void
++  onCrea: (corpo: Record<string, unknown>) => Promise<void>
++}) {
++  const [label, setLabel] = useState("")
++  const [fieldKey, setFieldKey] = useState("")
++  const [tipo, setTipo] = useState<string>("text")
++  const [inCorso, setInCorso] = useState(false)
++
++  if (!dialogo) return null
++
++  const titolo =
++    dialogo.tipo === "pagina"
++      ? `Nuova pagina in ${modulo}`
++      : dialogo.tipo === "blocco"
++        ? `Nuovo blocco in "${dialogo.paginaLabel}"`
++        : `Nuovo campo in "${dialogo.bloccoLabel}"`
++
++  async function conferma() {
++    if (!dialogo) return
++    setInCorso(true)
++    try {
++      if (dialogo.tipo === "pagina") {
++        await onCrea({ tipo: "pagina", label })
++      } else if (dialogo.tipo === "blocco") {
++        await onCrea({ tipo: "blocco", paginaId: dialogo.paginaId, label })
++      } else {
++        await onCrea({
++          tipo: "campo",
++          bloccoId: dialogo.bloccoId,
++          fieldKey: fieldKey.trim(),
++          label: label.trim() || undefined,
++        })
++      }
++    } finally {
++      setInCorso(false)
++    }
++  }
++
++  const puoConfermare =
++    dialogo.tipo === "campo" ? fieldKey.trim().length > 0 : label.trim().length > 0
++
++  return (
++    <Dialog open onOpenChange={(aperto) => (!aperto ? onChiudi() : undefined)}>
++      <DialogContent>
++        <DialogHeader>
++          <DialogTitle>{titolo}</DialogTitle>
++          <DialogDescription>
++            {dialogo.tipo === "campo"
++              ? "Indica la chiave del campo cosi&apos; come e&apos; definita nel modulo. L&apos;etichetta e&apos; facoltativa: senza, si usa quella nativa del campo."
++              : "Il nome e' modificabile in seguito; la chiave interna viene derivata ora e resta stabile."}
++          </DialogDescription>
++        </DialogHeader>
++
++        <div className="flex flex-col gap-3">
++          {dialogo.tipo === "campo" ? (
++            <>
++              <div className="flex flex-col gap-1.5">
++                <Label htmlFor="layout-field-key">Chiave del campo</Label>
++                <Input
++                  id="layout-field-key"
++                  value={fieldKey}
++                  onChange={(e) => setFieldKey(e.target.value)}
++                  placeholder="es. Importo Contrattuale"
++                />
++              </div>
++              <div className="flex flex-col gap-1.5">
++                <Label htmlFor="layout-field-label">Etichetta (facoltativa)</Label>
++                <Input
++                  id="layout-field-label"
++                  value={label}
++                  onChange={(e) => setLabel(e.target.value)}
++                  placeholder="Lascia vuoto per usare quella nativa"
++                />
++              </div>
++              <div className="flex flex-col gap-1.5">
++                <Label htmlFor="layout-field-tipo">Tipo</Label>
++                <Select value={tipo} onValueChange={(v) => setTipo(v ?? "text")}>
++                  <SelectTrigger id="layout-field-tipo">
++                    <SelectValue />
++                  </SelectTrigger>
++                  <SelectContent>
++                    {CAMPO_TIPI.map((t) => (
++                      <SelectItem key={t} value={t}>
++                        {CAMPO_TIPO_LABEL[t]}
++                      </SelectItem>
++                    ))}
++                  </SelectContent>
++                </Select>
++                <p className="text-xs text-muted-foreground">
++                  Per un campo gia&apos; esistente il tipo resta quello che ha nel modulo: questa scelta
++                  vale alla creazione di un campo nuovo.
++                </p>
++              </div>
++            </>
++          ) : (
++            <div className="flex flex-col gap-1.5">
++              <Label htmlFor="layout-label">Nome</Label>
++              <Input
++                id="layout-label"
++                value={label}
++                onChange={(e) => setLabel(e.target.value)}
++                placeholder={dialogo.tipo === "pagina" ? "es. Impianto" : "es. Informazioni Tecniche FTV"}
++                autoFocus
++              />
++            </div>
++          )}
++        </div>
++
++        <DialogFooter>
++          <Button variant="outline" onClick={onChiudi} disabled={inCorso}>
++            Annulla
++          </Button>
++          <Button onClick={() => void conferma()} disabled={!puoConfermare || inCorso}>
++            {inCorso ? <Loader2 className="size-4 animate-spin" /> : null}
++            Crea
++          </Button>
++        </DialogFooter>
++      </DialogContent>
++    </Dialog>
++  )
++}
+diff --git a/lib/crm-settings/__tests__/layout-validate.test.ts b/lib/crm-settings/__tests__/layout-validate.test.ts
+new file mode 100644
+index 0000000..dc10923
+--- /dev/null
++++ b/lib/crm-settings/__tests__/layout-validate.test.ts
+@@ -0,0 +1,150 @@
++import { describe, expect, it } from "vitest"
++import {
++  chiaveDaEtichetta,
++  formulaAutoReferenziale,
++  intInRange,
++  isChiaveValida,
++  isEtichettaValida,
++  isLayoutModulo,
++  isTipoValido,
++  normalizzaFormato,
++  validaFormula,
++} from "../layout-validate"
++
++describe("moduli e chiavi", () => {
++  it("accetta solo i moduli previsti", () => {
++    expect(isLayoutModulo("clienti")).toBe(true)
++    expect(isLayoutModulo("lead")).toBe(true)
++    expect(isLayoutModulo("Clienti")).toBe(false)
++    expect(isLayoutModulo("utenti")).toBe(false)
++    expect(isLayoutModulo(null)).toBe(false)
++  })
++
++  it("accetta chiavi minuscole con trattini", () => {
++    expect(isChiaveValida("anagrafica")).toBe(true)
++    expect(isChiaveValida("iter-burocratico")).toBe(true)
++  })
++
++  it("rifiuta chiavi che romperebbero un ancoraggio", () => {
++    expect(isChiaveValida("Anagrafica")).toBe(false)
++    expect(isChiaveValida("iter burocratico")).toBe(false)
++    expect(isChiaveValida("1-anagrafica")).toBe(false)
++    expect(isChiaveValida("")).toBe(false)
++    expect(isChiaveValida("a".repeat(64))).toBe(false)
++  })
++
++  it("deriva la chiave da un'etichetta con accenti e spazi", () => {
++    expect(chiaveDaEtichetta("Iter burocratico")).toBe("iter-burocratico")
++    expect(chiaveDaEtichetta("  Attività  ")).toBe("attivita")
++    expect(chiaveDaEtichetta("Pagamenti & Note Commerciali")).toBe("pagamenti-note-commerciali")
++  })
++
++  it("la chiave derivata e' sempre valida", () => {
++    for (const label of ["Anagrafica", "Info Tecniche Termico", "Dati Amministrativi CT3.0"]) {
++      expect(isChiaveValida(chiaveDaEtichetta(label))).toBe(true)
++    }
++  })
++})
++
++describe("etichette e tipi", () => {
++  it("rifiuta etichette vuote o troppo lunghe", () => {
++    expect(isEtichettaValida("Anagrafica")).toBe(true)
++    expect(isEtichettaValida("   ")).toBe(false)
++    expect(isEtichettaValida("x".repeat(121))).toBe(false)
++    expect(isEtichettaValida(42)).toBe(false)
++  })
++
++  it("accetta solo tipi in catalogo, inclusi i nuovi", () => {
++    expect(isTipoValido("decimal")).toBe(true)
++    expect(isTipoValido("percent")).toBe(true)
++    expect(isTipoValido("url")).toBe(true)
++    // "formula" e' una proprieta' del campo, non un tipo.
++    expect(isTipoValido("formula")).toBe(false)
++    expect(isTipoValido("inventato")).toBe(false)
++  })
++})
++
++describe("intInRange", () => {
++  it("accetta interi nell'intervallo e rifiuta il resto", () => {
++    expect(intInRange(2, 1, 4)).toBe(2)
++    expect(intInRange(0, 1, 4)).toBeNull()
++    expect(intInRange(2.5, 1, 4)).toBeNull()
++    expect(intInRange(NaN, 1, 4)).toBeNull()
++    expect(intInRange("2", 1, 4)).toBeNull()
++  })
++})
++
++describe("normalizzaFormato", () => {
++  it("tiene solo le chiavi previste", () => {
++    const formato = normalizzaFormato({
++      decimali: 2,
++      valuta: "EUR",
++      placeholder: "—",
++      iniettata: "<script>",
++    })
++    expect(formato).toEqual({ decimali: 2, valuta: "EUR", placeholder: "—" })
++  })
++
++  it("scarta valori fuori formato senza fallire", () => {
++    expect(normalizzaFormato({ decimali: 99, valuta: "euro" })).toEqual({})
++    expect(normalizzaFormato(null)).toEqual({})
++    expect(normalizzaFormato("stringa")).toEqual({})
++    expect(normalizzaFormato([1, 2])).toEqual({})
++  })
++})
++
++describe("validaFormula", () => {
++  it("accetta un'espressione aritmetica fra campi", () => {
++    const esito = validaFormula({
++      expr: "{Importo Contrattuale} - {1° Tranche} - {2°Tranche}",
++    })
++    expect(esito.ok).toBe(true)
++    if (esito.ok) {
++      expect(esito.riferimenti).toEqual(["Importo Contrattuale", "1° Tranche", "2°Tranche"])
++    }
++  })
++
++  it("accetta parentesi e moltiplicazioni", () => {
++    const esito = validaFormula({ expr: "({Nr. Moduli} * {Potenza Moduli (Wp)}) / 1000" })
++    expect(esito.ok).toBe(true)
++  })
++
++  it("conserva l'espressione Zoho originale come documentazione", () => {
++    const esito = validaFormula({ expr: "{a} + {b}", origine_zoho: "${Contacts.a} + ${Contacts.b}" })
++    expect(esito.ok).toBe(true)
++    if (esito.ok) expect(esito.formula.origine_zoho).toBe("${Contacts.a} + ${Contacts.b}")
++  })
++
++  it("accetta funzioni: non si sa ancora cosa arrivera' da Zoho", () => {
++    // La forma delle formule Zoho non e' stata ancora esportata: decidere
++    // ora quali operazioni siano lecite significherebbe rifiutare al
++    // salvataggio formule legittime. Le restrizioni valgono alla
++    // valutazione, non all'import.
++    expect(validaFormula({ expr: "SUM({a}, {b})" }).ok).toBe(true)
++    expect(validaFormula({ expr: "IF({Stato} = 'Installato', {a}, 0)" }).ok).toBe(true)
++    expect(validaFormula({ expr: "1 + 1" }).ok).toBe(true)
++  })
++
++  it("rifiuta delimitatori non bilanciati", () => {
++    expect(validaFormula({ expr: "({a} + {b}" }).ok).toBe(false)
++    expect(validaFormula({ expr: "{a}) + {b}" }).ok).toBe(false)
++    expect(validaFormula({ expr: "{a + {b}" }).ok).toBe(false)
++  })
++
++  it("rifiuta riferimenti vuoti ed espressioni assenti", () => {
++    expect(validaFormula({ expr: "{a} + {}" }).ok).toBe(false)
++    expect(validaFormula({ expr: "   " }).ok).toBe(false)
++    expect(validaFormula(null).ok).toBe(false)
++  })
++
++  it("segnala una formula che dipende da se stessa senza rifiutarla", () => {
++    const esito = validaFormula({ expr: "{Saldo} + {Importi extra}" })
++    // Salvabile comunque: se e' cosi' che arriva da Zoho va importata, e
++    // sistemata dopo con il dato sotto gli occhi.
++    expect(esito.ok).toBe(true)
++    if (esito.ok) {
++      expect(formulaAutoReferenziale("Saldo", esito.riferimenti)).toBe(true)
++      expect(formulaAutoReferenziale("Totale", esito.riferimenti)).toBe(false)
++    }
++  })
++})
+diff --git a/lib/crm-settings/catalog.ts b/lib/crm-settings/catalog.ts
+index 2adb996..973f21a 100644
+--- a/lib/crm-settings/catalog.ts
++++ b/lib/crm-settings/catalog.ts
+@@ -16,6 +16,7 @@ import {
+   PlugZap,
+   Shield,
+   SlidersHorizontal,
++  LayoutGrid,
+   Sparkles,
+   ScrollText,
+   ShieldCheck,
+@@ -285,6 +286,16 @@ export const CRM_SETTINGS_CATALOG: CrmSettingsCatalogItem[] = [
+     icon: SlidersHorizontal,
+     status: "active",
+   },
++  {
++    id: "layout",
++    group: "crm-config",
++    title: "Layout schede",
++    description: "Pagine, blocchi e disposizione dei campi nelle schede record",
++    href: "/crm-settings/system/layout",
++    pageKey: "crm_settings.system.layout",
++    icon: LayoutGrid,
++    status: "active",
++  },
+   {
+     id: "default-values",
+     group: "crm-config",
+diff --git a/lib/crm-settings/layout-validate.ts b/lib/crm-settings/layout-validate.ts
+new file mode 100644
+index 0000000..d440b21
+--- /dev/null
++++ b/lib/crm-settings/layout-validate.ts
+@@ -0,0 +1,173 @@
++import { CAMPO_TIPI } from "@/lib/system-settings-data"
++import type { LayoutFormato, LayoutFormula } from "./layout"
++
++/**
++ * Validazione delle scritture sul layout.
++ *
++ * Pure di proposito: la parte che decide cosa e' accettabile non deve avere
++ * bisogno di un database per essere verificata. La route si limita a chiamare
++ * queste funzioni e a scrivere il risultato.
++ *
++ * Regola generale: quello che arriva dal client e' un suggerimento, mai un
++ * fatto. Chiavi, tipi e riferimenti vengono sempre ricontrollati qui.
++ */
++
++/** Moduli che possono avere un layout configurabile. */
++export const LAYOUT_MODULI = ["clienti", "lead", "installatori"] as const
++export type LayoutModulo = (typeof LAYOUT_MODULI)[number]
++
++export function isLayoutModulo(value: unknown): value is LayoutModulo {
++  return typeof value === "string" && (LAYOUT_MODULI as readonly string[]).includes(value)
++}
++
++/**
++ * Le chiavi (page_key, block_key) finiscono negli ancoraggi della navbar
++ * (#section-...) e nei riferimenti del codice: restano minuscole, senza
++ * spazi, stabili anche quando l'etichetta viene rinominata.
++ */
++export function isChiaveValida(value: unknown): value is string {
++  return typeof value === "string" && /^[a-z][a-z0-9-]{0,62}$/.test(value)
++}
++
++/** Deriva una chiave da un'etichetta scritta a mano dall'admin. */
++export function chiaveDaEtichetta(label: string): string {
++  return label
++    .trim()
++    .toLowerCase()
++    .normalize("NFD")
++    .replace(/[\u0300-\u036f]/g, "")
++    .replace(/[^a-z0-9]+/g, "-")
++    .replace(/^-+|-+$/g, "")
++    .slice(0, 63)
++}
++
++export function isEtichettaValida(value: unknown): value is string {
++  return typeof value === "string" && value.trim().length > 0 && value.trim().length <= 120
++}
++
++export function isTipoValido(value: unknown): boolean {
++  return typeof value === "string" && (CAMPO_TIPI as readonly string[]).includes(value)
++}
++
++/** Intero dentro un intervallo, rifiutando NaN e decimali. */
++export function intInRange(value: unknown, min: number, max: number): number | null {
++  if (typeof value !== "number" || !Number.isInteger(value)) return null
++  if (value < min || value > max) return null
++  return value
++}
++
++/**
++ * Normalizza il blocco `formato`.
++ *
++ * Whitelist stretta: il jsonb finisce in una colonna che poi guida la resa in
++ * scheda, e non deve poter accogliere chiavi arbitrarie inviate dal client.
++ */
++export function normalizzaFormato(value: unknown): LayoutFormato {
++  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
++  const raw = value as Record<string, unknown>
++  const formato: LayoutFormato = {}
++
++  const decimali = intInRange(raw.decimali, 0, 6)
++  if (decimali !== null) formato.decimali = decimali
++
++  // Codice valuta ISO: tre lettere, niente testo libero.
++  if (typeof raw.valuta === "string" && /^[A-Z]{3}$/.test(raw.valuta)) {
++    formato.valuta = raw.valuta
++  }
++
++  if (typeof raw.placeholder === "string" && raw.placeholder.length <= 40) {
++    formato.placeholder = raw.placeholder
++  }
++
++  return formato
++}
++
++/**
++ * I riferimenti ai campi dentro un'espressione: {Nome Campo}.
++ *
++ * L'espressione NON viene eseguita qui e non viene ristretta nel contenuto:
++ * le formule Zoho da tradurre non sono ancora state esportate
++ * (GET settings/fields), quindi non si sa se usino solo aritmetica o anche
++ * funzioni. Decidere ora cosa e' ammesso vorrebbe dire vincolare la
++ * traduzione prima di sapere cosa deve esprimere, e rifiutare al
++ * salvataggio formule perfettamente legittime.
++ *
++ * Qui si controlla solo che l'espressione sia strutturalmente sana. Le
++ * restrizioni di contenuto hanno senso al momento della valutazione — dove
++ * contano davvero per la sicurezza — e verranno definite quando sapremo cosa
++ * arriva da Zoho.
++ */
++const RIFERIMENTO = /\{([^{}]+)\}/g
++
++export type EsitoFormula =
++  | { ok: true; formula: LayoutFormula; riferimenti: string[] }
++  | { ok: false; errore: string }
++
++/** Delimitatori bilanciati: un'espressione sbilanciata e' un refuso, non una scelta. */
++function bilanciati(expr: string, apre: string, chiude: string): boolean {
++  let aperti = 0
++  for (const carattere of expr) {
++    if (carattere === apre) aperti += 1
++    if (carattere === chiude) aperti -= 1
++    if (aperti < 0) return false
++  }
++  return aperti === 0
++}
++
++/**
++ * Controlla la forma di un'espressione ed estrae i campi referenziati.
++ *
++ * Volutamente permissiva sul contenuto: intercetta i refusi (parentesi o
++ * graffe non chiuse, riferimenti vuoti) senza pronunciarsi su quali
++ * operazioni siano lecite.
++ */
++export function validaFormula(value: unknown): EsitoFormula {
++  if (!value || typeof value !== "object" || Array.isArray(value)) {
++    return { ok: false, errore: "Formula assente o malformata" }
++  }
++  const raw = value as Record<string, unknown>
++  const expr = typeof raw.expr === "string" ? raw.expr.trim() : ""
++  if (!expr) return { ok: false, errore: "Espressione vuota" }
++  if (expr.length > 2000) return { ok: false, errore: "Espressione troppo lunga" }
++
++  if (!bilanciati(expr, "{", "}")) {
++    return { ok: false, errore: "Graffe non bilanciate: un riferimento {Campo} non e' chiuso" }
++  }
++  if (!bilanciati(expr, "(", ")")) {
++    return { ok: false, errore: "Parentesi non bilanciate" }
++  }
++
++  // Graffe vuote: il regex dei riferimenti richiede almeno un carattere e le
++  // salterebbe in silenzio, lasciando passare un refuso.
++  if (/\{\s*\}/.test(expr)) {
++    return { ok: false, errore: "Riferimento a campo vuoto: {}" }
++  }
++
++  const riferimenti: string[] = []
++  let match: RegExpExecArray | null
++  RIFERIMENTO.lastIndex = 0
++  while ((match = RIFERIMENTO.exec(expr)) !== null) {
++    const nome = match[1].trim()
++    if (!nome) return { ok: false, errore: "Riferimento a campo vuoto: {}" }
++    riferimenti.push(nome)
++  }
++
++  const formula: LayoutFormula = { expr }
++  if (typeof raw.origine_zoho === "string" && raw.origine_zoho.trim()) {
++    formula.origine_zoho = raw.origine_zoho.trim().slice(0, 2000)
++  }
++
++  return { ok: true, formula, riferimenti: [...new Set(riferimenti)] }
++}
++
++/**
++ * Segnala se una formula si riferisce al campo che sta definendo.
++ *
++ * Non blocca il salvataggio: e' una condizione che conta al momento della
++ * valutazione (un valore che dipende da se stesso non e' calcolabile), e
++ * finche' non si valuta nulla non c'e' motivo di rifiutare l'import di una
++ * formula che arriva da Zoho.
++ */
++export function formulaAutoReferenziale(fieldKey: string, riferimenti: string[]): boolean {
++  return riferimenti.includes(fieldKey)
++}
+diff --git a/lib/permissions/constants.ts b/lib/permissions/constants.ts
+index 0845a31..04fd6e6 100644
+--- a/lib/permissions/constants.ts
++++ b/lib/permissions/constants.ts
+@@ -30,6 +30,7 @@ export const PAGE_KEYS = [
+   "crm_settings.system.aspetto",
+   "crm_settings.system.comunicazioni",
+   "crm_settings.system.attributi",
++  "crm_settings.system.layout",
+   "crm_settings.system.valori",
+   "crm_settings.system.roberta",
+   "crm_settings.system.import_export",
+@@ -64,6 +65,7 @@ export const ROUTE_PAGE_MAP: Record<string, string> = {
+   "/crm-settings/system/aspetto": "crm_settings.system.aspetto",
+   "/crm-settings/system/comunicazioni": "crm_settings.system.comunicazioni",
+   "/crm-settings/system/attributi": "crm_settings.system.attributi",
++  "/crm-settings/system/layout": "crm_settings.system.layout",
+   "/crm-settings/system/valori": "crm_settings.system.valori",
+   "/crm-settings/system/roberta": "crm_settings.system.roberta",
+   "/crm-settings/system/import-export": "crm_settings.system.import_export",
+@@ -287,6 +289,7 @@ export function buildDefaultPermissionSnapshot(params?: {
+       "crm_settings.system.aspetto",
+       "crm_settings.system.comunicazioni",
+       "crm_settings.system.attributi",
++      "crm_settings.system.layout",
+       "crm_settings.system.valori",
+       "crm_settings.system.roberta",
+       "crm_settings.system.make",

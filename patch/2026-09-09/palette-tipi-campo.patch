@@ -1,0 +1,321 @@
+diff --git a/lib/crm-settings/__tests__/custom-fields.test.ts b/lib/crm-settings/__tests__/custom-fields.test.ts
+index 20943ca..2642867 100644
+--- a/lib/crm-settings/__tests__/custom-fields.test.ts
++++ b/lib/crm-settings/__tests__/custom-fields.test.ts
+@@ -41,4 +41,21 @@ describe("custom client fields", () => {
+     expect(validateCustomValue({ ...field, tipo: "datetime" }, "2026-09-04T12:00:00+02:00")).toBe("2026-09-04T10:00:00.000Z")
+     expect(() => validateCustomValue({ ...field, tipo: "unknown" }, "x")).toThrow()
+   })
++  it("accepts decimals on decimal and percent, and still on number", () => {
++    // "number" resta permissivo: campi gia' in uso contengono decimali.
++    expect(validateCustomValue(field, 12.5)).toBe(12.5)
++    expect(validateCustomValue({ ...field, tipo: "decimal" }, 12.29)).toBe(12.29)
++    expect(validateCustomValue({ ...field, tipo: "percent" }, 40)).toBe(40)
++    expect(() => validateCustomValue({ ...field, tipo: "decimal" }, "12.29")).toThrow()
++    expect(() => validateCustomValue({ ...field, tipo: "percent" }, Infinity)).toThrow()
++  })
++  it("accepts only absolute http(s) URLs", () => {
++    const url = { ...field, tipo: "url" }
++    expect(validateCustomValue(url, "https://solairgroup.it")).toBe("https://solairgroup.it")
++    // Il valore finisce in un link cliccabile: uno schema arbitrario non
++    // deve poterci arrivare.
++    expect(() => validateCustomValue(url, "javascript:alert(1)")).toThrow()
++    expect(() => validateCustomValue(url, "solairgroup.it")).toThrow()
++    expect(() => validateCustomValue(url, 12)).toThrow()
++  })
+ })
+diff --git a/lib/crm-settings/__tests__/layout.test.ts b/lib/crm-settings/__tests__/layout.test.ts
+index 70950dd..d3970b8 100644
+--- a/lib/crm-settings/__tests__/layout.test.ts
++++ b/lib/crm-settings/__tests__/layout.test.ts
+@@ -4,7 +4,7 @@ import {
+   campiDuplicati,
+   campoModificabile,
+   soloVisibili,
+-  tipoCalcolato,
++  campoCalcolato,
+   LAYOUT_CAMPO_TIPI,
+   LAYOUT_CAMPO_TIPO_LABEL,
+   type LayoutCampo,
+@@ -147,35 +147,40 @@ describe("campiDuplicati", () => {
+ })
+ 
+ describe("campi calcolati", () => {
+-  it("formula e autonumber sono calcolati", () => {
+-    expect(tipoCalcolato("formula")).toBe(true)
+-    expect(tipoCalcolato("autonumber")).toBe(true)
+-    expect(tipoCalcolato("currency")).toBe(false)
++  it("un campo con formula e' calcolato, uno senza no", () => {
++    expect(campoCalcolato(campo("Saldo", { formula: { expr: "{a} - {b}" } }))).toBe(true)
++    expect(campoCalcolato(campo("POD"))).toBe(false)
+   })
+ 
+-  it("un campo con formula non e' modificabile anche se il tipo e' numerico", () => {
++  it("un campo con formula non e' modificabile", () => {
++    // Il tipo resta quello del risultato (currency): e' la formula a
++    // renderlo non scrivibile, non il tipo.
+     const calcolato = campo("Saldo", {
+       formula: { expr: "{Importo Contrattuale} - {1° Tranche}" },
+     })
+-    expect(campoModificabile(calcolato, "currency")).toBe(false)
++    expect(campoModificabile(calcolato)).toBe(false)
+   })
+ 
+   it("un campo congelato dall'admin non e' modificabile", () => {
+-    expect(campoModificabile(campo("POD", { solaLettura: true }), "text")).toBe(false)
++    expect(campoModificabile(campo("POD", { solaLettura: true }))).toBe(false)
+   })
+ 
+   it("un campo normale resta modificabile", () => {
+-    expect(campoModificabile(campo("POD"), "text")).toBe(true)
++    expect(campoModificabile(campo("POD"))).toBe(true)
+   })
+ })
+ 
+ describe("palette dei tipi", () => {
+   it("copre i tipi Zoho che mancavano", () => {
+-    for (const tipo of ["formula", "percent", "url", "autonumber", "decimal"]) {
++    for (const tipo of ["decimal", "percent", "url"]) {
+       expect(LAYOUT_CAMPO_TIPI).toContain(tipo)
+     }
+   })
+ 
++  it("non espone formula come tipo: e' una proprieta' del campo", () => {
++    expect(LAYOUT_CAMPO_TIPI).not.toContain("formula")
++  })
++
+   it("ogni tipo ha un'etichetta italiana per la palette", () => {
+     for (const tipo of LAYOUT_CAMPO_TIPI) {
+       expect(LAYOUT_CAMPO_TIPO_LABEL[tipo]).toBeTruthy()
+diff --git a/lib/crm-settings/custom-fields.ts b/lib/crm-settings/custom-fields.ts
+index 3530b96..103b8ae 100644
+--- a/lib/crm-settings/custom-fields.ts
++++ b/lib/crm-settings/custom-fields.ts
+@@ -32,9 +32,27 @@ export function validateCustomValue(field: Pick<CustomFieldValue, "label" | "tip
+   const options = field.options ?? []
+   switch (field.tipo) {
+     case "number":
++    case "decimal":
+     case "currency":
++    case "percent":
++      // "number" resta permissivo sui decimali: i campi gia' creati con
++      // questo tipo contengono valori decimali (es. potenza_extra 12.5) e
++      // restringerlo ora rifiuterebbe dati oggi validi. La differenza fra
++      // number e decimal e' di presentazione, non di validazione.
+       if (typeof value !== "number" || !Number.isFinite(value)) return fail()
+       return value
++    case "url":
++      // Solo http/https e URL assoluto: il valore finisce in un link
++      // cliccabile, e uno schema arbitrario (javascript:, data:) non deve
++      // arrivarci.
++      if (typeof value !== "string") return fail()
++      try {
++        const url = new URL(value)
++        if (url.protocol !== "http:" && url.protocol !== "https:") return fail()
++      } catch {
++        return fail()
++      }
++      return value
+     case "boolean":
+       if (typeof value !== "boolean") return fail()
+       return value
+diff --git a/lib/crm-settings/layout.ts b/lib/crm-settings/layout.ts
+index ae305fd..35e1593 100644
+--- a/lib/crm-settings/layout.ts
++++ b/lib/crm-settings/layout.ts
+@@ -1,4 +1,4 @@
+-import type { CampoTipo } from "@/lib/system-settings-data"
++import { CAMPO_TIPI, CAMPO_TIPO_LABEL, type CampoTipo } from "@/lib/system-settings-data"
+ 
+ /**
+  * Layout configurabile delle schede record.
+@@ -16,78 +16,31 @@ import type { CampoTipo } from "@/lib/system-settings-data"
+ export type LayoutFieldOrigine = "system" | "custom"
+ 
+ /**
+- * Tipi di campo disponibili nel layout.
++ * Voci della palette dei tipi nella pagina Layout.
+  *
+- * I primi dodici sono quelli gia' supportati da CAMPO_TIPI e dalla pagina
+- * Attributi. Gli ultimi quattro sono le aggiunte necessarie per coprire i
+- * campi Zoho:
++ * Coincide con CampoTipo — i tipi di storage — perche' "formula" NON e' un
++ * tipo: e' una proprieta' di un campo che ha comunque un tipo di risultato.
++ * Zoho lo mostra cosi': "fx  Saldo  Decimale" e' un campo decimale che si
++ * calcola da solo, non un campo di tipo formula. Nel modello la distinzione
++ * sta fra il tipo (qui) e crm_layout_campi.formula (l'espressione).
+  *
+- * - formula:    campo calcolato da altri campi, non scrivibile a mano
+- * - percent:    numero mostrato come percentuale
+- * - url:        oggi ricadeva su text, senza validazione ne' link cliccabile
+- * - autonumber: progressivo assegnato dal sistema alla creazione
+- * - decimal:    Zoho distingue Numero (intero) da Decimale; CampoTipo aveva
+- *               solo number, e i campi tecnici (Tot Potenza DC, kWh) sono
+- *               decimali
+- *
+- * "Utente" della palette Zoho corrisponde al gia' presente lookup verso
+- * utenti, quindi non aggiunge un tipo nuovo.
++ * Rispetto ai dodici tipi originali sono stati aggiunti decimal, percent e
++ * url in lib/system-settings-data.ts.
+  */
+-export type LayoutCampoTipo =
+-  | CampoTipo
+-  | "formula"
+-  | "percent"
+-  | "url"
+-  | "autonumber"
+-  | "decimal"
+-
+-export const LAYOUT_CAMPO_TIPI: readonly LayoutCampoTipo[] = [
+-  "text",
+-  "textarea",
+-  "number",
+-  "decimal",
+-  "currency",
+-  "percent",
+-  "date",
+-  "datetime",
+-  "boolean",
+-  "select",
+-  "multiselect",
+-  "lookup",
+-  "email",
+-  "phone",
+-  "url",
+-  "formula",
+-  "autonumber",
+-] as const
++export type LayoutCampoTipo = CampoTipo
++
++export const LAYOUT_CAMPO_TIPI: readonly LayoutCampoTipo[] = CAMPO_TIPI
+ 
+ /** Etichette italiane per la palette dei tipi nella pagina Layout. */
+-export const LAYOUT_CAMPO_TIPO_LABEL: Record<string, string> = {
+-  text: "Linea singola",
+-  textarea: "Multi-linea",
+-  number: "Numero",
+-  decimal: "Decimale",
+-  currency: "Valuta",
+-  percent: "Percentuale",
+-  date: "Data",
+-  datetime: "Data/Ora",
+-  boolean: "Casella di controllo",
+-  select: "Elenco di selezione",
+-  multiselect: "Selezione multipla",
+-  lookup: "Ricerca",
+-  email: "E-mail",
+-  phone: "Telefono",
+-  url: "URL",
+-  formula: "Formula",
+-  autonumber: "Numerazione automatica",
+-}
++export const LAYOUT_CAMPO_TIPO_LABEL: Record<string, string> = CAMPO_TIPO_LABEL
+ 
+ /**
+  * Un campo calcolato non e' scrivibile: il valore arriva dalla formula, mai
+- * dall'utente. Vale anche per autonumber, assegnato alla creazione.
++ * dall'utente — su Zoho questi campi sono proprio nascosti in creazione e
++ * modifica.
+  */
+-export function tipoCalcolato(tipo: string): boolean {
+-  return tipo === "formula" || tipo === "autonumber"
++export function campoCalcolato(campo: Pick<LayoutCampo, "formula">): boolean {
++  return campo.formula !== null
+ }
+ 
+ /** Formattazione di presentazione. Non altera il valore salvato. */
+@@ -161,8 +114,8 @@ export type LayoutPagina = {
+ }
+ 
+ /** Un campo e' modificabile solo se non e' calcolato e non e' congelato. */
+-export function campoModificabile(campo: LayoutCampo, tipo: string): boolean {
+-  return !campo.solaLettura && !tipoCalcolato(tipo) && campo.formula === null
++export function campoModificabile(campo: LayoutCampo): boolean {
++  return !campo.solaLettura && !campoCalcolato(campo)
+ }
+ 
+ /**
+diff --git a/lib/crm-settings/schema-admin.ts b/lib/crm-settings/schema-admin.ts
+index c568110..b1db836 100644
+--- a/lib/crm-settings/schema-admin.ts
++++ b/lib/crm-settings/schema-admin.ts
+@@ -61,8 +61,13 @@ export const CRM_FIELD_DB_TYPES: Record<CampoTipo, string> = {
+   textarea: "text",
+   email: "text",
+   phone: "text",
++  url: "text",
+   number: "numeric",
+   currency: "numeric",
++  decimal: "numeric",
++  // Salvata come la si scrive: 40 per "40%", non 0.4. Il simbolo e' resa
++  // grafica, non fa parte del valore.
++  percent: "numeric",
+   date: "date",
+   datetime: "timestamptz",
+   boolean: "boolean",
+diff --git a/lib/system-settings-data.ts b/lib/system-settings-data.ts
+index 6b941cb..18a7176 100644
+--- a/lib/system-settings-data.ts
++++ b/lib/system-settings-data.ts
+@@ -17,6 +17,8 @@ export type CampoAccesso = "no_access" | "r" | "rw"
+ export type CampoTipo =
+   | "text"
+   | "number"
++  | "decimal"
++  | "percent"
+   | "date"
+   | "datetime"
+   | "boolean"
+@@ -25,12 +27,17 @@ export type CampoTipo =
+   | "lookup"
+   | "email"
+   | "phone"
++  | "url"
+   | "currency"
+   | "textarea"
+ 
+ export const CAMPO_TIPI: CampoTipo[] = [
+   "text",
++  "textarea",
+   "number",
++  "decimal",
++  "currency",
++  "percent",
+   "date",
+   "datetime",
+   "boolean",
+@@ -39,23 +46,25 @@ export const CAMPO_TIPI: CampoTipo[] = [
+   "lookup",
+   "email",
+   "phone",
+-  "currency",
+-  "textarea",
++  "url",
+ ]
+ 
+ export const CAMPO_TIPO_LABEL: Record<CampoTipo, string> = {
+-  text: "Testo",
++  text: "Linea singola",
++  textarea: "Multi-linea",
+   number: "Numero",
++  decimal: "Decimale",
++  currency: "Valuta",
++  percent: "Percentuale",
+   date: "Data",
+   datetime: "Data e ora",
+-  boolean: "Booleano",
+-  select: "Select",
+-  multiselect: "Multi-select",
+-  lookup: "Lookup",
++  boolean: "Casella di controllo",
++  select: "Elenco di selezione",
++  multiselect: "Selezione multipla",
++  lookup: "Ricerca",
+   email: "Email",
+   phone: "Telefono",
+-  currency: "Valuta",
+-  textarea: "Testo lungo",
++  url: "URL",
+ }
+ 
+ export const CAMPO_ACCESSO_LABEL: Record<CampoAccesso, string> = {

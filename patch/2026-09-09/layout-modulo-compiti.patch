@@ -1,0 +1,46 @@
+diff --git a/app/crm-settings/system/layout/page.tsx b/app/crm-settings/system/layout/page.tsx
+index f77f22a..8c4b5aa 100644
+--- a/app/crm-settings/system/layout/page.tsx
++++ b/app/crm-settings/system/layout/page.tsx
+@@ -40,6 +40,7 @@ const MODULO_LABEL: Record<LayoutModulo, string> = {
+   clienti: "Clienti",
+   lead: "Lead",
+   installatori: "Installatori",
++  compiti: "Compiti",
+ }
+ 
+ const PAGE_KEY = "crm_settings.system.layout"
+diff --git a/lib/crm-settings/__tests__/layout-validate.test.ts b/lib/crm-settings/__tests__/layout-validate.test.ts
+index dc10923..86de7f7 100644
+--- a/lib/crm-settings/__tests__/layout-validate.test.ts
++++ b/lib/crm-settings/__tests__/layout-validate.test.ts
+@@ -15,6 +15,8 @@ describe("moduli e chiavi", () => {
+   it("accetta solo i moduli previsti", () => {
+     expect(isLayoutModulo("clienti")).toBe(true)
+     expect(isLayoutModulo("lead")).toBe(true)
++    expect(isLayoutModulo("installatori")).toBe(true)
++    expect(isLayoutModulo("compiti")).toBe(true)
+     expect(isLayoutModulo("Clienti")).toBe(false)
+     expect(isLayoutModulo("utenti")).toBe(false)
+     expect(isLayoutModulo(null)).toBe(false)
+diff --git a/lib/crm-settings/layout-validate.ts b/lib/crm-settings/layout-validate.ts
+index d440b21..5494202 100644
+--- a/lib/crm-settings/layout-validate.ts
++++ b/lib/crm-settings/layout-validate.ts
+@@ -12,8 +12,14 @@ import type { LayoutFormato, LayoutFormula } from "./layout"
+  * fatto. Chiavi, tipi e riferimenti vengono sempre ricontrollati qui.
+  */
+ 
+-/** Moduli che possono avere un layout configurabile. */
+-export const LAYOUT_MODULI = ["clienti", "lead", "installatori"] as const
++/**
++ * Moduli che possono avere un layout configurabile.
++ *
++ * I nomi corrispondono alle tabelle in CRM_MODULE_TABLES: il layout descrive
++ * le schede di questi record, quindi l'elenco non puo' divergere da quello
++ * dei moduli che esistono davvero.
++ */
++export const LAYOUT_MODULI = ["clienti", "lead", "installatori", "compiti"] as const
+ export type LayoutModulo = (typeof LAYOUT_MODULI)[number]
+ 
+ export function isLayoutModulo(value: unknown): value is LayoutModulo {

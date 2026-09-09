@@ -1,0 +1,870 @@
+diff --git a/lib/crm-settings/__tests__/layout.test.ts b/lib/crm-settings/__tests__/layout.test.ts
+new file mode 100644
+index 0000000..70950dd
+--- /dev/null
++++ b/lib/crm-settings/__tests__/layout.test.ts
+@@ -0,0 +1,184 @@
++import { describe, expect, it } from "vitest"
++import {
++  applicaOrdinePersonale,
++  campiDuplicati,
++  campoModificabile,
++  soloVisibili,
++  tipoCalcolato,
++  LAYOUT_CAMPO_TIPI,
++  LAYOUT_CAMPO_TIPO_LABEL,
++  type LayoutCampo,
++  type LayoutPagina,
++} from "../layout"
++
++function campo(fieldKey: string, extra: Partial<LayoutCampo> = {}): LayoutCampo {
++  return {
++    id: `id-${fieldKey}`,
++    origine: "system",
++    fieldKey,
++    labelOverride: null,
++    ordinamento: 0,
++    visible: true,
++    span: 1,
++    solaLettura: false,
++    formato: {},
++    formula: null,
++    ...extra,
++  }
++}
++
++function pagina(
++  pageKey: string,
++  ordinamento: number,
++  campi: LayoutCampo[] = [],
++  extra: Partial<LayoutPagina> = {},
++): LayoutPagina {
++  return {
++    id: `pag-${pageKey}`,
++    pageKey,
++    label: pageKey,
++    icona: null,
++    ordinamento,
++    visible: true,
++    componente: null,
++    blocchi: [
++      {
++        id: `blk-${pageKey}`,
++        blockKey: `${pageKey}-blocco`,
++        label: pageKey,
++        mostraTitolo: true,
++        colonne: 2,
++        ordinamento: 0,
++        visible: true,
++        campi,
++      },
++    ],
++    ...extra,
++  }
++}
++
++describe("applicaOrdinePersonale", () => {
++  const pagine = [
++    pagina("anagrafica", 0),
++    pagina("impianto", 1),
++    pagina("pagamenti", 2),
++  ]
++
++  it("senza preferenza mantiene l'ordine dell'admin", () => {
++    expect(applicaOrdinePersonale(pagine, []).map((p) => p.pageKey)).toEqual([
++      "anagrafica",
++      "impianto",
++      "pagamenti",
++    ])
++  })
++
++  it("riordina secondo la preferenza dell'utente", () => {
++    const ordine = ["impianto", "anagrafica", "pagamenti"]
++    expect(applicaOrdinePersonale(pagine, ordine).map((p) => p.pageKey)).toEqual(ordine)
++  })
++
++  it("mette in coda le pagine non elencate nella preferenza", () => {
++    // Preferenza salvata prima che "pagamenti" esistesse: deve comunque
++    // comparire, non sparire.
++    const risultato = applicaOrdinePersonale(pagine, ["impianto", "anagrafica"])
++    expect(risultato.map((p) => p.pageKey)).toEqual(["impianto", "anagrafica", "pagamenti"])
++  })
++
++  it("ignora chiavi della preferenza che non esistono piu'", () => {
++    const risultato = applicaOrdinePersonale(pagine, ["sparita", "pagamenti"])
++    expect(risultato.map((p) => p.pageKey)).toEqual(["pagamenti", "anagrafica", "impianto"])
++  })
++
++  it("non muta l'array ricevuto", () => {
++    const originale = pagine.map((p) => p.pageKey)
++    applicaOrdinePersonale(pagine, ["pagamenti", "impianto", "anagrafica"])
++    expect(pagine.map((p) => p.pageKey)).toEqual(originale)
++  })
++})
++
++describe("soloVisibili", () => {
++  it("toglie pagine, blocchi e campi nascosti", () => {
++    const pagine: LayoutPagina[] = [
++      pagina("anagrafica", 0, [campo("Nome Clienti"), campo("Assistenza", { visible: false })]),
++      pagina("nascosta", 1, [campo("Foglio")], { visible: false }),
++    ]
++
++    const risultato = soloVisibili(pagine)
++    expect(risultato).toHaveLength(1)
++    expect(risultato[0].blocchi[0].campi.map((c) => c.fieldKey)).toEqual(["Nome Clienti"])
++  })
++
++  it("toglie un blocco nascosto lasciando la pagina", () => {
++    const base = pagina("impianto", 0, [campo("Nr. Moduli")])
++    base.blocchi[0].visible = false
++
++    const risultato = soloVisibili([base])
++    expect(risultato).toHaveLength(1)
++    expect(risultato[0].blocchi).toHaveLength(0)
++  })
++})
++
++describe("campiDuplicati", () => {
++  it("non segnala nulla quando ogni campo compare una volta sola", () => {
++    const pagine = [
++      pagina("anagrafica", 0, [campo("Nome Clienti")]),
++      pagina("pagamenti", 1, [campo("Saldo")]),
++    ]
++    expect(campiDuplicati(pagine)).toEqual([])
++  })
++
++  it("segnala lo stesso campo piazzato in due pagine diverse", () => {
++    const pagine = [
++      pagina("anagrafica", 0, [campo("Saldo")]),
++      pagina("pagamenti", 1, [campo("Saldo")]),
++    ]
++    expect(campiDuplicati(pagine)).toEqual(["system:Saldo"])
++  })
++
++  it("distingue system e custom con la stessa chiave", () => {
++    const pagine = [
++      pagina("anagrafica", 0, [
++        campo("Verifica"),
++        campo("Verifica", { origine: "custom", id: "custom-verifica" }),
++      ]),
++    ]
++    expect(campiDuplicati(pagine)).toEqual([])
++  })
++})
++
++describe("campi calcolati", () => {
++  it("formula e autonumber sono calcolati", () => {
++    expect(tipoCalcolato("formula")).toBe(true)
++    expect(tipoCalcolato("autonumber")).toBe(true)
++    expect(tipoCalcolato("currency")).toBe(false)
++  })
++
++  it("un campo con formula non e' modificabile anche se il tipo e' numerico", () => {
++    const calcolato = campo("Saldo", {
++      formula: { expr: "{Importo Contrattuale} - {1° Tranche}" },
++    })
++    expect(campoModificabile(calcolato, "currency")).toBe(false)
++  })
++
++  it("un campo congelato dall'admin non e' modificabile", () => {
++    expect(campoModificabile(campo("POD", { solaLettura: true }), "text")).toBe(false)
++  })
++
++  it("un campo normale resta modificabile", () => {
++    expect(campoModificabile(campo("POD"), "text")).toBe(true)
++  })
++})
++
++describe("palette dei tipi", () => {
++  it("copre i tipi Zoho che mancavano", () => {
++    for (const tipo of ["formula", "percent", "url", "autonumber", "decimal"]) {
++      expect(LAYOUT_CAMPO_TIPI).toContain(tipo)
++    }
++  })
++
++  it("ogni tipo ha un'etichetta italiana per la palette", () => {
++    for (const tipo of LAYOUT_CAMPO_TIPI) {
++      expect(LAYOUT_CAMPO_TIPO_LABEL[tipo]).toBeTruthy()
++    }
++  })
++})
+diff --git a/lib/crm-settings/layout-server.ts b/lib/crm-settings/layout-server.ts
+new file mode 100644
+index 0000000..5917adc
+--- /dev/null
++++ b/lib/crm-settings/layout-server.ts
+@@ -0,0 +1,207 @@
++import type { createClient } from "@/lib/supabase/server"
++import {
++  applicaOrdinePersonale,
++  type LayoutBlocco,
++  type LayoutCampo,
++  type LayoutFormato,
++  type LayoutFormula,
++  type LayoutPagina,
++} from "./layout"
++
++type SupabaseClient = Awaited<ReturnType<typeof createClient>>
++
++/**
++ * Lettura della configurazione di layout di un modulo.
++ *
++ * Stessa postura a prova di errore del loader dei campi custom: se le tabelle
++ * non esistono ancora (migrazione non applicata) o la query fallisce, torna
++ * array vuoto invece di far fallire la scheda. Chi chiama tratta l'array
++ * vuoto come "nessun layout configurato" e resta sul rendering di oggi —
++ * cosi' la scheda continua a funzionare mentre il nuovo sistema viene
++ * costruito in parallelo.
++ */
++
++type RigaPagina = {
++  id: string
++  page_key: string
++  label: string
++  icona: string | null
++  ordinamento: number
++  visible: boolean
++  componente: string | null
++}
++
++type RigaBlocco = {
++  id: string
++  pagina_id: string
++  block_key: string
++  label: string
++  mostra_titolo: boolean
++  colonne: number
++  ordinamento: number
++  visible: boolean
++}
++
++type RigaCampo = {
++  id: string
++  blocco_id: string
++  origine: string
++  field_key: string
++  label_override: string | null
++  ordinamento: number
++  visible: boolean
++  span: number
++  sola_lettura: boolean
++  formato: unknown
++  formula: unknown
++}
++
++/** jsonb arriva come unknown: normalizzato qui, mai passato grezzo alla UI. */
++function leggiFormato(value: unknown): LayoutFormato {
++  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
++  const raw = value as Record<string, unknown>
++  const formato: LayoutFormato = {}
++  if (typeof raw.decimali === "number" && Number.isInteger(raw.decimali) && raw.decimali >= 0) {
++    formato.decimali = raw.decimali
++  }
++  if (typeof raw.valuta === "string" && raw.valuta) formato.valuta = raw.valuta
++  if (typeof raw.placeholder === "string") formato.placeholder = raw.placeholder
++  return formato
++}
++
++function leggiFormula(value: unknown): LayoutFormula | null {
++  if (!value || typeof value !== "object" || Array.isArray(value)) return null
++  const raw = value as Record<string, unknown>
++  if (typeof raw.expr !== "string" || !raw.expr.trim()) return null
++  return {
++    expr: raw.expr,
++    ...(typeof raw.origine_zoho === "string" ? { origine_zoho: raw.origine_zoho } : {}),
++  }
++}
++
++/**
++ * Carica pagine, blocchi e campi di un modulo e li assembla nell'albero.
++ *
++ * Tre query invece di join annidati: PostgREST li supporta, ma con tre
++ * livelli la risposta diventa difficile da tipizzare e da leggere, e il
++ * volume qui e' minimo (decine di righe, non migliaia).
++ */
++export async function loadLayout(
++  supabase: SupabaseClient,
++  modulo: string,
++): Promise<LayoutPagina[]> {
++  const { data: pagine, error: erroreP } = await supabase
++    .from("crm_layout_pagine")
++    .select("id, page_key, label, icona, ordinamento, visible, componente")
++    .eq("modulo", modulo)
++    .order("ordinamento", { ascending: true })
++
++  if (erroreP || !pagine || pagine.length === 0) return []
++
++  const idPagine = (pagine as RigaPagina[]).map((p) => p.id)
++
++  const { data: blocchi, error: erroreB } = await supabase
++    .from("crm_layout_blocchi")
++    .select("id, pagina_id, block_key, label, mostra_titolo, colonne, ordinamento, visible")
++    .in("pagina_id", idPagine)
++    .order("ordinamento", { ascending: true })
++
++  if (erroreB) return []
++
++  const idBlocchi = ((blocchi ?? []) as RigaBlocco[]).map((b) => b.id)
++
++  // Nessun blocco: pagine tutte a componente dedicato, oppure layout appena
++  // creato. Le pagine restano valide, semplicemente senza campi.
++  const campi = idBlocchi.length
++    ? await supabase
++        .from("crm_layout_campi")
++        .select(
++          "id, blocco_id, origine, field_key, label_override, ordinamento, visible, span, sola_lettura, formato, formula",
++        )
++        .in("blocco_id", idBlocchi)
++        .order("ordinamento", { ascending: true })
++    : { data: [] as RigaCampo[], error: null }
++
++  if (campi.error) return []
++
++  const campiPerBlocco = new Map<string, LayoutCampo[]>()
++  for (const riga of (campi.data ?? []) as RigaCampo[]) {
++    const lista = campiPerBlocco.get(riga.blocco_id) ?? []
++    lista.push({
++      id: riga.id,
++      origine: riga.origine === "custom" ? "custom" : "system",
++      fieldKey: riga.field_key,
++      labelOverride: riga.label_override,
++      ordinamento: riga.ordinamento,
++      visible: riga.visible,
++      span: riga.span,
++      solaLettura: riga.sola_lettura,
++      formato: leggiFormato(riga.formato),
++      formula: leggiFormula(riga.formula),
++    })
++    campiPerBlocco.set(riga.blocco_id, lista)
++  }
++
++  const blocchiPerPagina = new Map<string, LayoutBlocco[]>()
++  for (const riga of ((blocchi ?? []) as RigaBlocco[])) {
++    const lista = blocchiPerPagina.get(riga.pagina_id) ?? []
++    lista.push({
++      id: riga.id,
++      blockKey: riga.block_key,
++      label: riga.label,
++      mostraTitolo: riga.mostra_titolo,
++      colonne: riga.colonne,
++      ordinamento: riga.ordinamento,
++      visible: riga.visible,
++      campi: campiPerBlocco.get(riga.id) ?? [],
++    })
++    blocchiPerPagina.set(riga.pagina_id, lista)
++  }
++
++  return (pagine as RigaPagina[]).map((riga) => ({
++    id: riga.id,
++    pageKey: riga.page_key,
++    label: riga.label,
++    icona: riga.icona,
++    ordinamento: riga.ordinamento,
++    visible: riga.visible,
++    componente: riga.componente,
++    blocchi: blocchiPerPagina.get(riga.id) ?? [],
++  }))
++}
++
++/**
++ * Ordine personale delle pagine per l'utente corrente.
++ *
++ * Preferenza, non permesso: se manca o non e' leggibile si torna array vuoto
++ * e vale l'ordine dell'admin.
++ */
++export async function loadOrdinePersonale(
++  supabase: SupabaseClient,
++  utenteId: string,
++  modulo: string,
++): Promise<string[]> {
++  const { data, error } = await supabase
++    .from("crm_layout_ordine_utente")
++    .select("ordine")
++    .eq("utente_id", utenteId)
++    .eq("modulo", modulo)
++    .maybeSingle()
++
++  if (error || !data) return []
++  const ordine = (data as { ordine: unknown }).ordine
++  if (!Array.isArray(ordine)) return []
++  return ordine.filter((key): key is string => typeof key === "string")
++}
++
++/** Layout del modulo gia' riordinato secondo la preferenza dell'utente. */
++export async function loadLayoutPerUtente(
++  supabase: SupabaseClient,
++  modulo: string,
++  utenteId: string | null,
++): Promise<LayoutPagina[]> {
++  const pagine = await loadLayout(supabase, modulo)
++  if (!pagine.length || !utenteId) return pagine
++  const ordine = await loadOrdinePersonale(supabase, utenteId, modulo)
++  return applicaOrdinePersonale(pagine, ordine)
++}
+diff --git a/lib/crm-settings/layout.ts b/lib/crm-settings/layout.ts
+new file mode 100644
+index 0000000..ae305fd
+--- /dev/null
++++ b/lib/crm-settings/layout.ts
+@@ -0,0 +1,230 @@
++import type { CampoTipo } from "@/lib/system-settings-data"
++
++/**
++ * Layout configurabile delle schede record.
++ *
++ * Tre livelli, come su Zoho: pagina (voce della navbar) -> blocco (riquadro
++ * con titolo) -> campo. Qui vivono solo i tipi e le funzioni pure; la lettura
++ * dal database sta in layout-server.ts, che gira lato server.
++ *
++ * Confine importante: questa configurazione descrive DOVE un campo appare e
++ * COME si presenta. Il valore resta dov'e' sempre stato — colonna tipizzata
++ * per i campi di sistema, crm_custom_fields per quelli personalizzati.
++ */
++
++/** Corrisponde a crm_layout_campi.origine. */
++export type LayoutFieldOrigine = "system" | "custom"
++
++/**
++ * Tipi di campo disponibili nel layout.
++ *
++ * I primi dodici sono quelli gia' supportati da CAMPO_TIPI e dalla pagina
++ * Attributi. Gli ultimi quattro sono le aggiunte necessarie per coprire i
++ * campi Zoho:
++ *
++ * - formula:    campo calcolato da altri campi, non scrivibile a mano
++ * - percent:    numero mostrato come percentuale
++ * - url:        oggi ricadeva su text, senza validazione ne' link cliccabile
++ * - autonumber: progressivo assegnato dal sistema alla creazione
++ * - decimal:    Zoho distingue Numero (intero) da Decimale; CampoTipo aveva
++ *               solo number, e i campi tecnici (Tot Potenza DC, kWh) sono
++ *               decimali
++ *
++ * "Utente" della palette Zoho corrisponde al gia' presente lookup verso
++ * utenti, quindi non aggiunge un tipo nuovo.
++ */
++export type LayoutCampoTipo =
++  | CampoTipo
++  | "formula"
++  | "percent"
++  | "url"
++  | "autonumber"
++  | "decimal"
++
++export const LAYOUT_CAMPO_TIPI: readonly LayoutCampoTipo[] = [
++  "text",
++  "textarea",
++  "number",
++  "decimal",
++  "currency",
++  "percent",
++  "date",
++  "datetime",
++  "boolean",
++  "select",
++  "multiselect",
++  "lookup",
++  "email",
++  "phone",
++  "url",
++  "formula",
++  "autonumber",
++] as const
++
++/** Etichette italiane per la palette dei tipi nella pagina Layout. */
++export const LAYOUT_CAMPO_TIPO_LABEL: Record<string, string> = {
++  text: "Linea singola",
++  textarea: "Multi-linea",
++  number: "Numero",
++  decimal: "Decimale",
++  currency: "Valuta",
++  percent: "Percentuale",
++  date: "Data",
++  datetime: "Data/Ora",
++  boolean: "Casella di controllo",
++  select: "Elenco di selezione",
++  multiselect: "Selezione multipla",
++  lookup: "Ricerca",
++  email: "E-mail",
++  phone: "Telefono",
++  url: "URL",
++  formula: "Formula",
++  autonumber: "Numerazione automatica",
++}
++
++/**
++ * Un campo calcolato non e' scrivibile: il valore arriva dalla formula, mai
++ * dall'utente. Vale anche per autonumber, assegnato alla creazione.
++ */
++export function tipoCalcolato(tipo: string): boolean {
++  return tipo === "formula" || tipo === "autonumber"
++}
++
++/** Formattazione di presentazione. Non altera il valore salvato. */
++export type LayoutFormato = {
++  /** Cifre decimali per number/decimal/currency/percent. */
++  decimali?: number
++  /** Simbolo valuta, default EUR quando il tipo e' currency. */
++  valuta?: string
++  /** Testo mostrato quando il valore e' vuoto. Default "—". */
++  placeholder?: string
++}
++
++/**
++ * Definizione di un campo calcolato.
++ *
++ * Le formule Zoho sono scritte in un linguaggio proprietario che non gira
++ * fuori da Zoho: vengono tradotte una per una e conservate qui in forma
++ * esplicita, cosi' restano leggibili e modificabili senza rileggere il codice.
++ *
++ * `expr` usa i field_key tra parentesi graffe:
++ *   { "expr": "{Importo Contrattuale} - {1° Tranche} - {2°Tranche}" }
++ *
++ * `origine_zoho` conserva l'espressione Zoho originale come documentazione:
++ * serve a ricontrollare la traduzione quando un numero non torna, e non viene
++ * mai valutata.
++ */
++export type LayoutFormula = {
++  expr: string
++  origine_zoho?: string
++}
++
++export type LayoutCampo = {
++  id: string
++  origine: LayoutFieldOrigine
++  fieldKey: string
++  /** Null quando si usa l'etichetta nativa del campo. */
++  labelOverride: string | null
++  ordinamento: number
++  visible: boolean
++  span: number
++  solaLettura: boolean
++  formato: LayoutFormato
++  formula: LayoutFormula | null
++}
++
++export type LayoutBlocco = {
++  id: string
++  blockKey: string
++  label: string
++  mostraTitolo: boolean
++  colonne: number
++  ordinamento: number
++  visible: boolean
++  campi: LayoutCampo[]
++}
++
++export type LayoutPagina = {
++  id: string
++  pageKey: string
++  label: string
++  icona: string | null
++  ordinamento: number
++  visible: boolean
++  /**
++   * Valorizzato per le pagine che rendono un componente dedicato invece di
++   * una griglia di campi (Allegati, Calendario, Attivita'). Restano nel
++   * layout per poterle riordinare e nascondere, ma non accettano campi.
++   */
++  componente: string | null
++  blocchi: LayoutBlocco[]
++}
++
++/** Un campo e' modificabile solo se non e' calcolato e non e' congelato. */
++export function campoModificabile(campo: LayoutCampo, tipo: string): boolean {
++  return !campo.solaLettura && !tipoCalcolato(tipo) && campo.formula === null
++}
++
++/**
++ * Applica l'ordine personale dell'utente alle pagine definite dall'admin.
++ *
++ * Le pagine elencate nella preferenza vengono per prime, nell'ordine scelto;
++ * quelle non elencate seguono in coda nell'ordine dell'admin. Cosi' una
++ * pagina aggiunta dopo che l'utente ha salvato la sua preferenza compare
++ * comunque, invece di sparire.
++ */
++export function applicaOrdinePersonale(
++  pagine: LayoutPagina[],
++  ordine: string[],
++): LayoutPagina[] {
++  if (!ordine.length) return pagine
++
++  const posizione = new Map(ordine.map((key, index) => [key, index]))
++  return [...pagine].sort((a, b) => {
++    const pa = posizione.get(a.pageKey)
++    const pb = posizione.get(b.pageKey)
++    if (pa !== undefined && pb !== undefined) return pa - pb
++    // Una pagina senza preferenza va dopo tutte quelle che ce l'hanno.
++    if (pa !== undefined) return -1
++    if (pb !== undefined) return 1
++    return a.ordinamento - b.ordinamento
++  })
++}
++
++/**
++ * Solo cio' che va disegnato: pagine e blocchi nascosti spariscono con tutto
++ * il loro contenuto, i campi nascosti spariscono singolarmente.
++ */
++export function soloVisibili(pagine: LayoutPagina[]): LayoutPagina[] {
++  return pagine
++    .filter((pagina) => pagina.visible)
++    .map((pagina) => ({
++      ...pagina,
++      blocchi: pagina.blocchi
++        .filter((blocco) => blocco.visible)
++        .map((blocco) => ({
++          ...blocco,
++          campi: blocco.campi.filter((campo) => campo.visible),
++        })),
++    }))
++}
++
++/**
++ * Lo stesso campo in due blocchi mostrerebbe il dato due volte in scheda.
++ * Il vincolo attraversa blocco -> pagina, quindi non e' un unique di tabella:
++ * lo verifica il backend prima di salvare. Torna le chiavi duplicate.
++ */
++export function campiDuplicati(pagine: LayoutPagina[]): string[] {
++  const visti = new Set<string>()
++  const duplicati = new Set<string>()
++  for (const pagina of pagine) {
++    for (const blocco of pagina.blocchi) {
++      for (const campo of blocco.campi) {
++        const chiave = `${campo.origine}:${campo.fieldKey}`
++        if (visti.has(chiave)) duplicati.add(chiave)
++        visti.add(chiave)
++      }
++    }
++  }
++  return [...duplicati]
++}
+diff --git a/supabase/migrations/20260909_crm_layout_config.sql b/supabase/migrations/20260909_crm_layout_config.sql
+new file mode 100644
+index 0000000..befb1b5
+--- /dev/null
++++ b/supabase/migrations/20260909_crm_layout_config.sql
+@@ -0,0 +1,225 @@
++-- Sistema di layout configurabile per le schede record (Clienti, Lead, ...).
++--
++-- Oggi la disposizione dei campi nella scheda e' scritta a mano nel codice
++-- (i <DataField> dentro cliente-detail-content.tsx), mentre solo i campi
++-- personalizzati di crm_custom_fields sono dinamici. Queste tabelle spostano
++-- la DISPOSIZIONE — non lo storage — in configurazione, cosi' un admin puo'
++-- spostare/rinominare/nascondere qualsiasi campo senza toccare il codice.
++--
++-- Confine deliberato: lo storage NON cambia. I campi di sistema restano
++-- colonne tipizzate sulle loro tabelle (clienti.saldo, clienti.iban, ...) e
++-- i personalizzati restano governati da crm_custom_fields. Qui si registra
++-- soltanto DOVE un campo appare e COME si presenta. Nessun EAV.
++--
++-- Tre livelli, come su Zoho: pagina (macro-voce della navbar) -> blocco
++-- (riquadro con titolo) -> campo (posizione dentro il riquadro).
++
++begin;
++
++-- ---------------------------------------------------------------------------
++-- Pagine: le macro-voci della navbar della scheda ("Anagrafica", "Impianto").
++-- ---------------------------------------------------------------------------
++create table if not exists public.crm_layout_pagine (
++  id uuid primary key default gen_random_uuid(),
++  modulo text not null,
++  -- Stabile e non rinominabile: e' l'ancora usata dai link della navbar
++  -- (#section-anagrafica) e dai riferimenti nel codice. La label invece e'
++  -- libera e modificabile dall'admin.
++  page_key text not null,
++  label text not null,
++  icona text,
++  ordinamento integer not null default 0,
++  visible boolean not null default true,
++  -- Le pagine che rendono un componente dedicato invece di una griglia di
++  -- campi (Allegati, Calendario, Attivita', Note interne). Restano nel
++  -- layout — cosi' si riordinano e si nascondono come le altre — ma non
++  -- accettano campi.
++  componente text,
++  created_by uuid references public.utenti(id) on delete set null,
++  updated_by uuid references public.utenti(id) on delete set null,
++  created_at timestamptz not null default now(),
++  updated_at timestamptz not null default now(),
++  unique (modulo, page_key)
++);
++
++-- ---------------------------------------------------------------------------
++-- Blocchi: i riquadri con titolo dentro una pagina ("Informazioni Clienti").
++-- ---------------------------------------------------------------------------
++create table if not exists public.crm_layout_blocchi (
++  id uuid primary key default gen_random_uuid(),
++  pagina_id uuid not null references public.crm_layout_pagine(id) on delete cascade,
++  block_key text not null,
++  label text not null,
++  -- Un blocco senza label visibile serve per raggruppare campi senza
++  -- introdurre un titolo in piu' nella pagina.
++  mostra_titolo boolean not null default true,
++  colonne smallint not null default 2 check (colonne between 1 and 4),
++  ordinamento integer not null default 0,
++  visible boolean not null default true,
++  created_at timestamptz not null default now(),
++  updated_at timestamptz not null default now(),
++  unique (pagina_id, block_key)
++);
++
++-- ---------------------------------------------------------------------------
++-- Campi: la posizione di un campo dentro un blocco.
++--
++-- origine = 'system'  -> field_key e' la chiave app del campo nativo
++--                        ("Nome Clienti", "Saldo"), quella gia' usata da
++--                        zoho-fields.ts / ClienteRecord.
++-- origine = 'custom'  -> field_key corrisponde a crm_custom_fields.field_key.
++--
++-- Non c'e' FK verso crm_custom_fields di proposito: la stessa tabella deve
++-- poter posizionare entrambe le origini con un meccanismo solo. La coerenza
++-- e' verificata dall'applicazione, che conosce l'elenco delle chiavi valide
++-- per ciascun modulo.
++-- ---------------------------------------------------------------------------
++create table if not exists public.crm_layout_campi (
++  id uuid primary key default gen_random_uuid(),
++  blocco_id uuid not null references public.crm_layout_blocchi(id) on delete cascade,
++  origine text not null check (origine in ('system', 'custom')),
++  field_key text not null,
++  -- Null = usa l'etichetta nativa del campo. Valorizzata = l'admin l'ha
++  -- rinominata solo per la visualizzazione; la colonna sottostante non si
++  -- muove.
++  label_override text,
++  ordinamento integer not null default 0,
++  visible boolean not null default true,
++  -- Larghezza in colonne della griglia del blocco: un campo lungo (una nota,
++  -- una descrizione) puo' occupare tutta la riga.
++  span smallint not null default 1 check (span between 1 and 4),
++  -- Sola lettura in scheda anche quando il campo sarebbe scrivibile. I campi
++  -- calcolati sono gia' di sola lettura per natura (vedi formula sotto):
++  -- questo copre il caso di un campo normale che l'admin vuole congelare.
++  sola_lettura boolean not null default false,
++  -- Formattazione di presentazione (valuta, percentuale, decimali, ...).
++  -- Non altera il valore salvato.
++  formato jsonb not null default '{}'::jsonb,
++  -- Campo calcolato: espressione tradotta dalle formule Zoho. Quando e'
++  -- valorizzata il campo non e' scrivibile e il valore viene ricalcolato,
++  -- mai inserito a mano. La valutazione e' dell'applicazione: qui si
++  -- conserva solo la definizione.
++  formula jsonb,
++  created_at timestamptz not null default now(),
++  updated_at timestamptz not null default now(),
++  unique (blocco_id, origine, field_key)
++);
++
++-- Nota: l'unique sulla tabella impedisce lo stesso campo due volte NELLO
++-- STESSO blocco. Lo stesso campo in due blocchi diversi dello stesso modulo
++-- mostrerebbe il dato due volte in scheda: quel vincolo attraversa
++-- blocco -> pagina -> modulo e non e' esprimibile come unique semplice, per
++-- cui lo verifica il backend prima di salvare, non il database.
++
++create index if not exists crm_layout_blocchi_pagina_idx
++  on public.crm_layout_blocchi (pagina_id, ordinamento);
++
++create index if not exists crm_layout_campi_blocco_idx
++  on public.crm_layout_campi (blocco_id, ordinamento);
++
++create index if not exists crm_layout_pagine_modulo_idx
++  on public.crm_layout_pagine (modulo, ordinamento)
++  where visible = true;
++
++-- ---------------------------------------------------------------------------
++-- Ordine personale delle pagine.
++--
++-- Il layout (quali pagine esistono, cosa contengono) e' definito dall'admin
++-- ed e' uguale per tutti. L'ORDINE in cui un utente le vede mentre lavora e'
++-- invece una sua preferenza: chi passa la giornata sull'impianto se lo mette
++-- per primo senza cambiare la scheda agli altri.
++--
++-- Righe assenti = ordine di default definito dall'admin.
++-- ---------------------------------------------------------------------------
++create table if not exists public.crm_layout_ordine_utente (
++  utente_id uuid not null references public.utenti(id) on delete cascade,
++  modulo text not null,
++  -- Elenco ordinato di page_key. Le pagine non elencate seguono in coda
++  -- nell'ordine dell'admin, cosi' una pagina nuova compare a tutti anche se
++  -- la preferenza e' stata salvata prima che esistesse.
++  ordine jsonb not null default '[]'::jsonb,
++  updated_at timestamptz not null default now(),
++  primary key (utente_id, modulo)
++);
++
++-- ---------------------------------------------------------------------------
++-- RLS
++--
++-- Lettura: aperta a tutti gli autenticati, come per crm_custom_fields — sono
++-- metadata di presentazione (etichetta, posizione, formato), non dati dei
++-- clienti. Senza lettura la scheda non saprebbe cosa disegnare.
++--
++-- Scrittura: nessuna policy. Passa dal backend con service_role, che
++-- verifica il ruolo admin prima di toccare qualsiasi cosa.
++-- ---------------------------------------------------------------------------
++alter table public.crm_layout_pagine enable row level security;
++alter table public.crm_layout_blocchi enable row level security;
++alter table public.crm_layout_campi enable row level security;
++alter table public.crm_layout_ordine_utente enable row level security;
++
++create policy "crm_layout_pagine_select"
++  on public.crm_layout_pagine
++  for select
++  to authenticated
++  using (true);
++
++create policy "crm_layout_blocchi_select"
++  on public.crm_layout_blocchi
++  for select
++  to authenticated
++  using (true);
++
++create policy "crm_layout_campi_select"
++  on public.crm_layout_campi
++  for select
++  to authenticated
++  using (true);
++
++-- L'ordine personale e' l'unica di queste tabelle che l'utente scrive da
++-- solo, e solo la propria riga.
++--
++-- auth.uid() e' l'id dell'utente Supabase Auth, che NON coincide con
++-- utenti.id: la corrispondenza passa da utenti.auth_user_id (stessa logica di
++-- get_permission_snapshot). La sottoquery avvolge auth.uid() perche' venga
++-- valutata una volta per query invece che per riga (vedi
++-- 20260822_fix_advisor_warnings.sql).
++create policy "crm_layout_ordine_utente_select_own"
++  on public.crm_layout_ordine_utente
++  for select
++  to authenticated
++  using (
++    utente_id in (
++      select u.id from public.utenti u
++      where u.auth_user_id = (select auth.uid())
++    )
++  );
++
++create policy "crm_layout_ordine_utente_upsert_own"
++  on public.crm_layout_ordine_utente
++  for insert
++  to authenticated
++  with check (
++    utente_id in (
++      select u.id from public.utenti u
++      where u.auth_user_id = (select auth.uid())
++    )
++  );
++
++create policy "crm_layout_ordine_utente_update_own"
++  on public.crm_layout_ordine_utente
++  for update
++  to authenticated
++  using (
++    utente_id in (
++      select u.id from public.utenti u
++      where u.auth_user_id = (select auth.uid())
++    )
++  )
++  with check (
++    utente_id in (
++      select u.id from public.utenti u
++      where u.auth_user_id = (select auth.uid())
++    )
++  );
++
++commit;

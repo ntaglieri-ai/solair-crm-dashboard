@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   ChevronRight,
   Filter,
@@ -12,12 +12,10 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
+import { createPortal } from "react-dom"
 import {
   Sheet,
   SheetContent,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
 } from "@/components/ui/sheet"
 import {
   Accordion,
@@ -94,6 +92,11 @@ function buildFields(
     { id: "Codice postale", label: "Codice postale", type: "text" },
     { id: "Cognome", label: "Cognome", type: "text" },
     { id: "Connesso a", label: "Connesso a", type: "text" },
+    // I tre consensi e il wallbox esistono sul record ma non erano
+    // filtrabili: l'elenco era scritto a mano e si era disallineato.
+    { id: "Consenso telefono", label: "Consenso telefono", type: "boolean" },
+    { id: "Consenso e-mail", label: "Consenso e-mail", type: "boolean" },
+    { id: "Consenso WhatsApp", label: "Consenso WhatsApp", type: "boolean" },
     { id: "Contatto convertito", label: "Contatto convertito", type: "text" },
     { id: "Creato da", label: "Creato da", type: "text" },
     { id: "Data Click", label: "Data Click", type: "date" },
@@ -171,6 +174,7 @@ function buildFields(
       type: "text",
     },
     { id: "Valutazione", label: "Valutazione", type: "number" },
+    { id: "Wallbox richiesto", label: "Wallbox richiesto", type: "boolean" },
   ]
 }
 
@@ -225,6 +229,10 @@ export function AdvancedFilters({
   onQuickFiltersReset,
   quickViews,
   trigger,
+  inline = false,
+  openInline = false,
+  onOpenInlineChange,
+  inlineContainer,
 }: {
   applied: AdvancedFilterState
   onApply: (state: AdvancedFilterState) => void
@@ -237,6 +245,26 @@ export function AdvancedFilters({
   quickViews?: { label: string; active: boolean; onSelect: () => void }[]
   /** Trigger personalizzato (es. bottone header colorato). Se assente, resta l'icona compatta di default. */
   trigger?: (ctx: { onClick: () => void; count: number }) => ReactNode
+  /**
+   * Pannello incastonato nella pagina invece che sovrapposto.
+   *
+   * Sovrapposto, il pannello copre la lista: si compone il filtro alla cieca
+   * e si scopre il risultato solo dopo aver chiuso. Incastonato, la lista
+   * resta accanto e si aggiorna mentre si sceglie.
+   *
+   * In questa modalita' l'apertura la governa la pagina, non il componente.
+   */
+  inline?: boolean
+  openInline?: boolean
+  onOpenInlineChange?: (open: boolean) => void
+  /**
+   * Dove disegnare il pannello quando e' incastonato.
+   *
+   * Il componente e' montato nella barra dei pulsanti, ma il pannello deve
+   * stare accanto alla tabella: la pagina fornisce il contenitore e il
+   * pannello ci viene portato dentro, senza duplicare lo stato del filtro.
+   */
+  inlineContainer?: HTMLElement | null
 }) {
   const { owners, installers } = useTags()
   const statoLeadOptions = useColumnValueOptions(
@@ -348,42 +376,38 @@ export function AdvancedFilters({
     else clearField(key)
   }
 
-  return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      {trigger ? (
-        trigger({ onClick: () => setOpen(true), count: totalAppliedCount })
-      ) : (
-        <Button
-          variant="outline"
-          size="icon"
-          className="relative bg-card"
-          aria-label="Filtri avanzati"
-          onClick={() => setOpen(true)}
-        >
-          <Filter />
-          {totalAppliedCount > 0 ? (
-            <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-teal px-1 text-[10px] font-bold tabular-nums text-teal-foreground">
-              {totalAppliedCount}
-            </span>
-          ) : null}
-        </Button>
-      )}
-      <SheetContent
-        side="right"
-        showCloseButton={false}
-        className="w-[340px] gap-0 p-0 sm:max-w-[340px]"
-      >
-        <SheetHeader className="flex-row items-center justify-between border-b border-border p-4">
-          <SheetTitle>Filtra Lead per</SheetTitle>
+  // Con il pannello incastonato la lista si aggiorna mentre si compone il
+  // filtro: e' il motivo per cui sta accanto invece che sopra. La piccola
+  // attesa evita che spuntare tre caselle faccia partire tre interrogazioni
+  // al database.
+  const applicaRef = useRef(onApply)
+  useEffect(() => {
+    applicaRef.current = onApply
+  }, [onApply])
+  useEffect(() => {
+    if (!inline) return
+    const attesa = setTimeout(() => applicaRef.current(draft), 350)
+    return () => clearTimeout(attesa)
+  }, [inline, draft])
+
+  // Apertura: nella modalita' incastonata la governa la pagina, che deve
+  // sapere quanto spazio lasciare alla lista.
+  const aperto = inline ? openInline : open
+  const chiudi = () => (inline ? onOpenInlineChange?.(false) : setOpen(false))
+
+  const contenutoPannello = (
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="flex flex-row items-center justify-between border-b border-border p-4">
+          <p className="text-base font-semibold text-foreground">Filtra Lead per</p>
           <Button
             variant="ghost"
             size="icon-sm"
             aria-label="Chiudi"
-            onClick={() => setOpen(false)}
+            onClick={chiudi}
           >
             <X />
           </Button>
-        </SheetHeader>
+        </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {/* Viste rapide */}
@@ -551,7 +575,7 @@ export function AdvancedFilters({
           </div>
         </div>
 
-        <SheetFooter className="flex-row gap-2 border-t border-border p-4">
+        <div className="flex flex-row gap-2 border-t border-border p-4">
           <Button
             variant="outline"
             className="flex-1 bg-card"
@@ -561,24 +585,64 @@ export function AdvancedFilters({
             <RotateCcw data-icon="inline-start" />
             Reimposta tutto
           </Button>
-          <Button
-            className="flex-1 bg-teal text-teal-foreground hover:bg-teal/90"
-            onClick={() => {
-              onApply(draft)
-              setOpen(false)
-            }}
-          >
-            Applica filtri
-          </Button>
-        </SheetFooter>
+          {!inline ? (
+            <Button
+              className="flex-1 bg-teal text-teal-foreground hover:bg-teal/90"
+              onClick={() => {
+                onApply(draft)
+                setOpen(false)
+              }}
+            >
+              Applica filtri
+            </Button>
+          ) : null}
+        </div>
+      </div>
+  )
+
+  if (inline) {
+    // Il pannello e' una colonna della pagina: quando e' chiuso non occupa
+    // spazio, quando e' aperto la lista si stringe accanto a lui.
+    if (!aperto || !inlineContainer) return null
+    return createPortal(
+      <aside className="flex h-full w-[340px] shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+        {contenutoPannello}
+      </aside>,
+      inlineContainer,
+    )
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      {trigger ? (
+        trigger({ onClick: () => setOpen(true), count: totalAppliedCount })
+      ) : (
+        <Button
+          variant="outline"
+          size="icon"
+          className="relative bg-card"
+          aria-label="Filtri avanzati"
+          onClick={() => setOpen(true)}
+        >
+          <Filter />
+          {totalAppliedCount > 0 ? (
+            <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-teal px-1 text-[10px] font-bold tabular-nums text-teal-foreground">
+              {totalAppliedCount}
+            </span>
+          ) : null}
+        </Button>
+      )}
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        className="w-[340px] gap-0 p-0 sm:max-w-[340px]"
+      >
+        {contenutoPannello}
       </SheetContent>
     </Sheet>
   )
 }
 
-// ----------------------------------------------------------------------------
-// Mini-form per tipo campo
-// ----------------------------------------------------------------------------
 function FieldEditor({
   def,
   value,

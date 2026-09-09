@@ -212,6 +212,10 @@ export function LeadsClient({
       document.body.style.overscrollBehavior = prevBodyOverscroll
     }
   }, [isMobile])
+  // Il pannello filtri e' una colonna della pagina: l'apertura la governa
+  // qui, perche' e' la pagina a decidere quanto spazio resta alla lista.
+  const [filtriAperti, setFiltriAperti] = useState(false)
+  const [pannelloFiltri, setPannelloFiltri] = useState<HTMLDivElement | null>(null)
   const [page, setPage] = useState(1)
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
   const [convertTarget, setConvertTarget] = useState<Lead | null>(null)
@@ -815,6 +819,10 @@ export function LeadsClient({
           </Button>
 
           <AdvancedFilters
+            inline={!isMobile}
+            openInline={filtriAperti}
+            onOpenInlineChange={setFiltriAperti}
+            inlineContainer={pannelloFiltri}
             applied={advanced}
             onApply={handleAdvancedApply}
             tags={allTags}
@@ -833,7 +841,7 @@ export function LeadsClient({
             }))}
             trigger={({ onClick, count }) => (
               <Button
-                onClick={onClick}
+                onClick={() => (isMobile ? onClick() : setFiltriAperti((v) => !v))}
                 className="relative h-11 w-full gap-1.5 bg-primary px-2 text-xs text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90 lg:h-10 lg:w-auto lg:gap-2 lg:px-3.5 lg:text-sm"
               >
                 <SlidersHorizontal className="size-[22px] lg:size-4" />
@@ -890,8 +898,13 @@ export function LeadsClient({
         </div>
       ) : null}
 
-      {/* Tabella — occupa lo spazio rimanente e scrolla internamente */}
-      <div className="min-h-0 flex-1">
+      {/* Pannello filtri e tabella affiancati: il pannello e' una colonna
+          della pagina, non un sovrapposto, cosi' la lista resta visibile e
+          si aggiorna mentre si compone il filtro. */}
+      <div className="flex min-h-0 flex-1 gap-3">
+        <div ref={setPannelloFiltri} className="contents" />
+
+        <div className="min-h-0 min-w-0 flex-1">
         <LeadTable
           leads={pageRows}
           columns={columns}
@@ -940,6 +953,7 @@ export function LeadsClient({
           loading={isFetching && !data}
           onOpenSettings={() => openSettings("colonne")}
         />
+        </div>
       </div>
 
       {/* Footer paginazione — sempre visibile e in primo piano */}

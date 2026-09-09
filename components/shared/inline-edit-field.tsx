@@ -231,8 +231,11 @@ function InlineEditableValueInner(props: InlineEditableValueProps) {
       disabled={!canEdit}
       onClick={() => canEdit && setEditing(true)}
       className={cn(
-        "group inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-md text-left text-sm text-foreground",
-        canEdit && "cursor-text hover:bg-secondary/70",
+        // Largo quanto la cella, non quanto il testo: il bersaglio del mouse
+        // era altrimenti la sola stringa del valore, e su un campo corto o
+        // vuoto diventava quasi impossibile capire che fosse modificabile.
+        "group flex min-h-8 w-full items-center justify-between gap-1.5 rounded-md border border-transparent px-1.5 text-left text-sm text-foreground transition-colors",
+        canEdit && "cursor-text hover:border-border hover:bg-secondary/60",
         !canEdit && "cursor-default",
         props.className,
       )}
@@ -250,7 +253,9 @@ function InlineEditableValueInner(props: InlineEditableValueProps) {
 export function InlineEditableField(props: InlineEditableValueProps) {
   return (
     <div className="min-w-0">
-      <span className="block text-xs font-medium uppercase tracking-normal text-muted-foreground">
+      {/* Il padding orizzontale ricalca quello del riquadro di modifica qui
+          sotto, altrimenti etichetta e valore risulterebbero sfalsati. */}
+      <span className="block px-1.5 text-xs font-medium uppercase tracking-normal text-muted-foreground">
         {props.label}
       </span>
       <div className="mt-1 min-w-0">

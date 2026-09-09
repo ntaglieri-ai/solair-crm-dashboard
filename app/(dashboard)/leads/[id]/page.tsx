@@ -7,29 +7,52 @@ import { LeadDetailContent } from "@/components/leads/lead-detail-content"
 import { LeadIntelligencePanel } from "@/components/leads/lead-intelligence-panel"
 import { requirePage } from "@/lib/permissions/server"
 import { listEmailLog } from "@/lib/email/email-log"
+import { createClient } from "@/lib/supabase/server"
+import { loadLayout, loadOrdinePersonale } from "@/lib/crm-settings/layout-server"
+import {
+  applicaOrdineBlocchi,
+  applicaOrdineCampi,
+  applicaOrdinePersonale,
+  soloVisibili,
+} from "@/lib/crm-settings/layout"
 
 export default async function LeadDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
-  await requirePage("lead")
-
+  // requirePage carica gia' lo snapshot dei permessi, memorizzato per
+  // richiesta: riusarlo qui non costa una seconda lettura.
+  const permissions = await requirePage("lead")
   const { id } = await params
-  const lead = await getLeadById(id)
+  const supabase = await createClient()
+  const utenteId = permissions.snapshot.subject.userId
+
+  // In parallelo: le tre letture non dipendono l'una dall'altra, e
+  // incatenarle aggiungerebbe un giro di rete verso il database per ciascuna.
+  const [lead, emailLog, pagine, ordine] = await Promise.all([
+    getLeadById(id),
+    listEmailLog("lead", id),
+    loadLayout(supabase, "lead"),
+    utenteId
+      ? loadOrdinePersonale(supabase, utenteId, "lead")
+      : Promise.resolve({ pagine: [], blocchi: {}, campi: {} }),
+  ])
+
   if (!lead) notFound()
 
-  // Se il lead e' stato convertito, recupera il nome del cliente collegato
-  // per la sezione "Record collegati" (altrimenti mostrerebbe solo l'id).
+  // Il nome del cliente collegato serve solo a lead convertiti, e dipende da
+  // un valore del lead: qui la lettura in sequenza e' inevitabile, ma scatta
+  // di rado.
   const clienteCollegatoId = lead["Account convertito"]
-  const clienteCollegato = clienteCollegatoId
-    ? await getClienteById(clienteCollegatoId)
-    : null
+  const clienteCollegato = clienteCollegatoId ? await getClienteById(clienteCollegatoId) : null
 
-  // Storico invii reali. Letto qui e passato ai due consumatori (pannello e
-  // sezione E-mail) invece che fatto fetchare a ciascuno: e' la stessa lista,
-  // e la policy di SELECT su crm_email_log eredita gia' lo scoping di leads.
-  const emailLog = await listEmailLog("lead", id)
+  const layout = soloVisibili(
+    applicaOrdineCampi(
+      applicaOrdineBlocchi(applicaOrdinePersonale(pagine, ordine.pagine), ordine.blocchi),
+      ordine.campi,
+    ),
+  )
 
   return (
     <div className="flex flex-col gap-6">
@@ -41,6 +64,7 @@ export default async function LeadDetailPage({
           lead={lead}
           clienteCollegatoNome={clienteCollegato?.["Nome Clienti"]}
           emailLog={emailLog}
+          layout={layout}
         />
         <LeadIntelligencePanel lead={lead} emailLog={emailLog} />
       </div>

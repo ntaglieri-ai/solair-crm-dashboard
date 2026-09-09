@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { useTags } from "@/lib/tag-store"
 import {
@@ -30,6 +31,10 @@ import {
 import { CalendarioRecordSection } from "@/components/calendario/calendario-record-section"
 import { Button } from "@/components/ui/button"
 import { EmailHistorySection } from "@/components/shared/email-history-section"
+import { LayoutRenderer, type RisolviModifica } from "@/components/shared/layout-renderer"
+import type { LayoutPagina } from "@/lib/crm-settings/layout"
+import { ancoraPagina, paginePiene } from "@/lib/crm-settings/layout-render"
+import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
 import { NoteAttachmentList, RichNoteComposer, RichNoteText } from "@/components/shared/rich-note"
 import type { NoteAttachment, NoteMention, NoteMentionDraft } from "@/lib/notes/mentions"
 import { Badge } from "@/components/ui/badge"
@@ -1044,11 +1049,13 @@ export function LeadDetailContent({
   lead,
   clienteCollegatoNome,
   emailLog,
+  layout = [],
 }: {
   lead: Lead
   clienteCollegatoNome?: string | null
   /** Storico invii reali (crm_email_log), risolto lato server dalla pagina. */
   emailLog: EmailLogEntry[]
+  layout?: LayoutPagina[]
 }) {
   const [openTasks, setOpenTasks] = useState<Task[]>(() =>
     (lead.compiti ?? []).filter((task) => !task.completato).map(taskFromLeadTask),
@@ -1093,12 +1100,33 @@ export function LeadDetailContent({
     ])
   }
 
+  // Con un layout configurato la scheda si disegna da quello; senza, resta
+  // il rendering scritto qui sotto come via di riserva.
+  const paginePronte = paginePiene(layout)
+
   const counts: Record<string, number> = {
     "section-note": lead.attivita.filter((activity) => activity.tipo === "nota").length,
     "section-attivita-aperte": openTasks.length,
     "section-attivita-chiuse": (lead.compiti ?? []).filter((task) => task.completato).length,
     "section-email": emailLog.length,
     "section-record": lead["Account convertito"] ? 1 : 0,
+  }
+
+  if (paginePronte.length > 0) {
+    return (
+      <LeadDaLayout
+        lead={lead}
+        emailLog={emailLog}
+        clienteCollegatoNome={clienteCollegatoNome}
+        layout={paginePronte}
+        openTasks={openTasks}
+        onToggleTask={toggleOpenTask}
+        onNuovoCompito={() => setTaskDialogOpen(true)}
+        taskDialogOpen={taskDialogOpen}
+        onTaskDialogOpenChange={setTaskDialogOpen}
+        onTaskCreated={handleTaskCreated}
+      />
+    )
   }
 
   return (
@@ -1248,6 +1276,179 @@ export function LeadDetailContent({
         onOpenChange={setTaskDialogOpen}
         correlato={{ tipo: "lead", id: lead.id, nome: lead["Nome Lead"] }}
         onCreated={handleTaskCreated}
+      />
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------
+ * Scheda Lead disegnata dal layout configurato.
+ *
+ * Stessa impostazione della scheda Cliente: i campi arrivano dalla
+ * configurazione, mentre i pezzi che non sono campi (note, allegati,
+ * attivita', calendario, record collegati, sequenza temporale) restano i
+ * componenti gia' esistenti, agganciati alla pagina che li dichiara.
+ * ---------------------------------------------------------------------- */
+
+/** Colonna e tipo di ogni campo Lead, per la modifica inline. */
+const LEAD_CAMPO_PER_APP_FIELD = new Map(
+  LEAD_RECORD_FIELDS.map((campo) => [campo.appField as string, campo]),
+)
+
+function LeadDaLayout({
+  lead,
+  emailLog,
+  clienteCollegatoNome,
+  layout,
+  openTasks,
+  onToggleTask,
+  onNuovoCompito,
+  taskDialogOpen,
+  onTaskDialogOpenChange,
+  onTaskCreated,
+}: {
+  lead: Lead
+  emailLog: EmailLogEntry[]
+  clienteCollegatoNome?: string | null
+  layout: LayoutPagina[]
+  openTasks: Task[]
+  onToggleTask: (id: string) => void
+  onNuovoCompito: () => void
+  taskDialogOpen: boolean
+  onTaskDialogOpenChange: (open: boolean) => void
+  onTaskCreated: (compito: Compito) => void
+}) {
+  const router = useRouter()
+
+  const salvaOrdine = (corpo: Record<string, unknown>) => {
+    void fetch("/api/layout/ordine-personale", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ modulo: "lead", ...corpo }),
+    }).catch(() => {})
+  }
+
+  const componenti: Record<string, ReactNode> = {
+    note: <NoteSection lead={lead} />,
+    "documenti-obbligatori": (
+      <AllegatiSection
+        recordTipo="lead"
+        recordId={lead.id}
+        nomeRecord={lead["Nome Lead"]}
+        sottocartella={DOCUMENTI_OBBLIGATORI_FOLDER}
+        titolo="Documenti obbligatori per la conversione"
+        onChanged={notificaDocumentiObbligatoriCambiati}
+      />
+    ),
+    allegati: (
+      <AllegatiSection recordTipo="lead" recordId={lead.id} nomeRecord={lead["Nome Lead"]} />
+    ),
+    "attivita-aperte": (
+      <div className="flex flex-col gap-3">
+        <div className="flex justify-end">
+          <Button size="sm" variant="outline" className="h-7 bg-card text-xs" onClick={onNuovoCompito}>
+            <IconPlus size={14} stroke={1.8} data-icon="inline-start" />
+            Compito
+          </Button>
+        </div>
+        <AttivitaAperte tasks={openTasks} onToggle={onToggleTask} />
+      </div>
+    ),
+    "attivita-chiuse": <AttivitaChiuse lead={lead} />,
+    email: (
+      <EmailHistorySection
+        emailLog={emailLog}
+        emptyLabel="Nessuna email inviata a questo lead dal CRM."
+        recordTipo="lead"
+        recordId={lead.id}
+        nomeRecord={lead["Nome Lead"]}
+      />
+    ),
+    calendario: (
+      <CalendarioRecordSection
+        recordTipo="lead"
+        recordId={lead.id}
+        nomeRecord={lead["Nome Lead"]}
+      />
+    ),
+    "record-collegati": (
+      <RecordCollegati lead={lead} clienteCollegatoNome={clienteCollegatoNome} />
+    ),
+    timeline: <SequenzaTemporale lead={lead} />,
+  }
+
+  const risolviModifica: RisolviModifica = (fieldKey) => {
+    const campo = LEAD_CAMPO_PER_APP_FIELD.get(fieldKey)
+    if (!campo) return null
+
+    const value = (lead as unknown as Record<string, unknown>)[fieldKey]
+    // Solo valori semplici: un oggetto o una lista non sono modificabili
+    // da un campo di testo.
+    if (
+      value !== null &&
+      value !== undefined &&
+      typeof value !== "string" &&
+      typeof value !== "number" &&
+      typeof value !== "boolean"
+    ) {
+      return null
+    }
+
+    return {
+      module: "lead",
+      field: campo.column,
+      endpoint: `/api/leads/${lead.id}`,
+      patchKey: fieldKey,
+      value,
+      type:
+        campo.type === "boolean"
+          ? "boolean"
+          : campo.type === "numeric"
+            ? "number"
+            : campo.type === "timestamp"
+              ? "date"
+              : fieldKey === "E-mail"
+                ? "email"
+                : /telefono|mobile/i.test(fieldKey)
+                  ? "tel"
+                  : "text",
+    }
+  }
+
+  return (
+    <div className="flex min-w-0 flex-1 flex-col gap-1">
+      <nav className="flex items-center gap-1 overflow-x-auto border-b border-border bg-background pb-3 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible lg:sticky lg:top-[var(--detail-header-h,0px)] lg:z-10 lg:pt-2">
+        {layout.map((pagina) => (
+          <button
+            key={pagina.id}
+            type="button"
+            onClick={() =>
+              document
+                .getElementById(ancoraPagina(pagina.pageKey))
+                ?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            {pagina.label}
+          </button>
+        ))}
+      </nav>
+
+      <LayoutRenderer
+        pagine={layout}
+        record={lead as unknown as Record<string, unknown>}
+        risolviModifica={risolviModifica}
+        componenti={componenti}
+        onRiordinaBlocchi={(pageKey, ordine) => salvaOrdine({ blocchi: { [pageKey]: ordine } })}
+        onRiordinaCampi={(blockKey, ordine) => salvaOrdine({ campi: { [blockKey]: ordine } })}
+        onSalvato={() => router.refresh()}
+      />
+
+      <QuickCompitoDialog
+        open={taskDialogOpen}
+        onOpenChange={onTaskDialogOpenChange}
+        correlato={{ tipo: "lead", id: lead.id, nome: lead["Nome Lead"] }}
+        onCreated={onTaskCreated}
       />
     </div>
   )

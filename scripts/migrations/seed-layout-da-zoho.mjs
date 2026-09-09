@@ -28,45 +28,84 @@ import { createClient } from "@supabase/supabase-js"
  * macro-voci concordate, come blocchi al loro interno. L'ordine dei blocchi
  * dentro una pagina segue l'ordine di questo elenco.
  * ---------------------------------------------------------------------- */
-const PAGINE = [
-  {
-    key: "anagrafica",
-    label: "Anagrafica",
-    sezioni: ["Informazioni Clienti", "Informazioni indirizzo", "Riepilogo Visite"],
-  },
-  { key: "documenti", label: "Documenti", componente: "allegati", sezioni: [] },
-  {
-    key: "iter-burocratico",
-    label: "Iter burocratico",
-    sezioni: ["Pratiche Enel", "GSE", "Dati catastali"],
-  },
-  {
-    key: "impianto",
-    label: "Impianto",
-    sezioni: ["Informazioni Tecniche FTV", "Zavorre", "Info Tecniche Termico"],
-  },
-  {
-    key: "pagamenti",
-    label: "Pagamenti & Note Commerciali",
-    sezioni: [
-      "Note Commerciale",
-      "Dati Amministrativi Fotovoltaico",
-      "Dati Amministrativi CT3.0",
-      "Provvigioni",
-    ],
-  },
-  {
-    key: "logistica",
-    label: "Logistica",
-    sezioni: ["Stanziamento materiali", "Iter ordinario"],
-  },
-  { key: "comunicazioni", label: "Comunicazioni", sezioni: ["Servizio clienti"] },
-  { key: "note-cliente", label: "Note cliente", componente: "note", sezioni: [] },
-  { key: "email", label: "E-mail", componente: "email", sezioni: [] },
-  { key: "note-interne", label: "Note interne", componente: "note-interne", sezioni: [] },
-  { key: "calendario", label: "Calendario", componente: "calendario", sezioni: [] },
-  { key: "attivita", label: "Attività", componente: "attivita", sezioni: [] },
-]
+const PAGINE_PER_MODULO = {
+  clienti: [
+    {
+      key: "anagrafica",
+      label: "Anagrafica",
+      sezioni: ["Informazioni Clienti", "Informazioni indirizzo", "Riepilogo Visite"],
+    },
+    { key: "documenti", label: "Documenti", componente: "allegati", sezioni: [] },
+    {
+      key: "iter-burocratico",
+      label: "Iter burocratico",
+      sezioni: ["Pratiche Enel", "GSE", "Dati catastali"],
+    },
+    {
+      key: "impianto",
+      label: "Impianto",
+      sezioni: ["Informazioni Tecniche FTV", "Zavorre", "Info Tecniche Termico"],
+    },
+    {
+      key: "pagamenti",
+      label: "Pagamenti & Note Commerciali",
+      sezioni: [
+        "Note Commerciale",
+        "Dati Amministrativi Fotovoltaico",
+        "Dati Amministrativi CT3.0",
+        "Provvigioni",
+      ],
+    },
+    {
+      key: "logistica",
+      label: "Logistica",
+      sezioni: ["Stanziamento materiali", "Iter ordinario"],
+    },
+    { key: "comunicazioni", label: "Comunicazioni", sezioni: ["Servizio clienti"] },
+    { key: "note-cliente", label: "Note cliente", componente: "note", sezioni: [] },
+    { key: "email", label: "E-mail", componente: "email", sezioni: [] },
+    { key: "note-interne", label: "Note interne", componente: "note-interne", sezioni: [] },
+    { key: "calendario", label: "Calendario", componente: "calendario", sezioni: [] },
+    { key: "attivita", label: "Attività", componente: "attivita", sezioni: [] },
+  ],
+
+  // Lead: stessa impostazione dei Clienti — le sezioni Zoho diventano
+  // blocchi dentro le voci di navigazione gia' in uso sulla scheda.
+  lead: [
+    { key: "info", label: "Informazioni principali", sezioni: ["Informazioni Lead"] },
+    { key: "indirizzo", label: "Indirizzo", sezioni: ["Informazioni indirizzo"] },
+    {
+      key: "descrizione",
+      label: "Descrizione",
+      sezioni: ["Informazioni sulla descrizione"],
+    },
+    { key: "sopralluogo", label: "Sopralluogo", sezioni: ["Sopralluogo precontrattuale"] },
+    { key: "note", label: "Note", componente: "note", sezioni: [] },
+    {
+      key: "documenti-obbligatori",
+      label: "Documenti obbligatori",
+      componente: "documenti-obbligatori",
+      sezioni: [],
+    },
+    { key: "allegati", label: "Allegati", componente: "allegati", sezioni: [] },
+    {
+      key: "attivita-aperte",
+      label: "Attività aperte",
+      componente: "attivita-aperte",
+      sezioni: [],
+    },
+    {
+      key: "attivita-chiuse",
+      label: "Attività chiuse",
+      componente: "attivita-chiuse",
+      sezioni: [],
+    },
+    { key: "email", label: "E-mail", componente: "email", sezioni: [] },
+    { key: "calendario", label: "Calendario", componente: "calendario", sezioni: [] },
+    { key: "record", label: "Record collegati", componente: "record-collegati", sezioni: [] },
+    { key: "timeline", label: "Sequenza temporale", componente: "timeline", sezioni: [] },
+  ],
+}
 
 /**
  * Sezioni Zoho deliberatamente escluse.
@@ -74,17 +113,43 @@ const PAGINE = [
  * "Immagine Clienti" e "Prova sottomodulo" sono vuote su Zoho; le altre due
  * voci non sono campi dato.
  */
-const SEZIONI_IGNORATE = new Set(["Immagine Clienti", "Prova sottomodulo"])
+const SEZIONI_IGNORATE = new Set([
+  "Immagine Clienti",
+  "Immagine Lead",
+  "Prova sottomodulo",
+  // Sul Lead il tracciamento delle visite non ha corrispondenza nel nostro
+  // database: gli otto campi resterebbero sempre vuoti.
+  "Riepilogo visite",
+])
 
 /**
  * Campi Zoho senza corrispondenza nel nostro CRM, saltati con motivo
  * esplicito invece che in silenzio.
  */
-const CAMPI_IGNORATI = {
-  "Nome e cognome": "calcolato da Zoho (Nome + Cognome), qui restano separati",
-  "Record Status": "campo interno Zoho",
-  "Layout installazione": "upload immagine, non un campo dato",
+const CAMPI_IGNORATI_PER_MODULO = {
+  clienti: {
+    "Nome e cognome": "calcolato da Zoho (Nome + Cognome), qui restano separati",
+    "Record Status": "campo interno Zoho",
+    "Layout installazione": "upload immagine, non un campo dato",
+  },
+  // Sul Lead il record applicativo ha meno campi: quelli elencati qui non
+  // esistono, e includerli lascerebbe in scheda caselle sempre vuote.
+  lead: {
+    "Nome e cognome": "calcolato da Zoho (Nome + Cognome), qui restano separati",
+    "Record Status": "campo interno Zoho",
+    "ID record": "identificatore Zoho, non un dato della scheda",
+    Locked: "flag interno Zoho",
+    "è convertito": "stato interno della conversione, gia' rappresentato altrove",
+    "Data/ora convertita": "gestita dal nostro flusso di conversione",
+    "Orario del registro delle modifiche": "campo interno Zoho",
+    "Ora dell’ultimo arricchimento": "arricchimento dati Zia, non in uso",
+    "Stato arricchito": "arricchimento dati Zia, non in uso",
+    "Ora  iscrizione annullata": "campo interno Zoho",
+    Saluti: "non presente sul record Lead",
+    "N. di dipendenti": "non presente sul record Lead",
+  },
 }
+
 
 function argomento(nome, predefinito = null) {
   const trovato = process.argv.find((a) => a.startsWith(`--${nome}=`))
@@ -126,34 +191,6 @@ function traduciFormula(expression, etichettaPerApiName) {
   return { expr, origine_zoho: expression }
 }
 
-/** Tipo Zoho -> tipo del nostro catalogo campi. */
-function tipoDaZoho(campo) {
-  const perData = {
-    text: "text",
-    textarea: "textarea",
-    email: "email",
-    phone: "phone",
-    website: "url",
-    date: "date",
-    datetime: "datetime",
-    boolean: "boolean",
-    picklist: "select",
-    multiselectpicklist: "multiselect",
-    lookup: "lookup",
-    ownerlookup: "lookup",
-    userlookup: "lookup",
-    currency: "currency",
-    double: "decimal",
-    integer: "number",
-    bigint: "number",
-    percent: "percent",
-  }
-  if (campo.data_type === "formula") {
-    // Per un campo calcolato il tipo e' quello del risultato.
-    return perData[campo.formula?.return_type] ?? "decimal"
-  }
-  return perData[campo.data_type] ?? "text"
-}
 
 async function main() {
   const percorso = argomento("file")
@@ -162,6 +199,12 @@ async function main() {
     process.exit(1)
   }
   const modulo = argomento("modulo", "clienti")
+  const PAGINE = PAGINE_PER_MODULO[modulo]
+  const CAMPI_IGNORATI = CAMPI_IGNORATI_PER_MODULO[modulo] ?? {}
+  if (!PAGINE) {
+    console.error(`Nessuna mappatura definita per il modulo "${modulo}"`)
+    process.exit(1)
+  }
   const applica = argomento("apply", false) === true
 
   const supabase = createClient(

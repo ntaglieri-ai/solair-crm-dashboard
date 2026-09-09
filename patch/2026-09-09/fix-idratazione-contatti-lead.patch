@@ -1,0 +1,40 @@
+diff --git a/lib/leads/__tests__/list-columns.test.ts b/lib/leads/__tests__/list-columns.test.ts
+index dc58ec4..3aac3db 100644
+--- a/lib/leads/__tests__/list-columns.test.ts
++++ b/lib/leads/__tests__/list-columns.test.ts
+@@ -30,6 +30,16 @@ describe("lead list columns", () => {
+     expect(leadListNeedsTags(["Tag"])).toBe(true)
+   })
+ 
++  it("always selects phone and email, even when their columns are hidden", () => {
++    // Le icone di contatto rapido stanno nella cella del nome e si disegnano
++    // sempre: senza queste due colonne ricevevano un numero vuoto, e il
++    // disegno lato server finiva per non coincidere con quello del browser.
++    const select = columns(leadListColumnsForFields(["Nome Lead"]))
++
++    expect(select.has("telefono")).toBe(true)
++    expect(select.has("email")).toBe(true)
++  })
++
+   it("selects all known lead data fields for full export paths", () => {
+     const select = columns(leadListColumnsForFields(["*"]))
+ 
+diff --git a/lib/leads/list-columns.ts b/lib/leads/list-columns.ts
+index 6241e6a..60975e7 100644
+--- a/lib/leads/list-columns.ts
++++ b/lib/leads/list-columns.ts
+@@ -10,6 +10,14 @@ const TECHNICAL_COLUMNS = [
+   "id",
+   "created_at",
+   "updated_at",
++  // Telefono ed e-mail servono sempre, anche quando le colonne omonime non
++  // sono visibili: le icone di contatto rapido stanno nella cella del nome e
++  // si disegnano comunque. Senza, la lista riceveva il numero solo in certe
++  // configurazioni di colonne, e server e browser potevano disegnare due
++  // cose diverse — il pulsante disabilitato da una parte, il link tel:
++  // dall'altra.
++  "telefono",
++  "email",
+ ]
+ 
+ const FIELD_EXTRA_COLUMNS: Record<string, string[]> = {

@@ -10,6 +10,14 @@ const TECHNICAL_COLUMNS = [
   "id",
   "created_at",
   "updated_at",
+  // Telefono ed e-mail servono sempre, anche quando le colonne omonime non
+  // sono visibili: le icone di contatto rapido stanno nella cella del nome e
+  // si disegnano comunque. Senza, la lista riceveva il numero solo in certe
+  // configurazioni di colonne, e server e browser potevano disegnare due
+  // cose diverse — il pulsante disabilitato da una parte, il link tel:
+  // dall'altra.
+  "telefono",
+  "email",
 ]
 
 const FIELD_EXTRA_COLUMNS: Record<string, string[]> = {

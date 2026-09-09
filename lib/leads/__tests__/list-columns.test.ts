@@ -30,6 +30,16 @@ describe("lead list columns", () => {
     expect(leadListNeedsTags(["Tag"])).toBe(true)
   })
 
+  it("always selects phone and email, even when their columns are hidden", () => {
+    // Le icone di contatto rapido stanno nella cella del nome e si disegnano
+    // sempre: senza queste due colonne ricevevano un numero vuoto, e il
+    // disegno lato server finiva per non coincidere con quello del browser.
+    const select = columns(leadListColumnsForFields(["Nome Lead"]))
+
+    expect(select.has("telefono")).toBe(true)
+    expect(select.has("email")).toBe(true)
+  })
+
   it("selects all known lead data fields for full export paths", () => {
     const select = columns(leadListColumnsForFields(["*"]))
 

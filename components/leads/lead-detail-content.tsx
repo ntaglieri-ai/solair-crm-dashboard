@@ -1332,6 +1332,16 @@ function LeadDaLayout({
   onTaskCreated: (compito: Compito) => void
 }) {
   const router = useRouter()
+  const { ownerNames } = useTags()
+
+  // Il proprietario e' salvato come id utente: senza questo la scheda
+  // mostrerebbe l'UUID al posto del nome, come gia' faceva la versione
+  // scritta a mano.
+  const valoriVisualizzati: Record<string, ReactNode> = {
+    "Lead Proprietario": lead["Lead Proprietario"]
+      ? (ownerNames[lead["Lead Proprietario"]] ?? "Utente non disponibile")
+      : "Non assegnato",
+  }
 
   const salvaOrdine = (corpo: Record<string, unknown>) => {
     void fetch("/api/layout/ordine-personale", {
@@ -1452,6 +1462,7 @@ function LeadDaLayout({
         record={lead as unknown as Record<string, unknown>}
         risolviModifica={risolviModifica}
         componenti={componenti}
+        valoriVisualizzati={valoriVisualizzati}
         onRiordinaBlocchi={(pageKey, ordine) => salvaOrdine({ blocchi: { [pageKey]: ordine } })}
         onRiordinaCampi={(blockKey, ordine) => salvaOrdine({ campi: { [blockKey]: ordine } })}
         onSalvato={() => router.refresh()}

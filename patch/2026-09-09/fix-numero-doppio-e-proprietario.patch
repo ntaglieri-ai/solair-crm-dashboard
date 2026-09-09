@@ -1,0 +1,113 @@
+diff --git a/components/leads/lead-detail-content.tsx b/components/leads/lead-detail-content.tsx
+index 2b21f58..5b0806a 100644
+--- a/components/leads/lead-detail-content.tsx
++++ b/components/leads/lead-detail-content.tsx
+@@ -1332,6 +1332,16 @@ function LeadDaLayout({
+   onTaskCreated: (compito: Compito) => void
+ }) {
+   const router = useRouter()
++  const { ownerNames } = useTags()
++
++  // Il proprietario e' salvato come id utente: senza questo la scheda
++  // mostrerebbe l'UUID al posto del nome, come gia' faceva la versione
++  // scritta a mano.
++  const valoriVisualizzati: Record<string, ReactNode> = {
++    "Lead Proprietario": lead["Lead Proprietario"]
++      ? (ownerNames[lead["Lead Proprietario"]] ?? "Utente non disponibile")
++      : "Non assegnato",
++  }
+ 
+   const salvaOrdine = (corpo: Record<string, unknown>) => {
+     void fetch("/api/layout/ordine-personale", {
+@@ -1452,6 +1462,7 @@ function LeadDaLayout({
+         record={lead as unknown as Record<string, unknown>}
+         risolviModifica={risolviModifica}
+         componenti={componenti}
++        valoriVisualizzati={valoriVisualizzati}
+         onRiordinaBlocchi={(pageKey, ordine) => salvaOrdine({ blocchi: { [pageKey]: ordine } })}
+         onRiordinaCampi={(blockKey, ordine) => salvaOrdine({ campi: { [blockKey]: ordine } })}
+         onSalvato={() => router.refresh()}
+diff --git a/components/shared/__tests__/quick-contact-icons.test.ts b/components/shared/__tests__/quick-contact-icons.test.ts
+new file mode 100644
+index 0000000..ebbff5c
+--- /dev/null
++++ b/components/shared/__tests__/quick-contact-icons.test.ts
+@@ -0,0 +1,44 @@
++import { describe, expect, it } from "vitest"
++import { telHref } from "../quick-contact-icons"
++
++/**
++ * Il collegamento "tel:" costruito dai numeri in anagrafica.
++ *
++ * I casi qui sotto vengono dai dati veri: numeri scritti a mano da persone
++ * diverse in anni diversi, con prefissi fra parentesi, spazi, e in piu' di
++ * un caso due numeri nello stesso campo.
++ */
++describe("telHref", () => {
++  it("toglie spazi e trattini tenendo le cifre", () => {
++    expect(telHref("347 280 76 82")).toBe("3472807682")
++    expect(telHref("347-280-7682")).toBe("3472807682")
++  })
++
++  it("conserva il prefisso internazionale", () => {
++    // Senza il "+", il centralino legge il numero come nazionale e chiama
++    // un'utenza diversa.
++    expect(telHref("+393427807682")).toBe("+393427807682")
++    expect(telHref("(+39) 342 780 7682")).toBe("+393427807682")
++  })
++
++  it("prende il primo quando nel campo ci sono piu' numeri", () => {
++    // Caso reale: il lead Youssef Nabil aveva due numeri nello stesso campo,
++    // e la vecchia versione li fondeva in "+393427807682393387759140" — venti
++    // cifre, un'utenza che non esiste.
++    expect(telHref("+393427807682 / +393387759140")).toBe("+393427807682")
++    expect(telHref("3427807682, 3387759140")).toBe("3427807682")
++    expect(telHref("3427807682; 3387759140")).toBe("3427807682")
++    expect(telHref("3427807682\n3387759140")).toBe("3427807682")
++  })
++
++  it("taglia anche quando i due numeri sono incollati senza separatore", () => {
++    // Com'e' salvato sul lead Youssef Nabil: "+39342…+39338…", nessuna
++    // barra ne' virgola, solo il "+" del secondo numero.
++    expect(telHref("+393427807682+393387759140")).toBe("+393427807682")
++  })
++
++  it("torna vuoto su un campo senza cifre", () => {
++    expect(telHref("")).toBe("")
++    expect(telHref("—")).toBe("")
++  })
++})
+diff --git a/components/shared/quick-contact-icons.tsx b/components/shared/quick-contact-icons.tsx
+index d4608a8..19a0f5d 100644
+--- a/components/shared/quick-contact-icons.tsx
++++ b/components/shared/quick-contact-icons.tsx
+@@ -47,12 +47,27 @@ function digitsOnly(value: string) {
+  * hanno requisiti opposti: non vanno unificate.
+  */
+ export function telHref(value: string) {
++  // In anagrafica capita che un campo contenga PIU' numeri, separati da una
++  // barra, una virgola, un punto e virgola o un a capo ("347… / 338…").
++  // Togliendo tutto cio' che non e' cifra si otteneva un unico numero da
++  // venti cifre che non esiste, e la chiamata partiva verso il nulla: si
++  // prende il primo, che e' quello principale.
++  const segmento = value.split(/[/,;\n|]/)[0]?.trimStart() ?? ""
++
++  // Capita anche senza separatore: "+39342…+39338…", due numeri incollati.
++  // Il "+" del prefisso e' il primo; un SECONDO "+" apre il numero
++  // successivo, e li' si taglia. Cercarlo dopo il primo evita di rovinare i
++  // prefissi scritti "(+39) 342 …", dove il "+" non e' in testa.
++  const primoPiu = segmento.indexOf("+")
++  const secondoPiu = primoPiu === -1 ? -1 : segmento.indexOf("+", primoPiu + 1)
++  const primo = secondoPiu > -1 ? segmento.slice(0, secondoPiu) : segmento
++
+   // Il "+" si cerca come primo carattere SIGNIFICATIVO, saltando spazi e
+   // parentesi di apertura: in anagrafica il prefisso capita scritto
+   // "(+39) 347 …", e guardare solo il primo carattere lo perderebbe insieme
+   // alla parentesi, degradando il numero a nazionale.
+-  const prefisso = /^[\s(]*\+/.test(value) ? "+" : ""
+-  return prefisso + value.replace(/[^\d]/g, "")
++  const prefisso = /^[\s(]*\+/.test(primo) ? "+" : ""
++  return prefisso + primo.replace(/[^\d]/g, "")
+ }
+ 
+ export function QuickContactIcons({

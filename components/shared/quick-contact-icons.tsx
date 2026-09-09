@@ -47,12 +47,27 @@ function digitsOnly(value: string) {
  * hanno requisiti opposti: non vanno unificate.
  */
 export function telHref(value: string) {
+  // In anagrafica capita che un campo contenga PIU' numeri, separati da una
+  // barra, una virgola, un punto e virgola o un a capo ("347… / 338…").
+  // Togliendo tutto cio' che non e' cifra si otteneva un unico numero da
+  // venti cifre che non esiste, e la chiamata partiva verso il nulla: si
+  // prende il primo, che e' quello principale.
+  const segmento = value.split(/[/,;\n|]/)[0]?.trimStart() ?? ""
+
+  // Capita anche senza separatore: "+39342…+39338…", due numeri incollati.
+  // Il "+" del prefisso e' il primo; un SECONDO "+" apre il numero
+  // successivo, e li' si taglia. Cercarlo dopo il primo evita di rovinare i
+  // prefissi scritti "(+39) 342 …", dove il "+" non e' in testa.
+  const primoPiu = segmento.indexOf("+")
+  const secondoPiu = primoPiu === -1 ? -1 : segmento.indexOf("+", primoPiu + 1)
+  const primo = secondoPiu > -1 ? segmento.slice(0, secondoPiu) : segmento
+
   // Il "+" si cerca come primo carattere SIGNIFICATIVO, saltando spazi e
   // parentesi di apertura: in anagrafica il prefisso capita scritto
   // "(+39) 347 …", e guardare solo il primo carattere lo perderebbe insieme
   // alla parentesi, degradando il numero a nazionale.
-  const prefisso = /^[\s(]*\+/.test(value) ? "+" : ""
-  return prefisso + value.replace(/[^\d]/g, "")
+  const prefisso = /^[\s(]*\+/.test(primo) ? "+" : ""
+  return prefisso + primo.replace(/[^\d]/g, "")
 }
 
 export function QuickContactIcons({

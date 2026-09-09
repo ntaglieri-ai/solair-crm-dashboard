@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  applicaOrdineBlocchi,
   applicaOrdinePersonale,
   campiDuplicati,
   campoModificabile,
@@ -185,5 +186,59 @@ describe("palette dei tipi", () => {
     for (const tipo of LAYOUT_CAMPO_TIPI) {
       expect(LAYOUT_CAMPO_TIPO_LABEL[tipo]).toBeTruthy()
     }
+  })
+})
+
+describe("applicaOrdineBlocchi", () => {
+  function paginaConBlocchi(pageKey: string, chiavi: string[]): LayoutPagina {
+    return {
+      id: `p-${pageKey}`,
+      pageKey,
+      label: pageKey,
+      icona: null,
+      ordinamento: 0,
+      visible: true,
+      componente: null,
+      blocchi: chiavi.map((blockKey, indice) => ({
+        id: `b-${blockKey}`,
+        blockKey,
+        label: blockKey,
+        mostraTitolo: true,
+        colonne: 2,
+        ordinamento: indice,
+        visible: true,
+        campi: [],
+      })),
+    }
+  }
+
+  const pagine = [paginaConBlocchi("impianto", ["ftv", "zavorre", "termico"])]
+
+  it("senza preferenza lascia l'ordine dell'admin", () => {
+    const risultato = applicaOrdineBlocchi(pagine, {})
+    expect(risultato[0].blocchi.map((b) => b.blockKey)).toEqual(["ftv", "zavorre", "termico"])
+  })
+
+  it("riordina i blocchi della pagina indicata", () => {
+    const risultato = applicaOrdineBlocchi(pagine, { impianto: ["termico", "ftv", "zavorre"] })
+    expect(risultato[0].blocchi.map((b) => b.blockKey)).toEqual(["termico", "ftv", "zavorre"])
+  })
+
+  it("mette in coda i blocchi non elencati nella preferenza", () => {
+    // Un blocco aggiunto dall'admin dopo il salvataggio deve comparire
+    // comunque, non sparire.
+    const risultato = applicaOrdineBlocchi(pagine, { impianto: ["termico"] })
+    expect(risultato[0].blocchi.map((b) => b.blockKey)).toEqual(["termico", "ftv", "zavorre"])
+  })
+
+  it("ignora preferenze riferite ad altre pagine", () => {
+    const risultato = applicaOrdineBlocchi(pagine, { anagrafica: ["x", "y"] })
+    expect(risultato[0].blocchi.map((b) => b.blockKey)).toEqual(["ftv", "zavorre", "termico"])
+  })
+
+  it("non muta le pagine ricevute", () => {
+    const originale = pagine[0].blocchi.map((b) => b.blockKey)
+    applicaOrdineBlocchi(pagine, { impianto: ["zavorre", "ftv", "termico"] })
+    expect(pagine[0].blocchi.map((b) => b.blockKey)).toEqual(originale)
   })
 })

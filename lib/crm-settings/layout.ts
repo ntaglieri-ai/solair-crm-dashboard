@@ -145,6 +145,35 @@ export function applicaOrdinePersonale(
 }
 
 /**
+ * Applica l'ordine personale dei blocchi dentro ciascuna pagina.
+ *
+ * Stessa regola delle pagine: i blocchi elencati nella preferenza vengono
+ * per primi, quelli non elencati seguono in coda nell'ordine dell'admin —
+ * cosi' un blocco aggiunto dopo il salvataggio della preferenza compare
+ * comunque.
+ */
+export function applicaOrdineBlocchi(
+  pagine: LayoutPagina[],
+  ordinePerPagina: Record<string, string[]>,
+): LayoutPagina[] {
+  return pagine.map((pagina) => {
+    const ordine = ordinePerPagina[pagina.pageKey]
+    if (!ordine?.length) return pagina
+
+    const posizione = new Map(ordine.map((key, indice) => [key, indice]))
+    const blocchi = [...pagina.blocchi].sort((a, b) => {
+      const pa = posizione.get(a.blockKey)
+      const pb = posizione.get(b.blockKey)
+      if (pa !== undefined && pb !== undefined) return pa - pb
+      if (pa !== undefined) return -1
+      if (pb !== undefined) return 1
+      return a.ordinamento - b.ordinamento
+    })
+    return { ...pagina, blocchi }
+  })
+}
+
+/**
  * Solo cio' che va disegnato: pagine e blocchi nascosti spariscono con tutto
  * il loro contenuto, i campi nascosti spariscono singolarmente.
  */

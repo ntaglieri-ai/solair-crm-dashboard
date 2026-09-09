@@ -1,5 +1,6 @@
 import type { createClient } from "@/lib/supabase/server"
 import {
+  applicaOrdineBlocchi,
   applicaOrdinePersonale,
   type LayoutBlocco,
   type LayoutCampo,
@@ -176,22 +177,42 @@ export async function loadLayout(
  * Preferenza, non permesso: se manca o non e' leggibile si torna array vuoto
  * e vale l'ordine dell'admin.
  */
+export type OrdinePersonale = {
+  pagine: string[]
+  blocchi: Record<string, string[]>
+}
+
 export async function loadOrdinePersonale(
   supabase: SupabaseClient,
   utenteId: string,
   modulo: string,
-): Promise<string[]> {
+): Promise<OrdinePersonale> {
+  const vuoto: OrdinePersonale = { pagine: [], blocchi: {} }
+
   const { data, error } = await supabase
     .from("crm_layout_ordine_utente")
-    .select("ordine")
+    .select("ordine, ordine_blocchi")
     .eq("utente_id", utenteId)
     .eq("modulo", modulo)
     .maybeSingle()
 
-  if (error || !data) return []
-  const ordine = (data as { ordine: unknown }).ordine
-  if (!Array.isArray(ordine)) return []
-  return ordine.filter((key): key is string => typeof key === "string")
+  if (error || !data) return vuoto
+  const riga = data as { ordine: unknown; ordine_blocchi: unknown }
+
+  const pagine = Array.isArray(riga.ordine)
+    ? riga.ordine.filter((key): key is string => typeof key === "string")
+    : []
+
+  const blocchi: Record<string, string[]> = {}
+  if (riga.ordine_blocchi && typeof riga.ordine_blocchi === "object" && !Array.isArray(riga.ordine_blocchi)) {
+    for (const [pageKey, elenco] of Object.entries(riga.ordine_blocchi as Record<string, unknown>)) {
+      if (Array.isArray(elenco)) {
+        blocchi[pageKey] = elenco.filter((key): key is string => typeof key === "string")
+      }
+    }
+  }
+
+  return { pagine, blocchi }
 }
 
 /** Layout del modulo gia' riordinato secondo la preferenza dell'utente. */
@@ -203,5 +224,5 @@ export async function loadLayoutPerUtente(
   const pagine = await loadLayout(supabase, modulo)
   if (!pagine.length || !utenteId) return pagine
   const ordine = await loadOrdinePersonale(supabase, utenteId, modulo)
-  return applicaOrdinePersonale(pagine, ordine)
+  return applicaOrdineBlocchi(applicaOrdinePersonale(pagine, ordine.pagine), ordine.blocchi)
 }

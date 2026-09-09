@@ -7,7 +7,8 @@ import { ClienteIntelligencePanel } from "@/components/clienti/cliente-intellige
 import { requirePage } from "@/lib/permissions/server"
 import { listEmailLog } from "@/lib/email/email-log"
 import { createClient } from "@/lib/supabase/server"
-import { loadLayout } from "@/lib/crm-settings/layout-server"
+import { loadLayoutPerUtente } from "@/lib/crm-settings/layout-server"
+import { getCurrentPermissions } from "@/lib/permissions/server"
 import { soloVisibili } from "@/lib/crm-settings/layout"
 
 export default async function ClienteDetailPage({
@@ -28,7 +29,10 @@ export default async function ClienteDetailPage({
   // torna array vuoto quando le tabelle non ci sono o la lettura fallisce,
   // quindi un problema sul layout non lascia la scheda inaccessibile.
   const supabase = await createClient()
-  const layout = soloVisibili(await loadLayout(supabase, "clienti"))
+  const permissions = await getCurrentPermissions()
+  const layout = soloVisibili(
+    await loadLayoutPerUtente(supabase, "clienti", permissions.snapshot.subject.userId),
+  )
 
   return (
     <div className="flex flex-col gap-6">

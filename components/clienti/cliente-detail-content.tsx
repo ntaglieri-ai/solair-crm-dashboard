@@ -1701,6 +1701,18 @@ function ClienteDaLayout({
   const router = useRouter()
   const { ownerNames } = useClienteTags()
 
+  // L'ordine dei riquadri e' una preferenza di chi guarda: si salva per
+  // utente e non cambia la scheda agli altri. Un errore qui non deve
+  // disturbare il lavoro — al massimo l'ordine torna quello dell'admin al
+  // prossimo caricamento.
+  const riordinaBlocchi = (pageKey: string, ordine: string[]) => {
+    void fetch("/api/layout/ordine-personale", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ modulo: "clienti", blocchi: { [pageKey]: ordine } }),
+    }).catch(() => {})
+  }
+
   // Il proprietario e' salvato come id utente: senza questo la scheda
   // mostrerebbe l'UUID al posto del nome, come faceva gia' la versione
   // scritta a mano tramite displayClienteOwner.
@@ -1781,6 +1793,7 @@ function ClienteDaLayout({
           risolviModifica={risolviModifica}
           componenti={componenti}
           valoriVisualizzati={valoriVisualizzati}
+          onRiordinaBlocchi={riordinaBlocchi}
           onSalvato={() => router.refresh()}
         />
       </div>

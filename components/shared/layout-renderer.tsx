@@ -1,6 +1,22 @@
 "use client"
 
 import { useCallback, useState, type ReactNode } from "react"
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  useSortable,
+  arrayMove,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import { GripVertical } from "lucide-react"
 import { AlertTriangle, Sigma } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { InlineEditableField } from "@/components/shared/inline-edit-field"
@@ -51,6 +67,7 @@ export function LayoutRenderer({
   risolviModifica,
   componenti,
   valoriVisualizzati,
+  onRiordinaBlocchi,
   onSalvato,
 }: {
   pagine: LayoutPagina[]
@@ -67,6 +84,12 @@ export function LayoutRenderer({
    * per esempio, e' salvato come id utente e va letto come nome.
    */
   valoriVisualizzati?: Record<string, ReactNode>
+  /**
+   * Riordino personale dei blocchi. Riceve la pagina e il nuovo ordine delle
+   * sue chiavi di blocco; chi chiama lo salva come preferenza dell'utente.
+   * Assente = trascinamento disattivato.
+   */
+  onRiordinaBlocchi?: (pageKey: string, ordine: string[]) => void
   onSalvato?: () => void
 }) {
   // Valori appena modificati, prima che il server rimandi il record
@@ -99,19 +122,15 @@ export function LayoutRenderer({
             <div className="mb-3">{componenti?.[pagina.componente] ?? null}</div>
           ) : null}
 
-          <div className="flex flex-col gap-3">
-            {pagina.blocchi.map((blocco) => (
-              <BloccoRenderer
-                key={blocco.id}
-                blocco={blocco}
-                record={recordVivo}
-                valori={valori}
-                risolviModifica={risolviModifica}
-                valoriVisualizzati={valoriVisualizzati}
-                onSalvato={salvato}
-              />
-            ))}
-          </div>
+          <BlocchiTrascinabili
+            pagina={pagina}
+            record={recordVivo}
+            valori={valori}
+            risolviModifica={risolviModifica}
+            valoriVisualizzati={valoriVisualizzati}
+            onRiordinaBlocchi={onRiordinaBlocchi}
+            onSalvato={salvato}
+          />
         </section>
       ))}
     </div>
@@ -124,6 +143,7 @@ function BloccoRenderer({
   valori,
   risolviModifica,
   valoriVisualizzati,
+  trascinabile,
   onSalvato,
 }: {
   blocco: LayoutBlocco
@@ -131,16 +151,45 @@ function BloccoRenderer({
   valori: ReturnType<typeof mappaValori>
   risolviModifica?: RisolviModifica
   valoriVisualizzati?: Record<string, ReactNode>
+  trascinabile?: boolean
   onSalvato?: (fieldKey: string, nuovoValore: unknown) => void
 }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: blocco.id,
+    disabled: !trascinabile,
+  })
+
   if (blocco.campi.length === 0) return null
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      {blocco.mostraTitolo ? (
-        <h3 className="mb-3 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-          {blocco.label}
-        </h3>
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "rounded-xl border border-border bg-card p-4",
+        isDragging && "z-10 shadow-lg",
+      )}
+    >
+      {blocco.mostraTitolo || trascinabile ? (
+        <div className="mb-3 flex items-center gap-1.5">
+          {trascinabile ? (
+            <button
+              type="button"
+              className="cursor-grab text-muted-foreground/60 transition-colors hover:text-foreground active:cursor-grabbing"
+              aria-label={`Trascina per spostare il riquadro ${blocco.label}`}
+              title="Trascina per spostare questo riquadro"
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical className="size-3.5" />
+            </button>
+          ) : null}
+          {blocco.mostraTitolo ? (
+            <h3 className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+              {blocco.label}
+            </h3>
+          ) : null}
+        </div>
       ) : null}
 
       <div
@@ -245,5 +294,84 @@ function CampoRenderer({
       </span>
       <div className="text-[13px] text-foreground">{giaPronto ?? testo}</div>
     </div>
+  )
+}
+
+/**
+ * I blocchi di una pagina, riordinabili trascinandoli.
+ *
+ * L'ordine e' una preferenza di chi guarda: non tocca la configurazione
+ * dell'admin e non cambia cosa vedono gli altri. Senza onRiordinaBlocchi il
+ * trascinamento non compare affatto.
+ */
+function BlocchiTrascinabili({
+  pagina,
+  record,
+  valori,
+  risolviModifica,
+  valoriVisualizzati,
+  onRiordinaBlocchi,
+  onSalvato,
+}: {
+  pagina: LayoutPagina
+  record: Record<string, unknown>
+  valori: ReturnType<typeof mappaValori>
+  risolviModifica?: RisolviModifica
+  valoriVisualizzati?: Record<string, ReactNode>
+  onRiordinaBlocchi?: (pageKey: string, ordine: string[]) => void
+  onSalvato?: (fieldKey: string, nuovoValore: unknown) => void
+}) {
+  const [blocchi, setBlocchi] = useState(pagina.blocchi)
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  )
+
+  // La pagina puo' cambiare sotto (ricarica dopo un salvataggio): l'ordine
+  // locale vale solo finche' coincide per composizione con quello ricevuto.
+  const chiaviCorrenti = pagina.blocchi.map((b) => b.id).join("|")
+  const chiaviLocali = blocchi.map((b) => b.id).join("|")
+  if (
+    chiaviCorrenti.length !== chiaviLocali.length ||
+    pagina.blocchi.some((b) => !blocchi.some((l) => l.id === b.id))
+  ) {
+    setBlocchi(pagina.blocchi)
+  }
+
+  const contenuto = blocchi.map((blocco) => (
+    <BloccoRenderer
+      key={blocco.id}
+      blocco={blocco}
+      record={record}
+      valori={valori}
+      risolviModifica={risolviModifica}
+      valoriVisualizzati={valoriVisualizzati}
+      trascinabile={Boolean(onRiordinaBlocchi)}
+      onSalvato={onSalvato}
+    />
+  ))
+
+  if (!onRiordinaBlocchi) {
+    return <div className="flex flex-col gap-3">{contenuto}</div>
+  }
+
+  function fineTrascinamento(evento: DragEndEvent) {
+    const { active, over } = evento
+    if (!over || active.id === over.id) return
+    const da = blocchi.findIndex((b) => b.id === active.id)
+    const a = blocchi.findIndex((b) => b.id === over.id)
+    const nuovi = arrayMove(blocchi, da, a)
+    setBlocchi(nuovi)
+    onRiordinaBlocchi?.(
+      pagina.pageKey,
+      nuovi.map((b) => b.blockKey),
+    )
+  }
+
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={fineTrascinamento}>
+      <SortableContext items={blocchi.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+        <div className="flex flex-col gap-3">{contenuto}</div>
+      </SortableContext>
+    </DndContext>
   )
 }

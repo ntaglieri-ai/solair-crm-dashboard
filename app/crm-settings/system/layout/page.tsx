@@ -40,6 +40,7 @@ const MODULO_LABEL: Record<LayoutModulo, string> = {
   clienti: "Clienti",
   lead: "Lead",
   installatori: "Installatori",
+  compiti: "Compiti",
 }
 
 const PAGE_KEY = "crm_settings.system.layout"

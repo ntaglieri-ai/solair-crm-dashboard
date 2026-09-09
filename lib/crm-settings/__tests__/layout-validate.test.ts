@@ -15,6 +15,8 @@ describe("moduli e chiavi", () => {
   it("accetta solo i moduli previsti", () => {
     expect(isLayoutModulo("clienti")).toBe(true)
     expect(isLayoutModulo("lead")).toBe(true)
+    expect(isLayoutModulo("installatori")).toBe(true)
+    expect(isLayoutModulo("compiti")).toBe(true)
     expect(isLayoutModulo("Clienti")).toBe(false)
     expect(isLayoutModulo("utenti")).toBe(false)
     expect(isLayoutModulo(null)).toBe(false)

@@ -12,8 +12,14 @@ import type { LayoutFormato, LayoutFormula } from "./layout"
  * fatto. Chiavi, tipi e riferimenti vengono sempre ricontrollati qui.
  */
 
-/** Moduli che possono avere un layout configurabile. */
-export const LAYOUT_MODULI = ["clienti", "lead", "installatori"] as const
+/**
+ * Moduli che possono avere un layout configurabile.
+ *
+ * I nomi corrispondono alle tabelle in CRM_MODULE_TABLES: il layout descrive
+ * le schede di questi record, quindi l'elenco non puo' divergere da quello
+ * dei moduli che esistono davvero.
+ */
+export const LAYOUT_MODULI = ["clienti", "lead", "installatori", "compiti"] as const
 export type LayoutModulo = (typeof LAYOUT_MODULI)[number]
 
 export function isLayoutModulo(value: unknown): value is LayoutModulo {

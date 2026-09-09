@@ -32,8 +32,26 @@ export function validateCustomValue(field: Pick<CustomFieldValue, "label" | "tip
   const options = field.options ?? []
   switch (field.tipo) {
     case "number":
+    case "decimal":
     case "currency":
+    case "percent":
+      // "number" resta permissivo sui decimali: i campi gia' creati con
+      // questo tipo contengono valori decimali (es. potenza_extra 12.5) e
+      // restringerlo ora rifiuterebbe dati oggi validi. La differenza fra
+      // number e decimal e' di presentazione, non di validazione.
       if (typeof value !== "number" || !Number.isFinite(value)) return fail()
+      return value
+    case "url":
+      // Solo http/https e URL assoluto: il valore finisce in un link
+      // cliccabile, e uno schema arbitrario (javascript:, data:) non deve
+      // arrivarci.
+      if (typeof value !== "string") return fail()
+      try {
+        const url = new URL(value)
+        if (url.protocol !== "http:" && url.protocol !== "https:") return fail()
+      } catch {
+        return fail()
+      }
       return value
     case "boolean":
       if (typeof value !== "boolean") return fail()

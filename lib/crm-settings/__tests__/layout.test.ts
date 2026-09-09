@@ -4,7 +4,7 @@ import {
   campiDuplicati,
   campoModificabile,
   soloVisibili,
-  tipoCalcolato,
+  campoCalcolato,
   LAYOUT_CAMPO_TIPI,
   LAYOUT_CAMPO_TIPO_LABEL,
   type LayoutCampo,
@@ -147,33 +147,38 @@ describe("campiDuplicati", () => {
 })
 
 describe("campi calcolati", () => {
-  it("formula e autonumber sono calcolati", () => {
-    expect(tipoCalcolato("formula")).toBe(true)
-    expect(tipoCalcolato("autonumber")).toBe(true)
-    expect(tipoCalcolato("currency")).toBe(false)
+  it("un campo con formula e' calcolato, uno senza no", () => {
+    expect(campoCalcolato(campo("Saldo", { formula: { expr: "{a} - {b}" } }))).toBe(true)
+    expect(campoCalcolato(campo("POD"))).toBe(false)
   })
 
-  it("un campo con formula non e' modificabile anche se il tipo e' numerico", () => {
+  it("un campo con formula non e' modificabile", () => {
+    // Il tipo resta quello del risultato (currency): e' la formula a
+    // renderlo non scrivibile, non il tipo.
     const calcolato = campo("Saldo", {
       formula: { expr: "{Importo Contrattuale} - {1° Tranche}" },
     })
-    expect(campoModificabile(calcolato, "currency")).toBe(false)
+    expect(campoModificabile(calcolato)).toBe(false)
   })
 
   it("un campo congelato dall'admin non e' modificabile", () => {
-    expect(campoModificabile(campo("POD", { solaLettura: true }), "text")).toBe(false)
+    expect(campoModificabile(campo("POD", { solaLettura: true }))).toBe(false)
   })
 
   it("un campo normale resta modificabile", () => {
-    expect(campoModificabile(campo("POD"), "text")).toBe(true)
+    expect(campoModificabile(campo("POD"))).toBe(true)
   })
 })
 
 describe("palette dei tipi", () => {
   it("copre i tipi Zoho che mancavano", () => {
-    for (const tipo of ["formula", "percent", "url", "autonumber", "decimal"]) {
+    for (const tipo of ["decimal", "percent", "url"]) {
       expect(LAYOUT_CAMPO_TIPI).toContain(tipo)
     }
+  })
+
+  it("non espone formula come tipo: e' una proprieta' del campo", () => {
+    expect(LAYOUT_CAMPO_TIPI).not.toContain("formula")
   })
 
   it("ogni tipo ha un'etichetta italiana per la palette", () => {

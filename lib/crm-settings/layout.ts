@@ -1,4 +1,4 @@
-import type { CampoTipo } from "@/lib/system-settings-data"
+import { CAMPO_TIPI, CAMPO_TIPO_LABEL, type CampoTipo } from "@/lib/system-settings-data"
 
 /**
  * Layout configurabile delle schede record.
@@ -16,78 +16,31 @@ import type { CampoTipo } from "@/lib/system-settings-data"
 export type LayoutFieldOrigine = "system" | "custom"
 
 /**
- * Tipi di campo disponibili nel layout.
+ * Voci della palette dei tipi nella pagina Layout.
  *
- * I primi dodici sono quelli gia' supportati da CAMPO_TIPI e dalla pagina
- * Attributi. Gli ultimi quattro sono le aggiunte necessarie per coprire i
- * campi Zoho:
+ * Coincide con CampoTipo — i tipi di storage — perche' "formula" NON e' un
+ * tipo: e' una proprieta' di un campo che ha comunque un tipo di risultato.
+ * Zoho lo mostra cosi': "fx  Saldo  Decimale" e' un campo decimale che si
+ * calcola da solo, non un campo di tipo formula. Nel modello la distinzione
+ * sta fra il tipo (qui) e crm_layout_campi.formula (l'espressione).
  *
- * - formula:    campo calcolato da altri campi, non scrivibile a mano
- * - percent:    numero mostrato come percentuale
- * - url:        oggi ricadeva su text, senza validazione ne' link cliccabile
- * - autonumber: progressivo assegnato dal sistema alla creazione
- * - decimal:    Zoho distingue Numero (intero) da Decimale; CampoTipo aveva
- *               solo number, e i campi tecnici (Tot Potenza DC, kWh) sono
- *               decimali
- *
- * "Utente" della palette Zoho corrisponde al gia' presente lookup verso
- * utenti, quindi non aggiunge un tipo nuovo.
+ * Rispetto ai dodici tipi originali sono stati aggiunti decimal, percent e
+ * url in lib/system-settings-data.ts.
  */
-export type LayoutCampoTipo =
-  | CampoTipo
-  | "formula"
-  | "percent"
-  | "url"
-  | "autonumber"
-  | "decimal"
+export type LayoutCampoTipo = CampoTipo
 
-export const LAYOUT_CAMPO_TIPI: readonly LayoutCampoTipo[] = [
-  "text",
-  "textarea",
-  "number",
-  "decimal",
-  "currency",
-  "percent",
-  "date",
-  "datetime",
-  "boolean",
-  "select",
-  "multiselect",
-  "lookup",
-  "email",
-  "phone",
-  "url",
-  "formula",
-  "autonumber",
-] as const
+export const LAYOUT_CAMPO_TIPI: readonly LayoutCampoTipo[] = CAMPO_TIPI
 
 /** Etichette italiane per la palette dei tipi nella pagina Layout. */
-export const LAYOUT_CAMPO_TIPO_LABEL: Record<string, string> = {
-  text: "Linea singola",
-  textarea: "Multi-linea",
-  number: "Numero",
-  decimal: "Decimale",
-  currency: "Valuta",
-  percent: "Percentuale",
-  date: "Data",
-  datetime: "Data/Ora",
-  boolean: "Casella di controllo",
-  select: "Elenco di selezione",
-  multiselect: "Selezione multipla",
-  lookup: "Ricerca",
-  email: "E-mail",
-  phone: "Telefono",
-  url: "URL",
-  formula: "Formula",
-  autonumber: "Numerazione automatica",
-}
+export const LAYOUT_CAMPO_TIPO_LABEL: Record<string, string> = CAMPO_TIPO_LABEL
 
 /**
  * Un campo calcolato non e' scrivibile: il valore arriva dalla formula, mai
- * dall'utente. Vale anche per autonumber, assegnato alla creazione.
+ * dall'utente — su Zoho questi campi sono proprio nascosti in creazione e
+ * modifica.
  */
-export function tipoCalcolato(tipo: string): boolean {
-  return tipo === "formula" || tipo === "autonumber"
+export function campoCalcolato(campo: Pick<LayoutCampo, "formula">): boolean {
+  return campo.formula !== null
 }
 
 /** Formattazione di presentazione. Non altera il valore salvato. */
@@ -161,8 +114,8 @@ export type LayoutPagina = {
 }
 
 /** Un campo e' modificabile solo se non e' calcolato e non e' congelato. */
-export function campoModificabile(campo: LayoutCampo, tipo: string): boolean {
-  return !campo.solaLettura && !tipoCalcolato(tipo) && campo.formula === null
+export function campoModificabile(campo: LayoutCampo): boolean {
+  return !campo.solaLettura && !campoCalcolato(campo)
 }
 
 /**

@@ -41,4 +41,21 @@ describe("custom client fields", () => {
     expect(validateCustomValue({ ...field, tipo: "datetime" }, "2026-09-04T12:00:00+02:00")).toBe("2026-09-04T10:00:00.000Z")
     expect(() => validateCustomValue({ ...field, tipo: "unknown" }, "x")).toThrow()
   })
+  it("accepts decimals on decimal and percent, and still on number", () => {
+    // "number" resta permissivo: campi gia' in uso contengono decimali.
+    expect(validateCustomValue(field, 12.5)).toBe(12.5)
+    expect(validateCustomValue({ ...field, tipo: "decimal" }, 12.29)).toBe(12.29)
+    expect(validateCustomValue({ ...field, tipo: "percent" }, 40)).toBe(40)
+    expect(() => validateCustomValue({ ...field, tipo: "decimal" }, "12.29")).toThrow()
+    expect(() => validateCustomValue({ ...field, tipo: "percent" }, Infinity)).toThrow()
+  })
+  it("accepts only absolute http(s) URLs", () => {
+    const url = { ...field, tipo: "url" }
+    expect(validateCustomValue(url, "https://solairgroup.it")).toBe("https://solairgroup.it")
+    // Il valore finisce in un link cliccabile: uno schema arbitrario non
+    // deve poterci arrivare.
+    expect(() => validateCustomValue(url, "javascript:alert(1)")).toThrow()
+    expect(() => validateCustomValue(url, "solairgroup.it")).toThrow()
+    expect(() => validateCustomValue(url, 12)).toThrow()
+  })
 })

@@ -61,8 +61,13 @@ export const CRM_FIELD_DB_TYPES: Record<CampoTipo, string> = {
   textarea: "text",
   email: "text",
   phone: "text",
+  url: "text",
   number: "numeric",
   currency: "numeric",
+  decimal: "numeric",
+  // Salvata come la si scrive: 40 per "40%", non 0.4. Il simbolo e' resa
+  // grafica, non fa parte del valore.
+  percent: "numeric",
   date: "date",
   datetime: "timestamptz",
   boolean: "boolean",

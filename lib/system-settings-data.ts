@@ -17,6 +17,8 @@ export type CampoAccesso = "no_access" | "r" | "rw"
 export type CampoTipo =
   | "text"
   | "number"
+  | "decimal"
+  | "percent"
   | "date"
   | "datetime"
   | "boolean"
@@ -25,12 +27,17 @@ export type CampoTipo =
   | "lookup"
   | "email"
   | "phone"
+  | "url"
   | "currency"
   | "textarea"
 
 export const CAMPO_TIPI: CampoTipo[] = [
   "text",
+  "textarea",
   "number",
+  "decimal",
+  "currency",
+  "percent",
   "date",
   "datetime",
   "boolean",
@@ -39,23 +46,25 @@ export const CAMPO_TIPI: CampoTipo[] = [
   "lookup",
   "email",
   "phone",
-  "currency",
-  "textarea",
+  "url",
 ]
 
 export const CAMPO_TIPO_LABEL: Record<CampoTipo, string> = {
-  text: "Testo",
+  text: "Linea singola",
+  textarea: "Multi-linea",
   number: "Numero",
+  decimal: "Decimale",
+  currency: "Valuta",
+  percent: "Percentuale",
   date: "Data",
   datetime: "Data e ora",
-  boolean: "Booleano",
-  select: "Select",
-  multiselect: "Multi-select",
-  lookup: "Lookup",
+  boolean: "Casella di controllo",
+  select: "Elenco di selezione",
+  multiselect: "Selezione multipla",
+  lookup: "Ricerca",
   email: "Email",
   phone: "Telefono",
-  currency: "Valuta",
-  textarea: "Testo lungo",
+  url: "URL",
 }
 
 export const CAMPO_ACCESSO_LABEL: Record<CampoAccesso, string> = {

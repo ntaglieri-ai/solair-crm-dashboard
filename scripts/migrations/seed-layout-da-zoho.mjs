@@ -159,6 +159,7 @@ const PAGINE_PER_MODULO = {
     },
     { key: "allegati", label: "Allegati", componente: "allegati", blocchi: [] },
     { key: "note", label: "Note", componente: "note", blocchi: [] },
+    { key: "note-interne", label: "Note interne", componente: "note-interne", blocchi: [] },
     { key: "email", label: "E-mail", componente: "email", blocchi: [] },
     { key: "calendario", label: "Calendario", componente: "calendario", blocchi: [] },
   ],

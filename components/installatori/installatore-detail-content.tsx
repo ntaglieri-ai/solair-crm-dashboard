@@ -6,6 +6,9 @@ import { AllegatiSection } from "@/components/shared/allegati-section"
 import { EmailHistorySection } from "@/components/shared/email-history-section"
 import { CalendarioRecordSection } from "@/components/calendario/calendario-record-section"
 import { InstallatoreNoteSection } from "@/components/installatori/installatore-note-section"
+import { NoteInterneSection } from "@/components/clienti/note-interne-section"
+import { usePermissions } from "@/lib/permissions/provider"
+import { canAccessNoteInterne } from "@/lib/clienti/note-interne"
 import { LayoutRenderer, type RisolviModifica } from "@/components/shared/layout-renderer"
 import type { LayoutPagina } from "@/lib/crm-settings/layout"
 import { ancoraPagina } from "@/lib/crm-settings/layout-render"
@@ -45,7 +48,20 @@ export function InstallatoreDetailContent({
   layout: LayoutPagina[]
 }) {
   const router = useRouter()
+  const permissions = usePermissions()
   const endpoint = `/api/installatori/${installatore.id}`
+
+  // Le note interne restano soggette al ruolo: una pagina configurata non
+  // deve poter aggirare un controllo di accesso. La RLS e' comunque
+  // l'ultimo controllo, questa e' la parte che evita di disegnare una
+  // sezione che tornerebbe sempre vuota.
+  const vediNoteInterne =
+    canAccessNoteInterne(permissions.snapshot.subject.ruoloCode) &&
+    permissions.canAction("installatori.note_interne.view")
+
+  const pagineVisibili = vediNoteInterne
+    ? layout
+    : layout.filter((pagina) => pagina.componente !== "note-interne")
 
   const salvaOrdine = (corpo: Record<string, unknown>) => {
     void fetch("/api/layout/ordine-personale", {
@@ -67,6 +83,15 @@ export function InstallatoreDetailContent({
       <InstallatoreNoteSection
         installatoreId={installatore.id}
         nomeRecord={installatore.nome}
+      />
+    ),
+    "note-interne": (
+      <NoteInterneSection
+        recordId={installatore.id}
+        nomeRecord={installatore.nome}
+        basePath={`/api/installatori/${installatore.id}/note-interne`}
+        azione="installatori.note_interne.view"
+        recordTipo="installatore"
       />
     ),
     email: (
@@ -121,7 +146,7 @@ export function InstallatoreDetailContent({
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1">
       <nav className="flex items-center gap-1 overflow-x-auto border-b border-border bg-background pb-3 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible">
-        {layout.map((pagina) => (
+        {pagineVisibili.map((pagina) => (
           <button
             key={pagina.id}
             type="button"
@@ -138,7 +163,7 @@ export function InstallatoreDetailContent({
       </nav>
 
       <LayoutRenderer
-        pagine={layout}
+        pagine={pagineVisibili}
         record={installatore as unknown as Record<string, unknown>}
         risolviModifica={risolviModifica}
         componenti={componenti}

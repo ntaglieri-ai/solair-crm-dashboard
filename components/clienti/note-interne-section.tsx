@@ -25,14 +25,16 @@ function NotaCard({
   onSave,
   onDelete,
   usersUrl,
-  clienteId,
+  recordId,
+  recordTipo,
   nomeRecord,
 }: {
   nota: NotaInterna
   onSave: (id: string, contenuto: string, menzioni: NoteMentionDraft[], files: File[]) => Promise<void>
   onDelete: (id: string) => Promise<void>
   usersUrl: string
-  clienteId: string
+  recordId: string
+  recordTipo: "cliente" | "installatore"
   nomeRecord: string
 }) {
   const [editing, setEditing] = useState(false)
@@ -125,8 +127,8 @@ function NotaCard({
             />
             <NoteAttachmentList
               allegati={nota.allegati}
-              recordTipo="cliente"
-              recordId={clienteId}
+              recordTipo={recordTipo}
+              recordId={recordId}
               nomeRecord={nomeRecord}
             />
             <div className="flex justify-end gap-2">
@@ -154,8 +156,8 @@ function NotaCard({
             <RichNoteText text={nota.contenuto} mentions={nota.menzioni} className="text-[13px] text-foreground" />
             <NoteAttachmentList
               allegati={nota.allegati}
-              recordTipo="cliente"
-              recordId={clienteId}
+              recordTipo={recordTipo}
+              recordId={recordId}
               nomeRecord={nomeRecord}
             />
           </>
@@ -174,9 +176,32 @@ function NotaCard({
  * cortesia, non una difesa. Il muro e' la RLS su cliente_note_interne,
  * e le route rispondono 404.
  */
-export function NoteInterneSection({ clienteId, nomeRecord }: { clienteId: string; nomeRecord: string }) {
+/**
+ * Sezione delle note interne, condivisa fra i moduli che le hanno.
+ *
+ * Il modulo passa la base delle proprie route e l'azione che ne governa la
+ * lettura: il resto — composizione, menzioni, allegati, modifica e
+ * cancellazione — e' identico, e tenerne due copie significherebbe
+ * correggere ogni difetto due volte.
+ */
+export function NoteInterneSection({
+  recordId,
+  nomeRecord,
+  basePath,
+  azione,
+  recordTipo,
+}: {
+  recordId: string
+  nomeRecord: string
+  /** Base delle route, es. "/api/clienti/<id>/note-interne". */
+  basePath: string
+  /** Azione che abilita la lettura, es. "clienti.note_interne.view". */
+  azione: string
+  recordTipo: "cliente" | "installatore"
+}) {
   const permissions = usePermissions()
-  const abilitato = canAccessNoteInterne(permissions.snapshot.subject.ruoloCode) && permissions.canAction("clienti.note_interne.view")
+  const abilitato =
+    canAccessNoteInterne(permissions.snapshot.subject.ruoloCode) && permissions.canAction(azione)
 
   const [note, setNote] = useState<NotaInterna[]>([])
   const [loading, setLoading] = useState(true)
@@ -184,12 +209,12 @@ export function NoteInterneSection({ clienteId, nomeRecord }: { clienteId: strin
   const [nuoveMenzioni, setNuoveMenzioni] = useState<NoteMentionDraft[]>([])
   const [nuoviFiles, setNuoviFiles] = useState<File[]>([])
   const [saving, setSaving] = useState(false)
-  const usersUrl = `/api/clienti/${clienteId}/note-interne/mention-users`
+  const usersUrl = `${basePath}/mention-users`
 
   useEffect(() => {
     if (!abilitato) return
     let current = true
-    fetch(`/api/clienti/${clienteId}/note-interne`, { cache: "no-store" })
+    fetch(basePath, { cache: "no-store" })
       .then(async (res) => {
         if (!res.ok) throw new Error()
         const payload = await res.json() as { note: NotaInterna[] }
@@ -198,7 +223,7 @@ export function NoteInterneSection({ clienteId, nomeRecord }: { clienteId: strin
       .catch(() => { if (current) toast.error("Impossibile caricare le note interne") })
       .finally(() => { if (current) setLoading(false) })
     return () => { current = false }
-  }, [abilitato, clienteId])
+  }, [abilitato, basePath])
 
   if (!abilitato) return null
 
@@ -211,7 +236,7 @@ export function NoteInterneSection({ clienteId, nomeRecord }: { clienteId: strin
       formData.append("contenuto", contenuto)
       formData.append("menzioni", JSON.stringify(nuoveMenzioni))
       nuoviFiles.forEach((file) => formData.append("files", file))
-      const res = await fetch(`/api/clienti/${clienteId}/note-interne`, {
+      const res = await fetch(basePath, {
         method: "POST",
         body: formData,
       })
@@ -236,7 +261,7 @@ export function NoteInterneSection({ clienteId, nomeRecord }: { clienteId: strin
     formData.append("contenuto", contenuto)
     formData.append("menzioni", JSON.stringify(menzioni))
     files.forEach((file) => formData.append("files", file))
-    const res = await fetch(`/api/clienti/${clienteId}/note-interne/${id}`, {
+    const res = await fetch(`${basePath}/${id}`, {
       method: "PATCH",
       body: formData,
     })
@@ -266,7 +291,7 @@ export function NoteInterneSection({ clienteId, nomeRecord }: { clienteId: strin
   }
 
   const elimina = async (id: string) => {
-    const res = await fetch(`/api/clienti/${clienteId}/note-interne/${id}`, {
+    const res = await fetch(`${basePath}/${id}`, {
       method: "DELETE",
     })
     if (!res.ok) {
@@ -296,7 +321,8 @@ export function NoteInterneSection({ clienteId, nomeRecord }: { clienteId: strin
               onSave={salva}
               onDelete={elimina}
               usersUrl={usersUrl}
-              clienteId={clienteId}
+              recordId={recordId}
+              recordTipo={recordTipo}
               nomeRecord={nomeRecord}
             />
           ))}

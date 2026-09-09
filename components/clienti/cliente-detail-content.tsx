@@ -1654,7 +1654,13 @@ export function ClienteDetailContent({
 
       {vediNoteInterne ? (
         <Section id="section-note-interne" title="Note interne" icon={IconLock}>
-          <NoteInterneSection clienteId={cliente.id} nomeRecord={cliente["Nome Clienti"]} />
+          <NoteInterneSection
+            recordId={cliente.id}
+            nomeRecord={cliente["Nome Clienti"]}
+            basePath={`/api/clienti/${cliente.id}/note-interne`}
+            azione="clienti.note_interne.view"
+            recordTipo="cliente"
+          />
         </Section>
       ) : null}
 
@@ -1743,7 +1749,13 @@ function ClienteDaLayout({
       />
     ),
     "note-interne": (
-      <NoteInterneSection clienteId={cliente.id} nomeRecord={cliente["Nome Clienti"]} />
+      <NoteInterneSection
+            recordId={cliente.id}
+            nomeRecord={cliente["Nome Clienti"]}
+            basePath={`/api/clienti/${cliente.id}/note-interne`}
+            azione="clienti.note_interne.view"
+            recordTipo="cliente"
+          />
     ),
     calendario: (
       <CalendarioRecordSection

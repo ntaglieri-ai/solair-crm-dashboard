@@ -110,6 +110,13 @@ describe("formattaValore", () => {
     expect(formattaValore(false, {})).toBe("No")
   })
 
+  it("riconosce i booleani salvati come testo dall'import Zoho", () => {
+    // Nel database diversi campi valgono "true"/"false" come stringa:
+    // senza questo la scheda mostrava "true" al posto di "Sì".
+    expect(formattaValore("true", {})).toBe("Sì")
+    expect(formattaValore("false", {})).toBe("No")
+  })
+
   it("usa il segnaposto per i valori vuoti", () => {
     expect(formattaValore(null, {})).toBe("—")
     expect(formattaValore("", {})).toBe("—")

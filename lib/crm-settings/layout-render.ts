@@ -77,6 +77,12 @@ export function formattaValore(
   if (valore === null || valore === undefined || valore === "") return vuoto
   if (typeof valore === "boolean") return valore ? "Sì" : "No"
 
+  // Diversi campi booleani arrivano dal database come testo ("true"/"false"):
+  // e' un residuo dell'import Zoho, dove le colonne erano stringhe. Senza
+  // questo la scheda mostrerebbe "true" al posto di "Sì".
+  if (valore === "true") return "Sì"
+  if (valore === "false") return "No"
+
   if (typeof valore === "number") {
     if (!Number.isFinite(valore)) return vuoto
     const decimali = formato.decimali

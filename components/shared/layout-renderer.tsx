@@ -49,6 +49,7 @@ export function LayoutRenderer({
   record,
   risolviModifica,
   componenti,
+  valoriVisualizzati,
   onSalvato,
 }: {
   pagine: LayoutPagina[]
@@ -59,6 +60,12 @@ export function LayoutRenderer({
    * dove vanno, il modulo dice come sono fatti.
    */
   componenti?: Record<string, ReactNode>
+  /**
+   * Valori gia' pronti per la lettura, per i campi che nel database
+   * contengono un riferimento invece del testo da mostrare: il proprietario,
+   * per esempio, e' salvato come id utente e va letto come nome.
+   */
+  valoriVisualizzati?: Record<string, ReactNode>
   onSalvato?: () => void
 }) {
   const valori = mappaValori(record)
@@ -85,6 +92,7 @@ export function LayoutRenderer({
                 record={record}
                 valori={valori}
                 risolviModifica={risolviModifica}
+                valoriVisualizzati={valoriVisualizzati}
                 onSalvato={onSalvato}
               />
             ))}
@@ -100,12 +108,14 @@ function BloccoRenderer({
   record,
   valori,
   risolviModifica,
+  valoriVisualizzati,
   onSalvato,
 }: {
   blocco: LayoutBlocco
   record: Record<string, unknown>
   valori: ReturnType<typeof mappaValori>
   risolviModifica?: RisolviModifica
+  valoriVisualizzati?: Record<string, ReactNode>
   onSalvato?: () => void
 }) {
   if (blocco.campi.length === 0) return null
@@ -134,6 +144,7 @@ function BloccoRenderer({
             record={record}
             valori={valori}
             risolviModifica={risolviModifica}
+            valoriVisualizzati={valoriVisualizzati}
             onSalvato={onSalvato}
           />
         ))}
@@ -147,15 +158,18 @@ function CampoRenderer({
   record,
   valori,
   risolviModifica,
+  valoriVisualizzati,
   onSalvato,
 }: {
   campo: LayoutCampo
   record: Record<string, unknown>
   valori: ReturnType<typeof mappaValori>
   risolviModifica?: RisolviModifica
+  valoriVisualizzati?: Record<string, ReactNode>
   onSalvato?: () => void
 }) {
   const etichetta = campo.labelOverride ?? campo.fieldKey
+  const giaPronto = valoriVisualizzati?.[campo.fieldKey]
   const esito = valoreCampo(campo, record, valori)
   const larghezza = cn(
     campo.span === 2 && "sm:col-span-2",
@@ -195,6 +209,7 @@ function CampoRenderer({
           label={etichetta}
           type={modifica.type as never}
           emptyLabel={campo.formato.placeholder ?? "—"}
+          displayValue={giaPronto}
           onSaved={onSalvato}
         />
       </div>
@@ -211,7 +226,7 @@ function CampoRenderer({
           <Sigma className="size-3 text-info" aria-label="Campo calcolato" />
         ) : null}
       </span>
-      <div className="text-[13px] text-foreground">{testo}</div>
+      <div className="text-[13px] text-foreground">{giaPronto ?? testo}</div>
     </div>
   )
 }

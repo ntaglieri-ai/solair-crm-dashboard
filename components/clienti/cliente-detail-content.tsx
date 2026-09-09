@@ -1699,6 +1699,14 @@ function ClienteDaLayout({
   vediNoteInterne: boolean
 }) {
   const router = useRouter()
+  const { ownerNames } = useClienteTags()
+
+  // Il proprietario e' salvato come id utente: senza questo la scheda
+  // mostrerebbe l'UUID al posto del nome, come faceva gia' la versione
+  // scritta a mano tramite displayClienteOwner.
+  const valoriVisualizzati: Record<string, ReactNode> = {
+    "Clienti Proprietario": displayClienteOwner(cliente, ownerNames, "Non assegnato"),
+  }
 
   // Le note interne restano soggette al permesso: una pagina configurata non
   // deve poter aggirare un controllo di accesso.
@@ -1755,6 +1763,7 @@ function ClienteDaLayout({
           record={cliente as unknown as Record<string, unknown>}
           risolviModifica={risolviModifica}
           componenti={componenti}
+          valoriVisualizzati={valoriVisualizzati}
           onSalvato={() => router.refresh()}
         />
       </div>

@@ -1,6 +1,7 @@
 "use client"
 
 import type { Gruppo } from "@/lib/filtri/albero"
+import { useTags } from "@/lib/tag-store"
 import { PannelloFiltri } from "@/components/filtri/pannello-filtri"
 import { gruppiCampiClienti } from "@/lib/filtri/catalogo-clienti"
 import type { LayoutPagina } from "@/lib/crm-settings/layout"
@@ -145,10 +146,21 @@ export function ClientiClient({
   // perche' e' la pagina a decidere quanto spazio resta alla lista.
   const [filtriAperti, setFiltriAperti] = useState(false)
   const [pannelloFiltri, setPannelloFiltri] = useState<HTMLDivElement | null>(null)
+  const { installers, owners } = useTags()
 
   // Campi filtrabili e loro gruppi, dal layout della scheda: un campo
   // aggiunto dalla pagina Layout diventa filtrabile da solo.
-  const gruppiCampi = useMemo(() => gruppiCampiClienti(layout), [layout])
+  // Alcuni campi hanno un elenco di valori invece che testo libero: cercare
+  // un installatore scrivendone il nome a memoria e' fatica inutile quando
+  // l'elenco esiste gia'.
+  const gruppiCampi = useMemo(
+    () =>
+      gruppiCampiClienti(layout, {
+        Installatore: installers.map((installatore) => installatore.nome),
+        "Clienti Proprietario": owners.map((owner) => owner.nome),
+      }),
+    [layout, installers, owners],
+  )
   const [sortBy, setSortBy] = useState<ClienteColumnId | null>("Ora modifica")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [page, setPage] = useState(1)

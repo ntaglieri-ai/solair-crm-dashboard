@@ -111,6 +111,8 @@ export function PannelloFiltri({
       .filter((gruppo) => gruppo.campi.length > 0)
   }, [gruppi, ricerca])
 
+  const campiTrovati = gruppiFiltrati.reduce((somma, gruppo) => somma + gruppo.campi.length, 0)
+
   function impostaCondizione(chiave: string, condizione: Condizione | null) {
     setBozza((corrente) => {
       const altre = corrente.nodi.filter(
@@ -162,6 +164,7 @@ export function PannelloFiltri({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
+        {!ricerca.trim() ? (
         <FiltriSalvati
           modulo={modulo}
           attivo={filtroSalvatoAttivo}
@@ -187,8 +190,9 @@ export function PannelloFiltri({
             setBozza(filtro.definizione)
           }}
         />
+        ) : null}
 
-        {visteRapide?.length ? (
+        {visteRapide?.length && !ricerca.trim() ? (
           <div className="border-b border-border px-4 py-3">
             <p className="mb-2 text-sm font-semibold text-foreground">Viste rapide</p>
             <div className="flex flex-wrap gap-1.5">
@@ -218,6 +222,13 @@ export function PannelloFiltri({
               className="pl-8"
             />
           </div>
+          {ricerca.trim() ? (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              {campiTrovati === 0
+                ? "Nessun campo trovato"
+                : `${campiTrovati} camp${campiTrovati === 1 ? "o" : "i"} trovat${campiTrovati === 1 ? "o" : "i"}`}
+            </p>
+          ) : null}
         </div>
 
         {condizioni.length ? (

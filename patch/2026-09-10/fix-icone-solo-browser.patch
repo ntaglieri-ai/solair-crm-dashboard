@@ -1,0 +1,49 @@
+diff --git a/components/shared/quick-contact-icons.tsx b/components/shared/quick-contact-icons.tsx
+index 19a0f5d..25eef5a 100644
+--- a/components/shared/quick-contact-icons.tsx
++++ b/components/shared/quick-contact-icons.tsx
+@@ -1,6 +1,6 @@
+ "use client"
+ 
+-import { useState } from "react"
++import { useEffect, useState } from "react"
+ import { Loader2, Mail, MessageCircle, Phone } from "lucide-react"
+ import { toast } from "sonner"
+ import { Button, buttonVariants } from "@/components/ui/button"
+@@ -90,6 +90,23 @@ export function QuickContactIcons({
+    * (per gli header di dettaglio) invece che come icona compatta (per le celle tabella). */
+   emailAsButton?: boolean
+ }) {
++  // Le icone si disegnano solo nel browser, non nell'HTML del server.
++  //
++  // Il loro aspetto dipende dal numero e dall'e-mail del record: link
++  // cliccabile se ci sono, pulsante spento se mancano. Ma la lista e' viva —
++  // i lead arrivano di continuo dal chatbot — quindi la riga che il server
++  // fotografa e quella a cui il browser si aggancia un istante dopo possono
++  // essere di due record diversi, e React segnala la differenza come errore.
++  //
++  // Disegnarle dopo l'aggancio elimina il confronto alla radice invece di
++  // inseguire i dati. Costa un fotogramma su elementi piccoli e accessori;
++  // il nome, i numeri e tutto il resto della riga restano nell'HTML del
++  // server come prima.
++  const [montato, setMontato] = useState(false)
++  useEffect(() => {
++    setMontato(true)
++  }, [])
++
+   const [emailOpen, setEmailOpen] = useState(false)
+   const [subject, setSubject] = useState("")
+   const [body, setBody] = useState("")
+@@ -137,6 +154,12 @@ export function QuickContactIcons({
+     }
+   }
+ 
++  // Prima dell'aggancio si tiene lo spazio, cosi' la riga non salta quando
++  // le icone compaiono.
++  if (!montato) {
++    return <span className="flex h-8 shrink-0 items-center gap-0.5" aria-hidden />
++  }
++
+   return (
+     <span
+       className="flex shrink-0 items-center gap-0.5"

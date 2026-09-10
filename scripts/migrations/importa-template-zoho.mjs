@@ -1,0 +1,213 @@
+#!/usr/bin/env node
+// Recupera i modelli e-mail da Zoho e li importa nella libreria del CRM.
+//
+// Due passi separati, perche' hanno fragilita' diverse:
+//
+//   1) scarico   node scripts/migrations/importa-template-zoho.mjs --scarica \
+//                  --elenco template-email.json --out template-completi.json
+//   2) importo   node --env-file=.env.local scripts/migrations/importa-template-zoho.mjs \
+//                  --importa --file template-completi.json [--apply]
+//
+// Lo scarico dipende da un token Zoho che dura un'ora e da un servizio che
+// sta per essere spento: va fatto una volta e conservato. L'importazione
+// legge quel file e si puo' rilanciare quante volte serve.
+//
+// L'elenco (settings/email_templates) NON contiene il corpo delle email:
+// va chiesto un modello per volta col suo id. E' lo stesso schema delle
+// formule, che stavano in settings/layouts e non in settings/fields.
+//
+// Variabili richieste per lo scarico:
+//   ZOHO_ACCESS_TOKEN
+// Per l'importazione (in .env.local, con --env-file):
+//   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+
+import { readFileSync, writeFileSync } from "node:fs"
+import { createClient } from "@supabase/supabase-js"
+
+const DOMINIO = "https://www.zohoapis.eu"
+
+/** Modulo Zoho -> modulo del nostro CRM. */
+const MODULI = {
+  Contacts: "clienti",
+  Leads: "lead",
+  Installatori: "installatori",
+}
+
+/**
+ * Segnaposto Zoho -> segnaposto nostri.
+ *
+ * Zoho scrive ${!Contacts.First_Name}; da noi i segnaposto sono gli stessi
+ * dell'invio di massa. Tradurli all'importazione evita di ritrovarsi
+ * cinquantasei modelli con una sintassi che il CRM non sostituisce, e che
+ * arriverebbe al cliente cosi' com'e'.
+ */
+const SEGNAPOSTO = [
+  [/\$\{!(?:Contacts|Leads)\.First_Name\}/g, "{nome}"],
+  [/\$\{!(?:Contacts|Leads)\.Last_Name\}/g, "{cognome}"],
+  [/\$\{!(?:Contacts|Leads)\.Full_Name\}/g, "{nome} {cognome}"],
+  [/\$\{!(?:Contacts|Leads)\.Email\}/g, "{email}"],
+  [/\$\{!(?:Contacts|Leads)\.Phone\}/g, "{telefono}"],
+  [/\$\{!(?:Contacts|Leads)\.Mobile\}/g, "{telefono}"],
+]
+
+function traduci(testo) {
+  if (!testo) return ""
+  let out = String(testo)
+  for (const [cerca, sostituisci] of SEGNAPOSTO) out = out.replace(cerca, sostituisci)
+  return out
+}
+
+/** Segnaposto Zoho rimasti dopo la traduzione: vanno visti, non nascosti. */
+function residui(testo) {
+  return [...new Set(String(testo || "").match(/\$\{![^}]+\}/g) ?? [])]
+}
+
+function argomento(nome, predefinito = null) {
+  const trovato = process.argv.find((a) => a.startsWith(`--${nome}=`))
+  if (trovato) return trovato.slice(nome.length + 3)
+  const indice = process.argv.indexOf(`--${nome}`)
+  if (indice === -1) return predefinito
+  const successivo = process.argv[indice + 1]
+  return successivo && !successivo.startsWith("--") ? successivo : true
+}
+
+function richiediEnv(nome) {
+  const valore = process.env[nome]
+  if (!valore) {
+    console.error(`Variabile d'ambiente mancante: ${nome}`)
+    process.exit(1)
+  }
+  return valore
+}
+
+const attesa = (ms) => new Promise((risolvi) => setTimeout(risolvi, ms))
+
+async function scarica() {
+  const token = richiediEnv("ZOHO_ACCESS_TOKEN")
+  const percorsoElenco = argomento("elenco", "template-email.json")
+  const destinazione = argomento("out", "template-completi.json")
+
+  const elenco = JSON.parse(readFileSync(percorsoElenco, "utf8")).email_templates ?? []
+  console.log(`Modelli nell'elenco: ${elenco.length}`)
+
+  const completi = []
+  for (const [indice, modello] of elenco.entries()) {
+    const risposta = await fetch(
+      `${DOMINIO}/crm/v8/settings/email_templates/${modello.id}`,
+      { headers: { Authorization: `Zoho-oauthtoken ${token}` } },
+    )
+
+    if (!risposta.ok) {
+      console.error(`  ${indice + 1}/${elenco.length} ${modello.name}: HTTP ${risposta.status}`)
+      continue
+    }
+
+    const dati = await risposta.json()
+    const dettaglio = dati.email_templates?.[0] ?? {}
+    completi.push({
+      id: modello.id,
+      nome: modello.name,
+      modulo: (modello.module || {}).api_name,
+      cartella: (modello.folder || {}).name ?? null,
+      oggetto: dettaglio.subject ?? modello.subject ?? "",
+      contenuto: dettaglio.content ?? "",
+      // Serve a decidere cosa nascere attivo: la maggior parte dei modelli
+      // non e' mai stata usata.
+      usato: Boolean(modello.last_usage_time),
+    })
+
+    console.log(
+      `  ${indice + 1}/${elenco.length} ${modello.name} — ${(dettaglio.content ?? "").length} caratteri`,
+    )
+
+    // Zoho limita le chiamate al minuto: una pausa breve evita di finire
+    // bloccati a meta' e dover ricominciare.
+    await attesa(400)
+  }
+
+  writeFileSync(destinazione, JSON.stringify({ template: completi }, null, 2))
+  console.log(`\nSalvati ${completi.length} modelli in ${destinazione}`)
+}
+
+async function importa() {
+  const percorso = argomento("file", "template-completi.json")
+  const applica = argomento("apply", false) === true
+
+  const supabase = createClient(
+    richiediEnv("NEXT_PUBLIC_SUPABASE_URL"),
+    richiediEnv("SUPABASE_SERVICE_ROLE_KEY"),
+    { auth: { persistSession: false } },
+  )
+
+  const modelli = JSON.parse(readFileSync(percorso, "utf8")).template ?? []
+  console.log(
+    `Modelli da importare: ${modelli.length} | modalita': ${applica ? "SCRITTURA" : "prova (nessuna scrittura)"}\n`,
+  )
+
+  let importati = 0
+  let saltati = 0
+  const conResidui = []
+
+  for (const modello of modelli) {
+    const modulo = MODULI[modello.modulo]
+    if (!modulo) {
+      console.log(`  SALTATO  ${modello.nome} — modulo Zoho non gestito: ${modello.modulo}`)
+      saltati += 1
+      continue
+    }
+
+    const oggetto = traduci(modello.oggetto)
+    const corpo = traduci(modello.contenuto)
+    const rimasti = [...residui(oggetto), ...residui(corpo)]
+    if (rimasti.length) conResidui.push([modello.nome, rimasti])
+
+    if (applica) {
+      const { error } = await supabase.from("crm_email_template").upsert(
+        {
+          nome: modello.nome,
+          modulo,
+          oggetto: oggetto || modello.nome,
+          corpo,
+          cartella: modello.cartella,
+          // Nasce spento se su Zoho non e' mai stato usato: la libreria
+          // parte pulita, e chi serve davvero si accende da solo.
+          attivo: Boolean(modello.usato),
+          zoho_id: modello.id,
+        },
+        { onConflict: "zoho_id" },
+      )
+
+      if (error) {
+        console.error(`  ERRORE   ${modello.nome}: ${error.message}`)
+        continue
+      }
+    }
+
+    console.log(
+      `  ${modello.usato ? "attivo " : "spento "}  ${modello.nome} (${modulo}, ${corpo.length} caratteri)`,
+    )
+    importati += 1
+  }
+
+  if (conResidui.length) {
+    console.log(`\nModelli con segnaposto Zoho non tradotti (${conResidui.length}):`)
+    for (const [nome, rimasti] of conResidui) {
+      console.log(`  ${nome}: ${rimasti.join(", ")}`)
+    }
+    console.log(
+      "Restano visibili nel testo invece di sparire: vanno sistemati a mano dalla pagina Modelli.",
+    )
+  }
+
+  console.log(`\nCompletato: ${importati} importati, ${saltati} saltati.`)
+  if (!applica) console.log("Nessuna scrittura effettuata. Rilancia con --apply per applicare.")
+}
+
+if (argomento("scarica", false)) {
+  await scarica()
+} else if (argomento("importa", false)) {
+  await importa()
+} else {
+  console.error("Indicare --scarica oppure --importa. Vedi il commento in testa al file.")
+  process.exit(1)
+}

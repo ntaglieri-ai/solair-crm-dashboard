@@ -89,6 +89,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ creati: esito.creati, saltati: esito.saltati })
   }
 
+  // Passaggio massivo dai modelli Zoho ai rispettivi "(nuovo)", e ritorno.
+  // Si lavora solo sugli originali importati da Zoho: i modelli creati a mano
+  // nel CRM non devono essere spenti per errore.
+  if (body.azione === "usa-convertiti" || body.azione === "ripristina-originali") {
+    const modulo = isModulo(body.modulo) ? body.modulo : null
+    const esito = await commutaConvertiti(
+      guardia.admin!,
+      guardia.permissions.snapshot.subject.userId,
+      body.azione === "usa-convertiti" ? "convertiti" : "originali",
+      modulo,
+    )
+    if (esito.errore) return NextResponse.json({ error: esito.errore }, { status: 500 })
+    return NextResponse.json(esito)
+  }
+
   const nome = typeof body.nome === "string" ? body.nome.trim() : ""
   const oggetto = typeof body.oggetto === "string" ? body.oggetto.trim() : ""
   const corpo = typeof body.corpo === "string" ? body.corpo : ""
@@ -126,6 +141,79 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json(data)
+}
+
+async function commutaConvertiti(
+  admin: NonNullable<Awaited<ReturnType<typeof richiediGestione>>["admin"]>,
+  userId: string | null,
+  modo: "convertiti" | "originali",
+  modulo: Modulo | null,
+) {
+  let queryOriginali = admin
+    .from("crm_email_template")
+    .select("id,nome,modulo")
+    .not("zoho_id", "is", null)
+
+  if (modulo) queryOriginali = queryOriginali.eq("modulo", modulo)
+
+  const { data: originali, error: erroreOriginali } = await queryOriginali
+  if (erroreOriginali) return { errore: erroreOriginali.message }
+  if (!originali?.length) {
+    return { errore: null, attivati: 0, nascosti: 0, mancanti: 0 }
+  }
+
+  const nomiConvertiti = originali.map((modello) => `${modello.nome}${SUFFISSO}`)
+  const { data: convertiti, error: erroreConvertiti } = await admin
+    .from("crm_email_template")
+    .select("id,nome,modulo")
+    .in("nome", nomiConvertiti)
+
+  if (erroreConvertiti) return { errore: erroreConvertiti.message }
+
+  const convertitiPerChiave = new Map(
+    (convertiti ?? []).map((modello) => [`${modello.modulo}:${modello.nome}`, modello.id]),
+  )
+  const coppie = originali
+    .map((originale) => {
+      const convertitoId = convertitiPerChiave.get(`${originale.modulo}:${originale.nome}${SUFFISSO}`)
+      return convertitoId ? { originaleId: originale.id, convertitoId } : null
+    })
+    .filter((coppia): coppia is { originaleId: string; convertitoId: string } => Boolean(coppia))
+
+  if (!coppie.length) {
+    return { errore: null, attivati: 0, nascosti: 0, mancanti: originali.length }
+  }
+
+  const ora = new Date().toISOString()
+  const modifiche = {
+    modificato_da: userId,
+    modificato_il: ora,
+  }
+  const idsOriginali = coppie.map((coppia) => coppia.originaleId)
+  const idsConvertiti = coppie.map((coppia) => coppia.convertitoId)
+  const idsDaAccendere = modo === "convertiti" ? idsConvertiti : idsOriginali
+  const idsDaSpegnere = modo === "convertiti" ? idsOriginali : idsConvertiti
+
+  const { error: erroreAccensione } = await admin
+    .from("crm_email_template")
+    .update({ ...modifiche, attivo: true })
+    .in("id", idsDaAccendere)
+
+  if (erroreAccensione) return { errore: erroreAccensione.message }
+
+  const { error: erroreSpegnimento } = await admin
+    .from("crm_email_template")
+    .update({ ...modifiche, attivo: false })
+    .in("id", idsDaSpegnere)
+
+  if (erroreSpegnimento) return { errore: erroreSpegnimento.message }
+
+  return {
+    errore: null,
+    attivati: idsDaAccendere.length,
+    nascosti: idsDaSpegnere.length,
+    mancanti: originali.length - coppie.length,
+  }
 }
 
 /**

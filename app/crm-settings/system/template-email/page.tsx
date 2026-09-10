@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { Eye, Loader2, Mail, Pencil, Plus, Trash2, Wand2 } from "lucide-react"
+import { Eye, Loader2, Mail, Pencil, Plus, RotateCcw, Trash2, Wand2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -81,6 +81,7 @@ export default function TemplateEmailPage() {
   const [inAnteprima, setInAnteprima] = useState<Template | null>(null)
   const attivi = template.filter((modello) => modello.attivo).length
   const [conversione, setConversione] = useState(false)
+  const [switchMassivo, setSwitchMassivo] = useState<"nuovi" | "vecchi" | null>(null)
 
   // Gia' convertiti si riconoscono dal suffisso: rilanciare non deve
   // produrre "(nuovo) (nuovo)".
@@ -114,6 +115,48 @@ export default function TemplateEmailPage() {
       await carica()
     } finally {
       setConversione(false)
+    }
+  }
+
+  async function commutaMassivo(modo: "nuovi" | "vecchi") {
+    const usaNuovi = modo === "nuovi"
+    const conferma = window.confirm(
+      usaNuovi
+        ? "Attivare tutti i modelli '(nuovo)' e nascondere i vecchi importati da Zoho?\n\nVale per Clienti, Lead e Installatori. I modelli creati a mano nel CRM non vengono toccati."
+        : "Ripristinare i vecchi modelli Zoho e spegnere i rispettivi '(nuovo)'?\n\nVale per Clienti, Lead e Installatori. I modelli creati a mano nel CRM non vengono toccati.",
+    )
+    if (!conferma) return
+
+    setSwitchMassivo(modo)
+    try {
+      const risposta = await fetch("/api/crm-settings/email-template", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          azione: usaNuovi ? "usa-convertiti" : "ripristina-originali",
+        }),
+      })
+      const dati = (await risposta.json().catch(() => ({}))) as {
+        attivati?: number
+        nascosti?: number
+        mancanti?: number
+        error?: string
+      }
+      if (!risposta.ok) {
+        toast.error(dati.error ?? "Aggiornamento non riuscito")
+        return
+      }
+      toast.success(
+        usaNuovi
+          ? `${dati.attivati ?? 0} modelli nuovi attivati, ${dati.nascosti ?? 0} vecchi nascosti.`
+          : `${dati.attivati ?? 0} vecchi modelli ripristinati, ${dati.nascosti ?? 0} nuovi spenti.`,
+      )
+      if (dati.mancanti) {
+        toast.warning(`${dati.mancanti} originali non hanno ancora una versione '(nuovo)'.`)
+      }
+      await carica()
+    } finally {
+      setSwitchMassivo(null)
     }
   }
 
@@ -201,7 +244,7 @@ export default function TemplateEmailPage() {
                   variant="outline"
                   size="sm"
                   className="bg-card"
-                  disabled={conversione || daConvertire.length === 0}
+                  disabled={conversione || switchMassivo !== null || daConvertire.length === 0}
                   title="Crea una versione con logo e dati aziendali, senza toccare gli originali"
                   onClick={() => void converti()}
                 >
@@ -211,6 +254,36 @@ export default function TemplateEmailPage() {
                     <Wand2 data-icon="inline-start" />
                   )}
                   Applica formato aziendale
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-card"
+                  disabled={conversione || switchMassivo !== null}
+                  title="Accende tutti i modelli (nuovo) e spegne i vecchi importati da Zoho"
+                  onClick={() => void commutaMassivo("nuovi")}
+                >
+                  {switchMassivo === "nuovi" ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Wand2 data-icon="inline-start" />
+                  )}
+                  Usa nuovi
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-card"
+                  disabled={conversione || switchMassivo !== null}
+                  title="Riaccende i vecchi Zoho e spegne i rispettivi modelli (nuovo)"
+                  onClick={() => void commutaMassivo("vecchi")}
+                >
+                  {switchMassivo === "vecchi" ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <RotateCcw data-icon="inline-start" />
+                  )}
+                  Ripristina vecchi
                 </Button>
                 <Button size="sm" onClick={() => setInModifica({ ...VUOTO, modulo })}>
                   <Plus data-icon="inline-start" />

@@ -1,0 +1,26 @@
+diff --git a/lib/email/mailer.ts b/lib/email/mailer.ts
+index 07bde0f..81e1987 100644
+--- a/lib/email/mailer.ts
++++ b/lib/email/mailer.ts
+@@ -6,6 +6,7 @@
+ // sistema, il dominio e' gia' verificato); assente lascia SMTP_FROM, che e' il
+ // caso delle email automatiche — benvenuto e reset password partono dal
+ // mittente di sistema e non sono toccate dalla scelta del mittente.
++import { bodyToHtml, bodyToText } from "./html"
+ import nodemailer, { type Transporter } from "nodemailer"
+ import { escapeHtml } from "./html"
+ 
+@@ -106,8 +107,11 @@ export async function sendDirectEmail(params: {
+       from: params.fromEmail || cfg.from,
+       to: params.to,
+       subject: params.subject,
+-      text: params.body,
+-      html: `<p>${escapeHtml(params.body).replace(/\n/g, "<br/>")}</p>`,
++      // Un corpo gia' HTML (un modello) si spedisce com'e'; uno scritto a
++      // mano viene neutralizzato e mandato a capo. Trattarli allo stesso
++      // modo faceva arrivare i modelli con i tag in chiaro.
++      text: bodyToText(params.body),
++      html: bodyToHtml(params.body),
+     })
+     return { ok: true, error: null }
+   } catch (error) {

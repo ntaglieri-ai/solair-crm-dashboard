@@ -56,6 +56,7 @@ import {
   EMPTY_ADVANCED,
   type AdvancedFilterState,
 } from "@/components/leads/advanced-filters"
+import type { Gruppo } from "@/lib/filtri/albero"
 import {
   type LeadListParams,
   type LeadListItem,
@@ -215,6 +216,9 @@ export function LeadsClient({
   // Il pannello filtri e' una colonna della pagina: l'apertura la governa
   // qui, perche' e' la pagina a decidere quanto spazio resta alla lista.
   const [filtriAperti, setFiltriAperti] = useState(false)
+  // Il filtro componibile: gruppi E/O annidati, dal costruttore o da un
+  // filtro salvato. Viaggia con gli altri parametri della lista.
+  const [albero, setAlbero] = useState<Gruppo | null>(null)
   const [pannelloFiltri, setPannelloFiltri] = useState<HTMLDivElement | null>(null)
   const [page, setPage] = useState(1)
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
@@ -357,6 +361,7 @@ export function LeadsClient({
       score: filters.score,
       onlyDuplicates,
       advanced,
+      albero,
       fields: visibleCols as unknown as string[],
     }),
     [
@@ -373,6 +378,7 @@ export function LeadsClient({
       filters.score,
       onlyDuplicates,
       advanced,
+      albero,
       visibleCols,
     ],
   )
@@ -823,6 +829,11 @@ export function LeadsClient({
             openInline={filtriAperti}
             onOpenInlineChange={setFiltriAperti}
             inlineContainer={pannelloFiltri}
+            alberoApplicato={albero ?? undefined}
+            onApplicaAlbero={(gruppo) => {
+              setAlbero(gruppo.nodi.length ? gruppo : null)
+              setPage(1)
+            }}
             applied={advanced}
             onApply={handleAdvancedApply}
             tags={allTags}

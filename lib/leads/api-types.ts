@@ -6,6 +6,7 @@ import type {
   LeadListNote,
   LeadListTask,
 } from "@/lib/mock-data"
+import type { Gruppo } from "@/lib/filtri/albero"
 import { DEFAULT_VISIBLE_COLUMNS } from "@/lib/mock-data"
 import {
   type AdvancedFilterState,
@@ -55,6 +56,11 @@ export interface LeadListParams {
   score: ScoreFilterValue[]
   onlyDuplicates: boolean
   advanced: AdvancedFilterState
+  /**
+   * Filtro componibile: gruppi E/O annidati, dal costruttore o da un filtro
+   * salvato. Assente quando non se ne usa uno.
+   */
+  albero?: Gruppo | null
   /** Colonne richieste oltre alla base; [] => solo base. "*" => tutte. */
   fields: string[]
 }
@@ -134,6 +140,9 @@ export function buildLeadsSearchParams(p: LeadListParams): URLSearchParams {
     Object.values(p.advanced.quick).some(Boolean) ||
     Object.keys(p.advanced.fields).length > 0
   if (hasAdvanced) sp.set("advanced", JSON.stringify(p.advanced))
+  // L'albero viaggia solo se ha condizioni: un gruppo vuoto allungherebbe
+  // la chiave della cache senza cambiare il risultato.
+  if (p.albero && p.albero.nodi.length > 0) sp.set("albero", JSON.stringify(p.albero))
   return sp
 }
 
@@ -149,8 +158,21 @@ export function parseLeadsSearchParams(sp: URLSearchParams): LeadListParams {
       advanced = EMPTY_ADVANCED
     }
   }
+  // L'albero arriva dal browser: qui si legge soltanto, la verifica di campi
+  // e operatori avviene dove diventa interrogazione.
+  let albero: Gruppo | null = null
+  const alberoRaw = sp.get("albero")
+  if (alberoRaw) {
+    try {
+      albero = JSON.parse(alberoRaw) as Gruppo
+    } catch {
+      albero = null
+    }
+  }
+
   const fieldsRaw = sp.get("fields")
   return {
+    albero,
     page: Math.max(1, Number(sp.get("page") ?? "1") || 1),
     pageSize: Math.min(200, Math.max(1, Number(sp.get("pageSize") ?? "10") || 10)),
     sortBy: (sp.get("sortBy") as LeadColumnId | null) ?? null,

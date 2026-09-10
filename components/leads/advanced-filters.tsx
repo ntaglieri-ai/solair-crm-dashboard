@@ -13,6 +13,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { createPortal } from "react-dom"
+import { toast } from "sonner"
+import { Maximize2 } from "lucide-react"
+import { FiltriSalvati } from "@/components/filtri/filtri-salvati"
+import { CostruttoreFiltro } from "@/components/filtri/costruttore-filtro"
+import { GRUPPO_VUOTO, type Gruppo } from "@/lib/filtri/albero"
+import { gruppiCampiLead } from "@/lib/filtri/catalogo-lead"
 import {
   Sheet,
   SheetContent,
@@ -233,6 +239,8 @@ export function AdvancedFilters({
   openInline = false,
   onOpenInlineChange,
   inlineContainer,
+  onApplicaAlbero,
+  alberoApplicato,
 }: {
   applied: AdvancedFilterState
   onApply: (state: AdvancedFilterState) => void
@@ -265,6 +273,13 @@ export function AdvancedFilters({
    * pannello ci viene portato dentro, senza duplicare lo stato del filtro.
    */
   inlineContainer?: HTMLElement | null
+  /**
+   * Applica un filtro ad albero (dal costruttore o da un filtro salvato).
+   * Assente = costruttore e filtri salvati non disponibili.
+   */
+  onApplicaAlbero?: (gruppo: Gruppo) => void
+  /** L'albero attualmente applicato, per riaprirlo nel costruttore. */
+  alberoApplicato?: Gruppo
 }) {
   const { owners, installers } = useTags()
   const statoLeadOptions = useColumnValueOptions(
@@ -376,6 +391,11 @@ export function AdvancedFilters({
     else clearField(key)
   }
 
+  const [costruttoreAperto, setCostruttoreAperto] = useState(false)
+  const [filtroSalvatoAttivo, setFiltroSalvatoAttivo] = useState<string | null>(null)
+  // Cambia a ogni salvataggio, per far rileggere l'elenco dei salvati.
+  const [versioneSalvati, setVersioneSalvati] = useState(0)
+
   // Con il pannello incastonato la lista si aggiorna mentre si compone il
   // filtro: e' il motivo per cui sta accanto invece che sopra. La piccola
   // attesa evita che spuntare tre caselle faccia partire tre interrogazioni
@@ -395,21 +415,81 @@ export function AdvancedFilters({
   const aperto = inline ? openInline : open
   const chiudi = () => (inline ? onOpenInlineChange?.(false) : setOpen(false))
 
+  // Le opzioni dei campi a elenco vengono dai dati veri, non da un elenco
+  // scritto qui: uno stato aggiunto in configurazione deve comparire nel
+  // costruttore senza toccare il codice.
+  const opzioniCatalogo = {
+    stati: statoLeadOptions.map((opzione) => opzione.value),
+    origini: origineLeadOptions.map((opzione) => opzione.value),
+    sedi: sedeOptions.map((opzione) => opzione.value),
+    proprietari: owners.map((owner) => owner.id),
+    tag: tags,
+  }
+
+  const costruttore = onApplicaAlbero ? (
+    <CostruttoreFiltro
+      aperto={costruttoreAperto}
+      onChiudi={() => setCostruttoreAperto(false)}
+      gruppi={gruppiCampiLead(opzioniCatalogo)}
+      valoreIniziale={alberoApplicato ?? GRUPPO_VUOTO}
+      onApplica={(gruppo) => {
+        // Applicare un albero composto a mano stacca l'eventuale filtro
+        // salvato: non e' piu' quello.
+        setFiltroSalvatoAttivo(null)
+        onApplicaAlbero(gruppo)
+      }}
+      onSalva={async (nome, gruppo) => {
+        const risposta = await fetch("/api/filtri-salvati", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ modulo: "lead", nome, definizione: gruppo }),
+        })
+        if (!risposta.ok) {
+          const dati = (await risposta.json().catch(() => ({}))) as { error?: string }
+          toast.error(dati.error ?? "Salvataggio non riuscito")
+          return
+        }
+        toast.success(`Filtro "${nome}" salvato e condiviso`)
+        setVersioneSalvati((v) => v + 1)
+      }}
+    />
+  ) : null
+
   const contenutoPannello = (
       <div className="flex h-full min-h-0 flex-col">
         <div className="flex flex-row items-center justify-between border-b border-border p-4">
           <p className="text-base font-semibold text-foreground">Filtra Lead per</p>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Chiudi"
-            onClick={chiudi}
-          >
-            <X />
-          </Button>
+          <div className="flex items-center gap-0.5">
+            {onApplicaAlbero ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Apri il costruttore"
+                title="Costruisci un filtro con condizioni e gruppi"
+                onClick={() => setCostruttoreAperto(true)}
+              >
+                <Maximize2 />
+              </Button>
+            ) : null}
+            <Button variant="ghost" size="icon-sm" aria-label="Chiudi" onClick={chiudi}>
+              <X />
+            </Button>
+          </div>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {onApplicaAlbero ? (
+          <FiltriSalvati
+            modulo="lead"
+            attivo={filtroSalvatoAttivo}
+            ricarica={versioneSalvati}
+            onApplica={(filtro) => {
+              setFiltroSalvatoAttivo(filtro.id)
+              onApplicaAlbero(filtro.definizione)
+            }}
+          />
+          ) : null}
+
           {/* Viste rapide */}
           {quickViews && quickViews.length > 0 ? (
             <div className="border-b border-border p-3">
@@ -627,6 +707,7 @@ export function AdvancedFilters({
     return (
       <>
         {pulsante}
+        {costruttore}
         {aperto && inlineContainer
           ? createPortal(
               <aside className="flex h-full w-[340px] shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
@@ -666,6 +747,7 @@ export function AdvancedFilters({
       >
         {contenutoPannello}
       </SheetContent>
+      {costruttore}
     </Sheet>
   )
 }

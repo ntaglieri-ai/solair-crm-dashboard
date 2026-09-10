@@ -75,6 +75,7 @@ async function queryLeadsWithMode(
     score: params.score,
     search: params.search,
     advanced: params.advanced,
+    albero: params.albero,
     visibleOwnerIds,
     fields: params.fields,
     includeInstallatoreSopralluogo: leadListNeedsInstallatoreSopralluogo(params.fields),
@@ -308,6 +309,7 @@ export async function queryLeadsForExport(
     score: params.score,
     search: params.search,
     advanced: params.advanced,
+    albero: params.albero,
     visibleOwnerIds,
   }
 

@@ -5,6 +5,9 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { activeFilterValues, postgrestInList } from "@/lib/shared/filter-values"
 import type { Lead } from "@/lib/mock-data"
 import type { AdvancedFilterState } from "@/lib/leads/advanced-filter-logic"
+import { validaAlbero, type Gruppo } from "@/lib/filtri/albero"
+import { traduciAlbero } from "@/lib/filtri/traduci"
+import { catalogoDaGruppi, gruppiCampiLead } from "@/lib/filtri/catalogo-lead"
 import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
 import { buildCustomPatch, CUSTOM_FIELD_PREFIX } from "@/lib/crm-settings/custom-fields"
 import {
@@ -229,6 +232,38 @@ const ADVANCED_DB_COLUMN: Record<string, string> = {
 // Traduce i filtri "per campo" avanzati in vincoli Supabase (AND tra campi).
 // Generico sul builder: ogni metodo filtro ritorna lo stesso tipo, così la
 // stessa funzione vale sia per la query lista che per quella di conteggio.
+/**
+ * Applica il filtro componibile.
+ *
+ * L'albero arriva dal browser: viene validato contro il catalogo del modulo
+ * e tradotto in una sola espressione, cosi' il filtro resta una query sola
+ * anche con gruppi annidati. Un albero non valido non filtra nulla invece di
+ * far fallire la lettura: meglio una lista intera che una pagina in errore.
+ */
+function applyAlbero<Q extends { or: (expr: string) => Q }>(
+  query: Q,
+  albero?: Gruppo | null,
+): Q {
+  if (!albero || !albero.nodi.length) return query
+
+  const gruppi = gruppiCampiLead({ stati: [], origini: [], sedi: [], proprietari: [], tag: [] })
+  const catalogo = catalogoDaGruppi(gruppi).map((campo) => ({
+    chiave: campo.chiave,
+    etichetta: campo.etichetta,
+    tipo: campo.tipo,
+  }))
+
+  const validato = validaAlbero(albero, catalogo)
+  if (!validato.ok) return query
+
+  const tradotto = traduciAlbero(validato.gruppo, catalogo, ADVANCED_DB_COLUMN)
+  if (!tradotto.ok || !tradotto.espressione) return query
+
+  // PostgREST accetta l'espressione annidata dentro or(): con un solo ramo
+  // equivale a un and, con piu' rami mantiene la struttura.
+  return query.or(tradotto.espressione)
+}
+
 function applyAdvancedFilters<
   Q extends {
     ilike(column: string, pattern: string): Q
@@ -280,6 +315,7 @@ export async function getAllLeads(filters?: {
   sortBy?: string | null
   sortDir?: "asc" | "desc"
   advanced?: AdvancedFilterState
+  albero?: Gruppo | null
   limit?: number
   offset?: number
   visibleOwnerIds?: string[]
@@ -374,6 +410,7 @@ export async function getAllLeads(filters?: {
 
   // Filtri avanzati "per campo" — applicati PRIMA di range/paginazione.
   query = applyAdvancedFilters(query, filters?.advanced)
+  query = applyAlbero(query, filters?.albero)
 
   if (filters?.limit) {
     const from = filters.offset ?? 0
@@ -462,6 +499,7 @@ export async function getTotalCount(filters?: {
   score?: string[]
   search?: string
   advanced?: AdvancedFilterState
+  albero?: Gruppo | null
   visibleOwnerIds?: string[]
   trustedRead?: boolean
 }): Promise<number> {
@@ -525,6 +563,7 @@ export async function getTotalCount(filters?: {
 
   // Stessi filtri avanzati della lista, per un conteggio coerente.
   query = applyAdvancedFilters(query, filters?.advanced)
+  query = applyAlbero(query, filters?.albero)
 
   const { count, error } = await query
   if (error) {

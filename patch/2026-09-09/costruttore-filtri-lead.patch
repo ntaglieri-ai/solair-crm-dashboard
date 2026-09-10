@@ -1,0 +1,1064 @@
+diff --git a/app/(dashboard)/leads/leads-client.tsx b/app/(dashboard)/leads/leads-client.tsx
+index ad27fe7..8e7ae06 100644
+--- a/app/(dashboard)/leads/leads-client.tsx
++++ b/app/(dashboard)/leads/leads-client.tsx
+@@ -56,6 +56,7 @@ import {
+   EMPTY_ADVANCED,
+   type AdvancedFilterState,
+ } from "@/components/leads/advanced-filters"
++import type { Gruppo } from "@/lib/filtri/albero"
+ import {
+   type LeadListParams,
+   type LeadListItem,
+@@ -215,6 +216,9 @@ export function LeadsClient({
+   // Il pannello filtri e' una colonna della pagina: l'apertura la governa
+   // qui, perche' e' la pagina a decidere quanto spazio resta alla lista.
+   const [filtriAperti, setFiltriAperti] = useState(false)
++  // Il filtro componibile: gruppi E/O annidati, dal costruttore o da un
++  // filtro salvato. Viaggia con gli altri parametri della lista.
++  const [albero, setAlbero] = useState<Gruppo | null>(null)
+   const [pannelloFiltri, setPannelloFiltri] = useState<HTMLDivElement | null>(null)
+   const [page, setPage] = useState(1)
+   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
+@@ -357,6 +361,7 @@ export function LeadsClient({
+       score: filters.score,
+       onlyDuplicates,
+       advanced,
++      albero,
+       fields: visibleCols as unknown as string[],
+     }),
+     [
+@@ -373,6 +378,7 @@ export function LeadsClient({
+       filters.score,
+       onlyDuplicates,
+       advanced,
++      albero,
+       visibleCols,
+     ],
+   )
+@@ -823,6 +829,11 @@ export function LeadsClient({
+             openInline={filtriAperti}
+             onOpenInlineChange={setFiltriAperti}
+             inlineContainer={pannelloFiltri}
++            alberoApplicato={albero ?? undefined}
++            onApplicaAlbero={(gruppo) => {
++              setAlbero(gruppo.nodi.length ? gruppo : null)
++              setPage(1)
++            }}
+             applied={advanced}
+             onApply={handleAdvancedApply}
+             tags={allTags}
+diff --git a/components/filtri/costruttore-filtro.tsx b/components/filtri/costruttore-filtro.tsx
+new file mode 100644
+index 0000000..24e3d63
+--- /dev/null
++++ b/components/filtri/costruttore-filtro.tsx
+@@ -0,0 +1,533 @@
++"use client"
++
++import { useState } from "react"
++import { Plus, Trash2, FolderPlus, Save, Loader2 } from "lucide-react"
++import { Button } from "@/components/ui/button"
++import { Input } from "@/components/ui/input"
++import { Label } from "@/components/ui/label"
++import {
++  Select,
++  SelectTrigger,
++  SelectValue,
++  SelectContent,
++  SelectItem,
++  SelectGroup,
++  SelectLabel,
++} from "@/components/ui/select"
++import {
++  Dialog,
++  DialogContent,
++  DialogHeader,
++  DialogTitle,
++  DialogDescription,
++  DialogFooter,
++} from "@/components/ui/dialog"
++import { cn } from "@/lib/utils"
++import {
++  contaCondizioni,
++  operatoreSenzaValore,
++  OPERATORI_PER_TIPO,
++  potaVuoti,
++  type CampoFiltrabile,
++  type Condizione,
++  type Connettore,
++  type Gruppo,
++  type Nodo,
++  type Operatore,
++  type TipoCampo,
++} from "@/lib/filtri/albero"
++import type { GruppoCampi } from "@/lib/filtri/catalogo-lead"
++
++/**
++ * Il costruttore dei filtri.
++ *
++ * Sta in una finestra grande e non nel pannello laterale: componendo gruppi
++ * annidati i rientri crescono, e in una colonna da 340 pixel diventerebbero
++ * illeggibili dopo il secondo livello.
++ *
++ * Un gruppo tiene insieme delle condizioni con un connettore — tutte in E
++ * oppure tutte in O — e puo' contenere altri gruppi. E' cosi' che si dice
++ * "(Sede e' Catania OPPURE Sede e' Palermo) E Stato e' Contattato", che una
++ * lista piatta non sa esprimere.
++ */
++
++const ETICHETTA_OPERATORE: Record<Operatore, string> = {
++  contiene: "contiene",
++  non_contiene: "non contiene",
++  uguale: "è",
++  diverso: "non è",
++  inizia_con: "inizia con",
++  uno_di: "è uno di",
++  nessuno_di: "non è nessuno di",
++  maggiore: "maggiore di",
++  minore: "minore di",
++  fra: "fra",
++  ultimi_giorni: "negli ultimi (giorni)",
++  prima: "prima del",
++  dopo: "dopo il",
++  vero: "è sì",
++  falso: "è no",
++  presente: "ne ha",
++  assente: "non ne ha",
++  vuoto: "è vuoto",
++  non_vuoto: "non è vuoto",
++}
++
++function condizioneVuota(campo: CampoFiltrabile): Condizione {
++  return {
++    tipo: "condizione",
++    campo: campo.chiave,
++    operatore: OPERATORI_PER_TIPO[campo.tipo][0],
++    valori: [],
++  }
++}
++
++/** Sostituisce un nodo in profondita' senza mutare l'albero originale. */
++function sostituisci(gruppo: Gruppo, percorso: number[], nuovo: Nodo | null): Gruppo {
++  const [indice, ...resto] = percorso
++  const nodi = [...gruppo.nodi]
++
++  if (resto.length === 0) {
++    if (nuovo === null) nodi.splice(indice, 1)
++    else nodi[indice] = nuovo
++    return { ...gruppo, nodi }
++  }
++
++  const figlio = nodi[indice]
++  if (!figlio || figlio.tipo !== "gruppo") return gruppo
++  nodi[indice] = sostituisci(figlio, resto, nuovo)
++  return { ...gruppo, nodi }
++}
++
++function aggiungi(gruppo: Gruppo, percorso: number[], nodo: Nodo): Gruppo {
++  if (percorso.length === 0) return { ...gruppo, nodi: [...gruppo.nodi, nodo] }
++  const [indice, ...resto] = percorso
++  const nodi = [...gruppo.nodi]
++  const figlio = nodi[indice]
++  if (!figlio || figlio.tipo !== "gruppo") return gruppo
++  nodi[indice] = aggiungi(figlio, resto, nodo)
++  return { ...gruppo, nodi }
++}
++
++export function CostruttoreFiltro({
++  aperto,
++  onChiudi,
++  gruppi,
++  valoreIniziale,
++  onApplica,
++  onSalva,
++}: {
++  aperto: boolean
++  onChiudi: () => void
++  gruppi: GruppoCampi[]
++  valoreIniziale: Gruppo
++  onApplica: (gruppo: Gruppo) => void
++  onSalva: (nome: string, gruppo: Gruppo) => Promise<void>
++}) {
++  const [albero, setAlbero] = useState<Gruppo>(valoreIniziale)
++  const [nome, setNome] = useState("")
++  const [salvataggio, setSalvataggio] = useState(false)
++
++  const catalogo = gruppi.flatMap((gruppo) => gruppo.campi)
++  const perChiave = new Map(catalogo.map((campo) => [campo.chiave, campo]))
++  const totale = contaCondizioni(albero)
++
++  function modifica(percorso: number[], nodo: Nodo | null) {
++    setAlbero((corrente) => sostituisci(corrente, percorso, nodo))
++  }
++
++  return (
++    <Dialog open={aperto} onOpenChange={(v) => (!v ? onChiudi() : undefined)}>
++      <DialogContent className="flex max-h-[88vh] w-[min(1000px,94vw)] max-w-none flex-col gap-0 p-0 sm:max-w-none">
++        <DialogHeader className="border-b border-border px-5 py-4">
++          <DialogTitle>Costruisci filtro</DialogTitle>
++          <DialogDescription>
++            Le condizioni di un gruppo valgono tutte insieme (E) oppure in alternativa (O).
++            Un gruppo può contenerne altri, per combinare le due cose.
++          </DialogDescription>
++        </DialogHeader>
++
++        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
++          <NodoGruppo
++            gruppo={albero}
++            percorso={[]}
++            gruppiCampi={gruppi}
++            perChiave={perChiave}
++            radice
++            onModifica={modifica}
++            onAggiungiCondizione={(percorso, campo) =>
++              setAlbero((corrente) => aggiungi(corrente, percorso, condizioneVuota(campo)))
++            }
++            onAggiungiGruppo={(percorso) =>
++              setAlbero((corrente) =>
++                aggiungi(corrente, percorso, { tipo: "gruppo", connettore: "o", nodi: [] }),
++              )
++            }
++          />
++        </div>
++
++        <DialogFooter className="flex-col gap-3 border-t border-border px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
++          <div className="flex w-full flex-col gap-1.5 sm:max-w-xs">
++            <Label htmlFor="filtro-nome" className="text-xs">
++              Salva come filtro
++            </Label>
++            <div className="flex gap-2">
++              <Input
++                id="filtro-nome"
++                value={nome}
++                onChange={(e) => setNome(e.target.value)}
++                placeholder="es. Installazioni da fare"
++              />
++              <Button
++                variant="outline"
++                className="shrink-0 bg-card"
++                disabled={!nome.trim() || totale === 0 || salvataggio}
++                onClick={async () => {
++                  setSalvataggio(true)
++                  try {
++                    await onSalva(nome.trim(), potaVuoti(albero))
++                    setNome("")
++                  } finally {
++                    setSalvataggio(false)
++                  }
++                }}
++              >
++                {salvataggio ? (
++                  <Loader2 className="size-4 animate-spin" />
++                ) : (
++                  <Save data-icon="inline-start" />
++                )}
++                Salva
++              </Button>
++            </div>
++            <p className="text-[11px] text-muted-foreground">
++              I filtri salvati sono visibili a tutti.
++            </p>
++          </div>
++
++          <div className="flex items-center gap-2">
++            <span className="text-xs text-muted-foreground">
++              {totale === 0
++                ? "Nessuna condizione"
++                : `${totale} condizion${totale === 1 ? "e" : "i"}`}
++            </span>
++            <Button variant="outline" className="bg-card" onClick={onChiudi}>
++              Annulla
++            </Button>
++            <Button
++              className="bg-teal text-teal-foreground hover:bg-teal/90"
++              onClick={() => {
++                onApplica(potaVuoti(albero))
++                onChiudi()
++              }}
++            >
++              Applica
++            </Button>
++          </div>
++        </DialogFooter>
++      </DialogContent>
++    </Dialog>
++  )
++}
++
++function NodoGruppo({
++  gruppo,
++  percorso,
++  gruppiCampi,
++  perChiave,
++  radice = false,
++  onModifica,
++  onAggiungiCondizione,
++  onAggiungiGruppo,
++}: {
++  gruppo: Gruppo
++  percorso: number[]
++  gruppiCampi: GruppoCampi[]
++  perChiave: Map<string, CampoFiltrabile>
++  radice?: boolean
++  onModifica: (percorso: number[], nodo: Nodo | null) => void
++  onAggiungiCondizione: (percorso: number[], campo: CampoFiltrabile) => void
++  onAggiungiGruppo: (percorso: number[]) => void
++}) {
++  return (
++    <div
++      className={cn(
++        "flex flex-col gap-2 rounded-lg",
++        !radice && "border border-border bg-secondary/30 p-3",
++      )}
++    >
++      <div className="flex items-center gap-2">
++        <SceltaConnettore
++          valore={gruppo.connettore}
++          onCambia={(connettore) => onModifica(percorso, { ...gruppo, connettore })}
++        />
++        <span className="text-xs text-muted-foreground">
++          {gruppo.connettore === "e"
++            ? "tutte le condizioni devono valere"
++            : "basta che ne valga una"}
++        </span>
++
++        {!radice ? (
++          <Button
++            variant="ghost"
++            size="icon"
++            className="ml-auto size-7 text-destructive hover:text-destructive"
++            aria-label="Elimina gruppo"
++            onClick={() => onModifica(percorso, null)}
++          >
++            <Trash2 className="size-3.5" />
++          </Button>
++        ) : null}
++      </div>
++
++      {gruppo.nodi.map((nodo, indice) => {
++        const figlio = [...percorso, indice]
++        if (nodo.tipo === "gruppo") {
++          return (
++            <NodoGruppo
++              key={indice}
++              gruppo={nodo}
++              percorso={figlio}
++              gruppiCampi={gruppiCampi}
++              perChiave={perChiave}
++              onModifica={onModifica}
++              onAggiungiCondizione={onAggiungiCondizione}
++              onAggiungiGruppo={onAggiungiGruppo}
++            />
++          )
++        }
++        const campo = perChiave.get(nodo.campo)
++        if (!campo) return null
++        return (
++          <RigaCondizione
++            key={indice}
++            condizione={nodo}
++            campo={campo}
++            onCambia={(nuova) => onModifica(figlio, nuova)}
++            onElimina={() => onModifica(figlio, null)}
++          />
++        )
++      })}
++
++      <div className="flex flex-wrap gap-2">
++        <SceltaCampo
++          gruppi={gruppiCampi}
++          onScelto={(campo) => onAggiungiCondizione(percorso, campo)}
++        />
++        <Button
++          variant="outline"
++          size="sm"
++          className="bg-card"
++          onClick={() => onAggiungiGruppo(percorso)}
++        >
++          <FolderPlus data-icon="inline-start" />
++          Gruppo
++        </Button>
++      </div>
++    </div>
++  )
++}
++
++function SceltaConnettore({
++  valore,
++  onCambia,
++}: {
++  valore: Connettore
++  onCambia: (valore: Connettore) => void
++}) {
++  return (
++    <div className="inline-flex overflow-hidden rounded-md border border-border">
++      {(["e", "o"] as const).map((opzione) => (
++        <button
++          key={opzione}
++          type="button"
++          onClick={() => onCambia(opzione)}
++          className={cn(
++            "px-3 py-1 text-xs font-semibold uppercase transition-colors",
++            valore === opzione
++              ? "bg-primary text-primary-foreground"
++              : "bg-card text-muted-foreground hover:bg-secondary",
++          )}
++        >
++          {opzione}
++        </button>
++      ))}
++    </div>
++  )
++}
++
++function SceltaCampo({
++  gruppi,
++  onScelto,
++}: {
++  gruppi: GruppoCampi[]
++  onScelto: (campo: CampoFiltrabile) => void
++}) {
++  const perChiave = new Map(
++    gruppi.flatMap((gruppo) => gruppo.campi).map((campo) => [campo.chiave, campo]),
++  )
++
++  return (
++    <Select
++      value=""
++      onValueChange={(chiave) => {
++        const campo = chiave ? perChiave.get(chiave) : undefined
++        if (campo) onScelto(campo)
++      }}
++    >
++      <SelectTrigger size="sm" className="w-52 bg-card">
++        <Plus className="size-3.5" />
++        <SelectValue placeholder="Condizione" />
++      </SelectTrigger>
++      <SelectContent className="max-h-80">
++        {gruppi.map((gruppo) => (
++          <SelectGroup key={gruppo.chiave}>
++            <SelectLabel>{gruppo.etichetta}</SelectLabel>
++            {gruppo.campi.map((campo) => (
++              <SelectItem key={campo.chiave} value={campo.chiave}>
++                {campo.etichetta}
++              </SelectItem>
++            ))}
++          </SelectGroup>
++        ))}
++      </SelectContent>
++    </Select>
++  )
++}
++
++function RigaCondizione({
++  condizione,
++  campo,
++  onCambia,
++  onElimina,
++}: {
++  condizione: Condizione
++  campo: CampoFiltrabile
++  onCambia: (condizione: Condizione) => void
++  onElimina: () => void
++}) {
++  const operatori = OPERATORI_PER_TIPO[campo.tipo]
++  const senzaValore = operatoreSenzaValore(condizione.operatore)
++
++  return (
++    <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card px-2.5 py-2">
++      <span className="min-w-32 text-sm font-medium text-foreground">{campo.etichetta}</span>
++
++      <Select
++        value={condizione.operatore}
++        onValueChange={(valore) =>
++          onCambia({ ...condizione, operatore: (valore ?? operatori[0]) as Operatore, valori: [] })
++        }
++      >
++        <SelectTrigger size="sm" className="w-48">
++          <SelectValue />
++        </SelectTrigger>
++        <SelectContent>
++          {operatori.map((operatore) => (
++            <SelectItem key={operatore} value={operatore}>
++              {ETICHETTA_OPERATORE[operatore]}
++            </SelectItem>
++          ))}
++        </SelectContent>
++      </Select>
++
++      {!senzaValore ? (
++        <EditorValore
++          tipo={campo.tipo}
++          opzioni={campo.opzioni}
++          operatore={condizione.operatore}
++          valori={condizione.valori}
++          onCambia={(valori) => onCambia({ ...condizione, valori })}
++        />
++      ) : null}
++
++      <Button
++        variant="ghost"
++        size="icon"
++        className="ml-auto size-7 text-destructive hover:text-destructive"
++        aria-label="Elimina condizione"
++        onClick={onElimina}
++      >
++        <Trash2 className="size-3.5" />
++      </Button>
++    </div>
++  )
++}
++
++function EditorValore({
++  tipo,
++  opzioni,
++  operatore,
++  valori,
++  onCambia,
++}: {
++  tipo: TipoCampo
++  opzioni?: readonly string[]
++  operatore: Operatore
++  valori: (string | number | boolean)[]
++  onCambia: (valori: (string | number | boolean)[]) => void
++}) {
++  // "fra" vuole due estremi: un solo campo lascerebbe il filtro incompleto
++  // senza che si capisca perche'.
++  if (operatore === "fra") {
++    return (
++      <div className="flex items-center gap-1.5">
++        <Input
++          className="h-8 w-28"
++          type={tipo === "data" ? "date" : "number"}
++          value={String(valori[0] ?? "")}
++          onChange={(e) => onCambia([e.target.value, valori[1] ?? ""])}
++        />
++        <span className="text-xs text-muted-foreground">e</span>
++        <Input
++          className="h-8 w-28"
++          type={tipo === "data" ? "date" : "number"}
++          value={String(valori[1] ?? "")}
++          onChange={(e) => onCambia([valori[0] ?? "", e.target.value])}
++        />
++      </div>
++    )
++  }
++
++  if (opzioni?.length) {
++    // Piu' valori sullo stesso campo sono gia' un "oppure": e' il caso piu'
++    // frequente, e non deve costare un gruppo.
++    const scelti = valori.map(String)
++    return (
++      <div className="flex flex-wrap items-center gap-1">
++        {opzioni.map((opzione) => {
++          const attivo = scelti.includes(opzione)
++          return (
++            <button
++              key={opzione}
++              type="button"
++              onClick={() =>
++                onCambia(
++                  attivo ? scelti.filter((v) => v !== opzione) : [...scelti, opzione],
++                )
++              }
++              className={cn(
++                "rounded-full border px-2.5 py-1 text-xs transition-colors",
++                attivo
++                  ? "border-teal bg-teal/10 font-medium text-teal"
++                  : "border-border bg-card text-muted-foreground hover:bg-secondary",
++              )}
++            >
++              {opzione}
++            </button>
++          )
++        })}
++      </div>
++    )
++  }
++
++  return (
++    <Input
++      className="h-8 w-56"
++      type={tipo === "numero" ? "number" : tipo === "data" ? "date" : "text"}
++      value={String(valori[0] ?? "")}
++      onChange={(e) => onCambia([e.target.value])}
++      placeholder="Valore"
++    />
++  )
++}
+diff --git a/components/filtri/filtri-salvati.tsx b/components/filtri/filtri-salvati.tsx
+new file mode 100644
+index 0000000..b5d4039
+--- /dev/null
++++ b/components/filtri/filtri-salvati.tsx
+@@ -0,0 +1,117 @@
++"use client"
++
++import { useCallback, useEffect, useState } from "react"
++import { Bookmark, Loader2, Trash2 } from "lucide-react"
++import { Button } from "@/components/ui/button"
++import { cn } from "@/lib/utils"
++import { contaCondizioni, type Gruppo } from "@/lib/filtri/albero"
++
++/**
++ * I filtri salvati, in cima al pannello.
++ *
++ * Sono condivisi fra tutti: chi ne costruisce uno utile lo lascia ai
++ * colleghi. E' la differenza principale rispetto a Zoho, dove restano
++ * personali e non si possono passare — un limite di cui gli utenti si
++ * lamentano apertamente.
++ */
++
++export type FiltroSalvato = {
++  id: string
++  nome: string
++  definizione: Gruppo
++  creato_da: string | null
++}
++
++export function FiltriSalvati({
++  modulo,
++  attivo,
++  onApplica,
++  ricarica,
++}: {
++  modulo: string
++  /** Id del filtro attualmente applicato, per evidenziarlo. */
++  attivo?: string | null
++  onApplica: (filtro: FiltroSalvato) => void
++  /** Cambia quando un filtro viene salvato, per rileggere l'elenco. */
++  ricarica?: number
++}) {
++  const [filtri, setFiltri] = useState<FiltroSalvato[]>([])
++  const [caricamento, setCaricamento] = useState(true)
++
++  const carica = useCallback(async () => {
++    setCaricamento(true)
++    try {
++      const risposta = await fetch(`/api/filtri-salvati?modulo=${modulo}`, { cache: "no-store" })
++      const dati = (await risposta.json()) as { filtri?: FiltroSalvato[] }
++      setFiltri(dati.filtri ?? [])
++    } catch {
++      // Un elenco che non si carica non deve impedire di filtrare a mano:
++      // resta vuoto e il resto del pannello funziona.
++      setFiltri([])
++    } finally {
++      setCaricamento(false)
++    }
++  }, [modulo])
++
++  useEffect(() => {
++    void carica()
++  }, [carica, ricarica])
++
++  async function elimina(id: string, nome: string) {
++    if (!window.confirm(`Eliminare il filtro "${nome}"? Sparisce per tutti.`)) return
++    await fetch(`/api/filtri-salvati?id=${id}`, { method: "DELETE" }).catch(() => {})
++    void carica()
++  }
++
++  if (caricamento) {
++    return (
++      <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
++        <Loader2 className="size-3.5 animate-spin" />
++        Filtri salvati…
++      </div>
++    )
++  }
++
++  if (!filtri.length) return null
++
++  return (
++    <div className="border-b border-border px-4 py-3">
++      <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
++        <Bookmark className="size-3.5 text-muted-foreground" />
++        Filtri salvati
++        <span className="text-xs font-normal text-muted-foreground">{filtri.length}</span>
++      </p>
++
++      <div className="flex flex-col gap-1">
++        {filtri.map((filtro) => (
++          <div key={filtro.id} className="group flex items-center gap-1">
++            <button
++              type="button"
++              onClick={() => onApplica(filtro)}
++              className={cn(
++                "flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-left text-sm transition-colors",
++                attivo === filtro.id
++                  ? "border-teal bg-teal/10 font-medium text-teal"
++                  : "border-border bg-card text-foreground hover:bg-secondary",
++              )}
++            >
++              <span className="truncate">{filtro.nome}</span>
++              <span className="shrink-0 text-[11px] text-muted-foreground">
++                {contaCondizioni(filtro.definizione)}
++              </span>
++            </button>
++            <Button
++              variant="ghost"
++              size="icon"
++              className="size-7 shrink-0 text-muted-foreground/60 hover:text-destructive"
++              aria-label={`Elimina ${filtro.nome}`}
++              onClick={() => void elimina(filtro.id, filtro.nome)}
++            >
++              <Trash2 className="size-3.5" />
++            </Button>
++          </div>
++        ))}
++      </div>
++    </div>
++  )
++}
+diff --git a/components/leads/advanced-filters.tsx b/components/leads/advanced-filters.tsx
+index 1ebbf75..41723ca 100644
+--- a/components/leads/advanced-filters.tsx
++++ b/components/leads/advanced-filters.tsx
+@@ -13,6 +13,12 @@ import { Button } from "@/components/ui/button"
+ import { Input } from "@/components/ui/input"
+ import { Checkbox } from "@/components/ui/checkbox"
+ import { createPortal } from "react-dom"
++import { toast } from "sonner"
++import { Maximize2 } from "lucide-react"
++import { FiltriSalvati } from "@/components/filtri/filtri-salvati"
++import { CostruttoreFiltro } from "@/components/filtri/costruttore-filtro"
++import { GRUPPO_VUOTO, type Gruppo } from "@/lib/filtri/albero"
++import { gruppiCampiLead } from "@/lib/filtri/catalogo-lead"
+ import {
+   Sheet,
+   SheetContent,
+@@ -233,6 +239,8 @@ export function AdvancedFilters({
+   openInline = false,
+   onOpenInlineChange,
+   inlineContainer,
++  onApplicaAlbero,
++  alberoApplicato,
+ }: {
+   applied: AdvancedFilterState
+   onApply: (state: AdvancedFilterState) => void
+@@ -265,6 +273,13 @@ export function AdvancedFilters({
+    * pannello ci viene portato dentro, senza duplicare lo stato del filtro.
+    */
+   inlineContainer?: HTMLElement | null
++  /**
++   * Applica un filtro ad albero (dal costruttore o da un filtro salvato).
++   * Assente = costruttore e filtri salvati non disponibili.
++   */
++  onApplicaAlbero?: (gruppo: Gruppo) => void
++  /** L'albero attualmente applicato, per riaprirlo nel costruttore. */
++  alberoApplicato?: Gruppo
+ }) {
+   const { owners, installers } = useTags()
+   const statoLeadOptions = useColumnValueOptions(
+@@ -376,6 +391,11 @@ export function AdvancedFilters({
+     else clearField(key)
+   }
+ 
++  const [costruttoreAperto, setCostruttoreAperto] = useState(false)
++  const [filtroSalvatoAttivo, setFiltroSalvatoAttivo] = useState<string | null>(null)
++  // Cambia a ogni salvataggio, per far rileggere l'elenco dei salvati.
++  const [versioneSalvati, setVersioneSalvati] = useState(0)
++
+   // Con il pannello incastonato la lista si aggiorna mentre si compone il
+   // filtro: e' il motivo per cui sta accanto invece che sopra. La piccola
+   // attesa evita che spuntare tre caselle faccia partire tre interrogazioni
+@@ -395,21 +415,81 @@ export function AdvancedFilters({
+   const aperto = inline ? openInline : open
+   const chiudi = () => (inline ? onOpenInlineChange?.(false) : setOpen(false))
+ 
++  // Le opzioni dei campi a elenco vengono dai dati veri, non da un elenco
++  // scritto qui: uno stato aggiunto in configurazione deve comparire nel
++  // costruttore senza toccare il codice.
++  const opzioniCatalogo = {
++    stati: statoLeadOptions.map((opzione) => opzione.value),
++    origini: origineLeadOptions.map((opzione) => opzione.value),
++    sedi: sedeOptions.map((opzione) => opzione.value),
++    proprietari: owners.map((owner) => owner.id),
++    tag: tags,
++  }
++
++  const costruttore = onApplicaAlbero ? (
++    <CostruttoreFiltro
++      aperto={costruttoreAperto}
++      onChiudi={() => setCostruttoreAperto(false)}
++      gruppi={gruppiCampiLead(opzioniCatalogo)}
++      valoreIniziale={alberoApplicato ?? GRUPPO_VUOTO}
++      onApplica={(gruppo) => {
++        // Applicare un albero composto a mano stacca l'eventuale filtro
++        // salvato: non e' piu' quello.
++        setFiltroSalvatoAttivo(null)
++        onApplicaAlbero(gruppo)
++      }}
++      onSalva={async (nome, gruppo) => {
++        const risposta = await fetch("/api/filtri-salvati", {
++          method: "POST",
++          headers: { "Content-Type": "application/json" },
++          body: JSON.stringify({ modulo: "lead", nome, definizione: gruppo }),
++        })
++        if (!risposta.ok) {
++          const dati = (await risposta.json().catch(() => ({}))) as { error?: string }
++          toast.error(dati.error ?? "Salvataggio non riuscito")
++          return
++        }
++        toast.success(`Filtro "${nome}" salvato e condiviso`)
++        setVersioneSalvati((v) => v + 1)
++      }}
++    />
++  ) : null
++
+   const contenutoPannello = (
+       <div className="flex h-full min-h-0 flex-col">
+         <div className="flex flex-row items-center justify-between border-b border-border p-4">
+           <p className="text-base font-semibold text-foreground">Filtra Lead per</p>
+-          <Button
+-            variant="ghost"
+-            size="icon-sm"
+-            aria-label="Chiudi"
+-            onClick={chiudi}
+-          >
+-            <X />
+-          </Button>
++          <div className="flex items-center gap-0.5">
++            {onApplicaAlbero ? (
++              <Button
++                variant="ghost"
++                size="icon-sm"
++                aria-label="Apri il costruttore"
++                title="Costruisci un filtro con condizioni e gruppi"
++                onClick={() => setCostruttoreAperto(true)}
++              >
++                <Maximize2 />
++              </Button>
++            ) : null}
++            <Button variant="ghost" size="icon-sm" aria-label="Chiudi" onClick={chiudi}>
++              <X />
++            </Button>
++          </div>
+         </div>
+ 
+         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
++          {onApplicaAlbero ? (
++          <FiltriSalvati
++            modulo="lead"
++            attivo={filtroSalvatoAttivo}
++            ricarica={versioneSalvati}
++            onApplica={(filtro) => {
++              setFiltroSalvatoAttivo(filtro.id)
++              onApplicaAlbero(filtro.definizione)
++            }}
++          />
++          ) : null}
++
+           {/* Viste rapide */}
+           {quickViews && quickViews.length > 0 ? (
+             <div className="border-b border-border p-3">
+@@ -627,6 +707,7 @@ export function AdvancedFilters({
+     return (
+       <>
+         {pulsante}
++        {costruttore}
+         {aperto && inlineContainer
+           ? createPortal(
+               <aside className="flex h-full w-[340px] shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+@@ -666,6 +747,7 @@ export function AdvancedFilters({
+       >
+         {contenutoPannello}
+       </SheetContent>
++      {costruttore}
+     </Sheet>
+   )
+ }
+diff --git a/lib/filtri/__tests__/albero.test.ts b/lib/filtri/__tests__/albero.test.ts
+index 245ed49..21e08ce 100644
+--- a/lib/filtri/__tests__/albero.test.ts
++++ b/lib/filtri/__tests__/albero.test.ts
+@@ -202,3 +202,28 @@ describe("potaVuoti e contaCondizioni", () => {
+     expect(contaCondizioni(albero)).toBe(1)
+   })
+ })
++
++describe("il filtro nella lista", () => {
++  it("un albero senza condizioni non deve filtrare nulla", () => {
++    // Applicare un gruppo vuoto come se fosse un filtro darebbe zero
++    // risultati invece di tutti: l'assenza di vincoli non e' un vincolo
++    // impossibile.
++    const validato = validaAlbero(gruppo([]), CATALOGO)
++    expect(validato.ok).toBe(true)
++    if (validato.ok) {
++      const tradotto = traduciAlbero(validato.gruppo, CATALOGO, COLONNE)
++      expect(tradotto.ok).toBe(true)
++      if (tradotto.ok) expect(tradotto.espressione).toBeNull()
++    }
++  })
++
++  it("un gruppo con soli collegati non produce espressione sulle colonne", () => {
++    const validato = validaAlbero(gruppo([cond("Attività aperte", "presente")]), CATALOGO)
++    expect(validato.ok).toBe(true)
++    if (validato.ok) {
++      const tradotto = traduciAlbero(validato.gruppo, CATALOGO, COLONNE)
++      expect(tradotto.ok).toBe(true)
++      if (tradotto.ok) expect(tradotto.espressione).toBeNull()
++    }
++  })
++})
+diff --git a/lib/leads/api-types.ts b/lib/leads/api-types.ts
+index 492d898..b75708f 100644
+--- a/lib/leads/api-types.ts
++++ b/lib/leads/api-types.ts
+@@ -6,6 +6,7 @@ import type {
+   LeadListNote,
+   LeadListTask,
+ } from "@/lib/mock-data"
++import type { Gruppo } from "@/lib/filtri/albero"
+ import { DEFAULT_VISIBLE_COLUMNS } from "@/lib/mock-data"
+ import {
+   type AdvancedFilterState,
+@@ -55,6 +56,11 @@ export interface LeadListParams {
+   score: ScoreFilterValue[]
+   onlyDuplicates: boolean
+   advanced: AdvancedFilterState
++  /**
++   * Filtro componibile: gruppi E/O annidati, dal costruttore o da un filtro
++   * salvato. Assente quando non se ne usa uno.
++   */
++  albero?: Gruppo | null
+   /** Colonne richieste oltre alla base; [] => solo base. "*" => tutte. */
+   fields: string[]
+ }
+@@ -134,6 +140,9 @@ export function buildLeadsSearchParams(p: LeadListParams): URLSearchParams {
+     Object.values(p.advanced.quick).some(Boolean) ||
+     Object.keys(p.advanced.fields).length > 0
+   if (hasAdvanced) sp.set("advanced", JSON.stringify(p.advanced))
++  // L'albero viaggia solo se ha condizioni: un gruppo vuoto allungherebbe
++  // la chiave della cache senza cambiare il risultato.
++  if (p.albero && p.albero.nodi.length > 0) sp.set("albero", JSON.stringify(p.albero))
+   return sp
+ }
+ 
+@@ -149,8 +158,21 @@ export function parseLeadsSearchParams(sp: URLSearchParams): LeadListParams {
+       advanced = EMPTY_ADVANCED
+     }
+   }
++  // L'albero arriva dal browser: qui si legge soltanto, la verifica di campi
++  // e operatori avviene dove diventa interrogazione.
++  let albero: Gruppo | null = null
++  const alberoRaw = sp.get("albero")
++  if (alberoRaw) {
++    try {
++      albero = JSON.parse(alberoRaw) as Gruppo
++    } catch {
++      albero = null
++    }
++  }
++
+   const fieldsRaw = sp.get("fields")
+   return {
++    albero,
+     page: Math.max(1, Number(sp.get("page") ?? "1") || 1),
+     pageSize: Math.min(200, Math.max(1, Number(sp.get("pageSize") ?? "10") || 10)),
+     sortBy: (sp.get("sortBy") as LeadColumnId | null) ?? null,
+diff --git a/lib/leads/repository.ts b/lib/leads/repository.ts
+index 0bf5c4c..c6e5cda 100644
+--- a/lib/leads/repository.ts
++++ b/lib/leads/repository.ts
+@@ -75,6 +75,7 @@ async function queryLeadsWithMode(
+     score: params.score,
+     search: params.search,
+     advanced: params.advanced,
++    albero: params.albero,
+     visibleOwnerIds,
+     fields: params.fields,
+     includeInstallatoreSopralluogo: leadListNeedsInstallatoreSopralluogo(params.fields),
+@@ -308,6 +309,7 @@ export async function queryLeadsForExport(
+     score: params.score,
+     search: params.search,
+     advanced: params.advanced,
++    albero: params.albero,
+     visibleOwnerIds,
+   }
+ 
+diff --git a/lib/leads/server-store.ts b/lib/leads/server-store.ts
+index a7b9fe4..9e915d4 100644
+--- a/lib/leads/server-store.ts
++++ b/lib/leads/server-store.ts
+@@ -5,6 +5,9 @@ import { createAdminClient } from "@/lib/supabase/admin"
+ import { activeFilterValues, postgrestInList } from "@/lib/shared/filter-values"
+ import type { Lead } from "@/lib/mock-data"
+ import type { AdvancedFilterState } from "@/lib/leads/advanced-filter-logic"
++import { validaAlbero, type Gruppo } from "@/lib/filtri/albero"
++import { traduciAlbero } from "@/lib/filtri/traduci"
++import { catalogoDaGruppi, gruppiCampiLead } from "@/lib/filtri/catalogo-lead"
+ import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
+ import { buildCustomPatch, CUSTOM_FIELD_PREFIX } from "@/lib/crm-settings/custom-fields"
+ import {
+@@ -229,6 +232,38 @@ const ADVANCED_DB_COLUMN: Record<string, string> = {
+ // Traduce i filtri "per campo" avanzati in vincoli Supabase (AND tra campi).
+ // Generico sul builder: ogni metodo filtro ritorna lo stesso tipo, così la
+ // stessa funzione vale sia per la query lista che per quella di conteggio.
++/**
++ * Applica il filtro componibile.
++ *
++ * L'albero arriva dal browser: viene validato contro il catalogo del modulo
++ * e tradotto in una sola espressione, cosi' il filtro resta una query sola
++ * anche con gruppi annidati. Un albero non valido non filtra nulla invece di
++ * far fallire la lettura: meglio una lista intera che una pagina in errore.
++ */
++function applyAlbero<Q extends { or: (expr: string) => Q }>(
++  query: Q,
++  albero?: Gruppo | null,
++): Q {
++  if (!albero || !albero.nodi.length) return query
++
++  const gruppi = gruppiCampiLead({ stati: [], origini: [], sedi: [], proprietari: [], tag: [] })
++  const catalogo = catalogoDaGruppi(gruppi).map((campo) => ({
++    chiave: campo.chiave,
++    etichetta: campo.etichetta,
++    tipo: campo.tipo,
++  }))
++
++  const validato = validaAlbero(albero, catalogo)
++  if (!validato.ok) return query
++
++  const tradotto = traduciAlbero(validato.gruppo, catalogo, ADVANCED_DB_COLUMN)
++  if (!tradotto.ok || !tradotto.espressione) return query
++
++  // PostgREST accetta l'espressione annidata dentro or(): con un solo ramo
++  // equivale a un and, con piu' rami mantiene la struttura.
++  return query.or(tradotto.espressione)
++}
++
+ function applyAdvancedFilters<
+   Q extends {
+     ilike(column: string, pattern: string): Q
+@@ -280,6 +315,7 @@ export async function getAllLeads(filters?: {
+   sortBy?: string | null
+   sortDir?: "asc" | "desc"
+   advanced?: AdvancedFilterState
++  albero?: Gruppo | null
+   limit?: number
+   offset?: number
+   visibleOwnerIds?: string[]
+@@ -374,6 +410,7 @@ export async function getAllLeads(filters?: {
+ 
+   // Filtri avanzati "per campo" — applicati PRIMA di range/paginazione.
+   query = applyAdvancedFilters(query, filters?.advanced)
++  query = applyAlbero(query, filters?.albero)
+ 
+   if (filters?.limit) {
+     const from = filters.offset ?? 0
+@@ -462,6 +499,7 @@ export async function getTotalCount(filters?: {
+   score?: string[]
+   search?: string
+   advanced?: AdvancedFilterState
++  albero?: Gruppo | null
+   visibleOwnerIds?: string[]
+   trustedRead?: boolean
+ }): Promise<number> {
+@@ -525,6 +563,7 @@ export async function getTotalCount(filters?: {
+ 
+   // Stessi filtri avanzati della lista, per un conteggio coerente.
+   query = applyAdvancedFilters(query, filters?.advanced)
++  query = applyAlbero(query, filters?.albero)
+ 
+   const { count, error } = await query
+   if (error) {

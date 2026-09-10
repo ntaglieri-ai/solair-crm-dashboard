@@ -202,3 +202,28 @@ describe("potaVuoti e contaCondizioni", () => {
     expect(contaCondizioni(albero)).toBe(1)
   })
 })
+
+describe("il filtro nella lista", () => {
+  it("un albero senza condizioni non deve filtrare nulla", () => {
+    // Applicare un gruppo vuoto come se fosse un filtro darebbe zero
+    // risultati invece di tutti: l'assenza di vincoli non e' un vincolo
+    // impossibile.
+    const validato = validaAlbero(gruppo([]), CATALOGO)
+    expect(validato.ok).toBe(true)
+    if (validato.ok) {
+      const tradotto = traduciAlbero(validato.gruppo, CATALOGO, COLONNE)
+      expect(tradotto.ok).toBe(true)
+      if (tradotto.ok) expect(tradotto.espressione).toBeNull()
+    }
+  })
+
+  it("un gruppo con soli collegati non produce espressione sulle colonne", () => {
+    const validato = validaAlbero(gruppo([cond("Attività aperte", "presente")]), CATALOGO)
+    expect(validato.ok).toBe(true)
+    if (validato.ok) {
+      const tradotto = traduciAlbero(validato.gruppo, CATALOGO, COLONNE)
+      expect(tradotto.ok).toBe(true)
+      if (tradotto.ok) expect(tradotto.espressione).toBeNull()
+    }
+  })
+})

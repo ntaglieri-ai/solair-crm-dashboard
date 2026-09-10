@@ -5,6 +5,7 @@ import { Loader2, Mail, MessageCircle, Phone } from "lucide-react"
 import { toast } from "sonner"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { ScegliModello, confermaSovrascrittura } from "@/components/shared/scegli-modello"
+import { CampoMessaggio } from "@/components/shared/campo-messaggio"
 import {
   Dialog,
   DialogContent,
@@ -15,7 +16,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { MittenteSelect, useMittenti } from "@/components/shared/mittente-select"
 import { cn } from "@/lib/utils"
 
@@ -238,14 +238,14 @@ export function QuickContactIcons({
 
       <Dialog open={emailOpen} onOpenChange={setEmailOpen}>
         <DialogContent
-          className="sm:max-w-lg"
+          className="flex max-h-[88vh] w-[min(980px,94vw)] max-w-none flex-col sm:max-w-none"
           onClick={(event) => event.stopPropagation()}
         >
           <DialogHeader>
             <DialogTitle>Scrivi a {nome}</DialogTitle>
             <DialogDescription>{email}</DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-3 py-1">
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-1">
             <MittenteSelect state={mittenti} disabled={sending} />
             <ScegliModello
               modulo={kind === "cliente" ? "clienti" : "lead"}
@@ -265,16 +265,12 @@ export function QuickContactIcons({
                 placeholder="Oggetto dell'email"
               />
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`quick-body-${recordId}`}>Messaggio</Label>
-              <Textarea
-                id={`quick-body-${recordId}`}
-                rows={5}
-                value={body}
-                onChange={(event) => setBody(event.target.value)}
-                placeholder="Scrivi il messaggio…"
-              />
-            </div>
+            <CampoMessaggio
+              id={`quick-body-${recordId}`}
+              value={body}
+              onChange={setBody}
+              disabled={sending}
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEmailOpen(false)}>

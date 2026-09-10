@@ -1,0 +1,223 @@
+diff --git a/components/shared/bulk-email-dialog.tsx b/components/shared/bulk-email-dialog.tsx
+index 08abc90..da2a085 100644
+--- a/components/shared/bulk-email-dialog.tsx
++++ b/components/shared/bulk-email-dialog.tsx
+@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button"
+ import { Input } from "@/components/ui/input"
+ import { Label } from "@/components/ui/label"
+ import { ScegliModello, confermaSovrascrittura } from "@/components/shared/scegli-modello"
+-import { Textarea } from "@/components/ui/textarea"
++import { CampoMessaggio } from "@/components/shared/campo-messaggio"
+ import {
+   Dialog,
+   DialogContent,
+@@ -260,7 +260,7 @@ export function BulkEmailDialog({
+ 
+   return (
+     <Dialog open={open} onOpenChange={handleOpenChange}>
+-      <DialogContent className="sm:max-w-2xl">
++      <DialogContent className="flex max-h-[88vh] w-[min(980px,94vw)] max-w-none flex-col sm:max-w-none">
+         <DialogHeader>
+           <DialogTitle>
+             {inSending ? "Invio email di massa" : "Invia email di massa"}
+@@ -300,7 +300,7 @@ export function BulkEmailDialog({
+             ) : null}
+           </div>
+         ) : (
+-          <div className="flex flex-col gap-3 py-1">
++          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-1">
+             {esclusiProprieta > 0 ? (
+               <p className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-sm text-amber-700">
+                 <IconAlertTriangle size={16} stroke={1.8} className="mt-0.5 shrink-0" />
+@@ -341,13 +341,13 @@ export function BulkEmailDialog({
+               />
+             </div>
+ 
+-            <div className="flex flex-col gap-1.5">
+-              <Label htmlFor="bulk-mail-body">Messaggio</Label>
+-              <Textarea
++            <div className="flex min-h-0 flex-1 flex-col gap-1.5">
++              <CampoMessaggio
+                 id="bulk-mail-body"
+-                rows={7}
+                 value={template}
+-                onChange={(e) => setTemplate(e.target.value)}
++                onChange={setTemplate}
++                disabled={submitting}
++                rows={7}
+                 placeholder={`Ciao {nome},\n\n…`}
+               />
+               <p className="text-xs text-muted-foreground">
+diff --git a/components/shared/campo-messaggio.tsx b/components/shared/campo-messaggio.tsx
+new file mode 100644
+index 0000000..c0a3e1a
+--- /dev/null
++++ b/components/shared/campo-messaggio.tsx
+@@ -0,0 +1,107 @@
++"use client"
++
++import { useState } from "react"
++import { Code2, Eye } from "lucide-react"
++import { Button } from "@/components/ui/button"
++import { Label } from "@/components/ui/label"
++import { Textarea } from "@/components/ui/textarea"
++import { cn } from "@/lib/utils"
++
++/**
++ * Il campo del messaggio, con anteprima.
++ *
++ * I modelli importati da Zoho sono pagine HTML complete: trentamila
++ * caratteri di fogli di stile, tabelle e immagini. Mostrarli in una casella
++ * di testo significa far leggere codice a chi voleva solo mandare un'email,
++ * e non dargli alcuna idea di come apparira' il messaggio.
++ *
++ * Quando il testo e' HTML si mostra quindi l'anteprima — il messaggio come
++ * lo vedra' il destinatario — con la possibilita' di passare al codice per
++ * chi deve davvero intervenire. Quando invece si scrive a mano, resta la
++ * casella di sempre: un messaggio di tre righe non ha bisogno d'altro.
++ */
++
++/** Riconosce un contenuto HTML da uno scritto a mano. */
++export function sembraHtml(testo: string): boolean {
++  return /<\s*(html|body|table|div|p|br|span|img)\b/i.test(testo)
++}
++
++export function CampoMessaggio({
++  id,
++  value,
++  onChange,
++  disabled,
++  rows = 6,
++  placeholder = "Scrivi il messaggio…",
++}: {
++  id: string
++  value: string
++  onChange: (valore: string) => void
++  disabled?: boolean
++  rows?: number
++  placeholder?: string
++}) {
++  const html = sembraHtml(value)
++  const [mostraCodice, setMostraCodice] = useState(false)
++
++  // Su un contenuto scritto a mano l'anteprima non aggiunge niente: si vede
++  // gia' quello che si scrive.
++  const anteprima = html && !mostraCodice
++
++  return (
++    <div className="flex min-h-0 flex-1 flex-col gap-1.5">
++      <div className="flex items-center justify-between gap-2">
++        <Label htmlFor={id}>Messaggio</Label>
++        {html ? (
++          <Button
++            type="button"
++            variant="ghost"
++            size="sm"
++            className="h-7 text-xs"
++            onClick={() => setMostraCodice((corrente) => !corrente)}
++          >
++            {anteprima ? (
++              <>
++                <Code2 data-icon="inline-start" />
++                Modifica HTML
++              </>
++            ) : (
++              <>
++                <Eye data-icon="inline-start" />
++                Anteprima
++              </>
++            )}
++          </Button>
++        ) : null}
++      </div>
++
++      {anteprima ? (
++        <>
++          {/* L'anteprima e' isolata in un iframe: il modello porta con se'
++              i propri fogli di stile, e senza isolamento riscriverebbe
++              l'aspetto della finestra attorno. */}
++          <iframe
++            title="Anteprima del messaggio"
++            srcDoc={value}
++            sandbox=""
++            className="min-h-0 w-full flex-1 rounded-md border border-border bg-white"
++          />
++          <p className="text-[11px] text-muted-foreground">
++            Anteprima del modello. I segnaposto come {"{nome}"} vengono sostituiti al momento
++            dell&apos;invio.
++          </p>
++        </>
++      ) : (
++        <Textarea
++          id={id}
++          rows={rows}
++          value={value}
++          disabled={disabled}
++          onChange={(event) => onChange(event.target.value)}
++          placeholder={placeholder}
++          className={cn("min-h-0 flex-1", html && "font-mono text-xs")}
++        />
++      )}
++    </div>
++  )
++}
+diff --git a/components/shared/quick-contact-icons.tsx b/components/shared/quick-contact-icons.tsx
+index 7fbb0f8..1e69efe 100644
+--- a/components/shared/quick-contact-icons.tsx
++++ b/components/shared/quick-contact-icons.tsx
+@@ -5,6 +5,7 @@ import { Loader2, Mail, MessageCircle, Phone } from "lucide-react"
+ import { toast } from "sonner"
+ import { Button, buttonVariants } from "@/components/ui/button"
+ import { ScegliModello, confermaSovrascrittura } from "@/components/shared/scegli-modello"
++import { CampoMessaggio } from "@/components/shared/campo-messaggio"
+ import {
+   Dialog,
+   DialogContent,
+@@ -15,7 +16,6 @@ import {
+ } from "@/components/ui/dialog"
+ import { Input } from "@/components/ui/input"
+ import { Label } from "@/components/ui/label"
+-import { Textarea } from "@/components/ui/textarea"
+ import { MittenteSelect, useMittenti } from "@/components/shared/mittente-select"
+ import { cn } from "@/lib/utils"
+ 
+@@ -238,14 +238,14 @@ export function QuickContactIcons({
+ 
+       <Dialog open={emailOpen} onOpenChange={setEmailOpen}>
+         <DialogContent
+-          className="sm:max-w-lg"
++          className="flex max-h-[88vh] w-[min(980px,94vw)] max-w-none flex-col sm:max-w-none"
+           onClick={(event) => event.stopPropagation()}
+         >
+           <DialogHeader>
+             <DialogTitle>Scrivi a {nome}</DialogTitle>
+             <DialogDescription>{email}</DialogDescription>
+           </DialogHeader>
+-          <div className="flex flex-col gap-3 py-1">
++          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-1">
+             <MittenteSelect state={mittenti} disabled={sending} />
+             <ScegliModello
+               modulo={kind === "cliente" ? "clienti" : "lead"}
+@@ -265,16 +265,12 @@ export function QuickContactIcons({
+                 placeholder="Oggetto dell'email"
+               />
+             </div>
+-            <div className="flex flex-col gap-1.5">
+-              <Label htmlFor={`quick-body-${recordId}`}>Messaggio</Label>
+-              <Textarea
+-                id={`quick-body-${recordId}`}
+-                rows={5}
+-                value={body}
+-                onChange={(event) => setBody(event.target.value)}
+-                placeholder="Scrivi il messaggio…"
+-              />
+-            </div>
++            <CampoMessaggio
++              id={`quick-body-${recordId}`}
++              value={body}
++              onChange={setBody}
++              disabled={sending}
++            />
+           </div>
+           <DialogFooter>
+             <Button variant="outline" onClick={() => setEmailOpen(false)}>

@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScegliModello, confermaSovrascrittura } from "@/components/shared/scegli-modello"
-import { Textarea } from "@/components/ui/textarea"
+import { CampoMessaggio } from "@/components/shared/campo-messaggio"
 import {
   Dialog,
   DialogContent,
@@ -260,7 +260,7 @@ export function BulkEmailDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="flex max-h-[88vh] w-[min(980px,94vw)] max-w-none flex-col sm:max-w-none">
         <DialogHeader>
           <DialogTitle>
             {inSending ? "Invio email di massa" : "Invia email di massa"}
@@ -300,7 +300,7 @@ export function BulkEmailDialog({
             ) : null}
           </div>
         ) : (
-          <div className="flex flex-col gap-3 py-1">
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-1">
             {esclusiProprieta > 0 ? (
               <p className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-sm text-amber-700">
                 <IconAlertTriangle size={16} stroke={1.8} className="mt-0.5 shrink-0" />
@@ -341,13 +341,13 @@ export function BulkEmailDialog({
               />
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="bulk-mail-body">Messaggio</Label>
-              <Textarea
+            <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+              <CampoMessaggio
                 id="bulk-mail-body"
-                rows={7}
                 value={template}
-                onChange={(e) => setTemplate(e.target.value)}
+                onChange={setTemplate}
+                disabled={submitting}
+                rows={7}
                 placeholder={`Ciao {nome},\n\n…`}
               />
               <p className="text-xs text-muted-foreground">

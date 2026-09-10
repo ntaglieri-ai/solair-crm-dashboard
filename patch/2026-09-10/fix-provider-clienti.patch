@@ -1,0 +1,37 @@
+diff --git a/app/(dashboard)/clienti/clienti-client.tsx b/app/(dashboard)/clienti/clienti-client.tsx
+index 59438c3..5fa114b 100644
+--- a/app/(dashboard)/clienti/clienti-client.tsx
++++ b/app/(dashboard)/clienti/clienti-client.tsx
+@@ -145,10 +145,23 @@ export function ClientiClient({
+   // perche' e' la pagina a decidere quanto spazio resta alla lista.
+   const [filtriAperti, setFiltriAperti] = useState(false)
+   const [pannelloFiltri, setPannelloFiltri] = useState<HTMLDivElement | null>(null)
++  // Il modulo Clienti ha il proprio deposito di riferimenti: quello dei Lead
++  // vive in un albero diverso e qui non esiste.
++  const { installers, owners, hydrateClienteTagIds } = useClienteTags()
+ 
+   // Campi filtrabili e loro gruppi, dal layout della scheda: un campo
+   // aggiunto dalla pagina Layout diventa filtrabile da solo.
+-  const gruppiCampi = useMemo(() => gruppiCampiClienti(layout), [layout])
++  // Alcuni campi hanno un elenco di valori invece che testo libero: cercare
++  // un installatore scrivendone il nome a memoria e' fatica inutile quando
++  // l'elenco esiste gia'.
++  const gruppiCampi = useMemo(
++    () =>
++      gruppiCampiClienti(layout, {
++        Installatore: installers.map((installatore) => installatore.nome),
++        "Clienti Proprietario": owners.map((owner) => owner.nome),
++      }),
++    [layout, installers, owners],
++  )
+   const [sortBy, setSortBy] = useState<ClienteColumnId | null>("Ora modifica")
+   const [sortDir, setSortDir] = useState<SortDir>("desc")
+   const [page, setPage] = useState(1)
+@@ -303,7 +316,6 @@ export function ClientiClient({
+   })
+ 
+   const pageRows = data?.rows ?? initialData.rows
+-  const { hydrateClienteTagIds } = useClienteTags()
+   useEffect(() => {
+     const assignments = Object.fromEntries(
+       pageRows.map((cliente) => [cliente.id, cliente.tagIds ?? []]),

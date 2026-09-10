@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { Eye, EyeOff, Loader2, Mail, Pencil, Plus, Trash2 } from "lucide-react"
+import { Loader2, Mail, Pencil, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
 import {
   Select,
   SelectTrigger,
@@ -23,7 +24,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { SectionHeader } from "@/components/impostazioni/settings-ui"
-import { cn } from "@/lib/utils"
 import { usePermissions } from "@/lib/permissions/provider"
 import { BULK_PLACEHOLDERS } from "@/lib/email/bulk-template"
 
@@ -72,6 +72,7 @@ export default function TemplateEmailPage() {
   const [caricamento, setCaricamento] = useState(true)
   const [modulo, setModulo] = useState<string>("clienti")
   const [inModifica, setInModifica] = useState<Template | null>(null)
+  const attivi = template.filter((modello) => modello.attivo).length
 
   const carica = useCallback(async () => {
     setCaricamento(true)
@@ -125,7 +126,11 @@ export default function TemplateEmailPage() {
     <div className="flex flex-col gap-6">
       <SectionHeader
         title="Modelli e-mail"
-        description="Testi pronti da riusare negli invii. Sono condivisi: chi ne scrive uno utile lo lascia a tutti."
+        description={
+          caricamento
+            ? "Testi pronti da riusare negli invii. Sono condivisi: chi ne scrive uno utile lo lascia a tutti."
+            : `${attivi} attivi su ${template.length}. Solo quelli attivi compaiono quando si scrive un'email; gli altri restano qui col loro testo.`
+        }
         action={
           <div className="flex items-center gap-2">
             <Select value={modulo} onValueChange={(v) => setModulo(v ?? "clienti")}>
@@ -165,10 +170,7 @@ export default function TemplateEmailPage() {
           {template.map((modello) => (
             <div
               key={modello.id}
-              className={cn(
-                "flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5",
-                !modello.attivo && "opacity-60",
-              )}
+              className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5"
             >
               <Mail className="size-4 shrink-0 text-muted-foreground" />
               <div className="min-w-0 flex-1">
@@ -182,22 +184,26 @@ export default function TemplateEmailPage() {
                 </span>
               ) : null}
 
+              {/* Un modello o e' attivo o non lo e': un interruttore lo dice
+                  meglio di un'icona da interpretare. Attivo = proponibile
+                  quando si scrive un'email; spento = resta qui col suo testo
+                  ma non compare fra le scelte. */}
+              <div className="flex shrink-0 items-center gap-2">
+                <Switch
+                  checked={modello.attivo}
+                  disabled={!puoGestire}
+                  aria-label={`${modello.nome}: ${modello.attivo ? "attivo" : "non attivo"}`}
+                  onCheckedChange={(valore) =>
+                    void salva({ ...modello, attivo: Boolean(valore) })
+                  }
+                />
+                <span className="w-14 shrink-0 text-xs text-muted-foreground">
+                  {modello.attivo ? "Attivo" : "Spento"}
+                </span>
+              </div>
+
               {puoGestire ? (
                 <div className="flex shrink-0 items-center">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8"
-                    aria-label={modello.attivo ? "Disattiva" : "Attiva"}
-                    title={
-                      modello.attivo
-                        ? "Disattiva: resta qui ma non compare fra i modelli proponibili"
-                        : "Attiva"
-                    }
-                    onClick={() => void salva({ ...modello, attivo: !modello.attivo })}
-                  >
-                    {modello.attivo ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
-                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"

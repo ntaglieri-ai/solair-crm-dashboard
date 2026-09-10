@@ -1,0 +1,335 @@
+diff --git a/components/shared/campo-messaggio.tsx b/components/shared/campo-messaggio.tsx
+index c0a3e1a..4dce6d5 100644
+--- a/components/shared/campo-messaggio.tsx
++++ b/components/shared/campo-messaggio.tsx
+@@ -1,6 +1,6 @@
+ "use client"
+ 
+-import { useState } from "react"
++import { useEffect, useRef, useState } from "react"
+ import { Code2, Eye } from "lucide-react"
+ import { Button } from "@/components/ui/button"
+ import { Label } from "@/components/ui/label"
+@@ -8,17 +8,19 @@ import { Textarea } from "@/components/ui/textarea"
+ import { cn } from "@/lib/utils"
+ 
+ /**
+- * Il campo del messaggio, con anteprima.
++ * Il campo del messaggio.
+  *
+  * I modelli importati da Zoho sono pagine HTML complete: trentamila
+  * caratteri di fogli di stile, tabelle e immagini. Mostrarli in una casella
+- * di testo significa far leggere codice a chi voleva solo mandare un'email,
+- * e non dargli alcuna idea di come apparira' il messaggio.
++ * di testo significa far leggere codice a chi voleva solo mandare un'email.
+  *
+- * Quando il testo e' HTML si mostra quindi l'anteprima — il messaggio come
+- * lo vedra' il destinatario — con la possibilita' di passare al codice per
+- * chi deve davvero intervenire. Quando invece si scrive a mano, resta la
+- * casella di sempre: un messaggio di tre righe non ha bisogno d'altro.
++ * Quando il contenuto e' HTML si scrive quindi direttamente sul messaggio
++ * come lo vedra' il destinatario: si clicca sul testo e si modifica, senza
++ * mai incontrare un tag. Il pulsante "Modifica HTML" resta per i casi in cui
++ * serve intervenire sul markup.
++ *
++ * Quando invece si scrive a mano resta la casella di sempre: un messaggio di
++ * tre righe non ha bisogno d'altro.
+  */
+ 
+ /** Riconosce un contenuto HTML da uno scritto a mano. */
+@@ -26,6 +28,20 @@ export function sembraHtml(testo: string): boolean {
+   return /<\s*(html|body|table|div|p|br|span|img)\b/i.test(testo)
+ }
+ 
++/**
++ * Toglie gli script prima di disegnare l'anteprima.
++ *
++ * L'anteprima e' modificabile, quindi non puo' essere isolata del tutto: il
++ * documento deve restare raggiungibile per leggerne le modifiche. Uno script
++ * dentro un modello girerebbe allora nella pagina del CRM, e i modelli
++ * arrivano da un sistema esterno.
++ */
++function senzaScript(html: string): string {
++  return html
++    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
++    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
++}
++
+ export function CampoMessaggio({
+   id,
+   value,
+@@ -43,10 +59,51 @@ export function CampoMessaggio({
+ }) {
+   const html = sembraHtml(value)
+   const [mostraCodice, setMostraCodice] = useState(false)
++  const iframeRef = useRef<HTMLIFrameElement | null>(null)
++
++  // Il documento disegnato nell'anteprima. Non segue ogni battuta: se il
++  // contenuto venisse riscritto a ogni carattere, il cursore tornerebbe
++  // all'inizio a ogni tasto premuto. Cambia solo quando il testo arriva da
++  // fuori — per esempio scegliendo un modello.
++  const [documento, setDocumento] = useState(() => senzaScript(value))
++  const ultimoEmesso = useRef(value)
++
++  useEffect(() => {
++    if (value === ultimoEmesso.current) return
++    ultimoEmesso.current = value
++    setDocumento(senzaScript(value))
++  }, [value])
+ 
+-  // Su un contenuto scritto a mano l'anteprima non aggiunge niente: si vede
+-  // gia' quello che si scrive.
+   const anteprima = html && !mostraCodice
++  const attesaRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
++  useEffect(() => () => clearTimeout(attesaRef.current), [])
++
++  /** Rende il documento modificabile e riporta fuori quello che si scrive. */
++  function preparaAnteprima() {
++    const finestra = iframeRef.current?.contentWindow
++    const doc = finestra?.document
++    if (!doc) return
++
++    // Modificabile il CORPO, non l'intero documento: con designMode attivo
++    // un "seleziona tutto" cancellava anche la testa del documento, fogli di
++    // stile compresi, e del modello restava il solo testo digitato.
++    if (doc.body) doc.body.contentEditable = disabled ? "false" : "true"
++
++    const leggi = () => {
++      const aggiornato = "<!doctype html>" + doc.documentElement.outerHTML
++      ultimoEmesso.current = aggiornato
++      onChange(aggiornato)
++    }
++
++    // Si legge quando si smette di scrivere, non a ogni tasto: leggere
++    // l'intero documento a ogni battuta su trentamila caratteri renderebbe
++    // la scrittura scattosa.
++    doc.addEventListener("blur", leggi, true)
++    doc.addEventListener("input", () => {
++      clearTimeout(attesaRef.current)
++      attesaRef.current = setTimeout(leggi, 500)
++    })
++  }
+ 
+   return (
+     <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+@@ -68,7 +125,7 @@ export function CampoMessaggio({
+             ) : (
+               <>
+                 <Eye data-icon="inline-start" />
+-                Anteprima
++                Torna all&apos;anteprima
+               </>
+             )}
+           </Button>
+@@ -77,18 +134,16 @@ export function CampoMessaggio({
+ 
+       {anteprima ? (
+         <>
+-          {/* L'anteprima e' isolata in un iframe: il modello porta con se'
+-              i propri fogli di stile, e senza isolamento riscriverebbe
+-              l'aspetto della finestra attorno. */}
+           <iframe
+-            title="Anteprima del messaggio"
+-            srcDoc={value}
+-            sandbox=""
+-            className="min-h-0 w-full flex-1 rounded-md border border-border bg-white"
++            ref={iframeRef}
++            title="Messaggio"
++            srcDoc={documento}
++            onLoad={preparaAnteprima}
++            className="min-h-[420px] w-full flex-1 rounded-md border border-border bg-white"
+           />
+           <p className="text-[11px] text-muted-foreground">
+-            Anteprima del modello. I segnaposto come {"{nome}"} vengono sostituiti al momento
+-            dell&apos;invio.
++            Clicca sul testo per modificarlo. I segnaposto come {"{nome}"} vengono sostituiti
++            al momento dell&apos;invio.
+           </p>
+         </>
+       ) : (
+@@ -97,9 +152,12 @@ export function CampoMessaggio({
+           rows={rows}
+           value={value}
+           disabled={disabled}
+-          onChange={(event) => onChange(event.target.value)}
++          onChange={(event) => {
++            ultimoEmesso.current = event.target.value
++            onChange(event.target.value)
++          }}
+           placeholder={placeholder}
+-          className={cn("min-h-0 flex-1", html && "font-mono text-xs")}
++          className={cn("min-h-[320px] flex-1", html && "font-mono text-xs")}
+         />
+       )}
+     </div>
+diff --git a/lib/email/__tests__/html.test.ts b/lib/email/__tests__/html.test.ts
+new file mode 100644
+index 0000000..8b181e5
+--- /dev/null
++++ b/lib/email/__tests__/html.test.ts
+@@ -0,0 +1,62 @@
++import { describe, expect, it } from "vitest"
++import { bodyToHtml, bodyToText, isHtmlBody, textToSafeHtml } from "../html"
++
++/**
++ * Come viene spedito il corpo di un'email.
++ *
++ * I modelli importati da Zoho sono pagine HTML complete; un messaggio
++ * digitato nella finestra di invio e' testo semplice. Confonderli si vede
++ * subito nella casella del destinatario: un modello trattato come testo
++ * arriva con i tag in chiaro, e un testo trattato come HTML puo' diventare
++ * markup per sbaglio.
++ */
++
++describe("isHtmlBody", () => {
++  it("riconosce un modello HTML", () => {
++    expect(isHtmlBody("<html><body><p>Ciao</p></body></html>")).toBe(true)
++    expect(isHtmlBody('<table class="x"><tr><td>Ciao</td></tr></table>')).toBe(true)
++  })
++
++  it("non scambia per HTML un messaggio scritto a mano", () => {
++    expect(isHtmlBody("Gentile cliente,\n\nla informiamo che…")).toBe(false)
++    expect(isHtmlBody("Il preventivo è < 1000 euro")).toBe(false)
++  })
++})
++
++describe("bodyToHtml", () => {
++  it("spedisce un modello HTML così com'è", () => {
++    const modello = "<html><body><p>Gentile {nome}</p></body></html>"
++    expect(bodyToHtml(modello)).toBe(modello)
++  })
++
++  it("converte il testo scritto a mano mandandolo a capo", () => {
++    expect(bodyToHtml("Ciao\nMario")).toBe("Ciao<br/>Mario")
++  })
++
++  it("neutralizza i simboli di un testo scritto a mano", () => {
++    // Senza, un preventivo "< 1000" diventerebbe markup e sparirebbe.
++    expect(bodyToHtml("Costo < 1000")).toBe(textToSafeHtml("Costo < 1000"))
++  })
++})
++
++describe("bodyToText", () => {
++  it("lascia intatto un messaggio scritto a mano", () => {
++    expect(bodyToText("Gentile cliente,\n\ngrazie.")).toBe("Gentile cliente,\n\ngrazie.")
++  })
++
++  it("ricava un testo leggibile da un modello HTML", () => {
++    // E' quello che leggono i programmi di posta senza HTML: meglio un
++    // testo semplificato che una pagina di markup.
++    const html = "<html><head><style>.x{color:red}</style></head><body><p>Ciao</p><p>Mario</p></body></html>"
++    expect(bodyToText(html)).toBe("Ciao\nMario")
++  })
++
++  it("toglie fogli di stile e script dal testo", () => {
++    const html = "<body><style>p{margin:0}</style><script>alert(1)</script><p>Solo questo</p></body>"
++    expect(bodyToText(html)).toBe("Solo questo")
++  })
++
++  it("traduce le entità più comuni", () => {
++    expect(bodyToText("<p>Costo &lt; 1000 &amp; oltre</p>")).toBe("Costo < 1000 & oltre")
++  })
++})
+diff --git a/lib/email/bulk-mailer.ts b/lib/email/bulk-mailer.ts
+index c222807..a7c52bd 100644
+--- a/lib/email/bulk-mailer.ts
++++ b/lib/email/bulk-mailer.ts
+@@ -10,7 +10,7 @@
+ import { createAgentOutboundTransport, sleep } from "./lead-mailer"
+ import { getCommunicationEmailPolicy } from "./communication-policy"
+ import { type BulkPlaceholder, renderTemplate } from "./bulk-template"
+-import { textToSafeHtml } from "./html"
++import { bodyToHtml, bodyToText } from "./html"
+ import type { ConsentEntita } from "./consent"
+ 
+ export type BulkRecipient = {
+@@ -95,8 +95,8 @@ export async function sendBulkEmails(params: {
+         replyTo: outbound.replyTo,
+         to: recipient.email,
+         subject,
+-        text: body,
+-        html: textToSafeHtml(body),
++        text: bodyToText(body),
++        html: bodyToHtml(body),
+       })
+       inviate++
+       destinatariRaggiunti.push({ id: recipient.id, email: recipient.email, oggetto: subject, corpo: body })
+diff --git a/lib/email/html.ts b/lib/email/html.ts
+index 4bc2211..8c2ef5e 100644
+--- a/lib/email/html.ts
++++ b/lib/email/html.ts
+@@ -10,3 +10,50 @@ export function escapeHtml(value: string): string {
+ export function textToSafeHtml(value: string): string {
+   return escapeHtml(value).replace(/\r\n|\r|\n/g, "<br/>")
+ }
++
++/**
++ * Riconosce un corpo gia' in HTML da uno scritto a mano.
++ *
++ * I modelli importati da Zoho sono pagine HTML complete; un messaggio
++ * digitato nella finestra di invio e' testo semplice. Vanno spediti in modo
++ * diverso, e confonderli si vede subito: un modello passato per
++ * textToSafeHtml arriva al destinatario con i tag in chiaro.
++ */
++export function isHtmlBody(value: string): boolean {
++  return /<\s*(html|body|table|div|p|br|span|img)\b/i.test(value)
++}
++
++/**
++ * La parte HTML di un'email, qualunque cosa sia stata scritta.
++ *
++ * Un corpo gia' HTML si spedisce com'e'; uno scritto a mano viene
++ * neutralizzato e mandato a capo, cosi' un messaggio che contiene "<" non
++ * diventa markup per sbaglio.
++ */
++export function bodyToHtml(value: string): string {
++  return isHtmlBody(value) ? value : textToSafeHtml(value)
++}
++
++/**
++ * La parte testuale di un'email.
++ *
++ * I programmi di posta che non mostrano HTML leggono questa. Da un corpo
++ * HTML si ricava togliendo i tag: meglio un testo semplificato che una
++ * pagina di markup illeggibile.
++ */
++export function bodyToText(value: string): string {
++  if (!isHtmlBody(value)) return value
++  return value
++    .replace(/<head\b[\s\S]*?<\/head>/gi, "")
++    .replace(/<style\b[\s\S]*?<\/style>/gi, "")
++    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
++    .replace(/<br\s*\/?>/gi, "\n")
++    .replace(/<\/(p|div|tr|h[1-6])>/gi, "\n")
++    .replace(/<[^>]+>/g, "")
++    .replace(/&nbsp;/gi, " ")
++    .replace(/&amp;/gi, "&")
++    .replace(/&lt;/gi, "<")
++    .replace(/&gt;/gi, ">")
++    .replace(/\n{3,}/g, "\n\n")
++    .trim()
++}
+diff --git a/lib/email/lead-mailer.ts b/lib/email/lead-mailer.ts
+index d0ff5cc..ba3df1a 100644
+--- a/lib/email/lead-mailer.ts
++++ b/lib/email/lead-mailer.ts
+@@ -14,7 +14,7 @@ import {
+   getCommunicationEmailPolicy,
+   type CommunicationEmailPolicy,
+ } from "./communication-policy"
+-import { textToSafeHtml } from "./html"
++import { bodyToHtml, bodyToText } from "./html"
+ 
+ const ARUBA_HOST = "smtps.aruba.it"
+ const ARUBA_PORT = 465
+@@ -204,8 +204,8 @@ export async function sendLeadEmails(params: {
+         replyTo: outbound.replyTo,
+         to,
+         subject: params.subject,
+-        text: params.body,
+-        html: textToSafeHtml(params.body),
++        text: bodyToText(params.body),
++        html: bodyToHtml(params.body),
+       })
+       results.push({ to, ok: true, error: null })
+     } catch (e) {

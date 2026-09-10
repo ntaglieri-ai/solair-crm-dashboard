@@ -1,0 +1,660 @@
+diff --git a/app/api/crm-settings/email-template/route.ts b/app/api/crm-settings/email-template/route.ts
+new file mode 100644
+index 0000000..ddfadf6
+--- /dev/null
++++ b/app/api/crm-settings/email-template/route.ts
+@@ -0,0 +1,178 @@
++import { NextResponse } from "next/server"
++import { createClient } from "@/lib/supabase/server"
++import { createAdminClient } from "@/lib/supabase/admin"
++import { getCurrentPermissions } from "@/lib/permissions/server"
++
++/**
++ * Modelli e-mail condivisi.
++ *
++ * Lettura a chiunque sia autenticato: chi puo' scrivere un'email deve poter
++ * scegliere un modello. Creazione, modifica ed eliminazione passano dal
++ * permesso `email_template.gestione`, concesso a Superadmin e
++ * Amministratori e attivabile per gli altri dalla pagina Permessi.
++ *
++ * La scrittura usa la chiave di servizio perche' la tabella concede solo la
++ * lettura: cosi' l'unico modo di modificare un modello e' passare da qui,
++ * dove il permesso viene verificato.
++ */
++
++const MODULI = ["clienti", "lead", "installatori"] as const
++type Modulo = (typeof MODULI)[number]
++
++const AZIONE = "email_template.gestione"
++
++function isModulo(valore: unknown): valore is Modulo {
++  return typeof valore === "string" && (MODULI as readonly string[]).includes(valore)
++}
++
++async function richiediGestione() {
++  const permissions = await getCurrentPermissions()
++  if (!permissions.canAction(AZIONE)) {
++    return { permissions, errore: NextResponse.json({ error: "Not found" }, { status: 404 }) }
++  }
++  const admin = createAdminClient()
++  if (!admin) {
++    return {
++      permissions,
++      errore: NextResponse.json(
++        { error: "Gestione modelli non disponibile: chiave di servizio non configurata" },
++        { status: 503 },
++      ),
++    }
++  }
++  return { permissions, admin, errore: null }
++}
++
++export async function GET(request: Request) {
++  const sp = new URL(request.url).searchParams
++  const modulo = sp.get("modulo")
++
++  const supabase = await createClient()
++  let query = supabase
++    .from("crm_email_template")
++    .select("id,nome,modulo,oggetto,corpo,cartella,attivo")
++    .order("nome")
++
++  if (isModulo(modulo)) query = query.eq("modulo", modulo)
++  // I modelli spenti restano nella pagina di gestione ma non fra quelli
++  // proponibili: chi scrive un'email non deve vedere roba dismessa.
++  if (sp.get("soloAttivi") === "1") query = query.eq("attivo", true)
++
++  const { data, error } = await query
++  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
++  return NextResponse.json({ template: data ?? [] })
++}
++
++export async function POST(request: Request) {
++  const guardia = await richiediGestione()
++  if (guardia.errore) return guardia.errore
++
++  let body: Record<string, unknown>
++  try {
++    body = await request.json()
++  } catch {
++    return NextResponse.json({ error: "Corpo richiesta non valido" }, { status: 400 })
++  }
++
++  const nome = typeof body.nome === "string" ? body.nome.trim() : ""
++  const oggetto = typeof body.oggetto === "string" ? body.oggetto.trim() : ""
++  const corpo = typeof body.corpo === "string" ? body.corpo : ""
++
++  if (!nome || nome.length > 120) {
++    return NextResponse.json({ error: "Nome non valido" }, { status: 400 })
++  }
++  if (!oggetto) return NextResponse.json({ error: "Oggetto mancante" }, { status: 400 })
++  if (!isModulo(body.modulo)) {
++    return NextResponse.json({ error: "Modulo non valido" }, { status: 400 })
++  }
++
++  const { data, error } = await guardia.admin!
++    .from("crm_email_template")
++    .insert({
++      nome,
++      modulo: body.modulo,
++      oggetto,
++      corpo,
++      cartella: typeof body.cartella === "string" ? body.cartella.trim() || null : null,
++      creato_da: guardia.permissions.snapshot.subject.userId,
++    })
++    .select("id,nome,modulo,oggetto,corpo,cartella,attivo")
++    .single()
++
++  if (error) {
++    if (error.code === "23505") {
++      return NextResponse.json(
++        { error: "Esiste già un modello con questo nome per il modulo" },
++        { status: 409 },
++      )
++    }
++    return NextResponse.json({ error: error.message }, { status: 500 })
++  }
++
++  return NextResponse.json(data)
++}
++
++export async function PATCH(request: Request) {
++  const guardia = await richiediGestione()
++  if (guardia.errore) return guardia.errore
++
++  let body: Record<string, unknown>
++  try {
++    body = await request.json()
++  } catch {
++    return NextResponse.json({ error: "Corpo richiesta non valido" }, { status: 400 })
++  }
++
++  const id = typeof body.id === "string" ? body.id : ""
++  if (!id) return NextResponse.json({ error: "Id mancante" }, { status: 400 })
++
++  const patch: Record<string, unknown> = {
++    modificato_da: guardia.permissions.snapshot.subject.userId,
++    modificato_il: new Date().toISOString(),
++  }
++
++  if (typeof body.nome === "string") {
++    const nome = body.nome.trim()
++    if (!nome) return NextResponse.json({ error: "Nome non valido" }, { status: 400 })
++    patch.nome = nome
++  }
++  if (typeof body.oggetto === "string") {
++    const oggetto = body.oggetto.trim()
++    if (!oggetto) return NextResponse.json({ error: "Oggetto mancante" }, { status: 400 })
++    patch.oggetto = oggetto
++  }
++  if (typeof body.corpo === "string") patch.corpo = body.corpo
++  if (typeof body.cartella === "string") patch.cartella = body.cartella.trim() || null
++  if (typeof body.attivo === "boolean") patch.attivo = body.attivo
++
++  const { data, error } = await guardia.admin!
++    .from("crm_email_template")
++    .update(patch)
++    .eq("id", id)
++    .select("id,nome,modulo,oggetto,corpo,cartella,attivo")
++    .single()
++
++  if (error) {
++    if (error.code === "23505") {
++      return NextResponse.json(
++        { error: "Esiste già un modello con questo nome per il modulo" },
++        { status: 409 },
++      )
++    }
++    return NextResponse.json({ error: error.message }, { status: 500 })
++  }
++
++  return NextResponse.json(data)
++}
++
++export async function DELETE(request: Request) {
++  const guardia = await richiediGestione()
++  if (guardia.errore) return guardia.errore
++
++  const id = new URL(request.url).searchParams.get("id")
++  if (!id) return NextResponse.json({ error: "Id mancante" }, { status: 400 })
++
++  const { error } = await guardia.admin!.from("crm_email_template").delete().eq("id", id)
++  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
++  return NextResponse.json({ ok: true })
++}
+diff --git a/app/crm-settings/system/template-email/page.tsx b/app/crm-settings/system/template-email/page.tsx
+new file mode 100644
+index 0000000..4efd87f
+--- /dev/null
++++ b/app/crm-settings/system/template-email/page.tsx
+@@ -0,0 +1,330 @@
++"use client"
++
++import { useCallback, useEffect, useState } from "react"
++import { toast } from "sonner"
++import { Eye, EyeOff, Loader2, Mail, Pencil, Plus, Trash2 } from "lucide-react"
++import { Button } from "@/components/ui/button"
++import { Input } from "@/components/ui/input"
++import { Label } from "@/components/ui/label"
++import { Textarea } from "@/components/ui/textarea"
++import {
++  Select,
++  SelectTrigger,
++  SelectValue,
++  SelectContent,
++  SelectItem,
++} from "@/components/ui/select"
++import {
++  Dialog,
++  DialogContent,
++  DialogHeader,
++  DialogTitle,
++  DialogDescription,
++  DialogFooter,
++} from "@/components/ui/dialog"
++import { SectionHeader } from "@/components/impostazioni/settings-ui"
++import { cn } from "@/lib/utils"
++import { usePermissions } from "@/lib/permissions/provider"
++import { BULK_PLACEHOLDERS } from "@/lib/email/bulk-template"
++
++/**
++ * Libreria dei modelli e-mail.
++ *
++ * I modelli sono condivisi: uno utile serve a tutti, e tenerli personali
++ * ripeterebbe il limite che Zoho ha sui filtri salvati.
++ *
++ * I segnaposto sono gli stessi dell'invio di massa, cosi' un modello si
++ * comporta allo stesso modo nell'invio singolo e in quello massivo invece di
++ * avere due sintassi da ricordare.
++ */
++
++const MODULI = [
++  { valore: "clienti", etichetta: "Clienti" },
++  { valore: "lead", etichetta: "Lead" },
++  { valore: "installatori", etichetta: "Installatori" },
++] as const
++
++type Template = {
++  id: string
++  nome: string
++  modulo: string
++  oggetto: string
++  corpo: string
++  cartella: string | null
++  attivo: boolean
++}
++
++const VUOTO = {
++  id: "",
++  nome: "",
++  modulo: "clienti",
++  oggetto: "",
++  corpo: "",
++  cartella: null,
++  attivo: true,
++} satisfies Template
++
++export default function TemplateEmailPage() {
++  const { canAction } = usePermissions()
++  const puoGestire = canAction("email_template.gestione")
++
++  const [template, setTemplate] = useState<Template[]>([])
++  const [caricamento, setCaricamento] = useState(true)
++  const [modulo, setModulo] = useState<string>("clienti")
++  const [inModifica, setInModifica] = useState<Template | null>(null)
++
++  const carica = useCallback(async () => {
++    setCaricamento(true)
++    try {
++      const risposta = await fetch(`/api/crm-settings/email-template?modulo=${modulo}`, {
++        cache: "no-store",
++      })
++      const dati = (await risposta.json()) as { template?: Template[] }
++      setTemplate(dati.template ?? [])
++    } catch {
++      setTemplate([])
++    } finally {
++      setCaricamento(false)
++    }
++  }, [modulo])
++
++  useEffect(() => {
++    void carica()
++  }, [carica])
++
++  async function salva(bozza: Template) {
++    const nuovo = !bozza.id
++    const risposta = await fetch("/api/crm-settings/email-template", {
++      method: nuovo ? "POST" : "PATCH",
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify(bozza),
++    })
++    if (!risposta.ok) {
++      const dati = (await risposta.json().catch(() => ({}))) as { error?: string }
++      toast.error(dati.error ?? "Salvataggio non riuscito")
++      return false
++    }
++    toast.success(nuovo ? "Modello creato" : "Modello aggiornato")
++    await carica()
++    return true
++  }
++
++  async function elimina(modello: Template) {
++    if (!window.confirm(`Eliminare il modello "${modello.nome}"? Sparisce per tutti.`)) return
++    const risposta = await fetch(`/api/crm-settings/email-template?id=${modello.id}`, {
++      method: "DELETE",
++    })
++    if (!risposta.ok) {
++      toast.error("Eliminazione non riuscita")
++      return
++    }
++    await carica()
++  }
++
++  return (
++    <div className="flex flex-col gap-6">
++      <SectionHeader
++        title="Modelli e-mail"
++        description="Testi pronti da riusare negli invii. Sono condivisi: chi ne scrive uno utile lo lascia a tutti."
++        action={
++          <div className="flex items-center gap-2">
++            <Select value={modulo} onValueChange={(v) => setModulo(v ?? "clienti")}>
++              <SelectTrigger className="w-40">
++                <SelectValue />
++              </SelectTrigger>
++              <SelectContent>
++                {MODULI.map((m) => (
++                  <SelectItem key={m.valore} value={m.valore}>
++                    {m.etichetta}
++                  </SelectItem>
++                ))}
++              </SelectContent>
++            </Select>
++            {puoGestire ? (
++              <Button size="sm" onClick={() => setInModifica({ ...VUOTO, modulo })}>
++                <Plus data-icon="inline-start" />
++                Modello
++              </Button>
++            ) : null}
++          </div>
++        }
++      />
++
++      {caricamento ? (
++        <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
++          <Loader2 className="size-4 animate-spin" />
++          Caricamento dei modelli…
++        </div>
++      ) : template.length === 0 ? (
++        <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
++          Nessun modello per questo modulo.
++          {puoGestire ? " Creane uno per iniziare." : null}
++        </div>
++      ) : (
++        <div className="flex flex-col gap-2">
++          {template.map((modello) => (
++            <div
++              key={modello.id}
++              className={cn(
++                "flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5",
++                !modello.attivo && "opacity-60",
++              )}
++            >
++              <Mail className="size-4 shrink-0 text-muted-foreground" />
++              <div className="min-w-0 flex-1">
++                <p className="truncate text-sm font-semibold text-foreground">{modello.nome}</p>
++                <p className="truncate text-xs text-muted-foreground">{modello.oggetto}</p>
++              </div>
++
++              {modello.cartella ? (
++                <span className="shrink-0 rounded bg-muted px-1.5 text-[10px] font-medium uppercase text-muted-foreground">
++                  {modello.cartella}
++                </span>
++              ) : null}
++
++              {puoGestire ? (
++                <div className="flex shrink-0 items-center">
++                  <Button
++                    variant="ghost"
++                    size="icon"
++                    className="size-8"
++                    aria-label={modello.attivo ? "Disattiva" : "Attiva"}
++                    title={
++                      modello.attivo
++                        ? "Disattiva: resta qui ma non compare fra i modelli proponibili"
++                        : "Attiva"
++                    }
++                    onClick={() => void salva({ ...modello, attivo: !modello.attivo })}
++                  >
++                    {modello.attivo ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
++                  </Button>
++                  <Button
++                    variant="ghost"
++                    size="icon"
++                    className="size-8"
++                    aria-label="Modifica"
++                    onClick={() => setInModifica(modello)}
++                  >
++                    <Pencil className="size-4" />
++                  </Button>
++                  <Button
++                    variant="ghost"
++                    size="icon"
++                    className="size-8 text-destructive hover:text-destructive"
++                    aria-label="Elimina"
++                    onClick={() => void elimina(modello)}
++                  >
++                    <Trash2 className="size-4" />
++                  </Button>
++                </div>
++              ) : null}
++            </div>
++          ))}
++        </div>
++      )}
++
++      {inModifica ? (
++        <DialogoModello
++          modello={inModifica}
++          onChiudi={() => setInModifica(null)}
++          onSalva={async (bozza) => {
++            if (await salva(bozza)) setInModifica(null)
++          }}
++        />
++      ) : null}
++    </div>
++  )
++}
++
++function DialogoModello({
++  modello,
++  onChiudi,
++  onSalva,
++}: {
++  modello: Template
++  onChiudi: () => void
++  onSalva: (modello: Template) => Promise<void>
++}) {
++  const [bozza, setBozza] = useState(modello)
++  const [inCorso, setInCorso] = useState(false)
++
++  return (
++    <Dialog open onOpenChange={(aperto) => (!aperto ? onChiudi() : undefined)}>
++      <DialogContent className="flex max-h-[88vh] w-[min(820px,94vw)] max-w-none flex-col gap-0 p-0 sm:max-w-none">
++        <DialogHeader className="border-b border-border px-5 py-4">
++          <DialogTitle>{bozza.id ? "Modifica modello" : "Nuovo modello"}</DialogTitle>
++          <DialogDescription>
++            Nel testo puoi usare {BULK_PLACEHOLDERS.map((p) => `{${p}}`).join(", ")}: vengono
++            sostituiti con i dati del destinatario al momento dell&apos;invio.
++          </DialogDescription>
++        </DialogHeader>
++
++        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-4">
++          <div className="grid gap-3 sm:grid-cols-2">
++            <div className="flex flex-col gap-1.5">
++              <Label htmlFor="modello-nome">Nome</Label>
++              <Input
++                id="modello-nome"
++                value={bozza.nome}
++                onChange={(e) => setBozza({ ...bozza, nome: e.target.value })}
++                placeholder="es. Sopralluogo confermativo"
++                autoFocus
++              />
++            </div>
++            <div className="flex flex-col gap-1.5">
++              <Label htmlFor="modello-cartella">Cartella (facoltativa)</Label>
++              <Input
++                id="modello-cartella"
++                value={bozza.cartella ?? ""}
++                onChange={(e) => setBozza({ ...bozza, cartella: e.target.value })}
++                placeholder="es. Sopralluoghi"
++              />
++            </div>
++          </div>
++
++          <div className="flex flex-col gap-1.5">
++            <Label htmlFor="modello-oggetto">Oggetto</Label>
++            <Input
++              id="modello-oggetto"
++              value={bozza.oggetto}
++              onChange={(e) => setBozza({ ...bozza, oggetto: e.target.value })}
++              placeholder="es. Sopralluogo confermato — {nome}"
++            />
++          </div>
++
++          <div className="flex min-h-0 flex-col gap-1.5">
++            <Label htmlFor="modello-corpo">Testo</Label>
++            <Textarea
++              id="modello-corpo"
++              value={bozza.corpo}
++              onChange={(e) => setBozza({ ...bozza, corpo: e.target.value })}
++              rows={14}
++              className="font-mono text-xs"
++              placeholder={"Gentile {nome},\n\nle confermiamo il sopralluogo…"}
++            />
++          </div>
++        </div>
++
++        <DialogFooter className="border-t border-border px-5 py-4">
++          <Button variant="outline" onClick={onChiudi} disabled={inCorso}>
++            Annulla
++          </Button>
++          <Button
++            disabled={inCorso || !bozza.nome.trim() || !bozza.oggetto.trim()}
++            onClick={async () => {
++              setInCorso(true)
++              try {
++                await onSalva(bozza)
++              } finally {
++                setInCorso(false)
++              }
++            }}
++          >
++            {inCorso ? <Loader2 className="size-4 animate-spin" /> : null}
++            Salva
++          </Button>
++        </DialogFooter>
++      </DialogContent>
++    </Dialog>
++  )
++}
+diff --git a/lib/crm-settings/catalog.ts b/lib/crm-settings/catalog.ts
+index 973f21a..6e9bdc2 100644
+--- a/lib/crm-settings/catalog.ts
++++ b/lib/crm-settings/catalog.ts
+@@ -286,6 +286,16 @@ export const CRM_SETTINGS_CATALOG: CrmSettingsCatalogItem[] = [
+     icon: SlidersHorizontal,
+     status: "active",
+   },
++  {
++    id: "template-email",
++    group: "crm-config",
++    title: "Modelli e-mail",
++    description: "Testi pronti da riusare negli invii, condivisi fra tutti",
++    href: "/crm-settings/system/template-email",
++    pageKey: "crm_settings.system.template-email",
++    icon: Mail,
++    status: "active",
++  },
+   {
+     id: "layout",
+     group: "crm-config",
+diff --git a/lib/permissions/constants.ts b/lib/permissions/constants.ts
+index c958bf8..bf6aa76 100644
+--- a/lib/permissions/constants.ts
++++ b/lib/permissions/constants.ts
+@@ -31,6 +31,7 @@ export const PAGE_KEYS = [
+   "crm_settings.system.comunicazioni",
+   "crm_settings.system.attributi",
+   "crm_settings.system.layout",
++  "crm_settings.system.template-email",
+   "crm_settings.system.valori",
+   "crm_settings.system.roberta",
+   "crm_settings.system.import_export",
+@@ -66,6 +67,7 @@ export const ROUTE_PAGE_MAP: Record<string, string> = {
+   "/crm-settings/system/comunicazioni": "crm_settings.system.comunicazioni",
+   "/crm-settings/system/attributi": "crm_settings.system.attributi",
+   "/crm-settings/system/layout": "crm_settings.system.layout",
++  "/crm-settings/system/template-email": "crm_settings.system.template-email",
+   "/crm-settings/system/valori": "crm_settings.system.valori",
+   "/crm-settings/system/roberta": "crm_settings.system.roberta",
+   "/crm-settings/system/import-export": "crm_settings.system.import_export",
+@@ -106,6 +108,7 @@ export const ACTION_KEYS = [
+   "calendario.events.manage_all",
+   "clienti.note_interne.view",
+   "note.gestione",
++  "email_template.gestione",
+   "installatori.note_interne.view",
+   "crm_settings.account.audit.view",
+   "crm_settings.account.session.view",
+@@ -292,6 +295,7 @@ export function buildDefaultPermissionSnapshot(params?: {
+       "crm_settings.system.comunicazioni",
+       "crm_settings.system.attributi",
+       "crm_settings.system.layout",
++      "crm_settings.system.template-email",
+       "crm_settings.system.valori",
+       "crm_settings.system.roberta",
+       "crm_settings.system.make",
+@@ -306,6 +310,7 @@ export function buildDefaultPermissionSnapshot(params?: {
+       "calendario.events.manage_all",
+       "clienti.note_interne.view",
+       "note.gestione",
++      "email_template.gestione",
+       "installatori.note_interne.view",
+       "crm_settings.account.users.manage",
+       "crm_settings.account.roles.manage",
+diff --git a/supabase/migrations/20260910_email_template.sql b/supabase/migrations/20260910_email_template.sql
+new file mode 100644
+index 0000000..62658dc
+--- /dev/null
++++ b/supabase/migrations/20260910_email_template.sql
+@@ -0,0 +1,69 @@
++-- Libreria dei modelli e-mail.
++--
++-- Oggi ogni email si riscrive da zero: su Zoho ne esistono 56, di cui 18
++-- davvero usati (Sopralluogo Confermativo, Ritardo installazione, Notifica
++-- mancato incasso...). Quelli vanno recuperati prima dello spegnimento,
++-- perche' l'API non li restituisce completi e a Zoho spento non ci sono piu'.
++--
++-- I modelli sono condivisi: un modello utile serve a tutti, e tenerli
++-- personali ripeterebbe il limite dei filtri salvati di Zoho.
++--
++-- Il corpo e' HTML con i segnaposto gia' in uso nell'invio di massa
++-- ({nome}, {cognome}, {email}, {telefono}): stessa resa, cosi' un modello
++-- funziona sia nell'invio singolo sia in quello massivo.
++
++begin;
++
++create table if not exists public.crm_email_template (
++  id uuid primary key default gen_random_uuid(),
++  nome text not null,
++  /** Modulo di destinazione: "clienti", "lead", "installatori". */
++  modulo text not null,
++  oggetto text not null,
++  corpo text not null,
++  /** Cartella di raggruppamento, come su Zoho. */
++  cartella text,
++  attivo boolean not null default true,
++  /** Origine Zoho, per non reimportare due volte lo stesso modello. */
++  zoho_id text,
++  creato_da uuid references public.utenti(id) on delete set null,
++  creato_il timestamptz not null default now(),
++  modificato_da uuid references public.utenti(id) on delete set null,
++  modificato_il timestamptz,
++  constraint crm_email_template_nome_non_vuoto check (length(btrim(nome)) > 0),
++  constraint crm_email_template_oggetto_non_vuoto check (length(btrim(oggetto)) > 0),
++  -- Due modelli con lo stesso nome nello stesso modulo renderebbero
++  -- l'elenco illeggibile al momento di sceglierne uno.
++  constraint crm_email_template_nome_unico unique (modulo, nome)
++);
++
++create unique index if not exists crm_email_template_zoho_idx
++  on public.crm_email_template (zoho_id)
++  where zoho_id is not null;
++
++create index if not exists crm_email_template_modulo_idx
++  on public.crm_email_template (modulo, nome)
++  where attivo;
++
++comment on table public.crm_email_template is
++  'Modelli e-mail condivisi. corpo = HTML con segnaposto {nome}, {cognome}, {email}, {telefono}.';
++
++-- ---------------------------------------------------------------------
++-- Policy
++-- ---------------------------------------------------------------------
++-- Lettura a chiunque sia autenticato: chi puo' scrivere un'email deve poter
++-- scegliere un modello. La scrittura passa dall'applicazione, che verifica
++-- il permesso configurabile email_template.gestione.
++alter table public.crm_email_template enable row level security;
++
++drop policy if exists crm_email_template_select on public.crm_email_template;
++create policy crm_email_template_select
++  on public.crm_email_template for select to authenticated
++  using (true);
++
++grant select on public.crm_email_template to authenticated;
++revoke all on public.crm_email_template from anon;
++
++notify pgrst, 'reload schema';
++
++commit;

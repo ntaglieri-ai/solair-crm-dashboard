@@ -287,6 +287,16 @@ export const CRM_SETTINGS_CATALOG: CrmSettingsCatalogItem[] = [
     status: "active",
   },
   {
+    id: "template-email",
+    group: "crm-config",
+    title: "Modelli e-mail",
+    description: "Testi pronti da riusare negli invii, condivisi fra tutti",
+    href: "/crm-settings/system/template-email",
+    pageKey: "crm_settings.system.template-email",
+    icon: Mail,
+    status: "active",
+  },
+  {
     id: "layout",
     group: "crm-config",
     title: "Layout schede",

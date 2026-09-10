@@ -37,9 +37,12 @@ create table if not exists public.crm_email_template (
   constraint crm_email_template_nome_unico unique (modulo, nome)
 );
 
+-- Indice non parziale: PostgreSQL accetta un indice parziale come bersaglio
+-- di ON CONFLICT solo ripetendone la condizione nella query, cosa che i
+-- client non fanno. I valori nulli non contano come duplicati, quindi i
+-- modelli scritti a mano restano liberi.
 create unique index if not exists crm_email_template_zoho_idx
-  on public.crm_email_template (zoho_id)
-  where zoho_id is not null;
+  on public.crm_email_template (zoho_id);
 
 create index if not exists crm_email_template_modulo_idx
   on public.crm_email_template (modulo, nome)

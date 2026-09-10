@@ -1,0 +1,102 @@
+diff --git a/lib/clienti/__tests__/list-columns.test.ts b/lib/clienti/__tests__/list-columns.test.ts
+index 71146ec..14118ac 100644
+--- a/lib/clienti/__tests__/list-columns.test.ts
++++ b/lib/clienti/__tests__/list-columns.test.ts
+@@ -1,5 +1,5 @@
+ import { describe, expect, it } from "vitest"
+-import { listColumnsForFields } from "../repository"
++import { listColumnsForFields, serveBadgeAttivita, serveTag } from "../repository"
+ 
+ function colonne(select: string): Set<string> {
+   return new Set(select.split(",").map((valore) => valore.trim()))
+@@ -37,3 +37,28 @@ describe("listColumnsForFields", () => {
+     expect(select.has("importo_contrattuale")).toBe(true)
+   })
+ })
++
++describe("letture accessorie", () => {
++  it("non legge i compiti aperti se il badge non è fra le colonne", () => {
++    // Costa un'interrogazione a parte sulla tabella dei compiti: chiederla
++    // per un dato che nessuno guarda rallenta ogni caricamento della lista.
++    expect(serveBadgeAttivita(["Nome Clienti"])).toBe(false)
++    expect(serveBadgeAttivita(["Nome Clienti", "Badge dell'attività"])).toBe(true)
++  })
++
++  it("non legge i tag se la colonna Tag non è richiesta", () => {
++    expect(serveTag(["Nome Clienti"])).toBe(false)
++    expect(serveTag(["Nome Clienti", "Tag"])).toBe(true)
++  })
++
++  it("con '*' legge tutto", () => {
++    expect(serveBadgeAttivita(["*"])).toBe(true)
++    expect(serveTag(["*"])).toBe(true)
++  })
++
++  it("con l'elenco vuoto vale quello che mostrano le colonne di default", () => {
++    // [] non significa "niente": significa "quelle di default".
++    expect(serveBadgeAttivita([])).toBe(true)
++    expect(serveTag([])).toBe(true)
++  })
++})
+diff --git a/lib/clienti/repository.ts b/lib/clienti/repository.ts
+index 1b9f814..63be72a 100644
+--- a/lib/clienti/repository.ts
++++ b/lib/clienti/repository.ts
+@@ -53,6 +53,33 @@ const LIST_TECHNICAL_COLUMNS = [
+   "cellulare",
+ ]
+ 
++/**
++ * I campi davvero richiesti da una lista.
++ *
++ * `[]` significa "quelli di default", `*` significa "tutti": senza questa
++ * normalizzazione un elenco vuoto sembrerebbe non chiedere nulla.
++ */
++function campiRichiesti(fields: string[]): string[] {
++  if (fields.includes("*")) return CLIENTI_RECORD_FIELDS.map((field) => field.appField)
++  return fields.length > 0 ? fields : (DEFAULT_CLIENTE_COLUMNS as unknown as string[])
++}
++
++/**
++ * Serve leggere i compiti aperti?
++ *
++ * Il badge dell'attivita' costa un'interrogazione a parte sulla tabella dei
++ * compiti. Chiederla quando la colonna non e' visibile significa pagarla per
++ * un dato che nessuno guarda — sui Lead infatti non si fa.
++ */
++export function serveBadgeAttivita(fields: string[]): boolean {
++  return fields.includes("*") || campiRichiesti(fields).includes("Badge dell'attività")
++}
++
++/** Come sopra per i tag, che vivono in una tabella di collegamento. */
++export function serveTag(fields: string[]): boolean {
++  return fields.includes("*") || campiRichiesti(fields).includes("Tag")
++}
++
+ /**
+  * Le colonne da leggere per una lista, dati i campi richiesti.
+  *
+@@ -314,11 +341,18 @@ export async function queryClienti(
+ 
+   const rows = (data ?? []).map((r) => mapRow(r as unknown as Record<string, unknown>))
+   const pageIds = rows.map((r) => r.id)
+-  const withActivity = await clientiWithOpenCompiti(supabase, pageIds)
+-  const tagAssignments = await supabase
+-    .from("cliente_tags")
+-    .select("cliente_id,tag_id")
+-    .in("cliente_id", pageIds)
++  // Le due letture non dipendono l'una dall'altra: in sequenza aggiungevano
++  // un giro completo di andata e ritorno al database a ogni caricamento
++  // della lista. E si chiedono solo se il dato serve davvero, come sui Lead.
++  const [withActivity, tagAssignments] = await Promise.all([
++    serveBadgeAttivita(params.fields)
++      ? clientiWithOpenCompiti(supabase, pageIds)
++      : Promise.resolve(new Set<string>()),
++    serveTag(params.fields)
++      ? supabase.from("cliente_tags").select("cliente_id,tag_id").in("cliente_id", pageIds)
++      : Promise.resolve({ data: [], error: null } as const),
++  ])
++
+   if (tagAssignments.error) {
+     console.error("[clienti/repository] cliente_tags:", tagAssignments.error.message)
+   }

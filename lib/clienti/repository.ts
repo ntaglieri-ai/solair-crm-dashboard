@@ -54,6 +54,33 @@ const LIST_TECHNICAL_COLUMNS = [
 ]
 
 /**
+ * I campi davvero richiesti da una lista.
+ *
+ * `[]` significa "quelli di default", `*` significa "tutti": senza questa
+ * normalizzazione un elenco vuoto sembrerebbe non chiedere nulla.
+ */
+function campiRichiesti(fields: string[]): string[] {
+  if (fields.includes("*")) return CLIENTI_RECORD_FIELDS.map((field) => field.appField)
+  return fields.length > 0 ? fields : (DEFAULT_CLIENTE_COLUMNS as unknown as string[])
+}
+
+/**
+ * Serve leggere i compiti aperti?
+ *
+ * Il badge dell'attivita' costa un'interrogazione a parte sulla tabella dei
+ * compiti. Chiederla quando la colonna non e' visibile significa pagarla per
+ * un dato che nessuno guarda — sui Lead infatti non si fa.
+ */
+export function serveBadgeAttivita(fields: string[]): boolean {
+  return fields.includes("*") || campiRichiesti(fields).includes("Badge dell'attività")
+}
+
+/** Come sopra per i tag, che vivono in una tabella di collegamento. */
+export function serveTag(fields: string[]): boolean {
+  return fields.includes("*") || campiRichiesti(fields).includes("Tag")
+}
+
+/**
  * Le colonne da leggere per una lista, dati i campi richiesti.
  *
  * Esportata per poter essere verificata: e' il punto in cui si decide cosa
@@ -314,11 +341,18 @@ export async function queryClienti(
 
   const rows = (data ?? []).map((r) => mapRow(r as unknown as Record<string, unknown>))
   const pageIds = rows.map((r) => r.id)
-  const withActivity = await clientiWithOpenCompiti(supabase, pageIds)
-  const tagAssignments = await supabase
-    .from("cliente_tags")
-    .select("cliente_id,tag_id")
-    .in("cliente_id", pageIds)
+  // Le due letture non dipendono l'una dall'altra: in sequenza aggiungevano
+  // un giro completo di andata e ritorno al database a ogni caricamento
+  // della lista. E si chiedono solo se il dato serve davvero, come sui Lead.
+  const [withActivity, tagAssignments] = await Promise.all([
+    serveBadgeAttivita(params.fields)
+      ? clientiWithOpenCompiti(supabase, pageIds)
+      : Promise.resolve(new Set<string>()),
+    serveTag(params.fields)
+      ? supabase.from("cliente_tags").select("cliente_id,tag_id").in("cliente_id", pageIds)
+      : Promise.resolve({ data: [], error: null } as const),
+  ])
+
   if (tagAssignments.error) {
     console.error("[clienti/repository] cliente_tags:", tagAssignments.error.message)
   }

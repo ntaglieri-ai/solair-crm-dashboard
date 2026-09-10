@@ -1,0 +1,33 @@
+diff --git a/scripts/migrations/importa-template-zoho.mjs b/scripts/migrations/importa-template-zoho.mjs
+index 260868f..db8352c 100644
+--- a/scripts/migrations/importa-template-zoho.mjs
++++ b/scripts/migrations/importa-template-zoho.mjs
+@@ -41,6 +41,18 @@ const MODULI = {
+  * cinquantasei modelli con una sintassi che il CRM non sostituisce, e che
+  * arriverebbe al cliente cosi' com'e'.
+  */
++/**
++ * Campi rinominati su Zoho dopo che i modelli erano gia' scritti.
++ *
++ * Zoho non aggiorna i segnaposto usati nei template quando si rinomina un
++ * campo: il modello resta con il vecchio nome API e, se usato, manda al
++ * cliente il segnaposto in chiaro. Qui si rimettono a posto.
++ */
++const RINOMINATI = {
++  // La sezione Zavorre aveva un campo "Tipo di zavorra", oggi "Tipologia".
++  Tipo_di_zavorra: "Tipologia",
++}
++
+ const SEGNAPOSTO = [
+   [/\$\{!(?:Contacts|Leads)\.First_Name\}/g, "{nome}"],
+   [/\$\{!(?:Contacts|Leads)\.Last_Name\}/g, "{cognome}"],
+@@ -68,7 +80,8 @@ function traduci(testo, etichettaPerApiName = {}) {
+   for (const [cerca, sostituisci] of SEGNAPOSTO) out = out.replace(cerca, sostituisci)
+ 
+   out = out.replace(/\$\{!(?:Contacts|Leads|Installatori)\.([A-Za-z0-9_]+)\}/g, (intero, apiName) => {
+-    const etichetta = etichettaPerApiName[apiName]
++    const nomeVero = RINOMINATI[apiName] ?? apiName
++    const etichetta = etichettaPerApiName[nomeVero]
+     // Nessuna corrispondenza: si lascia il token com'e', cosi' resta visibile
+     // e correggibile invece di sparire in silenzio.
+     return etichetta ? `{${etichetta}}` : intero

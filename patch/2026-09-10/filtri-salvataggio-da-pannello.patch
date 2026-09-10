@@ -1,0 +1,452 @@
+diff --git a/components/filtri/costruttore-filtro.tsx b/components/filtri/costruttore-filtro.tsx
+index 24e3d63..156af84 100644
+--- a/components/filtri/costruttore-filtro.tsx
++++ b/components/filtri/costruttore-filtro.tsx
+@@ -166,9 +166,9 @@ export function CostruttoreFiltro({
+           />
+         </div>
+ 
+-        <DialogFooter className="flex-col gap-3 border-t border-border px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
+-          <div className="flex w-full flex-col gap-1.5 sm:max-w-xs">
+-            <Label htmlFor="filtro-nome" className="text-xs">
++        <DialogFooter className="flex-col-reverse gap-4 border-t border-border bg-secondary/20 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
++          <div className="flex w-full flex-col gap-1.5 sm:max-w-sm">
++            <Label htmlFor="filtro-nome" className="text-xs font-medium">
+               Salva come filtro
+             </Label>
+             <div className="flex gap-2">
+@@ -205,8 +205,8 @@ export function CostruttoreFiltro({
+             </p>
+           </div>
+ 
+-          <div className="flex items-center gap-2">
+-            <span className="text-xs text-muted-foreground">
++          <div className="flex shrink-0 items-center gap-3">
++            <span className="text-xs tabular-nums text-muted-foreground">
+               {totale === 0
+                 ? "Nessuna condizione"
+                 : `${totale} condizion${totale === 1 ? "e" : "i"}`}
+@@ -216,6 +216,7 @@ export function CostruttoreFiltro({
+             </Button>
+             <Button
+               className="bg-teal text-teal-foreground hover:bg-teal/90"
++              disabled={totale === 0}
+               onClick={() => {
+                 onApplica(potaVuoti(albero))
+                 onChiudi()
+@@ -253,7 +254,9 @@ function NodoGruppo({
+     <div
+       className={cn(
+         "flex flex-col gap-2 rounded-lg",
+-        !radice && "border border-border bg-secondary/30 p-3",
++        radice
++          ? "border border-border bg-card p-3"
++          : "border border-border bg-secondary/40 p-3",
+       )}
+     >
+       <div className="flex items-center gap-2">
+@@ -280,6 +283,17 @@ function NodoGruppo({
+         ) : null}
+       </div>
+ 
++      {radice && gruppo.nodi.length === 0 ? (
++        <div className="rounded-lg border border-dashed border-border bg-secondary/20 px-4 py-8 text-center">
++          <p className="text-sm font-medium text-foreground">Nessuna condizione</p>
++          <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
++            Aggiungi una <span className="font-medium">condizione</span> per filtrare su un
++            campo, oppure un <span className="font-medium">gruppo</span> per combinare più
++            condizioni in alternativa fra loro — per esempio “Sede è Catania oppure Palermo”.
++          </p>
++        </div>
++      ) : null}
++
+       {gruppo.nodi.map((nodo, indice) => {
+         const figlio = [...percorso, indice]
+         if (nodo.tipo === "gruppo") {
+diff --git a/components/filtri/filtri-salvati.tsx b/components/filtri/filtri-salvati.tsx
+index b5d4039..63f3dbe 100644
+--- a/components/filtri/filtri-salvati.tsx
++++ b/components/filtri/filtri-salvati.tsx
+@@ -27,6 +27,7 @@ export function FiltriSalvati({
+   attivo,
+   onApplica,
+   ricarica,
++  azione,
+ }: {
+   modulo: string
+   /** Id del filtro attualmente applicato, per evidenziarlo. */
+@@ -34,6 +35,8 @@ export function FiltriSalvati({
+   onApplica: (filtro: FiltroSalvato) => void
+   /** Cambia quando un filtro viene salvato, per rileggere l'elenco. */
+   ricarica?: number
++  /** Pulsante accanto al titolo, es. "Salva". */
++  azione?: React.ReactNode
+ }) {
+   const [filtri, setFiltri] = useState<FiltroSalvato[]>([])
+   const [caricamento, setCaricamento] = useState(true)
+@@ -65,22 +68,33 @@ export function FiltriSalvati({
+ 
+   if (caricamento) {
+     return (
+-      <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
++      <div className="flex items-center gap-2 border-b border-border px-4 py-3 text-xs text-muted-foreground">
+         <Loader2 className="size-3.5 animate-spin" />
+         Filtri salvati…
+       </div>
+     )
+   }
+ 
+-  if (!filtri.length) return null
+-
+   return (
+     <div className="border-b border-border px-4 py-3">
+-      <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+-        <Bookmark className="size-3.5 text-muted-foreground" />
+-        Filtri salvati
+-        <span className="text-xs font-normal text-muted-foreground">{filtri.length}</span>
+-      </p>
++      <div className="mb-2 flex items-center justify-between gap-2">
++        <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
++          <Bookmark className="size-3.5 text-muted-foreground" />
++          Filtri salvati
++          {filtri.length ? (
++            <span className="rounded-full bg-secondary px-1.5 text-xs font-normal text-muted-foreground">
++              {filtri.length}
++            </span>
++          ) : null}
++        </p>
++        {azione}
++      </div>
++
++      {!filtri.length ? (
++        <p className="text-xs text-muted-foreground">
++          Nessuno ancora. Componi un filtro e salvalo: lo vedranno tutti.
++        </p>
++      ) : null}
+ 
+       <div className="flex flex-col gap-1">
+         {filtri.map((filtro) => (
+diff --git a/components/leads/advanced-filters.tsx b/components/leads/advanced-filters.tsx
+index 41723ca..814f453 100644
+--- a/components/leads/advanced-filters.tsx
++++ b/components/leads/advanced-filters.tsx
+@@ -14,11 +14,12 @@ import { Input } from "@/components/ui/input"
+ import { Checkbox } from "@/components/ui/checkbox"
+ import { createPortal } from "react-dom"
+ import { toast } from "sonner"
+-import { Maximize2 } from "lucide-react"
++import { Maximize2, Save } from "lucide-react"
+ import { FiltriSalvati } from "@/components/filtri/filtri-salvati"
+ import { CostruttoreFiltro } from "@/components/filtri/costruttore-filtro"
+ import { GRUPPO_VUOTO, type Gruppo } from "@/lib/filtri/albero"
+ import { gruppiCampiLead } from "@/lib/filtri/catalogo-lead"
++import { alberoDaPannello } from "@/lib/filtri/da-pannello"
+ import {
+   Sheet,
+   SheetContent,
+@@ -426,6 +427,33 @@ export function AdvancedFilters({
+     tag: tags,
+   }
+ 
++  async function salvaFiltro(nome: string, gruppo: Gruppo) {
++    const risposta = await fetch("/api/filtri-salvati", {
++      method: "POST",
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify({ modulo: "lead", nome, definizione: gruppo }),
++    })
++    if (!risposta.ok) {
++      const dati = (await risposta.json().catch(() => ({}))) as { error?: string }
++      toast.error(dati.error ?? "Salvataggio non riuscito")
++      return
++    }
++    toast.success(`Filtro "${nome}" salvato e condiviso`)
++    setVersioneSalvati((v) => v + 1)
++  }
++
++  /** Salva quello che c'e' nel pannello, senza passare dal costruttore. */
++  async function salvaDalPannello() {
++    const nome = window.prompt("Nome del filtro (lo vedranno tutti):")?.trim()
++    if (!nome) return
++    const gruppo = alberoDaPannello(draft, gruppiCampiLead(opzioniCatalogo).flatMap((g) => g.campi))
++    if (!gruppo.nodi.length) {
++      toast.error("Nessuna condizione da salvare")
++      return
++    }
++    await salvaFiltro(nome, gruppo)
++  }
++
+   const costruttore = onApplicaAlbero ? (
+     <CostruttoreFiltro
+       aperto={costruttoreAperto}
+@@ -438,20 +466,7 @@ export function AdvancedFilters({
+         setFiltroSalvatoAttivo(null)
+         onApplicaAlbero(gruppo)
+       }}
+-      onSalva={async (nome, gruppo) => {
+-        const risposta = await fetch("/api/filtri-salvati", {
+-          method: "POST",
+-          headers: { "Content-Type": "application/json" },
+-          body: JSON.stringify({ modulo: "lead", nome, definizione: gruppo }),
+-        })
+-        if (!risposta.ok) {
+-          const dati = (await risposta.json().catch(() => ({}))) as { error?: string }
+-          toast.error(dati.error ?? "Salvataggio non riuscito")
+-          return
+-        }
+-        toast.success(`Filtro "${nome}" salvato e condiviso`)
+-        setVersioneSalvati((v) => v + 1)
+-      }}
++      onSalva={salvaFiltro}
+     />
+   ) : null
+ 
+@@ -483,6 +498,19 @@ export function AdvancedFilters({
+             modulo="lead"
+             attivo={filtroSalvatoAttivo}
+             ricarica={versioneSalvati}
++            azione={
++              draftCount > 0 ? (
++                <Button
++                  variant="ghost"
++                  size="sm"
++                  className="h-7 text-xs"
++                  onClick={() => void salvaDalPannello()}
++                >
++                  <Save data-icon="inline-start" />
++                  Salva
++                </Button>
++              ) : null
++            }
+             onApplica={(filtro) => {
+               setFiltroSalvatoAttivo(filtro.id)
+               onApplicaAlbero(filtro.definizione)
+diff --git a/lib/filtri/__tests__/da-pannello.test.ts b/lib/filtri/__tests__/da-pannello.test.ts
+new file mode 100644
+index 0000000..2bdf09d
+--- /dev/null
++++ b/lib/filtri/__tests__/da-pannello.test.ts
+@@ -0,0 +1,108 @@
++import { describe, expect, it } from "vitest"
++import { alberoDaPannello } from "../da-pannello"
++import { validaAlbero, type CampoFiltrabile } from "../albero"
++import type { AdvancedFilterState } from "@/lib/leads/advanced-filter-logic"
++
++const CATALOGO: CampoFiltrabile[] = [
++  { chiave: "Nome Lead", etichetta: "Nome", tipo: "testo" },
++  { chiave: "Stato Lead", etichetta: "Stato", tipo: "elenco" },
++  { chiave: "Valutazione", etichetta: "Valutazione", tipo: "numero" },
++  { chiave: "Ora creazione", etichetta: "Creato", tipo: "data" },
++  { chiave: "Wallbox richiesto", etichetta: "Wallbox", tipo: "booleano" },
++]
++
++function stato(fields: AdvancedFilterState["fields"]): AdvancedFilterState {
++  return {
++    quick: { badgeAttivita: false, badgeNota: false, nonToccati: false, toccati: false },
++    fields,
++  }
++}
++
++describe("alberoDaPannello", () => {
++  it("converte il testo in 'contiene'", () => {
++    const albero = alberoDaPannello(
++      stato({ "Nome Lead": { type: "text", contains: "rossi" } }),
++      CATALOGO,
++    )
++    expect(albero.nodi).toEqual([
++      { tipo: "condizione", campo: "Nome Lead", operatore: "contiene", valori: ["rossi"] },
++    ])
++  })
++
++  it("converte piu' valori selezionati in un 'uno di'", () => {
++    // Selezionare due stati nel pannello e' gia' un "oppure": non deve
++    // diventare un gruppo con due condizioni.
++    const albero = alberoDaPannello(
++      stato({ "Stato Lead": { type: "enum", selected: ["Perso", "Contattato"] } }),
++      CATALOGO,
++    )
++    expect(albero.nodi).toHaveLength(1)
++    expect(albero.nodi[0]).toMatchObject({ operatore: "uno_di", valori: ["Perso", "Contattato"] })
++  })
++
++  it("converte il sì/no e ignora 'tutti'", () => {
++    expect(
++      alberoDaPannello(stato({ "Wallbox richiesto": { type: "boolean", value: "yes" } }), CATALOGO)
++        .nodi[0],
++    ).toMatchObject({ operatore: "vero" })
++
++    // "Tutti" non e' un vincolo: non deve produrre una condizione.
++    expect(
++      alberoDaPannello(stato({ "Wallbox richiesto": { type: "boolean", value: "all" } }), CATALOGO)
++        .nodi,
++    ).toHaveLength(0)
++  })
++
++  it("usa 'fra' quando ci sono entrambi gli estremi", () => {
++    const albero = alberoDaPannello(
++      stato({ Valutazione: { type: "number", min: "10", max: "40" } }),
++      CATALOGO,
++    )
++    expect(albero.nodi[0]).toMatchObject({ operatore: "fra", valori: ["10", "40"] })
++  })
++
++  it("un solo estremo diventa 'maggiore' o 'minore', non un intervallo scartato", () => {
++    expect(
++      alberoDaPannello(stato({ Valutazione: { type: "number", min: "10", max: "" } }), CATALOGO)
++        .nodi[0],
++    ).toMatchObject({ operatore: "maggiore", valori: ["10"] })
++
++    expect(
++      alberoDaPannello(stato({ Valutazione: { type: "number", min: "", max: "40" } }), CATALOGO)
++        .nodi[0],
++    ).toMatchObject({ operatore: "minore", valori: ["40"] })
++  })
++
++  it("sulle date usa 'dopo' e 'prima'", () => {
++    expect(
++      alberoDaPannello(
++        stato({ "Ora creazione": { type: "date", from: "2026-01-01", to: "" } }),
++        CATALOGO,
++      ).nodi[0],
++    ).toMatchObject({ operatore: "dopo" })
++  })
++
++  it("scarta i campi vuoti e quelli fuori catalogo", () => {
++    const albero = alberoDaPannello(
++      stato({
++        "Nome Lead": { type: "text", contains: "   " },
++        "Campo Inventato": { type: "text", contains: "x" },
++      }),
++      CATALOGO,
++    )
++    expect(albero.nodi).toHaveLength(0)
++  })
++
++  it("produce un albero che supera la validazione", () => {
++    // E' il punto della conversione: quello che esce dal pannello deve
++    // poter essere salvato e riletto dal costruttore.
++    const albero = alberoDaPannello(
++      stato({
++        "Nome Lead": { type: "text", contains: "rossi" },
++        "Stato Lead": { type: "enum", selected: ["Perso"] },
++      }),
++      CATALOGO,
++    )
++    expect(validaAlbero(albero, CATALOGO).ok).toBe(true)
++  })
++})
+diff --git a/lib/filtri/da-pannello.ts b/lib/filtri/da-pannello.ts
+new file mode 100644
+index 0000000..ef470f7
+--- /dev/null
++++ b/lib/filtri/da-pannello.ts
+@@ -0,0 +1,110 @@
++import type { AdvancedFilterState, FieldValue } from "@/lib/leads/advanced-filter-logic"
++import type { CampoFiltrabile, Condizione, Gruppo, Nodo } from "./albero"
++
++/**
++ * Dal pannello all'albero.
++ *
++ * Nel pannello si compone un filtro spuntando campi e valori; nel
++ * costruttore si compone lo stesso filtro come albero di gruppi. Sono due
++ * modi di dire la stessa cosa, e chi ha appena filtrato dal pannello deve
++ * poter salvare quello che vede senza rifarlo nella finestra grande.
++ *
++ * La conversione va in una direzione sola: il pannello sa esprimere meno —
++ * tutte le condizioni in E, nessun gruppo — quindi un albero con gruppi
++ * annidati non torna indietro in pillole senza perdere pezzi.
++ */
++
++function condizioneDaValore(
++  campo: CampoFiltrabile,
++  valore: FieldValue,
++): Condizione | null {
++  switch (valore.type) {
++    case "text": {
++      const testo = valore.contains.trim()
++      if (!testo) return null
++      return { tipo: "condizione", campo: campo.chiave, operatore: "contiene", valori: [testo] }
++    }
++    case "enum": {
++      if (!valore.selected.length) return null
++      // Piu' valori sullo stesso campo sono gia' un "oppure": nel pannello
++      // si esprime selezionandone diversi, e "uno di" dice esattamente
++      // questo senza bisogno di un gruppo.
++      return {
++        tipo: "condizione",
++        campo: campo.chiave,
++        operatore: "uno_di",
++        valori: [...valore.selected],
++      }
++    }
++    case "boolean": {
++      if (valore.value === "all") return null
++      return {
++        tipo: "condizione",
++        campo: campo.chiave,
++        operatore: valore.value === "yes" ? "vero" : "falso",
++        valori: [],
++      }
++    }
++    case "number":
++    case "date": {
++      const da = valore.type === "number" ? valore.min : valore.from
++      const a = valore.type === "number" ? valore.max : valore.to
++      const daPieno = da.trim()
++      const aPieno = a.trim()
++
++      if (daPieno && aPieno) {
++        return {
++          tipo: "condizione",
++          campo: campo.chiave,
++          operatore: "fra",
++          valori: [daPieno, aPieno],
++        }
++      }
++      // Un solo estremo compilato non e' un intervallo incompleto da
++      // scartare: e' un "da qui in poi" o un "fino a qui".
++      if (daPieno) {
++        return {
++          tipo: "condizione",
++          campo: campo.chiave,
++          operatore: valore.type === "date" ? "dopo" : "maggiore",
++          valori: [daPieno],
++        }
++      }
++      if (aPieno) {
++        return {
++          tipo: "condizione",
++          campo: campo.chiave,
++          operatore: valore.type === "date" ? "prima" : "minore",
++          valori: [aPieno],
++        }
++      }
++      return null
++    }
++    default:
++      return null
++  }
++}
++
++/**
++ * Traduce lo stato del pannello in un albero salvabile.
++ *
++ * I campi che il pannello ha ma il catalogo no vengono ignorati: meglio
++ * salvare un filtro con una condizione in meno che rifiutare il salvataggio
++ * per un campo che il costruttore non saprebbe comunque mostrare.
++ */
++export function alberoDaPannello(
++  stato: AdvancedFilterState,
++  catalogo: readonly CampoFiltrabile[],
++): Gruppo {
++  const perChiave = new Map(catalogo.map((campo) => [campo.chiave, campo]))
++  const nodi: Nodo[] = []
++
++  for (const [chiave, valore] of Object.entries(stato.fields)) {
++    const campo = perChiave.get(chiave)
++    if (!campo) continue
++    const condizione = condizioneDaValore(campo, valore)
++    if (condizione) nodi.push(condizione)
++  }
++
++  return { tipo: "gruppo", connettore: "e", nodi }
++}

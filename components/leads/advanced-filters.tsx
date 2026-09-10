@@ -14,11 +14,12 @@ import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { createPortal } from "react-dom"
 import { toast } from "sonner"
-import { Maximize2 } from "lucide-react"
+import { Maximize2, Save } from "lucide-react"
 import { FiltriSalvati } from "@/components/filtri/filtri-salvati"
 import { CostruttoreFiltro } from "@/components/filtri/costruttore-filtro"
 import { GRUPPO_VUOTO, type Gruppo } from "@/lib/filtri/albero"
 import { gruppiCampiLead } from "@/lib/filtri/catalogo-lead"
+import { alberoDaPannello } from "@/lib/filtri/da-pannello"
 import {
   Sheet,
   SheetContent,
@@ -426,6 +427,33 @@ export function AdvancedFilters({
     tag: tags,
   }
 
+  async function salvaFiltro(nome: string, gruppo: Gruppo) {
+    const risposta = await fetch("/api/filtri-salvati", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ modulo: "lead", nome, definizione: gruppo }),
+    })
+    if (!risposta.ok) {
+      const dati = (await risposta.json().catch(() => ({}))) as { error?: string }
+      toast.error(dati.error ?? "Salvataggio non riuscito")
+      return
+    }
+    toast.success(`Filtro "${nome}" salvato e condiviso`)
+    setVersioneSalvati((v) => v + 1)
+  }
+
+  /** Salva quello che c'e' nel pannello, senza passare dal costruttore. */
+  async function salvaDalPannello() {
+    const nome = window.prompt("Nome del filtro (lo vedranno tutti):")?.trim()
+    if (!nome) return
+    const gruppo = alberoDaPannello(draft, gruppiCampiLead(opzioniCatalogo).flatMap((g) => g.campi))
+    if (!gruppo.nodi.length) {
+      toast.error("Nessuna condizione da salvare")
+      return
+    }
+    await salvaFiltro(nome, gruppo)
+  }
+
   const costruttore = onApplicaAlbero ? (
     <CostruttoreFiltro
       aperto={costruttoreAperto}
@@ -438,20 +466,7 @@ export function AdvancedFilters({
         setFiltroSalvatoAttivo(null)
         onApplicaAlbero(gruppo)
       }}
-      onSalva={async (nome, gruppo) => {
-        const risposta = await fetch("/api/filtri-salvati", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ modulo: "lead", nome, definizione: gruppo }),
-        })
-        if (!risposta.ok) {
-          const dati = (await risposta.json().catch(() => ({}))) as { error?: string }
-          toast.error(dati.error ?? "Salvataggio non riuscito")
-          return
-        }
-        toast.success(`Filtro "${nome}" salvato e condiviso`)
-        setVersioneSalvati((v) => v + 1)
-      }}
+      onSalva={salvaFiltro}
     />
   ) : null
 
@@ -483,6 +498,19 @@ export function AdvancedFilters({
             modulo="lead"
             attivo={filtroSalvatoAttivo}
             ricarica={versioneSalvati}
+            azione={
+              draftCount > 0 ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => void salvaDalPannello()}
+                >
+                  <Save data-icon="inline-start" />
+                  Salva
+                </Button>
+              ) : null
+            }
             onApplica={(filtro) => {
               setFiltroSalvatoAttivo(filtro.id)
               onApplicaAlbero(filtro.definizione)

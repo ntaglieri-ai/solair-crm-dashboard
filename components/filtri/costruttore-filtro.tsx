@@ -166,9 +166,9 @@ export function CostruttoreFiltro({
           />
         </div>
 
-        <DialogFooter className="flex-col gap-3 border-t border-border px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex w-full flex-col gap-1.5 sm:max-w-xs">
-            <Label htmlFor="filtro-nome" className="text-xs">
+        <DialogFooter className="flex-col-reverse gap-4 border-t border-border bg-secondary/20 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex w-full flex-col gap-1.5 sm:max-w-sm">
+            <Label htmlFor="filtro-nome" className="text-xs font-medium">
               Salva come filtro
             </Label>
             <div className="flex gap-2">
@@ -205,8 +205,8 @@ export function CostruttoreFiltro({
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">
+          <div className="flex shrink-0 items-center gap-3">
+            <span className="text-xs tabular-nums text-muted-foreground">
               {totale === 0
                 ? "Nessuna condizione"
                 : `${totale} condizion${totale === 1 ? "e" : "i"}`}
@@ -216,6 +216,7 @@ export function CostruttoreFiltro({
             </Button>
             <Button
               className="bg-teal text-teal-foreground hover:bg-teal/90"
+              disabled={totale === 0}
               onClick={() => {
                 onApplica(potaVuoti(albero))
                 onChiudi()
@@ -253,7 +254,9 @@ function NodoGruppo({
     <div
       className={cn(
         "flex flex-col gap-2 rounded-lg",
-        !radice && "border border-border bg-secondary/30 p-3",
+        radice
+          ? "border border-border bg-card p-3"
+          : "border border-border bg-secondary/40 p-3",
       )}
     >
       <div className="flex items-center gap-2">
@@ -279,6 +282,17 @@ function NodoGruppo({
           </Button>
         ) : null}
       </div>
+
+      {radice && gruppo.nodi.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border bg-secondary/20 px-4 py-8 text-center">
+          <p className="text-sm font-medium text-foreground">Nessuna condizione</p>
+          <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
+            Aggiungi una <span className="font-medium">condizione</span> per filtrare su un
+            campo, oppure un <span className="font-medium">gruppo</span> per combinare più
+            condizioni in alternativa fra loro — per esempio “Sede è Catania oppure Palermo”.
+          </p>
+        </div>
+      ) : null}
 
       {gruppo.nodi.map((nodo, indice) => {
         const figlio = [...percorso, indice]

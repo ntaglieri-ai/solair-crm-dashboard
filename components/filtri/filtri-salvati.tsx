@@ -27,6 +27,7 @@ export function FiltriSalvati({
   attivo,
   onApplica,
   ricarica,
+  azione,
 }: {
   modulo: string
   /** Id del filtro attualmente applicato, per evidenziarlo. */
@@ -34,6 +35,8 @@ export function FiltriSalvati({
   onApplica: (filtro: FiltroSalvato) => void
   /** Cambia quando un filtro viene salvato, per rileggere l'elenco. */
   ricarica?: number
+  /** Pulsante accanto al titolo, es. "Salva". */
+  azione?: React.ReactNode
 }) {
   const [filtri, setFiltri] = useState<FiltroSalvato[]>([])
   const [caricamento, setCaricamento] = useState(true)
@@ -65,22 +68,33 @@ export function FiltriSalvati({
 
   if (caricamento) {
     return (
-      <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 border-b border-border px-4 py-3 text-xs text-muted-foreground">
         <Loader2 className="size-3.5 animate-spin" />
         Filtri salvati…
       </div>
     )
   }
 
-  if (!filtri.length) return null
-
   return (
     <div className="border-b border-border px-4 py-3">
-      <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
-        <Bookmark className="size-3.5 text-muted-foreground" />
-        Filtri salvati
-        <span className="text-xs font-normal text-muted-foreground">{filtri.length}</span>
-      </p>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+          <Bookmark className="size-3.5 text-muted-foreground" />
+          Filtri salvati
+          {filtri.length ? (
+            <span className="rounded-full bg-secondary px-1.5 text-xs font-normal text-muted-foreground">
+              {filtri.length}
+            </span>
+          ) : null}
+        </p>
+        {azione}
+      </div>
+
+      {!filtri.length ? (
+        <p className="text-xs text-muted-foreground">
+          Nessuno ancora. Componi un filtro e salvalo: lo vedranno tutti.
+        </p>
+      ) : null}
 
       <div className="flex flex-col gap-1">
         {filtri.map((filtro) => (

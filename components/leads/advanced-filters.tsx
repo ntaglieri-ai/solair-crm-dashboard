@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
+import { MultiFilterSelect } from "@/components/shared/multi-filter-select"
 import { createPortal } from "react-dom"
 import { toast } from "sonner"
 import { Maximize2, Save } from "lucide-react"
@@ -801,29 +802,18 @@ function FieldEditor({
     const selected = value.selected
     return (
       <div className="flex flex-col gap-2">
-        {(def.options ?? []).map((opt) => (
-          <label
-            key={opt.value}
-            className="flex cursor-pointer items-center gap-2 text-sm text-foreground"
-          >
-            <Checkbox
-              checked={selected.includes(opt.value)}
-              onCheckedChange={(c) =>
-                onChange({
-                  type: "enum",
-                  selected:
-                    c === true
-                      ? [...selected, opt.value]
-                      : selected.filter((s) => s !== opt.value),
-                })
-              }
-            />
-            <span className="truncate">{opt.label}</span>
-          </label>
-        ))}
-        {(def.options ?? []).length === 0 ? (
+        {(def.options ?? []).length > 0 ? (
+          <MultiFilterSelect
+            ariaLabel={`Filtra per ${def.label}`}
+            className="h-10 w-full bg-card text-sm"
+            value={selected}
+            onValueChange={(next) => onChange({ type: "enum", selected: next })}
+            allLabel="Tutti i valori"
+            options={def.options ?? []}
+          />
+        ) : (
           <p className="text-xs text-muted-foreground">Nessun valore</p>
-        ) : null}
+        )}
       </div>
     )
   }

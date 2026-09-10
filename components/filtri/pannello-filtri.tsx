@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { ChevronDown, ChevronRight, Maximize2, RotateCcw, Save, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { MultiFilterSelect } from "@/components/shared/multi-filter-select"
 import { cn } from "@/lib/utils"
 import { FiltriSalvati } from "@/components/filtri/filtri-salvati"
 import { CostruttoreFiltro } from "@/components/filtri/costruttore-filtro"
@@ -454,40 +455,25 @@ function ControlloCampo({
         <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {campo.etichetta}
         </span>
-        <div className="flex flex-wrap gap-1">
-          {campo.opzioni.map((opzione) => {
-            const attivo = scelti.includes(opzione)
-            return (
-              <button
-                key={opzione}
-                type="button"
-                onClick={() => {
-                  const nuovi = attivo
-                    ? scelti.filter((v) => v !== opzione)
-                    : [...scelti, opzione]
-                  onCambia(
-                    nuovi.length
-                      ? {
-                          tipo: "condizione",
-                          campo: campo.chiave,
-                          operatore: "uno_di",
-                          valori: nuovi,
-                        }
-                      : null,
-                  )
-                }}
-                className={cn(
-                  "max-w-full truncate rounded-full border px-2.5 py-1 text-xs transition-colors",
-                  attivo
-                    ? "border-teal bg-teal/10 font-medium text-teal"
-                    : "border-border bg-card text-muted-foreground hover:bg-secondary",
-                )}
-              >
-                {opzione}
-              </button>
+        <MultiFilterSelect
+          ariaLabel={`Filtra per ${campo.etichetta}`}
+          className="h-10 w-full bg-card text-sm"
+          value={scelti}
+          onValueChange={(nuovi) =>
+            onCambia(
+              nuovi.length
+                ? {
+                    tipo: "condizione",
+                    campo: campo.chiave,
+                    operatore: "uno_di",
+                    valori: nuovi,
+                  }
+                : null,
             )
-          })}
-        </div>
+          }
+          allLabel="Tutti i valori"
+          options={campo.opzioni.map((opzione) => ({ value: opzione, label: opzione }))}
+        />
       </div>
     )
   }

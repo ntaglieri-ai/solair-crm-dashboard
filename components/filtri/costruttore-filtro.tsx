@@ -5,6 +5,7 @@ import { Plus, Trash2, FolderPlus, Save, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { MultiFilterSelect } from "@/components/shared/multi-filter-select"
 import {
   Select,
   SelectTrigger,
@@ -508,30 +509,14 @@ function EditorValore({
     // frequente, e non deve costare un gruppo.
     const scelti = valori.map(String)
     return (
-      <div className="flex flex-wrap items-center gap-1">
-        {opzioni.map((opzione) => {
-          const attivo = scelti.includes(opzione)
-          return (
-            <button
-              key={opzione}
-              type="button"
-              onClick={() =>
-                onCambia(
-                  attivo ? scelti.filter((v) => v !== opzione) : [...scelti, opzione],
-                )
-              }
-              className={cn(
-                "rounded-full border px-2.5 py-1 text-xs transition-colors",
-                attivo
-                  ? "border-teal bg-teal/10 font-medium text-teal"
-                  : "border-border bg-card text-muted-foreground hover:bg-secondary",
-              )}
-            >
-              {opzione}
-            </button>
-          )
-        })}
-      </div>
+      <MultiFilterSelect
+        ariaLabel="Scegli valori del filtro"
+        className="h-8 w-72 max-w-full bg-card text-sm"
+        value={scelti}
+        onValueChange={onCambia}
+        allLabel="Scegli valori"
+        options={opzioni.map((opzione) => ({ value: opzione, label: opzione }))}
+      />
     )
   }
 

@@ -33,6 +33,7 @@ import {
 import {
   CLIENTE_COLUMNS,
   DEFAULT_CLIENTE_COLUMNS,
+  SEDE_LABELS,
   type ClienteRecord,
   type ClienteColumnId,
 } from "@/lib/mock-data"
@@ -83,6 +84,9 @@ import {
   fetchClientiByIdsForExport,
   type ClientiExportResult,
 } from "@/lib/clienti/hooks"
+import { option } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
+import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
 
 const ROWS_ITEMS: Record<string, string> = {
   "10": "10 righe",
@@ -145,7 +149,14 @@ export function ClientiClient({
   // perche' e' la pagina a decidere quanto spazio resta alla lista.
   const [filtriAperti, setFiltriAperti] = useState(false)
   const [pannelloFiltri, setPannelloFiltri] = useState<HTMLDivElement | null>(null)
-  const { hydrateClienteTagIds, installerNames, owners } = useClienteTags()
+  const { hydrateClienteTagIds, installerNames, owners, tags: clienteTags } = useClienteTags()
+  const { data: statoClienteOptions } = useStatoClienteQuery()
+  const sedeOptions = useColumnValueOptions(
+    "Clienti",
+    "sede",
+    SEDE_LABELS.map((sede) => option(sede)),
+    { includeFallback: true },
+  ).options
 
   // Campi filtrabili e loro gruppi, dal layout della scheda: un campo
   // aggiunto dalla pagina Layout diventa filtrabile da solo.
@@ -157,8 +168,11 @@ export function ClientiClient({
       gruppiCampiClienti(layout, {
         Installatore: installerNames,
         "Clienti Proprietario": owners.map((owner) => owner.nome),
+        Stato: (statoClienteOptions ?? []).map((stato) => stato.valore),
+        Sede: sedeOptions.map((sede) => sede.value),
+        Tag: clienteTags.map((tag) => tag.name),
       }),
-    [layout, installerNames, owners],
+    [clienteTags, installerNames, layout, owners, sedeOptions, statoClienteOptions],
   )
   const [sortBy, setSortBy] = useState<ClienteColumnId | null>("Ora modifica")
   const [sortDir, setSortDir] = useState<SortDir>("desc")

@@ -45,9 +45,22 @@ const LIST_TECHNICAL_COLUMNS = [
   "sede",
   "clienti_proprietario_id",
   "installatore_id",
+  // E-mail e cellulare servono sempre, anche quando le colonne omonime non
+  // sono visibili: le icone di contatto rapido stanno nella cella del nome e
+  // si disegnano comunque. Senza, restavano spente su tutta la lista e non
+  // si poteva scrivere a nessun cliente — pur avendo l'indirizzo a database.
+  "email",
+  "cellulare",
 ]
 
-function listColumnsForFields(fields: string[], sortCol: string) {
+/**
+ * Le colonne da leggere per una lista, dati i campi richiesti.
+ *
+ * Esportata per poter essere verificata: e' il punto in cui si decide cosa
+ * arriva davvero alla riga, e una dimenticanza qui non si vede finche'
+ * qualcuno non prova a usare un dato che non c'e'.
+ */
+export function listColumnsForFields(fields: string[], sortCol: string) {
   const requestedFields = fields.includes("*")
     ? CLIENTI_RECORD_FIELDS.map((field) => field.appField)
     : fields.length > 0

@@ -17,12 +17,18 @@ import {
   Clock,
   ArrowRightLeft,
   BadgeEuro,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react"
 
-import type { NavItem, KpiData, FeedTipo } from "@/lib/mock-data"
+import type { KpiData, FeedTipo } from "@/lib/mock-data"
+import type { NavIcon } from "@/lib/navigation"
 
-export const NAV_ICONS: Record<NavItem["icon"], LucideIcon> = {
+// Tipizzata su NavIcon di lib/navigation e non sull'omonimo NavItem di
+// mock-data: la barra laterale disegna le voci di lib/navigation, quindi e'
+// quella l'unione che deve restare allineata. Le due sono rimaste identiche
+// fino a oggi per caso, e la copia in mock-data serve ai dati di esempio.
+export const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   dashboard: LayoutDashboard,
   leads: Users,
   clienti: UserCheck,
@@ -32,6 +38,7 @@ export const NAV_ICONS: Record<NavItem["icon"], LucideIcon> = {
   documenti: FileText,
   installatori: Wrench,
   offerta_commerciale: BadgeEuro,
+  solair_ai: Sparkles,
   impostazioni: Settings,
 }
 

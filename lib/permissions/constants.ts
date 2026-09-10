@@ -18,6 +18,7 @@ export const PAGE_KEYS = [
   "documenti",
   "installatori",
   "offerta_commerciale",
+  "solair_ai",
   "crm_settings",
   "crm_settings.account",
   "crm_settings.account.utenti",
@@ -34,6 +35,8 @@ export const PAGE_KEYS = [
   "crm_settings.system.template-email",
   "crm_settings.system.valori",
   "crm_settings.system.roberta",
+  "crm_settings.system.solair_ai",
+  "crm_settings.system.solair_ai.permessi",
   "crm_settings.system.import_export",
   "crm_settings.system.zoho_t0",
   "crm_settings.system.make",
@@ -54,6 +57,7 @@ export const ROUTE_PAGE_MAP: Record<string, string> = {
   "/documenti": "documenti",
   "/installatori": "installatori",
   "/offerta-commerciale": "offerta_commerciale",
+  "/solair-ai": "solair_ai",
   "/crm-settings": "crm_settings",
   "/crm-settings/account": "crm_settings.account",
   "/crm-settings/account/utenti": "crm_settings.account.utenti",
@@ -70,6 +74,8 @@ export const ROUTE_PAGE_MAP: Record<string, string> = {
   "/crm-settings/system/template-email": "crm_settings.system.template-email",
   "/crm-settings/system/valori": "crm_settings.system.valori",
   "/crm-settings/system/roberta": "crm_settings.system.roberta",
+  "/crm-settings/system/solair-ai": "crm_settings.system.solair_ai",
+  "/crm-settings/system/solair-ai/permessi": "crm_settings.system.solair_ai.permessi",
   "/crm-settings/system/import-export": "crm_settings.system.import_export",
   "/crm-settings/system/import-export/zoho-t0": "crm_settings.system.zoho_t0",
   "/crm-settings/system/make": "crm_settings.system.make",
@@ -164,6 +170,14 @@ export const ACTION_KEYS = [
   // componente.
   "widget.bacheca.gestisci",
   "offerta_commerciale.manage",
+  // SolairAI. Le due chiavi restano separate di proposito: avviare
+  // scritture sul CRM per conto di un documento e controllare la coda di
+  // cio' che e' stato proposto sono due mestieri diversi, e chi revisiona
+  // non deve per forza poter scrivere. Le stesse due chiavi le legge la
+  // RLS (solair_ai_can_run / solair_ai_can_review), quindi toglierle da
+  // qui non basterebbe a chiuderle: e' il database a decidere.
+  "solair_ai.run",
+  "solair_ai.revisioni.view",
 ] as const
 
 export function normalizeRoleCode(value: string | null | undefined): RoleCode {
@@ -284,6 +298,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       "documenti",
       "installatori",
       "offerta_commerciale",
+      "solair_ai",
       "crm_settings",
       "crm_settings.account",
       "crm_settings.account.utenti",
@@ -298,6 +313,8 @@ export function buildDefaultPermissionSnapshot(params?: {
       "crm_settings.system.template-email",
       "crm_settings.system.valori",
       "crm_settings.system.roberta",
+      "crm_settings.system.solair_ai",
+      "crm_settings.system.solair_ai.permessi",
       "crm_settings.system.make",
       "crm_settings.system.meta",
       "crm_settings.system.import_export",
@@ -330,6 +347,8 @@ export function buildDefaultPermissionSnapshot(params?: {
       "appearance.personal.manage",
       "widget.bacheca.gestisci",
       "offerta_commerciale.manage",
+      "solair_ai.run",
+      "solair_ai.revisioni.view",
     ])
     grantFieldManagement([...MODULE_KEYS])
     for (const moduleKey of MODULE_KEYS) {
@@ -360,6 +379,7 @@ export function buildDefaultPermissionSnapshot(params?: {
       "scadenze",
       "installatori",
       "offerta_commerciale",
+      "solair_ai",
       "crm_settings.system.azienda",
       "crm_settings.system.sedi",
       "crm_settings.system.comunicazioni",
@@ -391,6 +411,8 @@ export function buildDefaultPermissionSnapshot(params?: {
       "company.communication.manage",
       "appearance.personal.manage",
       "widget.bacheca.gestisci",
+      "solair_ai.run",
+      "solair_ai.revisioni.view",
     ])
     for (const moduleKey of MODULE_KEYS) {
       fields[moduleKey] = roleFields[moduleKey] ?? { "*": "readonly" }

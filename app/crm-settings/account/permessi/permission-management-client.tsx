@@ -153,6 +153,12 @@ const ACTION_LABELS: Record<string, string> = {
   "compiti.default_values.manage": "Gestisce valori Compiti",
   "scadenze.default_values.manage": "Gestisce valori Scadenze",
   "installatori.default_values.manage": "Gestisce valori Installatori",
+  // SolairAI ha una pagina permessi sua (AI Features > Permessi SolairAI):
+  // le etichette servono comunque qui, perche' il riepilogo per ruolo
+  // elenca TUTTE le azioni abilitate e senza etichetta mostrerebbe la
+  // chiave grezza.
+  "solair_ai.run": "SolairAI — avvia aggiornamenti e creazioni",
+  "solair_ai.revisioni.view": "SolairAI — vede la coda di revisione",
 }
 
 function withAdvanced(

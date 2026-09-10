@@ -8,6 +8,7 @@ export type NavIcon =
   | "documenti"
   | "installatori"
   | "offerta_commerciale"
+  | "solair_ai"
   | "impostazioni"
 
 export type NavItem = {
@@ -25,6 +26,7 @@ export const NAV_PRINCIPALE: NavItem[] = [
 ]
 
 export const NAV_GESTIONE: NavItem[] = [
+  { label: "SolairAI", href: "/solair-ai", icon: "solair_ai" },
   { label: "Offerta Commerciale", href: "/offerta-commerciale", icon: "offerta_commerciale" },
   { label: "Scadenze", href: "/scadenze", icon: "scadenze" },
   { label: "Documenti", href: "/documenti", icon: "documenti" },

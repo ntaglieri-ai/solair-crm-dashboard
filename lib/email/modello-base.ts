@@ -68,6 +68,8 @@ const COLORI = {
   accento: "#2e8b72",
 } as const
 
+const FONT = "Arial, Helvetica, sans-serif"
+
 function stringa(valore: unknown): string {
   return typeof valore === "string" ? valore.trim() : ""
 }
@@ -109,17 +111,33 @@ export function aziendaDaProfilo(profilo: unknown): AziendaEmail {
  * compone un modello non deve pensare in termini di markup.
  */
 export function paragrafiDaTesto(testo: string): string {
-  return testo
+  return normalizzaTestoEmail(testo)
     .split(/\n\s*\n/)
     .map((blocco) => blocco.trim())
     .filter(Boolean)
     .map(
       (blocco) =>
-        `<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:${COLORI.testo}">${textToSafeHtml(
+        `<p style="margin:0 0 14px;font-family:${FONT};font-size:14px;line-height:1.58;color:${COLORI.testo}">${textToSafeHtml(
           blocco,
         )}</p>`,
     )
     .join("\n")
+}
+
+function normalizzaTestoEmail(testo: string): string {
+  return testo
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/([,;!?])(?=\S)/g, "$1 ")
+    .replace(/:(?=[A-Za-zÀ-ÖØ-öø-ÿ])/g, ": ")
+    .replace(/\.([A-ZÀ-Ö][a-zà-öø-ÿ])/g, ". $1")
+    .replace(/\bN\.\s+B\./g, "N.B.")
+    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])([’'])\s+/g, "$1$2")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
 }
 
 /**
@@ -156,43 +174,43 @@ export function modelloBase(corpo: string, azienda: AziendaEmail = AZIENDA): str
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${nome}</title>
 </head>
-<body style="margin:0;padding:0;background:${COLORI.sfondo};-webkit-text-size-adjust:100%">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${COLORI.sfondo}">
+<body style="margin:0;padding:0;background:${COLORI.sfondo};font-family:${FONT};-webkit-text-size-adjust:100%">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${COLORI.sfondo};font-family:${FONT}">
 <tr>
 <td align="center" style="padding:24px 12px">
 
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;background:#ffffff;border:1px solid ${COLORI.bordo};border-radius:10px;overflow:hidden">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;background:#ffffff;border:1px solid ${COLORI.bordo};border-radius:10px;overflow:hidden;font-family:${FONT}">
 
 <tr>
-<td style="background:${COLORI.scuro};padding:20px 28px">
-<img src="${logo}" alt="${nome}" width="132" style="display:block;width:132px;max-width:132px;height:auto;border:0">
+<td style="background:#ffffff;padding:22px 30px 18px">
+<img src="${logo}" alt="${nome}" width="168" style="display:block;width:168px;max-width:168px;height:auto;border:0">
 </td>
 </tr>
 
 <tr>
-<td style="height:3px;background:${COLORI.accento};font-size:0;line-height:0">&nbsp;</td>
+<td style="height:4px;background:${COLORI.accento};font-size:0;line-height:0">&nbsp;</td>
 </tr>
 
 <tr>
-<td style="padding:28px">
+<td style="padding:30px 32px 22px;font-family:${FONT}">
 ${contenuto}
 </td>
 </tr>
 
 <tr>
-<td style="padding:0 28px 28px">
+<td style="padding:0 32px 30px;font-family:${FONT}">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr><td style="border-top:1px solid ${COLORI.bordo};padding-top:16px">
-<p style="margin:0 0 4px;font-size:13px;line-height:1.5;color:${COLORI.testo}"><strong>${nome}</strong></p>
-<p style="margin:0 0 4px;font-size:13px;line-height:1.5;color:${COLORI.tenue}">
+<p style="margin:0 0 4px;font-family:${FONT};font-size:13px;line-height:1.5;color:${COLORI.testo}"><strong>${nome}</strong></p>
+<p style="margin:0 0 4px;font-family:${FONT};font-size:12px;line-height:1.5;color:${COLORI.tenue}">
 Tel. <a href="tel:${telHref}" style="color:${COLORI.tenue};text-decoration:none">${telefono}</a>
 &nbsp;·&nbsp; WhatsApp <a href="https://wa.me/${whatsappHref}" style="color:${COLORI.tenue};text-decoration:none">${whatsapp}</a>
 </p>
-<p style="margin:0 0 4px;font-size:13px;line-height:1.5;color:${COLORI.tenue}">
+<p style="margin:0 0 4px;font-family:${FONT};font-size:12px;line-height:1.5;color:${COLORI.tenue}">
 <a href="mailto:${email}" style="color:${COLORI.accento};text-decoration:none">${email}</a>
 &nbsp;·&nbsp; <a href="${sito}" style="color:${COLORI.accento};text-decoration:none">${sitoLabel}</a>
 </p>
-<p style="margin:0;font-size:12px;line-height:1.5;color:${COLORI.tenue}">${sedeTesto}</p>
+<p style="margin:0;font-family:${FONT};font-size:11px;line-height:1.5;color:${COLORI.tenue}">${sedeTesto}</p>
 </td></tr>
 </table>
 </td>
@@ -200,7 +218,7 @@ Tel. <a href="tel:${telHref}" style="color:${COLORI.tenue};text-decoration:none"
 
 </table>
 
-<p style="margin:14px 0 0;font-size:11px;line-height:1.5;color:${COLORI.tenue};text-align:center">
+<p style="margin:14px 0 0;font-family:${FONT};font-size:11px;line-height:1.5;color:${COLORI.tenue};text-align:center">
 ${nome}${datiFiscaliHtml ? ` — ${datiFiscaliHtml}` : ""}<br>
 <a href="${azienda.privacy}" style="color:${COLORI.tenue}">Informativa privacy</a>
 </p>

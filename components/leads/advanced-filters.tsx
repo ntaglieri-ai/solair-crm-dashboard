@@ -392,16 +392,26 @@ export function AdvancedFilters({
   const [versioneSalvati, setVersioneSalvati] = useState(0)
 
   // Con il pannello incastonato la lista si aggiorna mentre si compone il
-  // filtro: e' il motivo per cui sta accanto invece che sopra. La piccola
-  // attesa evita che spuntare tre caselle faccia partire tre interrogazioni
-  // al database.
+  // filtro: e' il motivo per cui sta accanto invece che sopra. Modifiche e
+  // scrittura hanno un debounce breve; rimozioni e svuotamenti sono immediati,
+  // cosi' la tabella libera subito i risultati esclusi dal filtro appena tolto.
   const applicaRef = useRef(onApply)
+  const conteggioPrecedenteRef = useRef(countActiveAdvanced(draft))
   useEffect(() => {
     applicaRef.current = onApply
   }, [onApply])
   useEffect(() => {
     if (!inline) return
-    const attesa = setTimeout(() => applicaRef.current(draft), 350)
+    const conteggioCorrente = countActiveAdvanced(draft)
+    const staRimuovendo = conteggioCorrente < conteggioPrecedenteRef.current
+    conteggioPrecedenteRef.current = conteggioCorrente
+
+    if (conteggioCorrente === 0 || staRimuovendo) {
+      applicaRef.current(draft)
+      return
+    }
+
+    const attesa = setTimeout(() => applicaRef.current(draft), 150)
     return () => clearTimeout(attesa)
   }, [inline, draft])
 

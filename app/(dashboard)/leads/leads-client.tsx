@@ -332,15 +332,16 @@ export function LeadsClient({
     [],
   )
 
-  // Ricerca con debounce: l'input resta reattivo (filters.search), ma la query
-  // parte solo ~350ms dopo l'ultimo tasto, evitando un fetch a ogni carattere.
+  // Ricerca con debounce breve: l'input resta reattivo, la tabella segue quasi
+  // subito, e quando la ricerca viene svuotata il filtro sparisce immediatamente.
   const [debouncedSearch, setDebouncedSearch] = useState(filters.search)
   useEffect(() => {
     if (debouncedSearch === filters.search) return
+
     const t = setTimeout(() => {
       setDebouncedSearch(filters.search)
       setPage(1)
-    }, 350)
+    }, 150)
     return () => clearTimeout(t)
   }, [filters.search, debouncedSearch])
 
@@ -449,6 +450,7 @@ export function LeadsClient({
 
   const handleFilterChange = useCallback((next: LeadFilterState) => {
     setFilters(next)
+    if (!next.search.trim()) setDebouncedSearch(next.search)
     setPage(1)
   }, [])
 

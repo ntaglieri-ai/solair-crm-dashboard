@@ -175,7 +175,7 @@ export function InstallatoriClient({
   const [settingsSection, setSettingsSection] =
     useState<InstallatoreSettingsSectionId>("proprietari")
 
-  const debouncedSearch = useDebouncedValue(filters.search, 300)
+  const debouncedSearch = useDebouncedValue(filters.search, 150)
   const params = useMemo<InstallatoriListParams>(
     () => ({
       page,

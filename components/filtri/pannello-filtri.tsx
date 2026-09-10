@@ -73,17 +73,29 @@ export function PannelloFiltri({
   const [ricerca, setRicerca] = useState("")
   const [gruppiAperti, setGruppiAperti] = useState<Set<string>>(new Set())
 
-  // Bozza locale: la lista si aggiorna mentre si compone, ma con una piccola
-  // attesa — spuntare tre caselle non deve far partire tre interrogazioni.
+  // Bozza locale: la lista si aggiorna mentre si compone. Inserimento/modifica
+  // resta leggermente debounced, mentre rimozioni e svuotamenti arrivano subito
+  // alla tabella: quando togli un filtro vuoi vedere sparire il vincolo al volo.
   const [bozza, setBozza] = useState<Gruppo>(albero ?? { tipo: "gruppo", connettore: "e", nodi: [] })
   const cambiaRef = useRef(onCambia)
+  const condizioniPrecedentiRef = useRef(contaCondizioni(bozza))
   useEffect(() => {
     cambiaRef.current = onCambia
   }, [onCambia])
   useEffect(() => {
+    const condizioniCorrenti = contaCondizioni(bozza)
+    const filtro = condizioniCorrenti > 0 ? bozza : null
+    const staRimuovendo = condizioniCorrenti < condizioniPrecedentiRef.current
+    condizioniPrecedentiRef.current = condizioniCorrenti
+
+    if (!filtro || staRimuovendo) {
+      cambiaRef.current(filtro)
+      return
+    }
+
     const attesa = setTimeout(() => {
-      cambiaRef.current(bozza.nodi.length ? bozza : null)
-    }, 350)
+      cambiaRef.current(filtro)
+    }, 150)
     return () => clearTimeout(attesa)
   }, [bozza])
 

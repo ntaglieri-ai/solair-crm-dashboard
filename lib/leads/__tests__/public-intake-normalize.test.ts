@@ -30,6 +30,9 @@ describe("normalizeLeadIntakePayload", () => {
       lastName: "Rossi",
       cognome: "Rossi",
       telefono: "+39 333 1234567",
+      mobileFisso: "+39 333 1234567",
+      mobile_fisso: "+39 333 1234567",
+      "Mobile/Fisso": "+39 333 1234567",
       email: "Mario@Example.test",
       citta: "Catania",
       provincia: "CT",
@@ -44,6 +47,7 @@ describe("normalizeLeadIntakePayload", () => {
       origine: "facebook",
       nome: "Raffaele D'aguanno",
       telefono: "+393313627769",
+      mobileFisso: "+393313627769",
       email: "raffaele.daguanno@libero.it",
       provincia: "Frosinone",
       campaign_name: "Lead FV Lazio",
@@ -76,6 +80,22 @@ describe("normalizeLeadIntakePayload", () => {
     expect(leadDataClickIso(payload as Parameters<typeof leadDataClickIso>[0])).toBe(
       "2026-08-04T21:35:00.000Z",
     )
+  })
+
+  it("mantiene Mobile/Fisso esplicito quando differisce dal telefono", () => {
+    const payload = normalizeLeadIntakePayload({
+      origine: "facebook",
+      nome: "Mario Rossi",
+      telefono: "+393331234567",
+      mobile_fisso: "+39061234567",
+    })
+
+    expect(payload).toMatchObject({
+      telefono: "+393331234567",
+      mobileFisso: "+39061234567",
+      mobile_fisso: "+39061234567",
+      "Mobile/Fisso": "+39061234567",
+    })
   })
 
   it("accetta i sinonimi di origine usati negli scenari", () => {

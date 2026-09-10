@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
+import { leadPrimaryPhone } from "@/lib/leads/contact"
 import { EditRecordDialog, buildLeadEditFields } from "@/components/shared/edit-record-dialog"
 import { useDeleteLead, useCreateLead } from "@/lib/leads/hooks"
 import { usePermissions } from "@/lib/permissions/provider"
@@ -190,7 +191,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
             kind="lead"
             recordId={lead.id}
             nome={lead["Nome Lead"]}
-            telefono={lead.Telefono}
+            telefono={leadPrimaryPhone(lead)}
             email={lead["E-mail"]}
             show={["email"]}
             emailAsButton

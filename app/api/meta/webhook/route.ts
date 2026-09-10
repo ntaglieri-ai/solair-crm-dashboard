@@ -401,6 +401,7 @@ function mapMetaLeadToIntakePayload(
     origine: "meta_ads",
     nome,
     telefono: telefono ?? "",
+    mobileFisso: telefono ?? "",
     email,
     citta,
     provincia,

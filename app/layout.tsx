@@ -37,7 +37,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="it" className="light" suppressHydrationWarning>
-      <head>
+      <head />
+      <body className="font-sans antialiased bg-background">
         {/* Applica tema, accento e densita' PRIMA che la pagina si disegni,
             per evitare il lampo chiaro su chi usa il tema scuro. Passa da
             next/script con strategy "beforeInteractive": uno <script>
@@ -47,8 +48,6 @@ export default function RootLayout({
         <Script id="solair-appearance" strategy="beforeInteractive">
           {`(function(){try{var p=JSON.parse(localStorage.getItem("solair:appearance")||"null")||{};var t=p.theme||"light";var d=t==="dark"||(t==="system"&&matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;r.classList.toggle("dark",d);r.classList.toggle("light",!d);r.dataset.accent=p.accent||"navy";r.dataset.density=p.density||"comfortable";r.dataset.radius=p.radius||"soft"}catch(e){}})();`}
         </Script>
-      </head>
-      <body className="font-sans antialiased bg-background">
         <QueryProvider>
           <AppearanceProvider>
             <TooltipProvider delay={150}>{children}</TooltipProvider>

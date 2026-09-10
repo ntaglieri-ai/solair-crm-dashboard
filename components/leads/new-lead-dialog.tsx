@@ -166,7 +166,7 @@ export function NewLeadDialog({
       "Ora creazione": stamp,
       "campaign name": "—",
       Telefono: form.telefono || "—",
-      "Mobile/Fisso": "Mobile",
+      "Mobile/Fisso": "",
       "Origine Lead": form.origine,
       "E-mail": form.email,
       Stato: "—",

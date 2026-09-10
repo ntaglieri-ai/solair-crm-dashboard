@@ -22,6 +22,9 @@ export interface LeadIntakePayload {
   lastName?: string
   cognome?: string
   telefono: string
+  mobileFisso?: string
+  mobile_fisso?: string
+  "Mobile/Fisso"?: string
   email?: string
   provincia?: string
   citta?: string
@@ -329,9 +332,22 @@ export function normalizeLeadIntakePayload(input: unknown): Partial<LeadIntakePa
       "cellulare",
       "numero_di_telefono",
     ])
+  const origine = normalizeOrigine(direct.origine ?? fields.origine, fields)
+  const mobileFisso =
+    direct.mobileFisso ??
+    direct.mobile_fisso ??
+    direct["Mobile/Fisso"] ??
+    pickField(fields, [
+      "mobile_fisso",
+      "mobile/fisso",
+      "mobile fisso",
+      "mobile_phone",
+      "cellulare",
+      "telefono_cellulare",
+    ]) ??
+    (origine === "meta_ads" ? telefono : undefined)
   const email = direct.email ?? pickField(fields, ["email", "e_mail", "indirizzo_email"])
   const note = buildMakeMetaNote(fields, direct.note)
-  const origine = normalizeOrigine(direct.origine ?? fields.origine, fields)
   const sourceCreatedAt =
     direct.sourceCreatedAt ??
     pickField(fields, [
@@ -372,6 +388,9 @@ export function normalizeLeadIntakePayload(input: unknown): Partial<LeadIntakePa
     lastName,
     cognome: direct.cognome ?? lastName,
     telefono,
+    mobileFisso,
+    mobile_fisso: direct.mobile_fisso ?? mobileFisso,
+    "Mobile/Fisso": direct["Mobile/Fisso"] ?? mobileFisso,
     email,
     provincia: direct.provincia ?? pickField(fields, ["state", "province", "provincia"]),
     citta: direct.citta ?? pickField(fields, ["city", "citta", "comune"]),
@@ -877,9 +896,13 @@ function intakeSource(payload: LeadIntakePayload): {
 function intakeReceivedDetails(payload: LeadIntakePayload) {
   const sourceCreatedAt = leadSourceCreatedAtIso(payload)
   const dataClick = leadDataClickIso(payload)
+  const mobileFisso = normalizeText(
+    payload.mobileFisso ?? payload.mobile_fisso ?? payload["Mobile/Fisso"],
+  )
   return [
     `Dati ricevuti: nome ${payload.nome}`,
     payload.telefono ? `Telefono: ${payload.telefono}` : null,
+    mobileFisso && mobileFisso !== payload.telefono ? `Mobile/Fisso: ${mobileFisso}` : null,
     payload.email ? `Email: ${payload.email}` : null,
     payload.provincia ? `Provincia: ${payload.provincia}` : null,
     payload.citta ? `Citta': ${payload.citta}` : null,
@@ -909,6 +932,7 @@ function intakeCreatedFields(params: {
   emailNorm: string | null
   socialLeadId: string | null
   payload: LeadIntakePayload
+  mobileFissoNorm: string | null
   kwp: number | null
   kwh: number | null
   tipoDocumento: LeadIntakeTipoDocumento | null
@@ -921,6 +945,7 @@ function intakeCreatedFields(params: {
     params.nameParts.nome ? "Nome" : null,
     params.nameParts.cognome ? "Cognome" : null,
     "Telefono",
+    params.mobileFissoNorm ? "Mobile/Fisso" : null,
     params.emailNorm ? "E-mail" : null,
     params.payload.provincia ? "Provincia" : null,
     params.payload.citta ? "Citta'" : null,
@@ -959,6 +984,7 @@ type ExistingLead = {
   cognome: string | null
   email: string | null
   telefono: string | null
+  mobile_fisso: string | null
   provincia: string | null
   citta: string | null
   codice_postale: string | null
@@ -988,6 +1014,7 @@ const EXISTING_LEAD_SELECT = [
   "cognome",
   "email",
   "telefono",
+  "mobile_fisso",
   "provincia",
   "citta",
   "codice_postale",
@@ -1011,7 +1038,7 @@ const EXISTING_LEAD_SELECT = [
 
 async function findExistingLeadByExactField(
   supabase: SupabaseClient,
-  column: "social_lead_id" | "telefono",
+  column: "social_lead_id" | "telefono" | "mobile_fisso",
   value: string | null,
 ) {
   if (!value) return null
@@ -1076,12 +1103,16 @@ async function findExistingLeadBySimilarPhone(
   const { data, error } = await supabase
     .from("leads")
     .select(EXISTING_LEAD_SELECT)
-    .ilike("telefono", `%${suffix}%`)
+    .or(`telefono.ilike.%${suffix}%,mobile_fisso.ilike.%${suffix}%`)
     .order("created_at", { ascending: false })
     .limit(50)
 
   if (error) throw new Error(`findExistingLead telefono simile: ${error.message}`)
-  return ((data ?? []) as unknown as ExistingLead[]).find((lead) => phonesMatch(lead.telefono, telefonoNorm)) ?? null
+  return (
+    ((data ?? []) as unknown as ExistingLead[]).find(
+      (lead) => phonesMatch(lead.telefono, telefonoNorm) || phonesMatch(lead.mobile_fisso, telefonoNorm),
+    ) ?? null
+  )
 }
 
 async function findExistingLead(
@@ -1096,6 +1127,7 @@ async function findExistingLead(
     (await findExistingLeadByExactField(supabase, "social_lead_id", socialLeadId)) ??
     (await findExistingLeadByEmail(supabase, emailNorm)) ??
     (await findExistingLeadByExactField(supabase, "telefono", telefonoNorm)) ??
+    (await findExistingLeadByExactField(supabase, "mobile_fisso", telefonoNorm)) ??
     (await findExistingLeadBySimilarPhone(supabase, telefonoNorm))
   )
 }
@@ -1209,6 +1241,13 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
 
   const now = new Date()
   const telefonoNorm = normalizePhone(payload.telefono)
+  const mobileFissoNorm =
+    normalizePhone(
+      payload.mobileFisso ??
+        payload.mobile_fisso ??
+        payload["Mobile/Fisso"] ??
+        (payload.origine === "meta_ads" ? payload.telefono : ""),
+    ) || null
   const emailNorm = payload.email ? normalizeEmail(payload.email) : null
   const kwp = normalizeNumber(payload.kwp ?? payload.potenzaKw)
   const kwh = normalizeNumber(payload.kwh ?? payload.accumuloKwh)
@@ -1274,6 +1313,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
     assignTextField(updateRow, existing, changedFields, "nome", "Nome", nameParts.nome)
     assignTextField(updateRow, existing, changedFields, "cognome", "Cognome", nameParts.cognome)
     assignTextField(updateRow, existing, changedFields, "telefono", "Telefono", telefonoNorm)
+    assignTextField(updateRow, existing, changedFields, "mobile_fisso", "Mobile/Fisso", mobileFissoNorm)
     assignTextField(updateRow, existing, changedFields, "email", "E-mail", emailNorm)
     assignTextField(updateRow, existing, changedFields, "provincia", "Provincia", payload.provincia)
     assignTextField(updateRow, existing, changedFields, "citta", "Citta'", payload.citta)
@@ -1392,6 +1432,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       nome: nameParts.nome,
       cognome: nameParts.cognome,
       telefono: telefonoNorm,
+      mobile_fisso: mobileFissoNorm,
       email: emailNorm || null,
       provincia: payload.provincia || null,
       citta: payload.citta || null,
@@ -1434,6 +1475,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
         emailNorm,
         socialLeadId,
         payload,
+        mobileFissoNorm,
         kwp,
         kwh,
         tipoDocumento,

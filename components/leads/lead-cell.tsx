@@ -19,6 +19,7 @@ import { LeadTagBadges } from "./tag-controls"
 import { useTags } from "@/lib/tag-store"
 import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
 import { MentionText } from "@/components/shared/note-mentions"
+import { leadPrimaryPhone } from "@/lib/leads/contact"
 import {
   Popover,
   PopoverContent,
@@ -284,6 +285,7 @@ export function LeadCell({
 }) {
   const { ownerNames, loading } = useTags()
   const value = lead[column]
+  const contactPhone = leadPrimaryPhone(lead)
 
   switch (column) {
     case "Badge dell'attività":
@@ -306,7 +308,7 @@ export function LeadCell({
             kind="lead"
             recordId={lead.id}
             nome={lead["Nome Lead"]}
-            telefono={lead.Telefono}
+            telefono={contactPhone}
             email={lead["E-mail"]}
           />
         </span>
@@ -317,7 +319,7 @@ export function LeadCell({
             kind="lead"
             recordId={lead.id}
             nome={lead["Nome Lead"]}
-            telefono={lead.Telefono}
+            telefono={contactPhone}
             email={lead["E-mail"]}
           />
         </span>
@@ -331,7 +333,7 @@ export function LeadCell({
             kind="lead"
             recordId={lead.id}
             nome={lead["Nome Lead"]}
-            telefono={lead.Telefono}
+            telefono={contactPhone}
             email={lead["E-mail"]}
             show={["phone", "whatsapp"]}
           />
@@ -346,7 +348,7 @@ export function LeadCell({
             kind="lead"
             recordId={lead.id}
             nome={lead["Nome Lead"]}
-            telefono={lead.Telefono}
+            telefono={contactPhone}
             email={lead["E-mail"]}
             show={["email"]}
           />

@@ -80,8 +80,6 @@ interface LeadAdvancedValueOptions {
 }
 
 const STATO_EMAIL_VALUES = ["Recapitata", "Aperta", "Non recapitata", "—"]
-const MOBILE_FISSO_VALUES = ["Mobile", "Fisso"]
-
 // Definizione dei campi del modello Lead in ordine alfabetico (italiano)
 const options = (values: readonly string[]) =>
   values.map((value) => ({ value, label: value }))
@@ -125,12 +123,7 @@ function buildFields(
       type: "enum",
       options: owners.map((item) => ({ value: item.id, label: item.nome })),
     },
-    {
-      id: "Mobile/Fisso",
-      label: "Mobile/Fisso",
-      type: "enum",
-      options: options(MOBILE_FISSO_VALUES),
-    },
+    { id: "Mobile/Fisso", label: "Mobile/Fisso", type: "text" },
     {
       id: "Modalità iscrizione annullata",
       label: "Modalità iscrizione annullata",

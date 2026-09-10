@@ -171,6 +171,7 @@ const SORT_COLUMN: Record<string, string> = {
   Provincia: "provincia",
   "E-mail": "email",
   Telefono: "telefono",
+  "Mobile/Fisso": "mobile_fisso",
   "Origine Lead": "origine_lead",
   Sede: "sede",
   "campaign name": "campaign_name",
@@ -405,7 +406,7 @@ export async function getAllLeads(filters?: {
     // non esiste. Stesso meccanismo ilike/or gia' usato in Cliente, niente
     // migration necessaria.
     const p = `%${filters.search.trim()}%`
-    query = query.or(`nome_lead.ilike.${p},email.ilike.${p},telefono.ilike.${p}`)
+    query = query.or(`nome_lead.ilike.${p},email.ilike.${p},telefono.ilike.${p},mobile_fisso.ilike.${p}`)
   }
 
   // Filtri avanzati "per campo" — applicati PRIMA di range/paginazione.
@@ -558,7 +559,7 @@ export async function getTotalCount(filters?: {
   }
   if (filters?.search?.trim()) {
     const p = `%${filters.search.trim()}%`
-    query = query.or(`nome_lead.ilike.${p},email.ilike.${p},telefono.ilike.${p}`)
+    query = query.or(`nome_lead.ilike.${p},email.ilike.${p},telefono.ilike.${p},mobile_fisso.ilike.${p}`)
   }
 
   // Stessi filtri avanzati della lista, per un conteggio coerente.

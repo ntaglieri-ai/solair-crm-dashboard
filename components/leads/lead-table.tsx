@@ -79,6 +79,7 @@ import { LeadTagBadges } from "./tag-controls"
 import { LeadRowContextMenu } from "./lead-row-context-menu"
 import { usePermissions } from "@/lib/permissions/provider"
 import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
+import { leadPrimaryPhone } from "@/lib/leads/contact"
 import { estimateColumnWidth } from "@/lib/shared/table-column-widths"
 import {
   LeadAvatar,
@@ -252,7 +253,7 @@ function LeadMobileList({
                 kind="lead"
                 recordId={lead.id}
                 nome={lead["Nome Lead"]}
-                telefono={lead.Telefono}
+                telefono={leadPrimaryPhone(lead)}
                 email={lead["E-mail"]}
               />
               <DropdownMenu>

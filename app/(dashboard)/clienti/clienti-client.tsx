@@ -1,7 +1,6 @@
 "use client"
 
 import type { Gruppo } from "@/lib/filtri/albero"
-import { useTags } from "@/lib/tag-store"
 import { PannelloFiltri } from "@/components/filtri/pannello-filtri"
 import { gruppiCampiClienti } from "@/lib/filtri/catalogo-clienti"
 import type { LayoutPagina } from "@/lib/crm-settings/layout"
@@ -146,7 +145,7 @@ export function ClientiClient({
   // perche' e' la pagina a decidere quanto spazio resta alla lista.
   const [filtriAperti, setFiltriAperti] = useState(false)
   const [pannelloFiltri, setPannelloFiltri] = useState<HTMLDivElement | null>(null)
-  const { installers, owners } = useTags()
+  const { hydrateClienteTagIds, installerNames, owners } = useClienteTags()
 
   // Campi filtrabili e loro gruppi, dal layout della scheda: un campo
   // aggiunto dalla pagina Layout diventa filtrabile da solo.
@@ -156,10 +155,10 @@ export function ClientiClient({
   const gruppiCampi = useMemo(
     () =>
       gruppiCampiClienti(layout, {
-        Installatore: installers.map((installatore) => installatore.nome),
+        Installatore: installerNames,
         "Clienti Proprietario": owners.map((owner) => owner.nome),
       }),
-    [layout, installers, owners],
+    [layout, installerNames, owners],
   )
   const [sortBy, setSortBy] = useState<ClienteColumnId | null>("Ora modifica")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
@@ -315,7 +314,6 @@ export function ClientiClient({
   })
 
   const pageRows = data?.rows ?? initialData.rows
-  const { hydrateClienteTagIds } = useClienteTags()
   useEffect(() => {
     const assignments = Object.fromEntries(
       pageRows.map((cliente) => [cliente.id, cliente.tagIds ?? []]),

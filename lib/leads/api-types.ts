@@ -31,6 +31,7 @@ export const LIST_BASE_FIELDS: LeadColumnId[] = [
   "Nome Lead",
   "E-mail",
   "Telefono",
+  "Mobile/Fisso",
   "Stato Lead",
   "Origine Lead",
   "Lead Proprietario",

@@ -10,13 +10,12 @@ const TECHNICAL_COLUMNS = [
   "id",
   "created_at",
   "updated_at",
-  // Telefono ed e-mail servono sempre, anche quando le colonne omonime non
+  // Telefono, Mobile/Fisso ed e-mail servono sempre, anche quando le colonne omonime non
   // sono visibili: le icone di contatto rapido stanno nella cella del nome e
-  // si disegnano comunque. Senza, la lista riceveva il numero solo in certe
-  // configurazioni di colonne, e server e browser potevano disegnare due
-  // cose diverse — il pulsante disabilitato da una parte, il link tel:
-  // dall'altra.
+  // si disegnano comunque. Mobile/Fisso nei dati Zoho e' un secondo numero:
+  // se Telefono e' vuoto deve poter fare da fallback.
   "telefono",
+  "mobile_fisso",
   "email",
 ]
 

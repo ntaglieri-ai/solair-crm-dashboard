@@ -1,6 +1,9 @@
 // Repository server-side del modulo Clienti — pattern identico a Lead.
 // Nessun mock: tutte le query vanno su Supabase con proiezione selettiva.
 import { createClient } from "@/lib/supabase/server"
+import { validaAlbero } from "@/lib/filtri/albero"
+import { traduciAlbero } from "@/lib/filtri/traduci"
+import { catalogoClientiCompleto, COLONNE_CLIENTI } from "@/lib/filtri/catalogo-clienti"
 import type {
   ClienteCompito,
   ClienteRecord,
@@ -203,6 +206,22 @@ export async function queryClienti(
   const ownerScope = await resolveCurrentOwnerScope("clienti")
   listQ = applyOwnerScope(listQ, "clienti_proprietario_id", ownerScope)
   countQ = applyOwnerScope(countQ, "clienti_proprietario_id", ownerScope)
+
+  // Filtro componibile: validato contro il catalogo del modulo e tradotto in
+  // una sola espressione, cosi' resta una query sola anche con gruppi
+  // annidati. Un albero non valido non filtra nulla invece di far fallire la
+  // lettura: meglio una lista intera che una pagina in errore.
+  if (params.albero?.nodi.length) {
+    const catalogo = catalogoClientiCompleto()
+    const validato = validaAlbero(params.albero, catalogo)
+    if (validato.ok) {
+      const tradotto = traduciAlbero(validato.gruppo, catalogo, COLONNE_CLIENTI)
+      if (tradotto.ok && tradotto.espressione) {
+        listQ = listQ.or(tradotto.espressione)
+        countQ = countQ.or(tradotto.espressione)
+      }
+    }
+  }
 
   if (params.search.trim()) {
     const p = `%${params.search.trim()}%`

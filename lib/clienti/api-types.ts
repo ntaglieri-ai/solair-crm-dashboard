@@ -1,3 +1,4 @@
+import type { Gruppo } from "@/lib/filtri/albero"
 import type { ClienteRecord, ClienteColumnId } from "@/lib/mock-data"
 import { DEFAULT_CLIENTE_COLUMNS } from "@/lib/mock-data"
 import {
@@ -24,6 +25,11 @@ export interface ClientiListParams {
   // gestione) ma nessun modo di filtrare la lista per tag — mancava
   // interamente da qui in giu', tendina UI disabilitata inclusa.
   tag: string[]
+  /**
+   * Filtro componibile: gruppi E/O annidati, dal costruttore o da un filtro
+   * salvato. Assente quando non se ne usa uno.
+   */
+  albero?: Gruppo | null
   /** Colonne richieste oltre alla base; [] => default visibili. "*" => tutte. */
   fields: string[]
 }
@@ -64,11 +70,27 @@ export function buildClientiSearchParams(p: ClientiListParams): URLSearchParams 
   appendFilterValues(sp, "installatore", p.installatore)
   appendFilterValues(sp, "tag", p.tag)
   if (p.fields.length > 0) sp.set("fields", p.fields.join(","))
+  // L'albero viaggia solo se ha condizioni: un gruppo vuoto allungherebbe la
+  // chiave della cache senza cambiare il risultato.
+  if (p.albero && p.albero.nodi.length > 0) sp.set("albero", JSON.stringify(p.albero))
   return sp
 }
 
 export function parseClientiSearchParams(sp: URLSearchParams): ClientiListParams {
+  // L'albero arriva dal browser: qui si legge soltanto, la verifica di campi
+  // e operatori avviene dove diventa interrogazione.
+  let albero: Gruppo | null = null
+  const alberoRaw = sp.get("albero")
+  if (alberoRaw) {
+    try {
+      albero = JSON.parse(alberoRaw) as Gruppo
+    } catch {
+      albero = null
+    }
+  }
+
   return {
+    albero,
     page: Math.max(1, Number(sp.get("page") ?? "1") || 1),
     pageSize: Math.min(200, Math.max(1, Number(sp.get("pageSize") ?? "50") || 50)),
     sortBy: (sp.get("sortBy") as ClienteColumnId | null) ?? null,

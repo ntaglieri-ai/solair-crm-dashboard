@@ -1,0 +1,704 @@
+diff --git a/app/(dashboard)/clienti/clienti-client.tsx b/app/(dashboard)/clienti/clienti-client.tsx
+index 7fa5ed3..9b44434 100644
+--- a/app/(dashboard)/clienti/clienti-client.tsx
++++ b/app/(dashboard)/clienti/clienti-client.tsx
+@@ -1,5 +1,7 @@
+ "use client"
+ 
++import type { Gruppo } from "@/lib/filtri/albero"
++import type { LayoutPagina } from "@/lib/crm-settings/layout"
+ import { useEffect, useMemo, useRef, useState } from "react"
+ import { toast } from "sonner"
+ import { ChevronLeft, ChevronRight, Plus, SlidersHorizontal, X } from "lucide-react"
+@@ -121,17 +123,23 @@ interface ClientiClientProps {
+   initialSp: string
+   initialData: ClientiListResponse
+   initialPreferences: Omit<ClienteViewPreferences, "version" | "owner"> | null
++  /** Layout della scheda: da qui il costruttore ricava campi e gruppi. */
++  layout?: LayoutPagina[]
+ }
+ 
+ export function ClientiClient({
+   initialSp,
+   initialData,
+   initialPreferences,
++  layout = [],
+ }: ClientiClientProps) {
+   const qc = useQueryClient()
+ 
+   // --- Filter / sort / pagination state ---
+   const [filters, setFilters] = useState<ClienteFilterState>(DEFAULT_CLIENTE_FILTERS)
++  // Filtro componibile: gruppi E/O annidati, dal costruttore o da un filtro
++  // salvato.
++  const [albero, setAlbero] = useState<Gruppo | null>(null)
+   const [sortBy, setSortBy] = useState<ClienteColumnId | null>("Ora modifica")
+   const [sortDir, setSortDir] = useState<SortDir>("desc")
+   const [page, setPage] = useState(1)
+@@ -269,6 +277,7 @@ export function ClientiClient({
+       proprietario: filters.proprietario,
+       installatore: filters.installatore,
+       tag: filters.tag,
++      albero,
+       // Colonne richieste al server = quelle davvero visibili in tabella:
+       // e' l'ottimizzazione query (fetch solo cio' che serve, non tutto),
+       // non va rotta passando [] a prescindere — altrimenti chi ha
+@@ -276,7 +285,7 @@ export function ClientiClient({
+       // dal server solo il set di default, con celle vuote per quelle in piu'.
+       fields: visibleCols,
+     }),
+-    [page, rowsPerPage, sortBy, sortDir, filters, visibleCols],
++    [page, rowsPerPage, sortBy, sortDir, filters, visibleCols, albero],
+   )
+ 
+   const { data, isFetching } = useClientiQuery(params, {
+@@ -605,6 +614,12 @@ export function ClientiClient({
+           />
+ 
+           <ClienteFiltersDrawer
++            layout={layout}
++            alberoApplicato={albero ?? undefined}
++            onApplicaAlbero={(gruppo) => {
++              setAlbero(gruppo.nodi.length ? gruppo : null)
++              setPage(1)
++            }}
+             filters={filters}
+             onChange={handleFilterChange}
+             onReset={handleReset}
+diff --git a/app/(dashboard)/clienti/page.tsx b/app/(dashboard)/clienti/page.tsx
+index a9532d1..542372a 100644
+--- a/app/(dashboard)/clienti/page.tsx
++++ b/app/(dashboard)/clienti/page.tsx
+@@ -14,6 +14,9 @@ import {
+ import { chiaveCampoCliente } from "@/lib/permissions/field-map"
+ import { ClientiClient } from "./clienti-client"
+ import { requirePage } from "@/lib/permissions/server"
++import { createClient } from "@/lib/supabase/server"
++import { loadLayout } from "@/lib/crm-settings/layout-server"
++import { soloVisibili } from "@/lib/crm-settings/layout"
+ 
+ // Sempre dinamica: i dati dipendono dallo stato corrente del DB.
+ export const dynamic = "force-dynamic"
+@@ -39,13 +42,21 @@ export default async function ClientiPage() {
+     fields: permittedInitialCols as unknown as string[],
+   }
+   const initialSp = buildClientiSearchParams(initialParams).toString()
+-  const initialData = await queryClienti(initialParams)
++
++  // Le due letture non dipendono l'una dall'altra: il layout serve al
++  // costruttore dei filtri, che ne ricava campi e gruppi.
++  const supabase = await createClient()
++  const [initialData, layout] = await Promise.all([
++    queryClienti(initialParams),
++    loadLayout(supabase, "clienti").then(soloVisibili),
++  ])
+ 
+   return (
+     <ClientiClient
+       initialSp={initialSp}
+       initialData={initialData}
+       initialPreferences={initialPreferences}
++      layout={layout}
+     />
+   )
+ }
+diff --git a/app/api/filtri-salvati/route.ts b/app/api/filtri-salvati/route.ts
+index 27c0f90..0120e29 100644
+--- a/app/api/filtri-salvati/route.ts
++++ b/app/api/filtri-salvati/route.ts
+@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
+ import { getCurrentPermissions } from "@/lib/permissions/server"
+ import { validaAlbero, type CampoFiltrabile } from "@/lib/filtri/albero"
+ import { catalogoDaGruppi, gruppiCampiLead } from "@/lib/filtri/catalogo-lead"
++import { catalogoClientiCompleto } from "@/lib/filtri/catalogo-clienti"
+ 
+ /**
+  * Filtri salvati, condivisi fra tutti.
+@@ -32,6 +33,7 @@ function isModulo(valore: unknown): valore is Modulo {
+  * corretto il giorno dopo.
+  */
+ function catalogoPerModulo(modulo: Modulo): CampoFiltrabile[] {
++  if (modulo === "clienti") return catalogoClientiCompleto()
+   if (modulo === "lead") {
+     const gruppi = gruppiCampiLead({
+       stati: [],
+diff --git a/components/clienti/cliente-filters-drawer.tsx b/components/clienti/cliente-filters-drawer.tsx
+index 899ec37..c988ae7 100644
+--- a/components/clienti/cliente-filters-drawer.tsx
++++ b/components/clienti/cliente-filters-drawer.tsx
+@@ -1,7 +1,8 @@
+ "use client"
+ 
+ import { useState, type ReactNode } from "react"
+-import { X } from "lucide-react"
++import { Maximize2, X } from "lucide-react"
++import { toast } from "sonner"
+ import { Button } from "@/components/ui/button"
+ import {
+   Sheet,
+@@ -9,6 +10,11 @@ import {
+   SheetHeader,
+   SheetTitle,
+ } from "@/components/ui/sheet"
++import { FiltriSalvati } from "@/components/filtri/filtri-salvati"
++import { CostruttoreFiltro } from "@/components/filtri/costruttore-filtro"
++import { GRUPPO_VUOTO, type Gruppo } from "@/lib/filtri/albero"
++import { gruppiCampiClienti } from "@/lib/filtri/catalogo-clienti"
++import type { LayoutPagina } from "@/lib/crm-settings/layout"
+ import {
+   ClienteQuickFilterFields,
+   countActiveClienteFilters,
+@@ -22,15 +28,45 @@ export function ClienteFiltersDrawer({
+   onChange,
+   onReset,
+   trigger,
++  layout,
++  onApplicaAlbero,
++  alberoApplicato,
+ }: {
+   filters: ClienteFilterState
+   onChange: (next: ClienteFilterState) => void
+   onReset: () => void
+   trigger: (ctx: { onClick: () => void; count: number }) => ReactNode
++  /**
++   * Layout della scheda Cliente: da qui vengono i campi filtrabili e i loro
++   * gruppi. Assente = costruttore e filtri salvati non disponibili.
++   */
++  layout?: LayoutPagina[]
++  onApplicaAlbero?: (gruppo: Gruppo) => void
++  alberoApplicato?: Gruppo
+ }) {
+   const [open, setOpen] = useState(false)
++  const [costruttoreAperto, setCostruttoreAperto] = useState(false)
++  const [filtroAttivo, setFiltroAttivo] = useState<string | null>(null)
++  const [versioneSalvati, setVersioneSalvati] = useState(0)
+   const count = countActiveClienteFilters(filters)
+ 
++  const disponibile = Boolean(layout?.length && onApplicaAlbero)
++
++  async function salvaFiltro(nome: string, gruppo: Gruppo) {
++    const risposta = await fetch("/api/filtri-salvati", {
++      method: "POST",
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify({ modulo: "clienti", nome, definizione: gruppo }),
++    })
++    if (!risposta.ok) {
++      const dati = (await risposta.json().catch(() => ({}))) as { error?: string }
++      toast.error(dati.error ?? "Salvataggio non riuscito")
++      return
++    }
++    toast.success(`Filtro "${nome}" salvato e condiviso`)
++    setVersioneSalvati((v) => v + 1)
++  }
++
+   return (
+     <Sheet open={open} onOpenChange={setOpen}>
+       {trigger({ onClick: () => setOpen(true), count })}
+@@ -42,20 +78,61 @@ export function ClienteFiltersDrawer({
+       >
+         <SheetHeader className="flex-row items-center justify-between border-b border-border p-4">
+           <SheetTitle>Filtra clienti per</SheetTitle>
+-          <Button
+-            variant="ghost"
+-            size="icon-sm"
+-            aria-label="Chiudi"
+-            onClick={() => setOpen(false)}
+-          >
+-            <X />
+-          </Button>
++          <div className="flex items-center gap-0.5">
++            {disponibile ? (
++              <Button
++                variant="ghost"
++                size="icon-sm"
++                aria-label="Apri il costruttore"
++                title="Costruisci un filtro con condizioni e gruppi"
++                onClick={() => setCostruttoreAperto(true)}
++              >
++                <Maximize2 />
++              </Button>
++            ) : null}
++            <Button
++              variant="ghost"
++              size="icon-sm"
++              aria-label="Chiudi"
++              onClick={() => setOpen(false)}
++            >
++              <X />
++            </Button>
++          </div>
+         </SheetHeader>
+ 
+-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
+-          <ClienteQuickFilterFields filters={filters} onChange={onChange} onReset={onReset} />
++        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
++          {disponibile ? (
++            <FiltriSalvati
++              modulo="clienti"
++              attivo={filtroAttivo}
++              ricarica={versioneSalvati}
++              onApplica={(filtro) => {
++                setFiltroAttivo(filtro.id)
++                onApplicaAlbero?.(filtro.definizione)
++              }}
++            />
++          ) : null}
++
++          <div className="p-3">
++            <ClienteQuickFilterFields filters={filters} onChange={onChange} onReset={onReset} />
++          </div>
+         </div>
+       </SheetContent>
++
++      {disponibile ? (
++        <CostruttoreFiltro
++          aperto={costruttoreAperto}
++          onChiudi={() => setCostruttoreAperto(false)}
++          gruppi={gruppiCampiClienti(layout ?? [])}
++          valoreIniziale={alberoApplicato ?? GRUPPO_VUOTO}
++          onApplica={(gruppo) => {
++            setFiltroAttivo(null)
++            onApplicaAlbero?.(gruppo)
++          }}
++          onSalva={salvaFiltro}
++        />
++      ) : null}
+     </Sheet>
+   )
+ }
+diff --git a/lib/clienti/api-types.ts b/lib/clienti/api-types.ts
+index d45cc9e..25ab029 100644
+--- a/lib/clienti/api-types.ts
++++ b/lib/clienti/api-types.ts
+@@ -1,3 +1,4 @@
++import type { Gruppo } from "@/lib/filtri/albero"
+ import type { ClienteRecord, ClienteColumnId } from "@/lib/mock-data"
+ import { DEFAULT_CLIENTE_COLUMNS } from "@/lib/mock-data"
+ import {
+@@ -24,6 +25,11 @@ export interface ClientiListParams {
+   // gestione) ma nessun modo di filtrare la lista per tag — mancava
+   // interamente da qui in giu', tendina UI disabilitata inclusa.
+   tag: string[]
++  /**
++   * Filtro componibile: gruppi E/O annidati, dal costruttore o da un filtro
++   * salvato. Assente quando non se ne usa uno.
++   */
++  albero?: Gruppo | null
+   /** Colonne richieste oltre alla base; [] => default visibili. "*" => tutte. */
+   fields: string[]
+ }
+@@ -64,11 +70,27 @@ export function buildClientiSearchParams(p: ClientiListParams): URLSearchParams
+   appendFilterValues(sp, "installatore", p.installatore)
+   appendFilterValues(sp, "tag", p.tag)
+   if (p.fields.length > 0) sp.set("fields", p.fields.join(","))
++  // L'albero viaggia solo se ha condizioni: un gruppo vuoto allungherebbe la
++  // chiave della cache senza cambiare il risultato.
++  if (p.albero && p.albero.nodi.length > 0) sp.set("albero", JSON.stringify(p.albero))
+   return sp
+ }
+ 
+ export function parseClientiSearchParams(sp: URLSearchParams): ClientiListParams {
++  // L'albero arriva dal browser: qui si legge soltanto, la verifica di campi
++  // e operatori avviene dove diventa interrogazione.
++  let albero: Gruppo | null = null
++  const alberoRaw = sp.get("albero")
++  if (alberoRaw) {
++    try {
++      albero = JSON.parse(alberoRaw) as Gruppo
++    } catch {
++      albero = null
++    }
++  }
++
+   return {
++    albero,
+     page: Math.max(1, Number(sp.get("page") ?? "1") || 1),
+     pageSize: Math.min(200, Math.max(1, Number(sp.get("pageSize") ?? "50") || 50)),
+     sortBy: (sp.get("sortBy") as ClienteColumnId | null) ?? null,
+diff --git a/lib/clienti/repository.ts b/lib/clienti/repository.ts
+index 541ef26..71c2574 100644
+--- a/lib/clienti/repository.ts
++++ b/lib/clienti/repository.ts
+@@ -1,6 +1,9 @@
+ // Repository server-side del modulo Clienti — pattern identico a Lead.
+ // Nessun mock: tutte le query vanno su Supabase con proiezione selettiva.
+ import { createClient } from "@/lib/supabase/server"
++import { validaAlbero } from "@/lib/filtri/albero"
++import { traduciAlbero } from "@/lib/filtri/traduci"
++import { catalogoClientiCompleto, COLONNE_CLIENTI } from "@/lib/filtri/catalogo-clienti"
+ import type {
+   ClienteCompito,
+   ClienteRecord,
+@@ -204,6 +207,22 @@ export async function queryClienti(
+   listQ = applyOwnerScope(listQ, "clienti_proprietario_id", ownerScope)
+   countQ = applyOwnerScope(countQ, "clienti_proprietario_id", ownerScope)
+ 
++  // Filtro componibile: validato contro il catalogo del modulo e tradotto in
++  // una sola espressione, cosi' resta una query sola anche con gruppi
++  // annidati. Un albero non valido non filtra nulla invece di far fallire la
++  // lettura: meglio una lista intera che una pagina in errore.
++  if (params.albero?.nodi.length) {
++    const catalogo = catalogoClientiCompleto()
++    const validato = validaAlbero(params.albero, catalogo)
++    if (validato.ok) {
++      const tradotto = traduciAlbero(validato.gruppo, catalogo, COLONNE_CLIENTI)
++      if (tradotto.ok && tradotto.espressione) {
++        listQ = listQ.or(tradotto.espressione)
++        countQ = countQ.or(tradotto.espressione)
++      }
++    }
++  }
++
+   if (params.search.trim()) {
+     const p = `%${params.search.trim()}%`
+     const filter = `nome_clienti.ilike.${p},email.ilike.${p},cellulare.ilike.${p}`
+diff --git a/lib/filtri/__tests__/catalogo-da-layout.test.ts b/lib/filtri/__tests__/catalogo-da-layout.test.ts
+new file mode 100644
+index 0000000..ab6e10a
+--- /dev/null
++++ b/lib/filtri/__tests__/catalogo-da-layout.test.ts
+@@ -0,0 +1,151 @@
++import { describe, expect, it } from "vitest"
++import { catalogoDaLayout, colonnePerCampo, type DescrittoreCampo } from "../catalogo-da-layout"
++import type { LayoutBlocco, LayoutCampo, LayoutPagina } from "@/lib/crm-settings/layout"
++
++function campo(fieldKey: string, extra: Partial<LayoutCampo> = {}): LayoutCampo {
++  return {
++    id: `c-${fieldKey}`,
++    origine: "system",
++    fieldKey,
++    labelOverride: null,
++    ordinamento: 0,
++    visible: true,
++    span: 1,
++    solaLettura: false,
++    formato: {},
++    formula: null,
++    ...extra,
++  }
++}
++
++function blocco(campi: LayoutCampo[]): LayoutBlocco {
++  return {
++    id: "b1",
++    blockKey: "b1",
++    label: "Blocco",
++    mostraTitolo: true,
++    colonne: 2,
++    ordinamento: 0,
++    visible: true,
++    campi,
++  }
++}
++
++function pagina(pageKey: string, label: string, campi: LayoutCampo[]): LayoutPagina {
++  return {
++    id: `p-${pageKey}`,
++    pageKey,
++    label,
++    icona: null,
++    ordinamento: 0,
++    visible: true,
++    componente: null,
++    blocchi: campi.length ? [blocco(campi)] : [],
++  }
++}
++
++const TIPI: Record<string, DescrittoreCampo> = {
++  "Nome Clienti": { tipo: "text" },
++  "Capacità Batterie": { tipo: "numeric" },
++  CER: { tipo: "boolean" },
++  "Data Sopralluogo": { tipo: "timestamp" },
++  "Modalità di Pagamento": { tipo: "text", opzioni: ["30-50-20", "50-50"] },
++}
++
++const descrittore = (chiave: string) => TIPI[chiave] ?? null
++
++describe("catalogoDaLayout", () => {
++  it("crea un gruppo per pagina, con l'etichetta della pagina", () => {
++    const gruppi = catalogoDaLayout(
++      [
++        pagina("anagrafica", "Anagrafica", [campo("Nome Clienti")]),
++        pagina("impianto", "Impianto", [campo("Capacità Batterie")]),
++      ],
++      descrittore,
++    )
++    expect(gruppi.map((g) => g.etichetta)).toEqual(["Anagrafica", "Impianto"])
++  })
++
++  it("traduce i tipi del modulo in tipi filtrabili", () => {
++    const gruppi = catalogoDaLayout(
++      [
++        pagina("x", "X", [
++          campo("Nome Clienti"),
++          campo("Capacità Batterie"),
++          campo("CER"),
++          campo("Data Sopralluogo"),
++        ]),
++      ],
++      descrittore,
++    )
++    expect(gruppi[0].campi.map((c) => c.tipo)).toEqual(["testo", "numero", "booleano", "data"])
++  })
++
++  it("un campo con valori configurati diventa un elenco", () => {
++    // Cercare scrivendo fra cinque scelte prefissate sarebbe inutilmente
++    // faticoso.
++    const gruppi = catalogoDaLayout(
++      [pagina("x", "X", [campo("Modalità di Pagamento")])],
++      descrittore,
++    )
++    expect(gruppi[0].campi[0].tipo).toBe("elenco")
++    expect(gruppi[0].campi[0].opzioni).toEqual(["30-50-20", "50-50"])
++  })
++
++  it("lascia fuori i campi calcolati", () => {
++    // Non sono colonne: il valore nasce da una formula al momento di
++    // disegnare la scheda, e il database non saprebbe filtrarci sopra.
++    const gruppi = catalogoDaLayout(
++      [
++        pagina("x", "X", [
++          campo("Nome Clienti"),
++          campo("Saldo", { formula: { expr: "{a}-{b}" } }),
++        ]),
++      ],
++      (chiave) => (chiave === "Saldo" ? { tipo: "numeric" } : descrittore(chiave)),
++    )
++    expect(gruppi[0].campi.map((c) => c.chiave)).toEqual(["Nome Clienti"])
++  })
++
++  it("lascia fuori i campi nascosti e quelli di tipo sconosciuto", () => {
++    const gruppi = catalogoDaLayout(
++      [
++        pagina("x", "X", [
++          campo("Nome Clienti", { visible: false }),
++          campo("Campo Misterioso"),
++        ]),
++      ],
++      descrittore,
++    )
++    expect(gruppi).toHaveLength(0)
++  })
++
++  it("salta le pagine senza campi filtrabili", () => {
++    // Le pagine a componente dedicato (Allegati, Calendario) non devono
++    // comparire come gruppi vuoti.
++    const gruppi = catalogoDaLayout(
++      [pagina("allegati", "Allegati", []), pagina("anagrafica", "Anagrafica", [campo("Nome Clienti")])],
++      descrittore,
++    )
++    expect(gruppi.map((g) => g.chiave)).toEqual(["anagrafica"])
++  })
++
++  it("usa l'etichetta personalizzata quando c'e'", () => {
++    const gruppi = catalogoDaLayout(
++      [pagina("x", "X", [campo("Nome Clienti", { labelOverride: "Ragione sociale" })])],
++      descrittore,
++    )
++    expect(gruppi[0].campi[0].etichetta).toBe("Ragione sociale")
++  })
++})
++
++describe("colonnePerCampo", () => {
++  it("mappa la chiave applicativa sulla colonna del database", () => {
++    const mappa = colonnePerCampo([
++      { appField: "Nome Clienti", column: "nome_clienti" },
++      { appField: "CER", column: "cer" },
++    ])
++    expect(mappa["Nome Clienti"]).toBe("nome_clienti")
++    expect(mappa["Campo assente"]).toBeUndefined()
++  })
++})
+diff --git a/lib/filtri/catalogo-clienti.ts b/lib/filtri/catalogo-clienti.ts
+new file mode 100644
+index 0000000..f69db63
+--- /dev/null
++++ b/lib/filtri/catalogo-clienti.ts
+@@ -0,0 +1,81 @@
++import { CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
++import type { LayoutPagina } from "@/lib/crm-settings/layout"
++import {
++  catalogoDaLayout,
++  colonnePerCampo,
++  type DescrittoreCampo,
++} from "./catalogo-da-layout"
++import type { CampoFiltrabile } from "./albero"
++import type { GruppoCampi } from "./catalogo-lead"
++
++/**
++ * I campi filtrabili dei Clienti.
++ *
++ * Non c'e' un elenco scritto a mano: i campi sono centosessantadue e si
++ * disallineerebbe subito. I gruppi vengono dal layout della scheda, i tipi
++ * dal catalogo campi del modulo. Aggiungendo un campo dalla pagina Layout
++ * diventa filtrabile da solo.
++ */
++
++const PER_APP_FIELD = new Map(
++  CLIENTI_RECORD_FIELDS.map((campo) => [campo.appField, campo]),
++)
++
++/** Colonne raggiungibili dal filtro: quello che non e' qui non si traduce. */
++export const COLONNE_CLIENTI = colonnePerCampo(CLIENTI_RECORD_FIELDS)
++
++/**
++ * Costruisce i gruppi filtrabili per i Clienti.
++ *
++ * `opzioniPerCampo` porta i valori configurati delle tendine: arrivano dai
++ * dati veri, cosi' un valore aggiunto in configurazione compare nel filtro
++ * senza toccare il codice.
++ */
++export function gruppiCampiClienti(
++  pagine: LayoutPagina[],
++  opzioniPerCampo: Record<string, readonly string[]> = {},
++): GruppoCampi[] {
++  const descrittore = (fieldKey: string): DescrittoreCampo | null => {
++    const campo = PER_APP_FIELD.get(fieldKey)
++    if (!campo) return null
++    const opzioni = opzioniPerCampo[fieldKey]
++    return { tipo: campo.type, opzioni: opzioni?.length ? opzioni : undefined }
++  }
++
++  const gruppi = catalogoDaLayout(pagine, descrittore)
++
++  // I contenuti collegati non sono campi della scheda: sono domande su altre
++  // tabelle, e stanno in fondo come sul Lead.
++  return [...gruppi, { chiave: "collegati", etichetta: "Contenuti collegati", campi: COLLEGATI_CLIENTI }]
++}
++
++export const COLLEGATI_CLIENTI: CampoFiltrabile[] = [
++  { chiave: "Attività", etichetta: "Attività", tipo: "collegato" },
++  { chiave: "Note", etichetta: "Note", tipo: "collegato" },
++  { chiave: "Allegati", etichetta: "Allegati", tipo: "collegato" },
++  { chiave: "E-mail inviate", etichetta: "E-mail inviate", tipo: "collegato" },
++  { chiave: "Eventi in calendario", etichetta: "Eventi in calendario", tipo: "collegato" },
++]
++
++/**
++ * Il catalogo piatto per la validazione lato server.
++ *
++ * Senza layout — quando la validazione avviene fuori da una pagina — si
++ * ricade sull'elenco completo dei campi del modulo: interessa che il campo
++ * esista e di che tipo sia, non in quale sezione della scheda compaia.
++ */
++export function catalogoClientiCompleto(): CampoFiltrabile[] {
++  const campi: CampoFiltrabile[] = CLIENTI_RECORD_FIELDS.map((campo) => ({
++    chiave: campo.appField,
++    etichetta: campo.appField,
++    tipo:
++      campo.type === "numeric"
++        ? "numero"
++        : campo.type === "boolean"
++          ? "booleano"
++          : campo.type === "timestamp"
++            ? "data"
++            : "testo",
++  }))
++  return [...campi, ...COLLEGATI_CLIENTI]
++}
+diff --git a/lib/filtri/catalogo-da-layout.ts b/lib/filtri/catalogo-da-layout.ts
+new file mode 100644
+index 0000000..3a24b03
+--- /dev/null
++++ b/lib/filtri/catalogo-da-layout.ts
+@@ -0,0 +1,101 @@
++import type { LayoutPagina } from "@/lib/crm-settings/layout"
++import type { CampoFiltrabile, TipoCampo } from "./albero"
++import type { GruppoCampi } from "./catalogo-lead"
++
++/**
++ * Il catalogo dei campi filtrabili, ricavato dal layout.
++ *
++ * Scriverlo a mano funziona finche' i campi sono trenta; sui Clienti sono
++ * centosessantadue, e un elenco separato si disallinea al primo campo nuovo
++ * — e' gia' successo con i consensi del Lead, filtrabili solo dopo che
++ * qualcuno se n'e' accorto.
++ *
++ * Il layout invece sa gia' quali campi esistono e come sono raggruppati:
++ * Anagrafica, Impianto, Pagamenti. Ricavando i gruppi da li', un campo
++ * aggiunto dalla pagina Layout diventa filtrabile senza toccare codice, e
++ * chi cerca "Capacita' Batterie" la trova sotto Impianto, dov'e' abituato a
++ * vederla.
++ */
++
++/** Il tipo di archiviazione del modulo, tradotto in tipo filtrabile. */
++export type TipoModulo = "text" | "numeric" | "boolean" | "timestamp"
++
++const TIPO_FILTRO: Record<TipoModulo, TipoCampo> = {
++  text: "testo",
++  numeric: "numero",
++  boolean: "booleano",
++  timestamp: "data",
++}
++
++export type DescrittoreCampo = {
++  /** Tipo di archiviazione, dal catalogo campi del modulo. */
++  tipo: TipoModulo
++  /**
++   * Valori ammessi, quando il campo e' una tendina. Un campo testo con
++   * valori configurati si comporta da elenco: cercarlo scrivendo sarebbe
++   * inutilmente faticoso quando le scelte sono cinque.
++   */
++  opzioni?: readonly string[]
++}
++
++/**
++ * Costruisce i gruppi filtrabili da un layout.
++ *
++ * I campi calcolati restano fuori: non sono colonne, si ottengono da una
++ * formula al momento di disegnare la scheda, e il database non saprebbe
++ * filtrarci sopra.
++ *
++ * Restano fuori anche i campi di cui il modulo non conosce il tipo: senza
++ * quello non si saprebbe quali operatori offrire.
++ */
++export function catalogoDaLayout(
++  pagine: LayoutPagina[],
++  descrittore: (fieldKey: string) => DescrittoreCampo | null,
++): GruppoCampi[] {
++  const gruppi: GruppoCampi[] = []
++
++  for (const pagina of pagine) {
++    const campi: CampoFiltrabile[] = []
++
++    for (const blocco of pagina.blocchi) {
++      for (const campo of blocco.campi) {
++        if (!campo.visible) continue
++        if (campo.formula) continue
++
++        const info = descrittore(campo.fieldKey)
++        if (!info) continue
++
++        campi.push({
++          chiave: campo.fieldKey,
++          etichetta: campo.labelOverride ?? campo.fieldKey,
++          tipo: info.opzioni?.length ? "elenco" : TIPO_FILTRO[info.tipo],
++          opzioni: info.opzioni,
++        })
++      }
++    }
++
++    // Una pagina senza campi filtrabili — quelle a componente dedicato, per
++    // esempio — non deve comparire come gruppo vuoto.
++    if (campi.length) {
++      gruppi.push({ chiave: pagina.pageKey, etichetta: pagina.label, campi })
++    }
++  }
++
++  return gruppi
++}
++
++/**
++ * La mappa campo -> colonna del database, ricavata dallo stesso catalogo.
++ *
++ * Serve alla traduzione in interrogazione, ed e' il punto in cui si decide
++ * quali colonne sono raggiungibili: un campo che non compare qui non viene
++ * tradotto, quindi non c'e' modo di far filtrare il database su una colonna
++ * arbitraria.
++ */
++export function colonnePerCampo(
++  campi: readonly { appField: string; column: string }[],
++): Record<string, string> {
++  const mappa: Record<string, string> = {}
++  for (const campo of campi) mappa[campo.appField] = campo.column
++  return mappa
++}

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getCurrentPermissions } from "@/lib/permissions/server"
 import { validaAlbero, type CampoFiltrabile } from "@/lib/filtri/albero"
 import { catalogoDaGruppi, gruppiCampiLead } from "@/lib/filtri/catalogo-lead"
+import { catalogoClientiCompleto } from "@/lib/filtri/catalogo-clienti"
 
 /**
  * Filtri salvati, condivisi fra tutti.
@@ -32,6 +33,7 @@ function isModulo(valore: unknown): valore is Modulo {
  * corretto il giorno dopo.
  */
 function catalogoPerModulo(modulo: Modulo): CampoFiltrabile[] {
+  if (modulo === "clienti") return catalogoClientiCompleto()
   if (modulo === "lead") {
     const gruppi = gruppiCampiLead({
       stati: [],

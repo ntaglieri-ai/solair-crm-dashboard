@@ -1,5 +1,7 @@
 "use client"
 
+import type { Gruppo } from "@/lib/filtri/albero"
+import type { LayoutPagina } from "@/lib/crm-settings/layout"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { ChevronLeft, ChevronRight, Plus, SlidersHorizontal, X } from "lucide-react"
@@ -121,17 +123,23 @@ interface ClientiClientProps {
   initialSp: string
   initialData: ClientiListResponse
   initialPreferences: Omit<ClienteViewPreferences, "version" | "owner"> | null
+  /** Layout della scheda: da qui il costruttore ricava campi e gruppi. */
+  layout?: LayoutPagina[]
 }
 
 export function ClientiClient({
   initialSp,
   initialData,
   initialPreferences,
+  layout = [],
 }: ClientiClientProps) {
   const qc = useQueryClient()
 
   // --- Filter / sort / pagination state ---
   const [filters, setFilters] = useState<ClienteFilterState>(DEFAULT_CLIENTE_FILTERS)
+  // Filtro componibile: gruppi E/O annidati, dal costruttore o da un filtro
+  // salvato.
+  const [albero, setAlbero] = useState<Gruppo | null>(null)
   const [sortBy, setSortBy] = useState<ClienteColumnId | null>("Ora modifica")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [page, setPage] = useState(1)
@@ -269,6 +277,7 @@ export function ClientiClient({
       proprietario: filters.proprietario,
       installatore: filters.installatore,
       tag: filters.tag,
+      albero,
       // Colonne richieste al server = quelle davvero visibili in tabella:
       // e' l'ottimizzazione query (fetch solo cio' che serve, non tutto),
       // non va rotta passando [] a prescindere — altrimenti chi ha
@@ -276,7 +285,7 @@ export function ClientiClient({
       // dal server solo il set di default, con celle vuote per quelle in piu'.
       fields: visibleCols,
     }),
-    [page, rowsPerPage, sortBy, sortDir, filters, visibleCols],
+    [page, rowsPerPage, sortBy, sortDir, filters, visibleCols, albero],
   )
 
   const { data, isFetching } = useClientiQuery(params, {
@@ -605,6 +614,12 @@ export function ClientiClient({
           />
 
           <ClienteFiltersDrawer
+            layout={layout}
+            alberoApplicato={albero ?? undefined}
+            onApplicaAlbero={(gruppo) => {
+              setAlbero(gruppo.nodi.length ? gruppo : null)
+              setPage(1)
+            }}
             filters={filters}
             onChange={handleFilterChange}
             onReset={handleReset}

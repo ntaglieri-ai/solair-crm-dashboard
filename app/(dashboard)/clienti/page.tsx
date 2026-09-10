@@ -14,6 +14,9 @@ import {
 import { chiaveCampoCliente } from "@/lib/permissions/field-map"
 import { ClientiClient } from "./clienti-client"
 import { requirePage } from "@/lib/permissions/server"
+import { createClient } from "@/lib/supabase/server"
+import { loadLayout } from "@/lib/crm-settings/layout-server"
+import { soloVisibili } from "@/lib/crm-settings/layout"
 
 // Sempre dinamica: i dati dipendono dallo stato corrente del DB.
 export const dynamic = "force-dynamic"
@@ -39,13 +42,21 @@ export default async function ClientiPage() {
     fields: permittedInitialCols as unknown as string[],
   }
   const initialSp = buildClientiSearchParams(initialParams).toString()
-  const initialData = await queryClienti(initialParams)
+
+  // Le due letture non dipendono l'una dall'altra: il layout serve al
+  // costruttore dei filtri, che ne ricava campi e gruppi.
+  const supabase = await createClient()
+  const [initialData, layout] = await Promise.all([
+    queryClienti(initialParams),
+    loadLayout(supabase, "clienti").then(soloVisibili),
+  ])
 
   return (
     <ClientiClient
       initialSp={initialSp}
       initialData={initialData}
       initialPreferences={initialPreferences}
+      layout={layout}
     />
   )
 }

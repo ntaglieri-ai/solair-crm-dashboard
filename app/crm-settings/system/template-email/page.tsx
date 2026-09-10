@@ -54,6 +54,7 @@ type Template = {
   corpo: string
   cartella: string | null
   attivo: boolean
+  zoho_id: string | null
 }
 
 const VUOTO = {
@@ -64,10 +65,21 @@ const VUOTO = {
   corpo: "",
   cartella: null,
   attivo: true,
+  zoho_id: null,
 } satisfies Template
+
+const SUFFISSO_NUOVO = " (nuovo)"
 
 function isModuloTemplate(valore: unknown): valore is ModuloTemplate {
   return typeof valore === "string" && MODULI.some((modulo) => modulo.valore === valore)
+}
+
+function nomeVisibile(nome: string): string {
+  return nome.endsWith(SUFFISSO_NUOVO) ? nome.slice(0, -SUFFISSO_NUOVO.length) : nome
+}
+
+function chiaveOriginale(modello: Pick<Template, "modulo" | "nome">): string {
+  return `${modello.modulo}:${nomeVisibile(modello.nome)}`
 }
 
 export default function TemplateEmailPage() {
@@ -79,13 +91,21 @@ export default function TemplateEmailPage() {
   const [modulo, setModulo] = useState<ModuloTemplate>("clienti")
   const [inModifica, setInModifica] = useState<Template | null>(null)
   const [inAnteprima, setInAnteprima] = useState<Template | null>(null)
-  const attivi = template.filter((modello) => modello.attivo).length
   const [conversione, setConversione] = useState(false)
   const [switchMassivo, setSwitchMassivo] = useState<"nuovi" | "vecchi" | null>(null)
 
   // Gia' convertiti si riconoscono dal suffisso: rilanciare non deve
   // produrre "(nuovo) (nuovo)".
-  const daConvertire = template.filter((modello) => !modello.nome.endsWith(" (nuovo)"))
+  const daConvertire = template.filter((modello) => !modello.nome.endsWith(SUFFISSO_NUOVO))
+  const convertiti = new Set(
+    template
+      .filter((modello) => modello.nome.endsWith(SUFFISSO_NUOVO))
+      .map((modello) => chiaveOriginale(modello)),
+  )
+  const templateVisibili = template.filter(
+    (modello) => !(modello.zoho_id && convertiti.has(chiaveOriginale(modello))),
+  )
+  const attiviVisibili = templateVisibili.filter((modello) => modello.attivo).length
 
   async function converti() {
     const conferma = window.confirm(
@@ -122,8 +142,8 @@ export default function TemplateEmailPage() {
     const usaNuovi = modo === "nuovi"
     const conferma = window.confirm(
       usaNuovi
-        ? "Attivare tutti i modelli '(nuovo)' e nascondere i vecchi importati da Zoho?\n\nVale per Clienti, Lead e Installatori. I modelli creati a mano nel CRM non vengono toccati."
-        : "Ripristinare i vecchi modelli Zoho e spegnere i rispettivi '(nuovo)'?\n\nVale per Clienti, Lead e Installatori. I modelli creati a mano nel CRM non vengono toccati.",
+        ? "Attivare tutti i modelli nuovi e nascondere i vecchi importati da Zoho?\n\nVale per Clienti, Lead e Installatori. I modelli creati a mano nel CRM non vengono toccati."
+        : "Ripristinare gli old models e spegnere i rispettivi modelli nuovi?\n\nVale per Clienti, Lead e Installatori. I modelli creati a mano nel CRM non vengono toccati.",
     )
     if (!conferma) return
 
@@ -152,7 +172,7 @@ export default function TemplateEmailPage() {
           : `${dati.attivati ?? 0} vecchi modelli ripristinati, ${dati.nascosti ?? 0} nuovi spenti.`,
       )
       if (dati.mancanti) {
-        toast.warning(`${dati.mancanti} originali non hanno ancora una versione '(nuovo)'.`)
+        toast.warning(`${dati.mancanti} originali non hanno ancora una versione nuova.`)
       }
       await carica()
     } finally {
@@ -201,7 +221,7 @@ export default function TemplateEmailPage() {
   }
 
   async function elimina(modello: Template) {
-    if (!window.confirm(`Eliminare il modello "${modello.nome}"? Sparisce per tutti.`)) return
+    if (!window.confirm(`Eliminare il modello "${nomeVisibile(modello.nome)}"? Sparisce per tutti.`)) return
     const risposta = await fetch(`/api/crm-settings/email-template?id=${modello.id}`, {
       method: "DELETE",
     })
@@ -219,7 +239,7 @@ export default function TemplateEmailPage() {
         description={
           caricamento
             ? "Testi pronti da riusare negli invii. Sono condivisi: chi ne scrive uno utile lo lascia a tutti."
-            : `${attivi} attivi su ${template.length}. Solo quelli attivi compaiono quando si scrive un'email; gli altri restano qui col loro testo.`
+            : `${attiviVisibili} attivi su ${templateVisibili.length}. Solo quelli attivi compaiono quando si scrive un'email; gli altri restano qui col loro testo.`
         }
         action={
           <div className="flex items-center gap-2">
@@ -260,7 +280,7 @@ export default function TemplateEmailPage() {
                   size="sm"
                   className="bg-card"
                   disabled={conversione || switchMassivo !== null}
-                  title="Accende tutti i modelli (nuovo) e spegne i vecchi importati da Zoho"
+                  title="Accende tutti i modelli nuovi e spegne i vecchi importati da Zoho"
                   onClick={() => void commutaMassivo("nuovi")}
                 >
                   {switchMassivo === "nuovi" ? (
@@ -275,7 +295,7 @@ export default function TemplateEmailPage() {
                   size="sm"
                   className="bg-card"
                   disabled={conversione || switchMassivo !== null}
-                  title="Riaccende i vecchi Zoho e spegne i rispettivi modelli (nuovo)"
+                  title="Riaccende gli old models e spegne i rispettivi modelli nuovi"
                   onClick={() => void commutaMassivo("vecchi")}
                 >
                   {switchMassivo === "vecchi" ? (
@@ -283,7 +303,7 @@ export default function TemplateEmailPage() {
                   ) : (
                     <RotateCcw data-icon="inline-start" />
                   )}
-                  Ripristina vecchi
+                  Old models
                 </Button>
                 <Button size="sm" onClick={() => setInModifica({ ...VUOTO, modulo })}>
                   <Plus data-icon="inline-start" />
@@ -300,21 +320,23 @@ export default function TemplateEmailPage() {
           <Loader2 className="size-4 animate-spin" />
           Caricamento dei modelli…
         </div>
-      ) : template.length === 0 ? (
+      ) : templateVisibili.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
           Nessun modello per questo modulo.
           {puoGestire ? " Creane uno per iniziare." : null}
         </div>
       ) : (
         <div className="flex flex-col gap-2">
-          {template.map((modello) => (
+          {templateVisibili.map((modello) => (
             <div
               key={modello.id}
               className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5"
             >
               <Mail className="size-4 shrink-0 text-muted-foreground" />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-foreground">{modello.nome}</p>
+                <p className="truncate text-sm font-semibold text-foreground">
+                  {nomeVisibile(modello.nome)}
+                </p>
                 <p className="truncate text-xs text-muted-foreground">{modello.oggetto}</p>
               </div>
 
@@ -332,7 +354,9 @@ export default function TemplateEmailPage() {
                 <Switch
                   checked={modello.attivo}
                   disabled={!puoGestire}
-                  aria-label={`${modello.nome}: ${modello.attivo ? "attivo" : "non attivo"}`}
+                  aria-label={`${nomeVisibile(modello.nome)}: ${
+                    modello.attivo ? "attivo" : "non attivo"
+                  }`}
                   onCheckedChange={(valore) =>
                     void salva({ ...modello, attivo: Boolean(valore) })
                   }
@@ -435,14 +459,14 @@ function DialogoAnteprima({
         <DialogHeader className="border-b border-border px-5 py-4">
           <DialogTitle>Anteprima modello</DialogTitle>
           <DialogDescription className="space-y-1">
-            <span className="block font-medium text-foreground">{modello.nome}</span>
+            <span className="block font-medium text-foreground">{nomeVisibile(modello.nome)}</span>
             <span className="block truncate">{modello.oggetto}</span>
           </DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 bg-muted/40 p-4">
           <iframe
-            title={`Anteprima ${modello.nome}`}
+            title={`Anteprima ${nomeVisibile(modello.nome)}`}
             srcDoc={documentoAnteprima(modello)}
             sandbox=""
             className="h-full w-full rounded-md border border-border bg-white shadow-sm"

@@ -54,7 +54,7 @@ export async function GET(request: Request) {
   const supabase = await createClient()
   let query = supabase
     .from("crm_email_template")
-    .select("id,nome,modulo,oggetto,corpo,cartella,attivo")
+    .select("id,nome,modulo,oggetto,corpo,cartella,attivo,zoho_id")
     .order("nome")
 
   if (isModulo(modulo)) query = query.eq("modulo", modulo)

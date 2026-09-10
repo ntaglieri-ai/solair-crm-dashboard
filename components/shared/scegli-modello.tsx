@@ -32,6 +32,12 @@ type Template = {
   cartella: string | null
 }
 
+const SUFFISSO_NUOVO = " (nuovo)"
+
+function nomeVisibile(nome: string): string {
+  return nome.endsWith(SUFFISSO_NUOVO) ? nome.slice(0, -SUFFISSO_NUOVO.length) : nome
+}
+
 export function ScegliModello({
   modulo,
   disabled,
@@ -112,7 +118,7 @@ export function ScegliModello({
               <SelectLabel>{cartella}</SelectLabel>
               {elenco.map((modello) => (
                 <SelectItem key={modello.id} value={modello.id}>
-                  {modello.nome}
+                  {nomeVisibile(modello.nome)}
                 </SelectItem>
               ))}
             </SelectGroup>

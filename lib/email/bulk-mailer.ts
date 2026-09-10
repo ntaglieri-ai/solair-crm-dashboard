@@ -10,7 +10,7 @@
 import { createAgentOutboundTransport, sleep } from "./lead-mailer"
 import { getCommunicationEmailPolicy } from "./communication-policy"
 import { type BulkPlaceholder, renderTemplate } from "./bulk-template"
-import { textToSafeHtml } from "./html"
+import { bodyToHtml, bodyToText } from "./html"
 import type { ConsentEntita } from "./consent"
 
 export type BulkRecipient = {
@@ -95,8 +95,8 @@ export async function sendBulkEmails(params: {
         replyTo: outbound.replyTo,
         to: recipient.email,
         subject,
-        text: body,
-        html: textToSafeHtml(body),
+        text: bodyToText(body),
+        html: bodyToHtml(body),
       })
       inviate++
       destinatariRaggiunti.push({ id: recipient.id, email: recipient.email, oggetto: subject, corpo: body })

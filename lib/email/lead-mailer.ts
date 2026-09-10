@@ -14,7 +14,7 @@ import {
   getCommunicationEmailPolicy,
   type CommunicationEmailPolicy,
 } from "./communication-policy"
-import { textToSafeHtml } from "./html"
+import { bodyToHtml, bodyToText } from "./html"
 
 const ARUBA_HOST = "smtps.aruba.it"
 const ARUBA_PORT = 465
@@ -204,8 +204,8 @@ export async function sendLeadEmails(params: {
         replyTo: outbound.replyTo,
         to,
         subject: params.subject,
-        text: params.body,
-        html: textToSafeHtml(params.body),
+        text: bodyToText(params.body),
+        html: bodyToHtml(params.body),
       })
       results.push({ to, ok: true, error: null })
     } catch (e) {

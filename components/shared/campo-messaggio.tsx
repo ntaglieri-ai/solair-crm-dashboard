@@ -84,7 +84,10 @@ export function CampoMessaggio({
     const doc = finestra?.document
     if (!doc) return
 
-    doc.designMode = disabled ? "off" : "on"
+    // Modificabile il CORPO, non l'intero documento: con designMode attivo
+    // un "seleziona tutto" cancellava anche la testa del documento, fogli di
+    // stile compresi, e del modello restava il solo testo digitato.
+    if (doc.body) doc.body.contentEditable = disabled ? "false" : "true"
 
     const leggi = () => {
       const aggiornato = "<!doctype html>" + doc.documentElement.outerHTML

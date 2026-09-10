@@ -1,0 +1,185 @@
+diff --git a/components/shared/campo-messaggio.tsx b/components/shared/campo-messaggio.tsx
+index e338a92..4dce6d5 100644
+--- a/components/shared/campo-messaggio.tsx
++++ b/components/shared/campo-messaggio.tsx
+@@ -84,7 +84,10 @@ export function CampoMessaggio({
+     const doc = finestra?.document
+     if (!doc) return
+ 
+-    doc.designMode = disabled ? "off" : "on"
++    // Modificabile il CORPO, non l'intero documento: con designMode attivo
++    // un "seleziona tutto" cancellava anche la testa del documento, fogli di
++    // stile compresi, e del modello restava il solo testo digitato.
++    if (doc.body) doc.body.contentEditable = disabled ? "false" : "true"
+ 
+     const leggi = () => {
+       const aggiornato = "<!doctype html>" + doc.documentElement.outerHTML
+diff --git a/lib/email/__tests__/html.test.ts b/lib/email/__tests__/html.test.ts
+new file mode 100644
+index 0000000..43f385d
+--- /dev/null
++++ b/lib/email/__tests__/html.test.ts
+@@ -0,0 +1,60 @@
++import { describe, expect, it } from "vitest"
++import { bodyToHtml, bodyToText, isHtmlBody, textToSafeHtml } from "../html"
++
++/**
++ * Come viene spedito il corpo di un'email.
++ *
++ * I modelli importati da Zoho sono pagine HTML complete; un messaggio
++ * digitato nella finestra di invio e' testo semplice. Confonderli si vede
++ * subito nella casella del destinatario: un modello trattato come testo
++ * arriva con i tag in chiaro.
++ */
++
++describe("isHtmlBody", () => {
++  it("riconosce un modello HTML", () => {
++    expect(isHtmlBody("<html><body><p>Ciao</p></body></html>")).toBe(true)
++    expect(isHtmlBody('<table class="x"><tr><td>Ciao</td></tr></table>')).toBe(true)
++  })
++
++  it("non scambia per HTML un messaggio scritto a mano", () => {
++    expect(isHtmlBody("Gentile cliente,\n\nla informiamo che…")).toBe(false)
++    expect(isHtmlBody("Il preventivo è < 1000 euro")).toBe(false)
++  })
++})
++
++describe("bodyToHtml", () => {
++  it("spedisce un modello HTML così com'è", () => {
++    const modello = "<html><body><p>Gentile {nome}</p></body></html>"
++    expect(bodyToHtml(modello)).toBe(modello)
++  })
++
++  it("converte il testo scritto a mano mandandolo a capo", () => {
++    expect(bodyToHtml("Ciao\nMario")).toBe("Ciao<br/>Mario")
++  })
++
++  it("neutralizza i simboli di un testo scritto a mano", () => {
++    expect(bodyToHtml("Costo < 1000")).toBe(textToSafeHtml("Costo < 1000"))
++  })
++})
++
++describe("bodyToText", () => {
++  it("lascia intatto un messaggio scritto a mano", () => {
++    expect(bodyToText("Gentile cliente,\n\ngrazie.")).toBe("Gentile cliente,\n\ngrazie.")
++  })
++
++  it("ricava un testo leggibile da un modello HTML", () => {
++    const html =
++      "<html><head><style>.x{color:red}</style></head><body><p>Ciao</p><p>Mario</p></body></html>"
++    expect(bodyToText(html)).toBe("Ciao\nMario")
++  })
++
++  it("toglie fogli di stile e script dal testo", () => {
++    const html =
++      "<body><style>p{margin:0}</style><script>alert(1)</script><p>Solo questo</p></body>"
++    expect(bodyToText(html)).toBe("Solo questo")
++  })
++
++  it("traduce le entità più comuni", () => {
++    expect(bodyToText("<p>Costo &lt; 1000 &amp; oltre</p>")).toBe("Costo < 1000 & oltre")
++  })
++})
+diff --git a/lib/email/bulk-mailer.ts b/lib/email/bulk-mailer.ts
+index c222807..a7c52bd 100644
+--- a/lib/email/bulk-mailer.ts
++++ b/lib/email/bulk-mailer.ts
+@@ -10,7 +10,7 @@
+ import { createAgentOutboundTransport, sleep } from "./lead-mailer"
+ import { getCommunicationEmailPolicy } from "./communication-policy"
+ import { type BulkPlaceholder, renderTemplate } from "./bulk-template"
+-import { textToSafeHtml } from "./html"
++import { bodyToHtml, bodyToText } from "./html"
+ import type { ConsentEntita } from "./consent"
+ 
+ export type BulkRecipient = {
+@@ -95,8 +95,8 @@ export async function sendBulkEmails(params: {
+         replyTo: outbound.replyTo,
+         to: recipient.email,
+         subject,
+-        text: body,
+-        html: textToSafeHtml(body),
++        text: bodyToText(body),
++        html: bodyToHtml(body),
+       })
+       inviate++
+       destinatariRaggiunti.push({ id: recipient.id, email: recipient.email, oggetto: subject, corpo: body })
+diff --git a/lib/email/html.ts b/lib/email/html.ts
+index 4bc2211..8c2ef5e 100644
+--- a/lib/email/html.ts
++++ b/lib/email/html.ts
+@@ -10,3 +10,50 @@ export function escapeHtml(value: string): string {
+ export function textToSafeHtml(value: string): string {
+   return escapeHtml(value).replace(/\r\n|\r|\n/g, "<br/>")
+ }
++
++/**
++ * Riconosce un corpo gia' in HTML da uno scritto a mano.
++ *
++ * I modelli importati da Zoho sono pagine HTML complete; un messaggio
++ * digitato nella finestra di invio e' testo semplice. Vanno spediti in modo
++ * diverso, e confonderli si vede subito: un modello passato per
++ * textToSafeHtml arriva al destinatario con i tag in chiaro.
++ */
++export function isHtmlBody(value: string): boolean {
++  return /<\s*(html|body|table|div|p|br|span|img)\b/i.test(value)
++}
++
++/**
++ * La parte HTML di un'email, qualunque cosa sia stata scritta.
++ *
++ * Un corpo gia' HTML si spedisce com'e'; uno scritto a mano viene
++ * neutralizzato e mandato a capo, cosi' un messaggio che contiene "<" non
++ * diventa markup per sbaglio.
++ */
++export function bodyToHtml(value: string): string {
++  return isHtmlBody(value) ? value : textToSafeHtml(value)
++}
++
++/**
++ * La parte testuale di un'email.
++ *
++ * I programmi di posta che non mostrano HTML leggono questa. Da un corpo
++ * HTML si ricava togliendo i tag: meglio un testo semplificato che una
++ * pagina di markup illeggibile.
++ */
++export function bodyToText(value: string): string {
++  if (!isHtmlBody(value)) return value
++  return value
++    .replace(/<head\b[\s\S]*?<\/head>/gi, "")
++    .replace(/<style\b[\s\S]*?<\/style>/gi, "")
++    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
++    .replace(/<br\s*\/?>/gi, "\n")
++    .replace(/<\/(p|div|tr|h[1-6])>/gi, "\n")
++    .replace(/<[^>]+>/g, "")
++    .replace(/&nbsp;/gi, " ")
++    .replace(/&amp;/gi, "&")
++    .replace(/&lt;/gi, "<")
++    .replace(/&gt;/gi, ">")
++    .replace(/\n{3,}/g, "\n\n")
++    .trim()
++}
+diff --git a/lib/email/lead-mailer.ts b/lib/email/lead-mailer.ts
+index d0ff5cc..ba3df1a 100644
+--- a/lib/email/lead-mailer.ts
++++ b/lib/email/lead-mailer.ts
+@@ -14,7 +14,7 @@ import {
+   getCommunicationEmailPolicy,
+   type CommunicationEmailPolicy,
+ } from "./communication-policy"
+-import { textToSafeHtml } from "./html"
++import { bodyToHtml, bodyToText } from "./html"
+ 
+ const ARUBA_HOST = "smtps.aruba.it"
+ const ARUBA_PORT = 465
+@@ -204,8 +204,8 @@ export async function sendLeadEmails(params: {
+         replyTo: outbound.replyTo,
+         to,
+         subject: params.subject,
+-        text: params.body,
+-        html: textToSafeHtml(params.body),
++        text: bodyToText(params.body),
++        html: bodyToHtml(params.body),
+       })
+       results.push({ to, ok: true, error: null })
+     } catch (e) {

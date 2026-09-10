@@ -12,6 +12,7 @@ import { resolveOwnerScope } from "@/lib/permissions/data-scope"
 import type { PermissionSnapshot } from "@/lib/permissions/types"
 import type { BulkRecipient } from "./bulk-mailer"
 import type { BulkPlaceholder } from "./bulk-template"
+import { CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
 import { EMAIL_CONSENT_COLUMN, type ConsentEntita, type DestinatarioConsenziente } from "./consent"
 
 export const BULK_RECORD_TIPI = ["lead", "cliente", "installatore"] as const
@@ -42,7 +43,40 @@ type TargetConfig = {
   toRecipient: (row: Record<string, unknown>) => {
     email: string
     placeholders: Record<BulkPlaceholder, string>
+    /**
+     * Valori dei campi del record, per i segnaposto che non sono fra i
+     * quattro di base ({Nr. Moduli}, {Capacità Batterie}...). I modelli
+     * importati da Zoho ne usano parecchi: senza, arriverebbero al cliente
+     * con i segnaposto in chiaro.
+     */
+    campi?: Record<string, string | number | boolean | null>
   }
+}
+
+/**
+ * Le colonne del record tradotte nei nomi dei campi usati nei modelli.
+ *
+ * I modelli scrivono {Nr. Moduli}, il database ha `nr_moduli`: la
+ * corrispondenza e' la stessa che il CRM usa ovunque.
+ */
+function campiDaRiga(
+  row: Record<string, unknown>,
+  mappa: readonly { column: string; appField: string }[],
+): Record<string, string | number | boolean | null> {
+  const campi: Record<string, string | number | boolean | null> = {}
+  for (const campo of mappa) {
+    const valore = row[campo.column]
+    if (valore === undefined) continue
+    if (
+      valore === null ||
+      typeof valore === "string" ||
+      typeof valore === "number" ||
+      typeof valore === "boolean"
+    ) {
+      campi[campo.appField] = valore
+    }
+  }
+  return campi
 }
 
 function text(value: unknown): string {
@@ -72,7 +106,11 @@ const TARGETS: Record<BulkRecordTipo, TargetConfig> = {
   cliente: {
     permissionModule: "clienti",
     table: "clienti",
-    columns: `id,nome_clienti,nome,cognome,email,cellulare,clienti_proprietario_id,${EMAIL_CONSENT_COLUMN}`,
+    // Tutte le colonne, non solo quelle del destinatario: i modelli
+    // importati da Zoho usano campi tecnici e amministrativi (moduli,
+    // batterie, date di installazione). Su un invio da cento destinatari il
+    // costo e' trascurabile.
+    columns: "*",
     ownerColumn: "clienti_proprietario_id",
     consentEntita: "cliente",
     label: { singolare: "cliente", plurale: "clienti" },
@@ -86,6 +124,7 @@ const TARGETS: Record<BulkRecordTipo, TargetConfig> = {
         // `telefono`): il placeholder resta {telefono} per uniformita' UI.
         telefono: text(row.cellulare),
       },
+      campi: campiDaRiga(row, CLIENTI_RECORD_FIELDS),
     }),
   },
   installatore: {
@@ -191,6 +230,7 @@ export async function resolveBulkRecipients(params: {
       id: String(row.id),
       email: mapped.email,
       placeholders: mapped.placeholders,
+      campi: mapped.campi,
     })
   }
 

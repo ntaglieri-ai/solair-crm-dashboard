@@ -78,7 +78,12 @@ export async function POST(request: Request) {
       inviatiSenzaConsenso: 0,
       // Solo il primo: serve a rendere l'anteprima, non a esporre l'intera
       // rubrica selezionata al client.
-      esempio: primo ? { email: primo.email, placeholders: primo.placeholders } : null,
+      // I campi viaggiano con l'esempio: l'anteprima deve mostrare il testo
+      // esattamente come lo ricevera' il destinatario, segnaposto sui campi
+      // compresi.
+      esempio: primo
+        ? { email: primo.email, placeholders: primo.placeholders, campi: primo.campi }
+        : null,
     },
     { headers: { "Cache-Control": "no-store" } },
   )

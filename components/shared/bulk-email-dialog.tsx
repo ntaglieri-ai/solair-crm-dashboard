@@ -49,7 +49,12 @@ type PreviewResponse = {
   esclusiSenzaConsenso: number
   consensoEnforcementAttivo: boolean
   inviatiSenzaConsenso: number
-  esempio: { email: string; placeholders: Record<string, string> } | null
+  esempio: {
+    email: string
+    placeholders: Record<string, string>
+    /** Valori dei campi del record, per i segnaposto oltre ai quattro base. */
+    campi?: Record<string, string | number | boolean | null>
+  } | null
 }
 
 type JobStatus = {
@@ -181,8 +186,15 @@ export function BulkEmailDialog({
   const esclusiEmail = preview?.esclusiSenzaEmail ?? 0
   const esempio = preview?.esempio ?? null
 
-  const oggettoPreview = esempio ? renderTemplate(oggetto, esempio.placeholders) : oggetto
-  const corpoPreview = esempio ? renderTemplate(template, esempio.placeholders) : template
+  // L'anteprima usa gli stessi valori dell'invio, campi del record compresi:
+  // vedere il testo con i segnaposto gia' sostituiti e' l'unico modo di
+  // accorgersi di uno sbagliato prima di spedirlo a cento persone.
+  const oggettoPreview = esempio
+    ? renderTemplate(oggetto, esempio.placeholders, esempio.campi)
+    : oggetto
+  const corpoPreview = esempio
+    ? renderTemplate(template, esempio.placeholders, esempio.campi)
+    : template
 
   const canSend =
     !submitting &&

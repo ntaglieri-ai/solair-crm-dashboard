@@ -18,6 +18,12 @@ export type BulkRecipient = {
   id: string
   email: string
   placeholders: Record<BulkPlaceholder, string>
+  /**
+   * Valori dei campi del record, per i segnaposto oltre ai quattro di base.
+   * Assente sui moduli che non li espongono: quei segnaposto restano allora
+   * visibili nel testo invece di diventare vuoti.
+   */
+  campi?: Record<string, string | number | boolean | null>
 }
 
 export type BulkProgress = {
@@ -80,8 +86,8 @@ export async function sendBulkEmails(params: {
   const destinatariRaggiunti: Array<{ id: string; email: string; oggetto: string; corpo: string }> = []
 
   for (const recipient of params.recipients) {
-    const body = renderTemplate(params.template, recipient.placeholders)
-    const subject = renderTemplate(params.subject, recipient.placeholders)
+    const body = renderTemplate(params.template, recipient.placeholders, recipient.campi)
+    const subject = renderTemplate(params.subject, recipient.placeholders, recipient.campi)
 
     try {
       await outbound.transport.sendMail({

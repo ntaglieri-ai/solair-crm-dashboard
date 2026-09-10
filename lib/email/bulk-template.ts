@@ -28,10 +28,49 @@ export type BulkPlaceholder = (typeof BULK_PLACEHOLDERS)[number]
 export function renderTemplate(
   template: string,
   placeholders: Record<string, string>,
+  /**
+   * Valori dei campi del record, per i segnaposto che non sono fra i quattro
+   * di base: {Nr. Moduli}, {Capacità Batterie}, {Data installazione ultimata}.
+   *
+   * I modelli importati da Zoho ne usano parecchi — quello di Assistenza da
+   * solo diciotto — e senza questi arriverebbero al cliente con i segnaposto
+   * in chiaro.
+   */
+  campi?: Record<string, string | number | boolean | null | undefined>,
 ): string {
-  return template.replace(/\{(\w+)\}/g, (match, key: string) => {
-    const normalized = key.toLowerCase()
-    if (!(BULK_PLACEHOLDERS as readonly string[]).includes(normalized)) return match
-    return placeholders[normalized] ?? ""
+  // Il contenuto e' HTML e puo' contenere graffe che non sono segnaposto
+  // (regole CSS, per esempio). Non e' un problema: un token che non
+  // corrisponde a nulla resta intatto invece di diventare vuoto.
+  return template.replace(/\{([^{}]+)\}/g, (match, key: string) => {
+    const normalized = key.trim().toLowerCase()
+    if ((BULK_PLACEHOLDERS as readonly string[]).includes(normalized)) {
+      return placeholders[normalized] ?? ""
+    }
+
+    if (campi) {
+      const chiave = key.trim()
+      // Prima la corrispondenza esatta, poi quella senza distinzione di
+      // maiuscole: i nomi dei campi vengono scritti a mano nei modelli, e
+      // "cod- moduli" deve trovare "COD- MODULI".
+      if (chiave in campi) return formattaValoreCampo(campi[chiave])
+      const trovata = Object.keys(campi).find(
+        (nome) => nome.toLowerCase() === chiave.toLowerCase(),
+      )
+      if (trovata) return formattaValoreCampo(campi[trovata])
+    }
+
+    return match
   })
+}
+
+/**
+ * Il valore di un campo dentro un'email.
+ *
+ * Un campo non compilato diventa stringa vuota e non "null" o "undefined",
+ * che finirebbero nel testo inviato al cliente.
+ */
+function formattaValoreCampo(valore: string | number | boolean | null | undefined): string {
+  if (valore === null || valore === undefined) return ""
+  if (typeof valore === "boolean") return valore ? "Sì" : "No"
+  return String(valore)
 }

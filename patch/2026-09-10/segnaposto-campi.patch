@@ -1,0 +1,385 @@
+diff --git a/app/api/email-massa/preview/route.ts b/app/api/email-massa/preview/route.ts
+index cb4d984..4f2ee0a 100644
+--- a/app/api/email-massa/preview/route.ts
++++ b/app/api/email-massa/preview/route.ts
+@@ -78,7 +78,12 @@ export async function POST(request: Request) {
+       inviatiSenzaConsenso: 0,
+       // Solo il primo: serve a rendere l'anteprima, non a esporre l'intera
+       // rubrica selezionata al client.
+-      esempio: primo ? { email: primo.email, placeholders: primo.placeholders } : null,
++      // I campi viaggiano con l'esempio: l'anteprima deve mostrare il testo
++      // esattamente come lo ricevera' il destinatario, segnaposto sui campi
++      // compresi.
++      esempio: primo
++        ? { email: primo.email, placeholders: primo.placeholders, campi: primo.campi }
++        : null,
+     },
+     { headers: { "Cache-Control": "no-store" } },
+   )
+diff --git a/components/shared/bulk-email-dialog.tsx b/components/shared/bulk-email-dialog.tsx
+index 5247508..feac74c 100644
+--- a/components/shared/bulk-email-dialog.tsx
++++ b/components/shared/bulk-email-dialog.tsx
+@@ -49,7 +49,12 @@ type PreviewResponse = {
+   esclusiSenzaConsenso: number
+   consensoEnforcementAttivo: boolean
+   inviatiSenzaConsenso: number
+-  esempio: { email: string; placeholders: Record<string, string> } | null
++  esempio: {
++    email: string
++    placeholders: Record<string, string>
++    /** Valori dei campi del record, per i segnaposto oltre ai quattro base. */
++    campi?: Record<string, string | number | boolean | null>
++  } | null
+ }
+ 
+ type JobStatus = {
+@@ -181,8 +186,15 @@ export function BulkEmailDialog({
+   const esclusiEmail = preview?.esclusiSenzaEmail ?? 0
+   const esempio = preview?.esempio ?? null
+ 
+-  const oggettoPreview = esempio ? renderTemplate(oggetto, esempio.placeholders) : oggetto
+-  const corpoPreview = esempio ? renderTemplate(template, esempio.placeholders) : template
++  // L'anteprima usa gli stessi valori dell'invio, campi del record compresi:
++  // vedere il testo con i segnaposto gia' sostituiti e' l'unico modo di
++  // accorgersi di uno sbagliato prima di spedirlo a cento persone.
++  const oggettoPreview = esempio
++    ? renderTemplate(oggetto, esempio.placeholders, esempio.campi)
++    : oggetto
++  const corpoPreview = esempio
++    ? renderTemplate(template, esempio.placeholders, esempio.campi)
++    : template
+ 
+   const canSend =
+     !submitting &&
+diff --git a/lib/email/__tests__/bulk-template.test.ts b/lib/email/__tests__/bulk-template.test.ts
+new file mode 100644
+index 0000000..ef050f5
+--- /dev/null
++++ b/lib/email/__tests__/bulk-template.test.ts
+@@ -0,0 +1,73 @@
++import { describe, expect, it } from "vitest"
++import { renderTemplate } from "../bulk-template"
++
++/**
++ * I segnaposto dei modelli e-mail.
++ *
++ * I quattro di base ({nome}, {cognome}, {email}, {telefono}) esistono da
++ * sempre. Quelli sui campi del record sono arrivati con i modelli importati
++ * da Zoho: il modello di Assistenza da solo ne usa diciotto, e senza
++ * arriverebbe al cliente con i segnaposto in chiaro.
++ */
++
++const BASE = {
++  nome: "Mario",
++  cognome: "Rossi",
++  email: "mario@example.test",
++  telefono: "+393401234567",
++}
++
++describe("renderTemplate", () => {
++  it("sostituisce i segnaposto di base", () => {
++    expect(renderTemplate("Gentile {nome} {cognome},", BASE)).toBe("Gentile Mario Rossi,")
++  })
++
++  it("non distingue maiuscole nei segnaposto di base", () => {
++    expect(renderTemplate("Ciao {Nome}", BASE)).toBe("Ciao Mario")
++  })
++
++  it("lascia intatto un segnaposto che non conosce", () => {
++    // Meglio un token visibile da correggere che un buco silenzioso nel
++    // testo inviato al cliente.
++    expect(renderTemplate("Ciao {sconosciuto}", BASE)).toBe("Ciao {sconosciuto}")
++  })
++
++  it("sostituisce i campi del record", () => {
++    const campi = { "Nr. Moduli": 27, "Capacità Batterie": 23 }
++    expect(renderTemplate("Impianto da {Nr. Moduli} moduli", BASE, campi)).toBe(
++      "Impianto da 27 moduli",
++    )
++  })
++
++  it("trova il campo anche con maiuscole diverse", () => {
++    // I nomi dei campi vengono scritti a mano nei modelli.
++    const campi = { "COD- MODULI": "ABC123" }
++    expect(renderTemplate("Codice {cod- moduli}", BASE, campi)).toBe("Codice ABC123")
++  })
++
++  it("un campo vuoto diventa stringa vuota, non 'null'", () => {
++    const campi = { "Data installazione ultimata": null }
++    expect(renderTemplate("Il {Data installazione ultimata} lavori", BASE, campi)).toBe(
++      "Il  lavori",
++    )
++  })
++
++  it("mostra i booleani in italiano", () => {
++    expect(renderTemplate("Wallbox: {Wallbox}", BASE, { Wallbox: true })).toBe("Wallbox: Sì")
++  })
++
++  it("non rovina le regole CSS dentro il corpo HTML", () => {
++    // I modelli importati sono HTML completo, con fogli di stile: le graffe
++    // che non corrispondono a un campo devono restare com'erano.
++    const html = "<style>.riga { margin: 0; padding: 4px }</style><p>Ciao {nome}</p>"
++    expect(renderTemplate(html, BASE)).toBe(
++      "<style>.riga { margin: 0; padding: 4px }</style><p>Ciao Mario</p>",
++    )
++  })
++
++  it("i campi non prevalgono sui segnaposto di base", () => {
++    // Se un record avesse un campo chiamato "nome", il segnaposto di base
++    // deve continuare a valere: e' quello che i modelli usano da sempre.
++    expect(renderTemplate("Ciao {nome}", BASE, { nome: "Sbagliato" })).toBe("Ciao Mario")
++  })
++})
+diff --git a/lib/email/bulk-mailer.ts b/lib/email/bulk-mailer.ts
+index 285788f..c222807 100644
+--- a/lib/email/bulk-mailer.ts
++++ b/lib/email/bulk-mailer.ts
+@@ -18,6 +18,12 @@ export type BulkRecipient = {
+   id: string
+   email: string
+   placeholders: Record<BulkPlaceholder, string>
++  /**
++   * Valori dei campi del record, per i segnaposto oltre ai quattro di base.
++   * Assente sui moduli che non li espongono: quei segnaposto restano allora
++   * visibili nel testo invece di diventare vuoti.
++   */
++  campi?: Record<string, string | number | boolean | null>
+ }
+ 
+ export type BulkProgress = {
+@@ -80,8 +86,8 @@ export async function sendBulkEmails(params: {
+   const destinatariRaggiunti: Array<{ id: string; email: string; oggetto: string; corpo: string }> = []
+ 
+   for (const recipient of params.recipients) {
+-    const body = renderTemplate(params.template, recipient.placeholders)
+-    const subject = renderTemplate(params.subject, recipient.placeholders)
++    const body = renderTemplate(params.template, recipient.placeholders, recipient.campi)
++    const subject = renderTemplate(params.subject, recipient.placeholders, recipient.campi)
+ 
+     try {
+       await outbound.transport.sendMail({
+diff --git a/lib/email/bulk-targets.ts b/lib/email/bulk-targets.ts
+index 0b53fef..986b277 100644
+--- a/lib/email/bulk-targets.ts
++++ b/lib/email/bulk-targets.ts
+@@ -12,6 +12,7 @@ import { resolveOwnerScope } from "@/lib/permissions/data-scope"
+ import type { PermissionSnapshot } from "@/lib/permissions/types"
+ import type { BulkRecipient } from "./bulk-mailer"
+ import type { BulkPlaceholder } from "./bulk-template"
++import { CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
+ import { EMAIL_CONSENT_COLUMN, type ConsentEntita, type DestinatarioConsenziente } from "./consent"
+ 
+ export const BULK_RECORD_TIPI = ["lead", "cliente", "installatore"] as const
+@@ -42,9 +43,42 @@ type TargetConfig = {
+   toRecipient: (row: Record<string, unknown>) => {
+     email: string
+     placeholders: Record<BulkPlaceholder, string>
++    /**
++     * Valori dei campi del record, per i segnaposto che non sono fra i
++     * quattro di base ({Nr. Moduli}, {Capacità Batterie}...). I modelli
++     * importati da Zoho ne usano parecchi: senza, arriverebbero al cliente
++     * con i segnaposto in chiaro.
++     */
++    campi?: Record<string, string | number | boolean | null>
+   }
+ }
+ 
++/**
++ * Le colonne del record tradotte nei nomi dei campi usati nei modelli.
++ *
++ * I modelli scrivono {Nr. Moduli}, il database ha `nr_moduli`: la
++ * corrispondenza e' la stessa che il CRM usa ovunque.
++ */
++function campiDaRiga(
++  row: Record<string, unknown>,
++  mappa: readonly { column: string; appField: string }[],
++): Record<string, string | number | boolean | null> {
++  const campi: Record<string, string | number | boolean | null> = {}
++  for (const campo of mappa) {
++    const valore = row[campo.column]
++    if (valore === undefined) continue
++    if (
++      valore === null ||
++      typeof valore === "string" ||
++      typeof valore === "number" ||
++      typeof valore === "boolean"
++    ) {
++      campi[campo.appField] = valore
++    }
++  }
++  return campi
++}
++
+ function text(value: unknown): string {
+   return typeof value === "string" ? value.trim() : ""
+ }
+@@ -72,7 +106,11 @@ const TARGETS: Record<BulkRecordTipo, TargetConfig> = {
+   cliente: {
+     permissionModule: "clienti",
+     table: "clienti",
+-    columns: `id,nome_clienti,nome,cognome,email,cellulare,clienti_proprietario_id,${EMAIL_CONSENT_COLUMN}`,
++    // Tutte le colonne, non solo quelle del destinatario: i modelli
++    // importati da Zoho usano campi tecnici e amministrativi (moduli,
++    // batterie, date di installazione). Su un invio da cento destinatari il
++    // costo e' trascurabile.
++    columns: "*",
+     ownerColumn: "clienti_proprietario_id",
+     consentEntita: "cliente",
+     label: { singolare: "cliente", plurale: "clienti" },
+@@ -86,6 +124,7 @@ const TARGETS: Record<BulkRecordTipo, TargetConfig> = {
+         // `telefono`): il placeholder resta {telefono} per uniformita' UI.
+         telefono: text(row.cellulare),
+       },
++      campi: campiDaRiga(row, CLIENTI_RECORD_FIELDS),
+     }),
+   },
+   installatore: {
+@@ -191,6 +230,7 @@ export async function resolveBulkRecipients(params: {
+       id: String(row.id),
+       email: mapped.email,
+       placeholders: mapped.placeholders,
++      campi: mapped.campi,
+     })
+   }
+ 
+diff --git a/lib/email/bulk-template.ts b/lib/email/bulk-template.ts
+index 0e49ff3..36cf3ee 100644
+--- a/lib/email/bulk-template.ts
++++ b/lib/email/bulk-template.ts
+@@ -28,10 +28,49 @@ export type BulkPlaceholder = (typeof BULK_PLACEHOLDERS)[number]
+ export function renderTemplate(
+   template: string,
+   placeholders: Record<string, string>,
++  /**
++   * Valori dei campi del record, per i segnaposto che non sono fra i quattro
++   * di base: {Nr. Moduli}, {Capacità Batterie}, {Data installazione ultimata}.
++   *
++   * I modelli importati da Zoho ne usano parecchi — quello di Assistenza da
++   * solo diciotto — e senza questi arriverebbero al cliente con i segnaposto
++   * in chiaro.
++   */
++  campi?: Record<string, string | number | boolean | null | undefined>,
+ ): string {
+-  return template.replace(/\{(\w+)\}/g, (match, key: string) => {
+-    const normalized = key.toLowerCase()
+-    if (!(BULK_PLACEHOLDERS as readonly string[]).includes(normalized)) return match
+-    return placeholders[normalized] ?? ""
++  // Il contenuto e' HTML e puo' contenere graffe che non sono segnaposto
++  // (regole CSS, per esempio). Non e' un problema: un token che non
++  // corrisponde a nulla resta intatto invece di diventare vuoto.
++  return template.replace(/\{([^{}]+)\}/g, (match, key: string) => {
++    const normalized = key.trim().toLowerCase()
++    if ((BULK_PLACEHOLDERS as readonly string[]).includes(normalized)) {
++      return placeholders[normalized] ?? ""
++    }
++
++    if (campi) {
++      const chiave = key.trim()
++      // Prima la corrispondenza esatta, poi quella senza distinzione di
++      // maiuscole: i nomi dei campi vengono scritti a mano nei modelli, e
++      // "cod- moduli" deve trovare "COD- MODULI".
++      if (chiave in campi) return formattaValoreCampo(campi[chiave])
++      const trovata = Object.keys(campi).find(
++        (nome) => nome.toLowerCase() === chiave.toLowerCase(),
++      )
++      if (trovata) return formattaValoreCampo(campi[trovata])
++    }
++
++    return match
+   })
+ }
++
++/**
++ * Il valore di un campo dentro un'email.
++ *
++ * Un campo non compilato diventa stringa vuota e non "null" o "undefined",
++ * che finirebbero nel testo inviato al cliente.
++ */
++function formattaValoreCampo(valore: string | number | boolean | null | undefined): string {
++  if (valore === null || valore === undefined) return ""
++  if (typeof valore === "boolean") return valore ? "Sì" : "No"
++  return String(valore)
++}
+diff --git a/scripts/migrations/importa-template-zoho.mjs b/scripts/migrations/importa-template-zoho.mjs
+index d4aadda..260868f 100644
+--- a/scripts/migrations/importa-template-zoho.mjs
++++ b/scripts/migrations/importa-template-zoho.mjs
+@@ -50,13 +50,49 @@ const SEGNAPOSTO = [
+   [/\$\{!(?:Contacts|Leads)\.Mobile\}/g, "{telefono}"],
+ ]
+ 
+-function traduci(testo) {
++/**
++ * Traduce i segnaposto di un testo.
++ *
++ * Prima i quattro di base, che hanno un nome breve e stabile. Poi tutti gli
++ * altri campi, usando la corrispondenza fra nome API Zoho ed etichetta del
++ * campo: ${!Contacts.Nr_Moduli} diventa {Nr. Moduli}, che il CRM sostituisce
++ * col valore del record.
++ *
++ * Senza questa seconda parte sette modelli nascerebbero rotti — quello di
++ * Assistenza usa diciotto campi, e arriverebbe al cliente pieno di
++ * segnaposto in chiaro.
++ */
++function traduci(testo, etichettaPerApiName = {}) {
+   if (!testo) return ""
+   let out = String(testo)
+   for (const [cerca, sostituisci] of SEGNAPOSTO) out = out.replace(cerca, sostituisci)
++
++  out = out.replace(/\$\{!(?:Contacts|Leads|Installatori)\.([A-Za-z0-9_]+)\}/g, (intero, apiName) => {
++    const etichetta = etichettaPerApiName[apiName]
++    // Nessuna corrispondenza: si lascia il token com'e', cosi' resta visibile
++    // e correggibile invece di sparire in silenzio.
++    return etichetta ? `{${etichetta}}` : intero
++  })
++
+   return out
+ }
+ 
++/** Costruisce la corrispondenza nome API -> etichetta dall'export dei campi. */
++function etichettePerApiName(percorsi) {
++  const mappa = {}
++  for (const percorso of percorsi) {
++    try {
++      const dati = JSON.parse(readFileSync(percorso, "utf8"))
++      for (const campo of dati.fields ?? []) {
++        if (campo.api_name && campo.field_label) mappa[campo.api_name] = campo.field_label
++      }
++    } catch {
++      console.warn(`  (export campi non leggibile, ignorato: ${percorso})`)
++    }
++  }
++  return mappa
++}
++
+ /** Segnaposto Zoho rimasti dopo la traduzione: vanno visti, non nascosti. */
+ function residui(testo) {
+   return [...new Set(String(testo || "").match(/\$\{![^}]+\}/g) ?? [])]
+@@ -139,6 +175,15 @@ async function importa() {
+     { auth: { persistSession: false } },
+   )
+ 
++  // Gli export dei campi servono a tradurre i segnaposto sui campi del
++  // record. Senza, quei token restano in chiaro nel testo.
++  const percorsiCampi = String(argomento("campi", "campi-clienti.json,campi-lead.json"))
++    .split(",")
++    .map((valore) => valore.trim())
++    .filter(Boolean)
++  const etichette = etichettePerApiName(percorsiCampi)
++  console.log(`Corrispondenze campo disponibili: ${Object.keys(etichette).length}`)
++
+   const modelli = JSON.parse(readFileSync(percorso, "utf8")).template ?? []
+   console.log(
+     `Modelli da importare: ${modelli.length} | modalita': ${applica ? "SCRITTURA" : "prova (nessuna scrittura)"}\n`,
+@@ -156,8 +201,8 @@ async function importa() {
+       continue
+     }
+ 
+-    const oggetto = traduci(modello.oggetto)
+-    const corpo = traduci(modello.contenuto)
++    const oggetto = traduci(modello.oggetto, etichette)
++    const corpo = traduci(modello.contenuto, etichette)
+     const rimasti = [...residui(oggetto), ...residui(corpo)]
+     if (rimasti.length) conResidui.push([modello.nome, rimasti])
+ 

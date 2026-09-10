@@ -50,11 +50,47 @@ const SEGNAPOSTO = [
   [/\$\{!(?:Contacts|Leads)\.Mobile\}/g, "{telefono}"],
 ]
 
-function traduci(testo) {
+/**
+ * Traduce i segnaposto di un testo.
+ *
+ * Prima i quattro di base, che hanno un nome breve e stabile. Poi tutti gli
+ * altri campi, usando la corrispondenza fra nome API Zoho ed etichetta del
+ * campo: ${!Contacts.Nr_Moduli} diventa {Nr. Moduli}, che il CRM sostituisce
+ * col valore del record.
+ *
+ * Senza questa seconda parte sette modelli nascerebbero rotti — quello di
+ * Assistenza usa diciotto campi, e arriverebbe al cliente pieno di
+ * segnaposto in chiaro.
+ */
+function traduci(testo, etichettaPerApiName = {}) {
   if (!testo) return ""
   let out = String(testo)
   for (const [cerca, sostituisci] of SEGNAPOSTO) out = out.replace(cerca, sostituisci)
+
+  out = out.replace(/\$\{!(?:Contacts|Leads|Installatori)\.([A-Za-z0-9_]+)\}/g, (intero, apiName) => {
+    const etichetta = etichettaPerApiName[apiName]
+    // Nessuna corrispondenza: si lascia il token com'e', cosi' resta visibile
+    // e correggibile invece di sparire in silenzio.
+    return etichetta ? `{${etichetta}}` : intero
+  })
+
   return out
+}
+
+/** Costruisce la corrispondenza nome API -> etichetta dall'export dei campi. */
+function etichettePerApiName(percorsi) {
+  const mappa = {}
+  for (const percorso of percorsi) {
+    try {
+      const dati = JSON.parse(readFileSync(percorso, "utf8"))
+      for (const campo of dati.fields ?? []) {
+        if (campo.api_name && campo.field_label) mappa[campo.api_name] = campo.field_label
+      }
+    } catch {
+      console.warn(`  (export campi non leggibile, ignorato: ${percorso})`)
+    }
+  }
+  return mappa
 }
 
 /** Segnaposto Zoho rimasti dopo la traduzione: vanno visti, non nascosti. */
@@ -139,6 +175,15 @@ async function importa() {
     { auth: { persistSession: false } },
   )
 
+  // Gli export dei campi servono a tradurre i segnaposto sui campi del
+  // record. Senza, quei token restano in chiaro nel testo.
+  const percorsiCampi = String(argomento("campi", "campi-clienti.json,campi-lead.json"))
+    .split(",")
+    .map((valore) => valore.trim())
+    .filter(Boolean)
+  const etichette = etichettePerApiName(percorsiCampi)
+  console.log(`Corrispondenze campo disponibili: ${Object.keys(etichette).length}`)
+
   const modelli = JSON.parse(readFileSync(percorso, "utf8")).template ?? []
   console.log(
     `Modelli da importare: ${modelli.length} | modalita': ${applica ? "SCRITTURA" : "prova (nessuna scrittura)"}\n`,
@@ -156,8 +201,8 @@ async function importa() {
       continue
     }
 
-    const oggetto = traduci(modello.oggetto)
-    const corpo = traduci(modello.contenuto)
+    const oggetto = traduci(modello.oggetto, etichette)
+    const corpo = traduci(modello.contenuto, etichette)
     const rimasti = [...residui(oggetto), ...residui(corpo)]
     if (rimasti.length) conResidui.push([modello.nome, rimasti])
 

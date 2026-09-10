@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getCurrentPermissions } from "@/lib/permissions/server"
-import { convertiDaZoho } from "@/lib/email/modello-base"
+import { aziendaDaProfilo, convertiDaZoho, type AziendaEmail } from "@/lib/email/modello-base"
 
 /**
  * Modelli e-mail condivisi.
@@ -83,7 +83,8 @@ export async function POST(request: Request) {
   if (body.azione === "converti") {
     const ids = Array.isArray(body.ids) ? body.ids.filter((id): id is string => typeof id === "string") : []
     if (!ids.length) return NextResponse.json({ error: "Nessun modello indicato" }, { status: 400 })
-    const esito = await converti(guardia.admin!, ids)
+    const azienda = await caricaAzienda(guardia.admin!)
+    const esito = await converti(guardia.admin!, ids, azienda)
     if (esito.errore) return NextResponse.json({ error: esito.errore }, { status: 500 })
     return NextResponse.json({ creati: esito.creati, saltati: esito.saltati })
   }
@@ -108,6 +109,7 @@ export async function POST(request: Request) {
       oggetto,
       corpo,
       cartella: typeof body.cartella === "string" ? body.cartella.trim() || null : null,
+      attivo: typeof body.attivo === "boolean" ? body.attivo : true,
       creato_da: guardia.permissions.snapshot.subject.userId,
     })
     .select("id,nome,modulo,oggetto,corpo,cartella,attivo")
@@ -138,6 +140,7 @@ export async function POST(request: Request) {
 async function converti(
   admin: NonNullable<Awaited<ReturnType<typeof richiediGestione>>["admin"]>,
   ids: string[],
+  azienda: AziendaEmail,
 ) {
   const { data: originali, error } = await admin
     .from("crm_email_template")
@@ -156,7 +159,7 @@ async function converti(
       continue
     }
 
-    const corpo = convertiDaZoho(modello.corpo ?? "")
+    const corpo = convertiDaZoho(modello.corpo ?? "", azienda)
 
     // Un modello il cui testo si riduce a nulla non e' convertibile: il
     // contenuto stava tutto nelle immagini. Meglio saltarlo che crearne uno
@@ -186,6 +189,18 @@ async function converti(
   }
 
   return { errore: null, creati, saltati }
+}
+
+async function caricaAzienda(
+  admin: NonNullable<Awaited<ReturnType<typeof richiediGestione>>["admin"]>,
+): Promise<AziendaEmail> {
+  const { data } = await admin
+    .from("crm_settings")
+    .select("valore")
+    .eq("chiave", "company.profile")
+    .maybeSingle()
+
+  return aziendaDaProfilo(data?.valore)
 }
 
 export async function PATCH(request: Request) {
@@ -220,6 +235,7 @@ export async function PATCH(request: Request) {
   if (typeof body.corpo === "string") patch.corpo = body.corpo
   if (typeof body.cartella === "string") patch.cartella = body.cartella.trim() || null
   if (typeof body.attivo === "boolean") patch.attivo = body.attivo
+  if (isModulo(body.modulo)) patch.modulo = body.modulo
 
   const { data, error } = await guardia.admin!
     .from("crm_email_template")

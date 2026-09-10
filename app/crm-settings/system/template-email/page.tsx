@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { Loader2, Mail, Pencil, Plus, Trash2, Wand2 } from "lucide-react"
+import { Eye, Loader2, Mail, Pencil, Plus, Trash2, Wand2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -44,10 +44,12 @@ const MODULI = [
   { valore: "installatori", etichetta: "Installatori" },
 ] as const
 
+type ModuloTemplate = (typeof MODULI)[number]["valore"]
+
 type Template = {
   id: string
   nome: string
-  modulo: string
+  modulo: ModuloTemplate
   oggetto: string
   corpo: string
   cartella: string | null
@@ -64,14 +66,19 @@ const VUOTO = {
   attivo: true,
 } satisfies Template
 
+function isModuloTemplate(valore: unknown): valore is ModuloTemplate {
+  return typeof valore === "string" && MODULI.some((modulo) => modulo.valore === valore)
+}
+
 export default function TemplateEmailPage() {
   const { canAction } = usePermissions()
   const puoGestire = canAction("email_template.gestione")
 
   const [template, setTemplate] = useState<Template[]>([])
   const [caricamento, setCaricamento] = useState(true)
-  const [modulo, setModulo] = useState<string>("clienti")
+  const [modulo, setModulo] = useState<ModuloTemplate>("clienti")
   const [inModifica, setInModifica] = useState<Template | null>(null)
+  const [inAnteprima, setInAnteprima] = useState<Template | null>(null)
   const attivi = template.filter((modello) => modello.attivo).length
   const [conversione, setConversione] = useState(false)
 
@@ -84,7 +91,8 @@ export default function TemplateEmailPage() {
       `Creare la versione nel formato Solair di ${daConvertire.length} modelli?\n\n` +
         "Gli originali non vengono toccati: nascono modelli affiancati, spenti, " +
         "da guardare e accendere uno per uno.\n\n" +
-        "Del modello originale si tiene il testo, non l'impaginazione.",
+        "Del modello originale si tiene il testo, non l'impaginazione. Logo e dati aziendali " +
+        "arrivano da Informazioni aziendali.",
     )
     if (!conferma) return
 
@@ -135,13 +143,17 @@ export default function TemplateEmailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(bozza),
     })
+    const dati = (await risposta.json().catch(() => ({}))) as Partial<Template> & { error?: string }
     if (!risposta.ok) {
-      const dati = (await risposta.json().catch(() => ({}))) as { error?: string }
       toast.error(dati.error ?? "Salvataggio non riuscito")
       return false
     }
     toast.success(nuovo ? "Modello creato" : "Modello aggiornato")
-    await carica()
+    if (isModuloTemplate(dati.modulo) && dati.modulo !== modulo) {
+      setModulo(dati.modulo)
+    } else {
+      await carica()
+    }
     return true
   }
 
@@ -168,7 +180,10 @@ export default function TemplateEmailPage() {
         }
         action={
           <div className="flex items-center gap-2">
-            <Select value={modulo} onValueChange={(v) => setModulo(v ?? "clienti")}>
+            <Select
+              value={modulo}
+              onValueChange={(valore) => setModulo(isModuloTemplate(valore) ? valore : "clienti")}
+            >
               <SelectTrigger className="w-40">
                 <SelectValue />
               </SelectTrigger>
@@ -187,7 +202,7 @@ export default function TemplateEmailPage() {
                   size="sm"
                   className="bg-card"
                   disabled={conversione || daConvertire.length === 0}
-                  title="Crea una versione nel formato Solair, senza toccare gli originali"
+                  title="Crea una versione con logo e dati aziendali, senza toccare gli originali"
                   onClick={() => void converti()}
                 >
                   {conversione ? (
@@ -195,7 +210,7 @@ export default function TemplateEmailPage() {
                   ) : (
                     <Wand2 data-icon="inline-start" />
                   )}
-                  Rifai nel formato Solair
+                  Applica formato aziendale
                 </Button>
                 <Button size="sm" onClick={() => setInModifica({ ...VUOTO, modulo })}>
                   <Plus data-icon="inline-start" />
@@ -260,6 +275,16 @@ export default function TemplateEmailPage() {
                     variant="ghost"
                     size="icon"
                     className="size-8"
+                    aria-label="Anteprima"
+                    title="Anteprima"
+                    onClick={() => setInAnteprima(modello)}
+                  >
+                    <Eye className="size-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
                     aria-label="Modifica"
                     onClick={() => setInModifica(modello)}
                   >
@@ -290,7 +315,74 @@ export default function TemplateEmailPage() {
           }}
         />
       ) : null}
+
+      {inAnteprima ? (
+        <DialogoAnteprima modello={inAnteprima} onChiudi={() => setInAnteprima(null)} />
+      ) : null}
     </div>
+  )
+}
+
+function htmlSicuro(html: string): string {
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+}
+
+function documentoAnteprima(modello: Template): string {
+  const corpo = modello.corpo.trim()
+  const contenuto = corpo
+    ? htmlSicuro(corpo)
+    : "<p style=\"font-family:Arial,sans-serif;color:#64748b\">Modello senza corpo.</p>"
+
+  if (/<\s*(html|body)\b/i.test(contenuto)) return contenuto
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body style="margin:0;padding:24px;background:#ffffff;">
+    ${contenuto}
+  </body>
+</html>`
+}
+
+function DialogoAnteprima({
+  modello,
+  onChiudi,
+}: {
+  modello: Template
+  onChiudi: () => void
+}) {
+  return (
+    <Dialog open onOpenChange={(aperto) => (!aperto ? onChiudi() : undefined)}>
+      <DialogContent className="flex h-[90vh] w-[min(1120px,96vw)] max-w-none flex-col gap-0 p-0 sm:max-w-none">
+        <DialogHeader className="border-b border-border px-5 py-4">
+          <DialogTitle>Anteprima modello</DialogTitle>
+          <DialogDescription className="space-y-1">
+            <span className="block font-medium text-foreground">{modello.nome}</span>
+            <span className="block truncate">{modello.oggetto}</span>
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="min-h-0 flex-1 bg-muted/40 p-4">
+          <iframe
+            title={`Anteprima ${modello.nome}`}
+            srcDoc={documentoAnteprima(modello)}
+            sandbox=""
+            className="h-full w-full rounded-md border border-border bg-white shadow-sm"
+          />
+        </div>
+
+        <DialogFooter className="border-t border-border px-5 py-4">
+          <Button variant="outline" onClick={onChiudi}>
+            Chiudi
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -330,6 +422,29 @@ function DialogoModello({
               />
             </div>
             <div className="flex flex-col gap-1.5">
+              <Label htmlFor="modello-modulo">Modulo</Label>
+              <Select
+                value={bozza.modulo}
+                onValueChange={(valore) =>
+                  setBozza({ ...bozza, modulo: isModuloTemplate(valore) ? valore : bozza.modulo })
+                }
+              >
+                <SelectTrigger id="modello-modulo">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MODULI.map((m) => (
+                    <SelectItem key={m.valore} value={m.valore}>
+                      {m.etichetta}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="modello-cartella">Cartella (facoltativa)</Label>
               <Input
                 id="modello-cartella"
@@ -337,6 +452,21 @@ function DialogoModello({
                 onChange={(e) => setBozza({ ...bozza, cartella: e.target.value })}
                 placeholder="es. Sopralluoghi"
               />
+            </div>
+            <div className="flex min-w-40 flex-col justify-end gap-2 rounded-md border border-border px-3 py-2">
+              <Label htmlFor="modello-attivo" className="text-sm">
+                Disponibile in invio
+              </Label>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="modello-attivo"
+                  checked={bozza.attivo}
+                  onCheckedChange={(valore) => setBozza({ ...bozza, attivo: Boolean(valore) })}
+                />
+                <span className="text-xs text-muted-foreground">
+                  {bozza.attivo ? "Attivo" : "Spento"}
+                </span>
+              </div>
             </div>
           </div>
 

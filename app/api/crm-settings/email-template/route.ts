@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getCurrentPermissions } from "@/lib/permissions/server"
+import { convertiDaZoho } from "@/lib/email/modello-base"
 
 /**
  * Modelli e-mail condivisi.
@@ -20,6 +21,9 @@ const MODULI = ["clienti", "lead", "installatori"] as const
 type Modulo = (typeof MODULI)[number]
 
 const AZIONE = "email_template.gestione"
+
+/** Suffisso dei modelli convertiti, per distinguerli dagli originali. */
+const SUFFISSO = " (nuovo)"
 
 function isModulo(valore: unknown): valore is Modulo {
   return typeof valore === "string" && (MODULI as readonly string[]).includes(valore)
@@ -74,6 +78,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Corpo richiesta non valido" }, { status: 400 })
   }
 
+  // Conversione nel formato Solair: arriva dallo stesso endpoint perche'
+  // richiede lo stesso permesso e scrive sulla stessa tabella.
+  if (body.azione === "converti") {
+    const ids = Array.isArray(body.ids) ? body.ids.filter((id): id is string => typeof id === "string") : []
+    if (!ids.length) return NextResponse.json({ error: "Nessun modello indicato" }, { status: 400 })
+    const esito = await converti(guardia.admin!, ids)
+    if (esito.errore) return NextResponse.json({ error: esito.errore }, { status: 500 })
+    return NextResponse.json({ creati: esito.creati, saltati: esito.saltati })
+  }
+
   const nome = typeof body.nome === "string" ? body.nome.trim() : ""
   const oggetto = typeof body.oggetto === "string" ? body.oggetto.trim() : ""
   const corpo = typeof body.corpo === "string" ? body.corpo : ""
@@ -110,6 +124,68 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json(data)
+}
+
+/**
+ * Crea la versione nel formato Solair di uno o piu' modelli.
+ *
+ * Non tocca gli originali: crea modelli affiancati, SPENTI, da guardare e
+ * accendere uno per uno. Dei modelli Zoho si tiene il testo, non
+ * l'impaginazione — quella e' generata dal loro editor e non sopravvive al
+ * travaso. Su un avviso di mancato incasso non serve, su un volantino
+ * promozionale si', ed e' per questo che la scelta resta all'utente.
+ */
+async function converti(
+  admin: NonNullable<Awaited<ReturnType<typeof richiediGestione>>["admin"]>,
+  ids: string[],
+) {
+  const { data: originali, error } = await admin
+    .from("crm_email_template")
+    .select("id,nome,modulo,oggetto,corpo,cartella")
+    .in("id", ids)
+
+  if (error) return { errore: error.message, creati: 0, saltati: 0 }
+
+  let creati = 0
+  let saltati = 0
+
+  for (const modello of originali ?? []) {
+    // Rilanciare la conversione non deve produrre "(nuovo) (nuovo)".
+    if (modello.nome.endsWith(SUFFISSO)) {
+      saltati += 1
+      continue
+    }
+
+    const corpo = convertiDaZoho(modello.corpo ?? "")
+
+    // Un modello il cui testo si riduce a nulla non e' convertibile: il
+    // contenuto stava tutto nelle immagini. Meglio saltarlo che crearne uno
+    // vuoto.
+    if (corpo.replace(/<[^>]+>/g, "").trim().length < 200) {
+      saltati += 1
+      continue
+    }
+
+    const { error: erroreScrittura } = await admin.from("crm_email_template").upsert(
+      {
+        nome: `${modello.nome}${SUFFISSO}`,
+        modulo: modello.modulo,
+        oggetto: modello.oggetto,
+        corpo,
+        cartella: modello.cartella,
+        attivo: false,
+      },
+      { onConflict: "modulo,nome" },
+    )
+
+    if (erroreScrittura) {
+      saltati += 1
+      continue
+    }
+    creati += 1
+  }
+
+  return { errore: null, creati, saltati }
 }
 
 export async function PATCH(request: Request) {

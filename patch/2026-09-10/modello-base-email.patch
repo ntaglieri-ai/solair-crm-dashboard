@@ -1,0 +1,446 @@
+diff --git a/app/api/crm-settings/email-template/route.ts b/app/api/crm-settings/email-template/route.ts
+index ddfadf6..0c49cf4 100644
+--- a/app/api/crm-settings/email-template/route.ts
++++ b/app/api/crm-settings/email-template/route.ts
+@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
+ import { createClient } from "@/lib/supabase/server"
+ import { createAdminClient } from "@/lib/supabase/admin"
+ import { getCurrentPermissions } from "@/lib/permissions/server"
++import { convertiDaZoho } from "@/lib/email/modello-base"
+ 
+ /**
+  * Modelli e-mail condivisi.
+@@ -21,6 +22,9 @@ type Modulo = (typeof MODULI)[number]
+ 
+ const AZIONE = "email_template.gestione"
+ 
++/** Suffisso dei modelli convertiti, per distinguerli dagli originali. */
++const SUFFISSO = " (nuovo)"
++
+ function isModulo(valore: unknown): valore is Modulo {
+   return typeof valore === "string" && (MODULI as readonly string[]).includes(valore)
+ }
+@@ -74,6 +78,16 @@ export async function POST(request: Request) {
+     return NextResponse.json({ error: "Corpo richiesta non valido" }, { status: 400 })
+   }
+ 
++  // Conversione nel formato Solair: arriva dallo stesso endpoint perche'
++  // richiede lo stesso permesso e scrive sulla stessa tabella.
++  if (body.azione === "converti") {
++    const ids = Array.isArray(body.ids) ? body.ids.filter((id): id is string => typeof id === "string") : []
++    if (!ids.length) return NextResponse.json({ error: "Nessun modello indicato" }, { status: 400 })
++    const esito = await converti(guardia.admin!, ids)
++    if (esito.errore) return NextResponse.json({ error: esito.errore }, { status: 500 })
++    return NextResponse.json({ creati: esito.creati, saltati: esito.saltati })
++  }
++
+   const nome = typeof body.nome === "string" ? body.nome.trim() : ""
+   const oggetto = typeof body.oggetto === "string" ? body.oggetto.trim() : ""
+   const corpo = typeof body.corpo === "string" ? body.corpo : ""
+@@ -112,6 +126,68 @@ export async function POST(request: Request) {
+   return NextResponse.json(data)
+ }
+ 
++/**
++ * Crea la versione nel formato Solair di uno o piu' modelli.
++ *
++ * Non tocca gli originali: crea modelli affiancati, SPENTI, da guardare e
++ * accendere uno per uno. Dei modelli Zoho si tiene il testo, non
++ * l'impaginazione — quella e' generata dal loro editor e non sopravvive al
++ * travaso. Su un avviso di mancato incasso non serve, su un volantino
++ * promozionale si', ed e' per questo che la scelta resta all'utente.
++ */
++async function converti(
++  admin: NonNullable<Awaited<ReturnType<typeof richiediGestione>>["admin"]>,
++  ids: string[],
++) {
++  const { data: originali, error } = await admin
++    .from("crm_email_template")
++    .select("id,nome,modulo,oggetto,corpo,cartella")
++    .in("id", ids)
++
++  if (error) return { errore: error.message, creati: 0, saltati: 0 }
++
++  let creati = 0
++  let saltati = 0
++
++  for (const modello of originali ?? []) {
++    // Rilanciare la conversione non deve produrre "(nuovo) (nuovo)".
++    if (modello.nome.endsWith(SUFFISSO)) {
++      saltati += 1
++      continue
++    }
++
++    const corpo = convertiDaZoho(modello.corpo ?? "")
++
++    // Un modello il cui testo si riduce a nulla non e' convertibile: il
++    // contenuto stava tutto nelle immagini. Meglio saltarlo che crearne uno
++    // vuoto.
++    if (corpo.replace(/<[^>]+>/g, "").trim().length < 200) {
++      saltati += 1
++      continue
++    }
++
++    const { error: erroreScrittura } = await admin.from("crm_email_template").upsert(
++      {
++        nome: `${modello.nome}${SUFFISSO}`,
++        modulo: modello.modulo,
++        oggetto: modello.oggetto,
++        corpo,
++        cartella: modello.cartella,
++        attivo: false,
++      },
++      { onConflict: "modulo,nome" },
++    )
++
++    if (erroreScrittura) {
++      saltati += 1
++      continue
++    }
++    creati += 1
++  }
++
++  return { errore: null, creati, saltati }
++}
++
+ export async function PATCH(request: Request) {
+   const guardia = await richiediGestione()
+   if (guardia.errore) return guardia.errore
+diff --git a/app/crm-settings/system/template-email/page.tsx b/app/crm-settings/system/template-email/page.tsx
+index 5ba1d9f..c6ed500 100644
+--- a/app/crm-settings/system/template-email/page.tsx
++++ b/app/crm-settings/system/template-email/page.tsx
+@@ -2,7 +2,7 @@
+ 
+ import { useCallback, useEffect, useState } from "react"
+ import { toast } from "sonner"
+-import { Loader2, Mail, Pencil, Plus, Trash2 } from "lucide-react"
++import { Loader2, Mail, Pencil, Plus, Trash2, Wand2 } from "lucide-react"
+ import { Button } from "@/components/ui/button"
+ import { Input } from "@/components/ui/input"
+ import { Label } from "@/components/ui/label"
+@@ -73,6 +73,41 @@ export default function TemplateEmailPage() {
+   const [modulo, setModulo] = useState<string>("clienti")
+   const [inModifica, setInModifica] = useState<Template | null>(null)
+   const attivi = template.filter((modello) => modello.attivo).length
++  const [conversione, setConversione] = useState(false)
++
++  // Gia' convertiti si riconoscono dal suffisso: rilanciare non deve
++  // produrre "(nuovo) (nuovo)".
++  const daConvertire = template.filter((modello) => !modello.nome.endsWith(" (nuovo)"))
++
++  async function converti() {
++    const conferma = window.confirm(
++      `Creare la versione nel formato Solair di ${daConvertire.length} modelli?\n\n` +
++        "Gli originali non vengono toccati: nascono modelli affiancati, spenti, " +
++        "da guardare e accendere uno per uno.\n\n" +
++        "Del modello originale si tiene il testo, non l'impaginazione.",
++    )
++    if (!conferma) return
++
++    setConversione(true)
++    try {
++      const risposta = await fetch("/api/crm-settings/email-template", {
++        method: "POST",
++        headers: { "Content-Type": "application/json" },
++        body: JSON.stringify({ azione: "converti", ids: daConvertire.map((m) => m.id) }),
++      })
++      const dati = (await risposta.json()) as { creati?: number; saltati?: number; error?: string }
++      if (!risposta.ok) {
++        toast.error(dati.error ?? "Conversione non riuscita")
++        return
++      }
++      toast.success(
++        `${dati.creati} modelli creati${dati.saltati ? `, ${dati.saltati} saltati` : ""}. Sono spenti: accendili dopo averli guardati.`,
++      )
++      await carica()
++    } finally {
++      setConversione(false)
++    }
++  }
+ 
+   const carica = useCallback(async () => {
+     setCaricamento(true)
+@@ -146,10 +181,27 @@ export default function TemplateEmailPage() {
+               </SelectContent>
+             </Select>
+             {puoGestire ? (
+-              <Button size="sm" onClick={() => setInModifica({ ...VUOTO, modulo })}>
+-                <Plus data-icon="inline-start" />
+-                Modello
+-              </Button>
++              <>
++                <Button
++                  variant="outline"
++                  size="sm"
++                  className="bg-card"
++                  disabled={conversione || daConvertire.length === 0}
++                  title="Crea una versione nel formato Solair, senza toccare gli originali"
++                  onClick={() => void converti()}
++                >
++                  {conversione ? (
++                    <Loader2 className="size-4 animate-spin" />
++                  ) : (
++                    <Wand2 data-icon="inline-start" />
++                  )}
++                  Rifai nel formato Solair
++                </Button>
++                <Button size="sm" onClick={() => setInModifica({ ...VUOTO, modulo })}>
++                  <Plus data-icon="inline-start" />
++                  Modello
++                </Button>
++              </>
+             ) : null}
+           </div>
+         }
+diff --git a/lib/email/__tests__/modello-base.test.ts b/lib/email/__tests__/modello-base.test.ts
+new file mode 100644
+index 0000000..03db50e
+--- /dev/null
++++ b/lib/email/__tests__/modello-base.test.ts
+@@ -0,0 +1,91 @@
++import { describe, expect, it } from "vitest"
++import { AZIENDA, convertiDaZoho, modelloBase, paragrafiDaTesto } from "../modello-base"
++import { bodyToText, isHtmlBody } from "../html"
++
++/**
++ * L'involucro delle email Solair.
++ *
++ * I controlli qui sotto guardano le cose che si rompono davvero nelle
++ * caselle di posta: la larghezza fissa, gli stili in linea, i dati
++ * aziendali nel piede, e il fatto che i segnaposto arrivino intatti fino
++ * all'invio.
++ */
++
++describe("paragrafiDaTesto", () => {
++  it("separa i paragrafi sulle righe vuote", () => {
++    const html = paragrafiDaTesto("Gentile cliente,\n\nla informiamo che…")
++    expect(html.match(/<p /g)).toHaveLength(2)
++  })
++
++  it("neutralizza i simboli del testo", () => {
++    // Un preventivo "< 1000" non deve diventare markup e sparire.
++    expect(paragrafiDaTesto("Costo < 1000")).toContain("&lt;")
++  })
++
++  it("scarta le righe vuote in eccesso", () => {
++    expect(paragrafiDaTesto("Uno\n\n\n\nDue").match(/<p /g)).toHaveLength(2)
++  })
++})
++
++describe("modelloBase", () => {
++  it("produce un documento HTML completo", () => {
++    const html = modelloBase("Ciao")
++    expect(html.startsWith("<!doctype html>")).toBe(true)
++    expect(isHtmlBody(html)).toBe(true)
++  })
++
++  it("usa una larghezza fissa di 600px", () => {
++    // I programmi di posta ignorano buona parte del CSS moderno: la
++    // larghezza va dichiarata sulla tabella, non lasciata al foglio di stile.
++    expect(modelloBase("Ciao")).toContain('width="600"')
++  })
++
++  it("mette i dati aziendali nel piede", () => {
++    const html = modelloBase("Ciao")
++    expect(html).toContain(AZIENDA.piva)
++    expect(html).toContain(AZIENDA.email)
++    expect(html).toContain(AZIENDA.nome)
++  })
++
++  it("usa un indirizzo pubblico per il logo", () => {
++    // Un file del progetto non e' raggiungibile dalla casella del
++    // destinatario: l'immagine arriverebbe rotta.
++    expect(modelloBase("Ciao")).toContain("https://")
++    expect(modelloBase("Ciao")).not.toContain('src="/')
++  })
++
++  it("lascia intatti i segnaposto", () => {
++    // Vengono sostituiti al momento dell'invio: se l'involucro li
++    // trasformasse, arriverebbero in chiaro al cliente.
++    expect(modelloBase("Gentile {nome} {cognome},")).toContain("{nome}")
++  })
++
++  it("accetta anche HTML già pronto senza spezzarlo in paragrafi", () => {
++    expect(modelloBase("<p>Già pronto</p>")).toContain("<p>Già pronto</p>")
++  })
++})
++
++describe("convertiDaZoho", () => {
++  const zoho =
++    "<html><head><style>body{margin:0}</style></head><body>" +
++    "<table><tr><td><p>Gentile {nome},</p><p>il sopralluogo è confermato.</p></td></tr></table>" +
++    "</body></html>"
++
++  it("tiene il testo e butta l'impaginazione originale", () => {
++    const html = convertiDaZoho(zoho)
++    expect(bodyToText(html)).toContain("Gentile {nome},")
++    expect(bodyToText(html)).toContain("il sopralluogo è confermato.")
++    expect(html).not.toContain("body{margin:0}")
++  })
++
++  it("il risultato è molto più corto dell'originale", () => {
++    // E' il punto dell'operazione: da trentamila caratteri di markup
++    // generato a un documento leggibile e modificabile.
++    const lungo = "<html><head><style>" + "a{b:c}".repeat(2000) + "</style></head><body><p>Ciao</p></body></html>"
++    expect(convertiDaZoho(lungo).length).toBeLessThan(lungo.length / 2)
++  })
++
++  it("conserva i dati aziendali nel piede", () => {
++    expect(convertiDaZoho(zoho)).toContain(AZIENDA.piva)
++  })
++})
+diff --git a/lib/email/modello-base.ts b/lib/email/modello-base.ts
+new file mode 100644
+index 0000000..02b637d
+--- /dev/null
++++ b/lib/email/modello-base.ts
+@@ -0,0 +1,148 @@
++import { bodyToText, isHtmlBody, textToSafeHtml } from "./html"
++
++/**
++ * L'involucro delle email Solair.
++ *
++ * I modelli importati da Zoho sono pagine generate dal loro editor: tabelle
++ * annidate, fogli di stile lunghi trentamila caratteri, media query. Difficili
++ * da modificare senza rompere l'impaginazione, e illeggibili nell'anteprima.
++ *
++ * Qui l'involucro e' uno solo: intestazione con il logo, corpo, piede con i
++ * dati aziendali. Quello che cambia da un modello all'altro e' il testo.
++ *
++ * Le scelte tecniche sono dettate dai programmi di posta, non dal gusto:
++ * tabelle invece di flexbox, stili in linea invece di classi, larghezza fissa
++ * a 600 pixel. Outlook e Gmail ignorano buona parte del CSS moderno, e un
++ * layout che si vede bene nel browser puo' arrivare a pezzi nella casella.
++ */
++
++/** Dati aziendali, da solairgroup.it. */
++export const AZIENDA = {
++  nome: "Solair Group S.r.l.",
++  piva: "06056640870",
++  email: "info@solairgroup.it",
++  telefono: "+39 095 290 0274",
++  whatsapp: "+39 095 290 0278",
++  sito: "https://solairgroup.it",
++  privacy: "https://www.iubenda.com/privacy-policy/56116406",
++  sedi: "Catania · Giarre (CT) · Treviso (TV) · Torino (TO) · Porto Sant'Elpidio (FM)",
++  // Ospitato pubblicamente: nelle email un'immagine deve avere un indirizzo
++  // raggiungibile da fuori, un file del progetto non basta.
++  logo:
++    "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/WhatsApp_Image_2026-05-05_at_18.34.28-removebg-preview-rlWc3q38NGodyFUqcCA2TsRp7eyfiY.png",
++} as const
++
++const COLORI = {
++  testo: "#1f2937",
++  tenue: "#6b7280",
++  bordo: "#e5e7eb",
++  sfondo: "#f4f6f8",
++  scuro: "#12293f",
++  accento: "#2e8b72",
++} as const
++
++/**
++ * Il corpo, a partire da testo semplice.
++ *
++ * Le righe vuote separano i paragrafi, come ci si aspetta scrivendo: chi
++ * compone un modello non deve pensare in termini di markup.
++ */
++export function paragrafiDaTesto(testo: string): string {
++  return testo
++    .split(/\n\s*\n/)
++    .map((blocco) => blocco.trim())
++    .filter(Boolean)
++    .map(
++      (blocco) =>
++        `<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:${COLORI.testo}">${textToSafeHtml(
++          blocco,
++        )}</p>`,
++    )
++    .join("\n")
++}
++
++/**
++ * Avvolge un corpo nell'involucro Solair.
++ *
++ * `corpo` puo' essere HTML gia' pronto oppure testo semplice: nel secondo
++ * caso viene diviso in paragrafi. Chi scrive un modello nuovo passa testo,
++ * la conversione da Zoho passa i paragrafi gia' composti.
++ */
++export function modelloBase(corpo: string): string {
++  const contenuto = isHtmlBody(corpo) ? corpo : paragrafiDaTesto(corpo)
++
++  return `<!doctype html>
++<html lang="it">
++<head>
++<meta charset="utf-8">
++<meta name="viewport" content="width=device-width,initial-scale=1">
++<title>${AZIENDA.nome}</title>
++</head>
++<body style="margin:0;padding:0;background:${COLORI.sfondo};-webkit-text-size-adjust:100%">
++<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${COLORI.sfondo}">
++<tr>
++<td align="center" style="padding:24px 12px">
++
++<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;background:#ffffff;border:1px solid ${COLORI.bordo};border-radius:10px;overflow:hidden">
++
++<tr>
++<td style="background:${COLORI.scuro};padding:20px 28px">
++<img src="${AZIENDA.logo}" alt="${AZIENDA.nome}" width="132" style="display:block;width:132px;max-width:132px;height:auto;border:0">
++</td>
++</tr>
++
++<tr>
++<td style="height:3px;background:${COLORI.accento};font-size:0;line-height:0">&nbsp;</td>
++</tr>
++
++<tr>
++<td style="padding:28px">
++${contenuto}
++</td>
++</tr>
++
++<tr>
++<td style="padding:0 28px 28px">
++<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
++<tr><td style="border-top:1px solid ${COLORI.bordo};padding-top:16px">
++<p style="margin:0 0 4px;font-size:13px;line-height:1.5;color:${COLORI.testo}"><strong>${AZIENDA.nome}</strong></p>
++<p style="margin:0 0 4px;font-size:13px;line-height:1.5;color:${COLORI.tenue}">
++Tel. <a href="tel:${AZIENDA.telefono.replace(/\s/g, "")}" style="color:${COLORI.tenue};text-decoration:none">${AZIENDA.telefono}</a>
++&nbsp;·&nbsp; WhatsApp <a href="https://wa.me/${AZIENDA.whatsapp.replace(/[^\d]/g, "")}" style="color:${COLORI.tenue};text-decoration:none">${AZIENDA.whatsapp}</a>
++</p>
++<p style="margin:0 0 4px;font-size:13px;line-height:1.5;color:${COLORI.tenue}">
++<a href="mailto:${AZIENDA.email}" style="color:${COLORI.accento};text-decoration:none">${AZIENDA.email}</a>
++&nbsp;·&nbsp; <a href="${AZIENDA.sito}" style="color:${COLORI.accento};text-decoration:none">solairgroup.it</a>
++</p>
++<p style="margin:0;font-size:12px;line-height:1.5;color:${COLORI.tenue}">${AZIENDA.sedi}</p>
++</td></tr>
++</table>
++</td>
++</tr>
++
++</table>
++
++<p style="margin:14px 0 0;font-size:11px;line-height:1.5;color:${COLORI.tenue};text-align:center">
++${AZIENDA.nome} — P.IVA ${AZIENDA.piva}<br>
++<a href="${AZIENDA.privacy}" style="color:${COLORI.tenue}">Informativa privacy</a>
++</p>
++
++</td>
++</tr>
++</table>
++</body>
++</html>`
++}
++
++/**
++ * Converte un modello Zoho nell'involucro Solair.
++ *
++ * Del modello originale si tiene il TESTO, non l'impaginazione: quella e'
++ * generata dal loro editor e non sopravvive a un travaso. E' una perdita
++ * consapevole — su un avviso di mancato incasso non serve, su un volantino
++ * promozionale si', ed e' per questo che la conversione non tocca gli
++ * originali ma crea modelli affiancati.
++ */
++export function convertiDaZoho(htmlZoho: string): string {
++  return modelloBase(paragrafiDaTesto(bodyToText(htmlZoho)))
++}

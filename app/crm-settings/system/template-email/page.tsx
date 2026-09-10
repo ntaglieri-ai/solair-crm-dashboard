@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { Loader2, Mail, Pencil, Plus, Trash2 } from "lucide-react"
+import { Loader2, Mail, Pencil, Plus, Trash2, Wand2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -73,6 +73,41 @@ export default function TemplateEmailPage() {
   const [modulo, setModulo] = useState<string>("clienti")
   const [inModifica, setInModifica] = useState<Template | null>(null)
   const attivi = template.filter((modello) => modello.attivo).length
+  const [conversione, setConversione] = useState(false)
+
+  // Gia' convertiti si riconoscono dal suffisso: rilanciare non deve
+  // produrre "(nuovo) (nuovo)".
+  const daConvertire = template.filter((modello) => !modello.nome.endsWith(" (nuovo)"))
+
+  async function converti() {
+    const conferma = window.confirm(
+      `Creare la versione nel formato Solair di ${daConvertire.length} modelli?\n\n` +
+        "Gli originali non vengono toccati: nascono modelli affiancati, spenti, " +
+        "da guardare e accendere uno per uno.\n\n" +
+        "Del modello originale si tiene il testo, non l'impaginazione.",
+    )
+    if (!conferma) return
+
+    setConversione(true)
+    try {
+      const risposta = await fetch("/api/crm-settings/email-template", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ azione: "converti", ids: daConvertire.map((m) => m.id) }),
+      })
+      const dati = (await risposta.json()) as { creati?: number; saltati?: number; error?: string }
+      if (!risposta.ok) {
+        toast.error(dati.error ?? "Conversione non riuscita")
+        return
+      }
+      toast.success(
+        `${dati.creati} modelli creati${dati.saltati ? `, ${dati.saltati} saltati` : ""}. Sono spenti: accendili dopo averli guardati.`,
+      )
+      await carica()
+    } finally {
+      setConversione(false)
+    }
+  }
 
   const carica = useCallback(async () => {
     setCaricamento(true)
@@ -146,10 +181,27 @@ export default function TemplateEmailPage() {
               </SelectContent>
             </Select>
             {puoGestire ? (
-              <Button size="sm" onClick={() => setInModifica({ ...VUOTO, modulo })}>
-                <Plus data-icon="inline-start" />
-                Modello
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-card"
+                  disabled={conversione || daConvertire.length === 0}
+                  title="Crea una versione nel formato Solair, senza toccare gli originali"
+                  onClick={() => void converti()}
+                >
+                  {conversione ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Wand2 data-icon="inline-start" />
+                  )}
+                  Rifai nel formato Solair
+                </Button>
+                <Button size="sm" onClick={() => setInModifica({ ...VUOTO, modulo })}>
+                  <Plus data-icon="inline-start" />
+                  Modello
+                </Button>
+              </>
             ) : null}
           </div>
         }

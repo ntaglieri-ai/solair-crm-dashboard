@@ -38,7 +38,10 @@ import {
   DEFAULT_INSTALLATORE_FILTERS,
   type InstallatoreFilterState,
 } from "@/components/installatori/installatore-filters"
-import { InstallatoreFiltersDrawer } from "@/components/installatori/installatore-filters-drawer"
+import { PannelloFiltri } from "@/components/filtri/pannello-filtri"
+import { gruppiCampiInstallatori } from "@/lib/filtri/catalogo-installatori"
+import type { Gruppo } from "@/lib/filtri/albero"
+import type { LayoutPagina } from "@/lib/crm-settings/layout"
 import { InstallatoreTable } from "@/components/installatori/installatore-table"
 import { InstallatoreActionsMenu } from "@/components/installatori/installatore-actions-menu"
 import { BulkEmailDialog } from "@/components/shared/bulk-email-dialog"
@@ -85,12 +88,26 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
 interface InstallatoriClientProps {
   initialSp: string
   initialData: InstallatoriListResponse
+  /** Layout della scheda: da qui vengono i campi filtrabili e i loro gruppi. */
+  layout?: LayoutPagina[]
 }
 
-export function InstallatoriClient({ initialSp, initialData }: InstallatoriClientProps) {
+export function InstallatoriClient({
+  initialSp,
+  initialData,
+  layout = [],
+}: InstallatoriClientProps) {
   const qc = useQueryClient()
 
   const [filters, setFilters] = useState<InstallatoreFilterState>(DEFAULT_INSTALLATORE_FILTERS)
+  // Filtro componibile e apertura del pannello: e' una colonna della pagina,
+  // quindi e' la pagina a decidere quanto spazio resta alla lista.
+  const [albero, setAlbero] = useState<Gruppo | null>(null)
+  const [filtriAperti, setFiltriAperti] = useState(false)
+  const [pannelloFiltri, setPannelloFiltri] = useState<HTMLDivElement | null>(null)
+
+  // Campi filtrabili e gruppi dal layout della scheda.
+  const gruppiCampi = useMemo(() => gruppiCampiInstallatori(layout), [layout])
   const [sortBy, setSortBy] = useState<InstallatoreSortKey | null>("nome")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
   const [page, setPage] = useState(1)
@@ -169,8 +186,9 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
       proprietario: filters.proprietario,
       tag: filters.tag,
       stato: filters.stato,
+      albero,
     }),
-    [page, rowsPerPage, sortBy, sortDir, filters, debouncedSearch],
+    [page, rowsPerPage, sortBy, sortDir, filters, debouncedSearch, albero],
   )
 
   const { data, isFetching } = useInstallatoriQuery(params, { sp: initialSp, data: initialData })
@@ -322,10 +340,19 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
             onBulkDelete={() => setBulkDeleteOpen(true)}
           />
 
-          <InstallatoreFiltersDrawer
-            filters={filters}
-            onChange={handleFilterChange}
-            onReset={handleReset}
+          <PannelloFiltri
+            titolo="Filtra installatori per"
+            modulo="installatori"
+            gruppi={gruppiCampi}
+            albero={albero}
+            onCambia={(nuovo) => {
+              setAlbero(nuovo)
+              setPage(1)
+            }}
+            inline={!isMobile}
+            aperto={filtriAperti}
+            onApertoChange={setFiltriAperti}
+            contenitore={pannelloFiltri}
             trigger={({ onClick, count }) => (
               <Button
                 onClick={onClick}
@@ -447,7 +474,13 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
         </div>
       ) : (
         <>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:overflow-visible [-webkit-overflow-scrolling:touch]">
+          {/* Pannello filtri e tabella affiancati: il pannello e' una colonna
+              della pagina, cosi' la lista resta visibile e si aggiorna
+              mentre si compone il filtro. */}
+          <div className="flex min-h-0 flex-1 gap-3">
+            <div ref={setPannelloFiltri} className="contents" />
+
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain lg:overflow-visible [-webkit-overflow-scrolling:touch]">
             <InstallatoreTable
               installatori={pageRows}
               selected={selected}
@@ -459,6 +492,7 @@ export function InstallatoriClient({ initialSp, initialData }: InstallatoriClien
               sortDir={sortDir}
               onSort={handleSort}
             />
+          </div>
           </div>
 
           <div className="sticky bottom-0 z-30 -mx-5 flex shrink-0 items-center justify-between gap-2 border-t border-border bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:static lg:mx-0 lg:flex-wrap lg:border-t-0 lg:bg-transparent lg:px-0 lg:py-0 lg:backdrop-blur-none">

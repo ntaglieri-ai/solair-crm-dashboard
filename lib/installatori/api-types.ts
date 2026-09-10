@@ -1,3 +1,4 @@
+import type { Gruppo } from "@/lib/filtri/albero"
 import type { InstallatoreRecord } from "@/lib/installatori/repository"
 import {
   appendFilterValues,
@@ -46,6 +47,11 @@ export interface InstallatoriListParams {
   tag: string[]
   /** Valori selezionati tra "attivo" e "non_attivo". [] = tutti. */
   stato: Array<"attivo" | "non_attivo">
+  /**
+   * Filtro componibile: gruppi E/O annidati, dal costruttore o da un filtro
+   * salvato. Assente quando non se ne usa uno.
+   */
+  albero?: Gruppo | null
 }
 
 export interface InstallatoriListResponse {
@@ -84,12 +90,27 @@ export function buildInstallatoriSearchParams(
   appendFilterValues(sp, "proprietario", p.proprietario)
   appendFilterValues(sp, "tag", p.tag)
   appendFilterValues(sp, "stato", p.stato)
+  // L'albero viaggia solo se ha condizioni: un gruppo vuoto allungherebbe la
+  // chiave della cache senza cambiare il risultato.
+  if (p.albero && p.albero.nodi.length > 0) sp.set("albero", JSON.stringify(p.albero))
   return sp
 }
 
 export function parseInstallatoriSearchParams(
   sp: URLSearchParams,
 ): InstallatoriListParams {
+  // L'albero arriva dal browser: qui si legge soltanto, la verifica di campi
+  // e operatori avviene dove diventa interrogazione.
+  let albero: Gruppo | null = null
+  const alberoRaw = sp.get("albero")
+  if (alberoRaw) {
+    try {
+      albero = JSON.parse(alberoRaw) as Gruppo
+    } catch {
+      albero = null
+    }
+  }
+
   const stato = parseFilterValues(sp, "stato").filter(
     (value): value is "attivo" | "non_attivo" =>
       value === "attivo" || value === "non_attivo",
@@ -103,5 +124,6 @@ export function parseInstallatoriSearchParams(
     proprietario: parseFilterValues(sp, "proprietario"),
     tag: parseFilterValues(sp, "tag"),
     stato,
+    albero,
   }
 }

@@ -1,3 +1,9 @@
+import { validaAlbero } from "@/lib/filtri/albero"
+import { traduciAlbero } from "@/lib/filtri/traduci"
+import {
+  catalogoInstallatoriCompleto,
+  COLONNE_INSTALLATORI,
+} from "@/lib/filtri/catalogo-installatori"
 import { createClient } from "@/lib/supabase/server"
 import { normalizeCanalePreferito } from "@/lib/installatori/api-types"
 import type {
@@ -131,6 +137,21 @@ export async function queryInstallatori(
   const absoluteQ = applyOwnerScope(supabase.from("installatori").select("id", { count: "exact", head: true }), "proprietario_id", ownerScope)
   const activeQ = applyOwnerScope(supabase.from("installatori").select("id", { count: "exact", head: true }).eq("attivo", true), "proprietario_id", ownerScope)
   const inactiveQ = applyOwnerScope(supabase.from("installatori").select("id", { count: "exact", head: true }).eq("attivo", false), "proprietario_id", ownerScope)
+
+  // Filtro componibile: validato contro il catalogo del modulo e tradotto in
+  // una sola espressione. Un albero non valido non filtra nulla invece di far
+  // fallire la lettura: meglio una lista intera che una pagina in errore.
+  if (params.albero?.nodi.length) {
+    const catalogo = catalogoInstallatoriCompleto()
+    const validato = validaAlbero(params.albero, catalogo)
+    if (validato.ok) {
+      const tradotto = traduciAlbero(validato.gruppo, catalogo, COLONNE_INSTALLATORI)
+      if (tradotto.ok && tradotto.espressione) {
+        listQ = listQ.or(tradotto.espressione)
+        countQ = countQ.or(tradotto.espressione)
+      }
+    }
+  }
 
   if (params.search.trim()) {
     const p = `%${params.search.trim()}%`

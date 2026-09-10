@@ -1,6 +1,8 @@
 "use client"
 
 import type { Gruppo } from "@/lib/filtri/albero"
+import { PannelloFiltri } from "@/components/filtri/pannello-filtri"
+import { gruppiCampiClienti } from "@/lib/filtri/catalogo-clienti"
 import type { LayoutPagina } from "@/lib/crm-settings/layout"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -40,7 +42,6 @@ import {
   DEFAULT_CLIENTE_FILTERS,
   type ClienteFilterState,
 } from "@/components/clienti/cliente-filters"
-import { ClienteFiltersDrawer } from "@/components/clienti/cliente-filters-drawer"
 import {
   ClienteTable,
   type SortDir,
@@ -140,6 +141,14 @@ export function ClientiClient({
   // Filtro componibile: gruppi E/O annidati, dal costruttore o da un filtro
   // salvato.
   const [albero, setAlbero] = useState<Gruppo | null>(null)
+  // Il pannello e' una colonna della pagina: l'apertura la governa qui,
+  // perche' e' la pagina a decidere quanto spazio resta alla lista.
+  const [filtriAperti, setFiltriAperti] = useState(false)
+  const [pannelloFiltri, setPannelloFiltri] = useState<HTMLDivElement | null>(null)
+
+  // Campi filtrabili e loro gruppi, dal layout della scheda: un campo
+  // aggiunto dalla pagina Layout diventa filtrabile da solo.
+  const gruppiCampi = useMemo(() => gruppiCampiClienti(layout), [layout])
   const [sortBy, setSortBy] = useState<ClienteColumnId | null>("Ora modifica")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [page, setPage] = useState(1)
@@ -364,12 +373,6 @@ export function ClientiClient({
     setSelected(new Set())
   }
 
-  const handleReset = () => {
-    setFilters(DEFAULT_CLIENTE_FILTERS)
-    setOnlyDuplicates(false)
-    setPage(1)
-    setSelected(new Set())
-  }
 
   const handleCreate = async (cliente: ClienteRecord) => {
     await createCliente.mutateAsync(cliente)
@@ -613,16 +616,19 @@ export function ClientiClient({
             onBulkDelete={() => setBulkDeleteOpen(true)}
           />
 
-          <ClienteFiltersDrawer
-            layout={layout}
-            alberoApplicato={albero ?? undefined}
-            onApplicaAlbero={(gruppo) => {
-              setAlbero(gruppo.nodi.length ? gruppo : null)
+          <PannelloFiltri
+            titolo="Filtra clienti per"
+            modulo="clienti"
+            gruppi={gruppiCampi}
+            albero={albero}
+            onCambia={(nuovo) => {
+              setAlbero(nuovo)
               setPage(1)
             }}
-            filters={filters}
-            onChange={handleFilterChange}
-            onReset={handleReset}
+            inline={!isMobile}
+            aperto={filtriAperti}
+            onApertoChange={setFiltriAperti}
+            contenitore={pannelloFiltri}
             trigger={({ onClick, count }) => (
               <Button
                 onClick={onClick}
@@ -695,6 +701,13 @@ export function ClientiClient({
           </div>
         )}
 
+        {/* Pannello filtri e tabella affiancati: il pannello e' una colonna
+            della pagina, non un sovrapposto, cosi' la lista resta visibile e
+            si aggiorna mentre si compone il filtro. */}
+        <div className="flex min-h-0 gap-3">
+          <div ref={setPannelloFiltri} className="contents" />
+
+          <div className="min-w-0 flex-1">
         {/* Tabella */}
         {total > 0 && (
           <div style={{ visibility: preferencesLoaded ? undefined : "hidden" }}>
@@ -727,6 +740,8 @@ export function ClientiClient({
             />
           </div>
         )}
+          </div>
+        </div>
       </div>
 
       {/* Footer paginazione — sticky solo su mobile, in flusso normale da lg in su */}

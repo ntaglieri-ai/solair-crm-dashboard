@@ -18,6 +18,7 @@ import { IconMail, IconAlertTriangle, IconCircleCheck } from "@tabler/icons-reac
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { ScegliModello, confermaSovrascrittura } from "@/components/shared/scegli-modello"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Dialog,
@@ -313,6 +314,22 @@ export function BulkEmailDialog({
               </p>
             ) : null}
             <MittenteSelect state={mittenti} disabled={submitting} />
+
+            <ScegliModello
+              modulo={
+                recordTipo === "cliente"
+                  ? "clienti"
+                  : recordTipo === "lead"
+                    ? "lead"
+                    : "installatori"
+              }
+              disabled={submitting}
+              onScelto={(modello) => {
+                if (!confermaSovrascrittura(oggetto, template)) return
+                setOggetto(modello.oggetto)
+                setTemplate(modello.corpo)
+              }}
+            />
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="bulk-mail-subject">Oggetto</Label>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Loader2, Mail, MessageCircle, Phone } from "lucide-react"
 import { toast } from "sonner"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { ScegliModello, confermaSovrascrittura } from "@/components/shared/scegli-modello"
 import {
   Dialog,
   DialogContent,
@@ -246,6 +247,15 @@ export function QuickContactIcons({
           </DialogHeader>
           <div className="flex flex-col gap-3 py-1">
             <MittenteSelect state={mittenti} disabled={sending} />
+            <ScegliModello
+              modulo={kind === "cliente" ? "clienti" : "lead"}
+              disabled={sending}
+              onScelto={(modello) => {
+                if (!confermaSovrascrittura(subject, body)) return
+                setSubject(modello.oggetto)
+                setBody(modello.corpo)
+              }}
+            />
             <div className="flex flex-col gap-1.5">
               <Label htmlFor={`quick-subject-${recordId}`}>Oggetto</Label>
               <Input

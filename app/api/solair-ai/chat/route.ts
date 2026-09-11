@@ -303,9 +303,19 @@ export async function POST(request: Request) {
   }
 
   if (candidati.length === 0) {
+    if (record) {
+      return risposta(
+        `Ho trovato ${ENTITA_ARTICOLO[entita]} "${record.etichetta}" nel CRM, ma in ` +
+          `${impostazione.nextcloudPath} non trovo documenti Nextcloud intestati a "${nome}". ` +
+          "Va bene cosi': significa solo che per ora non ho file da leggere e non preparo aggiornamenti automatici.",
+        { entita, nome, proposta: null },
+      )
+    }
+
     return risposta(
-      `In ${impostazione.nextcloudPath} non trovo file intestati a "${nome}". ` +
-        "Controlla il nome della cartella o del file.",
+      `In ${impostazione.nextcloudPath} non trovo documenti Nextcloud intestati a "${nome}". ` +
+        "Se questo record esiste solo nel CRM va bene: non ho file da leggere. " +
+        "Se invece ti aspettavi dei documenti, controlla il nome o la cartella.",
       { entita, nome, proposta: null },
     )
   }

@@ -14,8 +14,15 @@ import {
   soloNuovi,
 } from "@/lib/solair-ai/nextcloud"
 import { risolviCampoAI } from "@/lib/solair-ai/campi"
-import { entitaDaSelezioneSemplice } from "@/lib/solair-ai/dialogo"
+import {
+  confermaSemplice,
+  entitaDaSelezioneSemplice,
+  nomeDaRispostaSemplice,
+  richiestaLetturaDocumenti,
+  rifiutoSemplice,
+} from "@/lib/solair-ai/dialogo"
 import { cercaIndiceSolairAI } from "@/lib/solair-ai/indice"
+import type { SolairAiKnowledgeSnippet } from "@/lib/solair-ai/indice"
 import { trovaRecord } from "@/lib/solair-ai/records"
 import { leggiImpostazioneAI } from "@/lib/solair-ai/settings"
 import {
@@ -51,6 +58,16 @@ function risposta(
     attendeConferma: false,
     ...extra,
   } satisfies RisposteChat)
+}
+
+function fileDaRisultatiIndice(risultati: SolairAiKnowledgeSnippet[]) {
+  return risultati.map((risultato) => ({
+    path: risultato.path,
+    nome: risultato.path.split("/").pop() ?? risultato.path,
+    dimensione: null,
+    modificatoIl: null,
+    fingerprint: "",
+  }))
 }
 
 function statoDaPayload(grezzo: Partial<StatoConversazione> | undefined): StatoConversazione {
@@ -92,6 +109,24 @@ export async function POST(request: Request) {
 
   const stato = statoDaPayload(body?.stato)
   const ultimoMessaggio = messaggi[messaggi.length - 1]?.testo ?? ""
+
+  if (stato.proposta && rifiutoSemplice(ultimoMessaggio)) {
+    return risposta("Va bene, non tocco niente. Dimmi pure se serve altro.", {
+      entita: stato.entita,
+      nome: stato.nome,
+      proposta: null,
+    })
+  }
+
+  if (stato.proposta && confermaSemplice(ultimoMessaggio)) {
+    return NextResponse.json({
+      messaggio: "Procedo.",
+      stato,
+      attendeConferma: false,
+      applica: true,
+    })
+  }
+
   const entitaSelezionata = entitaDaSelezioneSemplice(ultimoMessaggio)
   if (entitaSelezionata) {
     return risposta(
@@ -101,17 +136,62 @@ export async function POST(request: Request) {
     )
   }
 
+  const letturaRapidaNome =
+    stato.entita && !stato.nome ? nomeDaRispostaSemplice(ultimoMessaggio) : null
+  if (stato.entita && letturaRapidaNome) {
+    return risposta(
+      `Ok, ${ENTITA_LABEL[stato.entita].toLowerCase()} "${letturaRapidaNome}". ` +
+        "Che cosa vuoi sapere? Se vuoi leggere i documenti nuovi e preparare aggiornamenti CRM, scrivi \"leggi documenti\".",
+      { entita: stato.entita, nome: letturaRapidaNome, proposta: null },
+    )
+  }
+
+  const letturaLiveRichiesta = richiestaLetturaDocumenti(ultimoMessaggio)
+  if (stato.entita && stato.nome && !stato.proposta && !letturaLiveRichiesta) {
+    const risultati = await cercaIndiceSolairAI(`${stato.nome} ${ultimoMessaggio}`, {
+      entita: stato.entita,
+      limit: 8,
+    })
+    if (risultati.length > 0) {
+      const messaggio = await rispondiDaIndiceSolairAI({
+        domanda: `${ultimoMessaggio}\n\nContesto record: ${ENTITA_LABEL[stato.entita]} ${stato.nome}.`,
+        risultati,
+      })
+      return risposta(
+        messaggio,
+        { entita: stato.entita, nome: stato.nome, proposta: null },
+        { file: fileDaRisultatiIndice(risultati) },
+      )
+    }
+
+    return risposta(
+      "Non trovo ancora abbastanza nell'indice per rispondere su questo record. " +
+        "Se vuoi controllare Nextcloud live e preparare aggiornamenti CRM, scrivi \"leggi documenti\".",
+      { entita: stato.entita, nome: stato.nome, proposta: null },
+    )
+  }
+
   let lettura
-  try {
-    lettura = await interpretaTurno(
-      messaggi.map((messaggio) => ({ ruolo: messaggio.ruolo, testo: messaggio.testo })),
-      { entita: stato.entita, nome: stato.nome, attendeConferma: stato.proposta != null },
-    )
-  } catch (errore) {
-    return NextResponse.json(
-      { error: errore instanceof Error ? errore.message : "SolairAI non ha risposto." },
-      { status: 502 },
-    )
+  if (stato.entita && stato.nome && letturaLiveRichiesta) {
+    lettura = {
+      entita: stato.entita,
+      nome: stato.nome,
+      conferma: false,
+      rifiuto: false,
+      domanda: null,
+    }
+  } else {
+    try {
+      lettura = await interpretaTurno(
+        messaggi.map((messaggio) => ({ ruolo: messaggio.ruolo, testo: messaggio.testo })),
+        { entita: stato.entita, nome: stato.nome, attendeConferma: stato.proposta != null },
+      )
+    } catch (errore) {
+      return NextResponse.json(
+        { error: errore instanceof Error ? errore.message : "SolairAI non ha risposto." },
+        { status: 502 },
+      )
+    }
   }
 
   // Rifiuto su una proposta in sospeso: si butta via e si torna in ascolto.
@@ -147,15 +227,7 @@ export async function POST(request: Request) {
       return risposta(
         messaggio,
         { entita: null, nome: lettura.nome, proposta: null },
-        {
-          file: risultati.map((risultato) => ({
-            path: risultato.path,
-            nome: risultato.path.split("/").pop() ?? risultato.path,
-            dimensione: null,
-            modificatoIl: null,
-            fingerprint: "",
-          })),
-        },
+        { file: fileDaRisultatiIndice(risultati) },
       )
     }
 
@@ -177,15 +249,7 @@ export async function POST(request: Request) {
       return risposta(
         messaggio,
         { entita, nome: null, proposta: null },
-        {
-          file: risultati.map((risultato) => ({
-            path: risultato.path,
-            nome: risultato.path.split("/").pop() ?? risultato.path,
-            dimensione: null,
-            modificatoIl: null,
-            fingerprint: "",
-          })),
-        },
+        { file: fileDaRisultatiIndice(risultati) },
       )
     }
 

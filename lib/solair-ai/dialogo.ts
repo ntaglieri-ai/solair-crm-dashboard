@@ -17,6 +17,50 @@ const SELEZIONI_ENTITA = new Map<string, EntitaAI>([
   ["gli installatori", "installatore"],
 ])
 
+const CONFERME_SEMPLICI = new Set([
+  "si",
+  "sisi",
+  "ok",
+  "okay",
+  "va bene",
+  "procedi",
+  "confermo",
+  "aggiorna",
+  "aggiorna pure",
+  "crea",
+  "crea pure",
+])
+
+const RIFIUTI_SEMPLICI = new Set([
+  "no",
+  "annulla",
+  "stop",
+  "ferma",
+  "lascia stare",
+  "non procedere",
+])
+
+const PAROLE_DOMANDA = new Set([
+  "chi",
+  "che",
+  "cosa",
+  "come",
+  "quando",
+  "quanto",
+  "quale",
+  "quali",
+  "dove",
+  "perche",
+  "dimmi",
+  "cerca",
+  "trova",
+  "vedi",
+  "leggi",
+  "controlla",
+  "aggiorna",
+  "sincronizza",
+])
+
 function normalizzaTestoDialogo(testo: string): string {
   return testo
     .normalize("NFD")
@@ -33,4 +77,40 @@ export function entitaDaSelezioneSemplice(messaggio: string): EntitaAI | null {
   if (testo === "") return null
 
   return SELEZIONI_ENTITA.get(testo) ?? null
+}
+
+export function confermaSemplice(messaggio: string): boolean {
+  return CONFERME_SEMPLICI.has(normalizzaTestoDialogo(messaggio))
+}
+
+export function rifiutoSemplice(messaggio: string): boolean {
+  return RIFIUTI_SEMPLICI.has(normalizzaTestoDialogo(messaggio))
+}
+
+export function nomeDaRispostaSemplice(messaggio: string): string | null {
+  const originale = messaggio.trim().replace(/\s+/g, " ")
+  const normalizzato = normalizzaTestoDialogo(originale)
+  if (originale === "" || normalizzato === "") return null
+  if (originale.includes("?")) return null
+  if (entitaDaSelezioneSemplice(originale)) return null
+
+  const parole = normalizzato.split(" ")
+  if (parole.length > 5) return null
+  if (PAROLE_DOMANDA.has(parole[0] ?? "")) return null
+  if (parole.some((parola) => CONFERME_SEMPLICI.has(parola) || RIFIUTI_SEMPLICI.has(parola))) {
+    return null
+  }
+
+  return originale
+}
+
+export function richiestaLetturaDocumenti(messaggio: string): boolean {
+  const testo = normalizzaTestoDialogo(messaggio)
+  return (
+    /\b(leggi|controlla|vedi|scansiona|analizza)\b.*\b(documenti|file|cartella|nextcloud)\b/.test(
+      testo,
+    ) ||
+    /\b(aggiorna|crea|compila)\b.*\b(crm|scheda|record|campi)\b/.test(testo) ||
+    /\b(nuovi documenti|documenti nuovi|novita)\b/.test(testo)
+  )
 }

@@ -6,6 +6,7 @@ import {
   nomeDaRispostaSemplice,
   richiestaLetturaDocumenti,
   rifiutoSemplice,
+  salutoSemplice,
 } from "@/lib/solair-ai/dialogo"
 
 describe("entitaDaSelezioneSemplice", () => {
@@ -31,6 +32,14 @@ describe("confermaSemplice e rifiutoSemplice", () => {
     expect(confermaSemplice("procedi")).toBe(true)
     expect(rifiutoSemplice("no")).toBe(true)
     expect(rifiutoSemplice("lascia stare")).toBe(true)
+  })
+})
+
+describe("salutoSemplice", () => {
+  it("riconosce saluti che non sono richieste operative", () => {
+    expect(salutoSemplice("ciao")).toBe(true)
+    expect(salutoSemplice("Buongiorno SolairAI")).toBe(true)
+    expect(salutoSemplice("ciao, mi riassumi Mario Rossi?")).toBe(false)
   })
 })
 

@@ -20,6 +20,7 @@ import {
   nomeDaRispostaSemplice,
   richiestaLetturaDocumenti,
   rifiutoSemplice,
+  salutoSemplice,
 } from "@/lib/solair-ai/dialogo"
 import { cercaIndiceSolairAI } from "@/lib/solair-ai/indice"
 import type { SolairAiKnowledgeSnippet } from "@/lib/solair-ai/indice"
@@ -109,6 +110,13 @@ export async function POST(request: Request) {
 
   const stato = statoDaPayload(body?.stato)
   const ultimoMessaggio = messaggi[messaggi.length - 1]?.testo ?? ""
+
+  if (!stato.proposta && salutoSemplice(ultimoMessaggio)) {
+    return risposta(
+      "Ciao. Dimmi pure cosa vuoi fare: posso cercare nelle fonti Nextcloud indicizzate, oppure lavorare su un lead, un cliente o un installatore.",
+      { entita: stato.entita, nome: stato.nome, proposta: null },
+    )
+  }
 
   if (stato.proposta && rifiutoSemplice(ultimoMessaggio)) {
     return risposta("Va bene, non tocco niente. Dimmi pure se serve altro.", {

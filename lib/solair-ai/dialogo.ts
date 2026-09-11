@@ -40,6 +40,17 @@ const RIFIUTI_SEMPLICI = new Set([
   "non procedere",
 ])
 
+const SALUTI_SEMPLICI = new Set([
+  "ciao",
+  "salve",
+  "buongiorno",
+  "buonasera",
+  "buon pomeriggio",
+  "hey",
+  "ciao solairai",
+  "buongiorno solairai",
+])
+
 const PAROLE_DOMANDA = new Set([
   "chi",
   "che",
@@ -85,6 +96,10 @@ export function confermaSemplice(messaggio: string): boolean {
 
 export function rifiutoSemplice(messaggio: string): boolean {
   return RIFIUTI_SEMPLICI.has(normalizzaTestoDialogo(messaggio))
+}
+
+export function salutoSemplice(messaggio: string): boolean {
+  return SALUTI_SEMPLICI.has(normalizzaTestoDialogo(messaggio))
 }
 
 export function nomeDaRispostaSemplice(messaggio: string): string | null {

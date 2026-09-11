@@ -15,6 +15,7 @@ import { PermissionManagementClient } from "./permission-management-client"
 import { NextcloudPathsEditor } from "./nextcloud-paths-editor"
 import { completeFieldPermissions } from "@/lib/permissions/field-catalog"
 import {
+  ACTION_KEYS,
   buildDefaultPermissionSnapshot,
   normalizeRoleCode,
 } from "@/lib/permissions/constants"
@@ -95,9 +96,23 @@ function buildRuoli(
   const validAzioni = new Set<string>(RECORD_PERMESSI.map((p) => p.id))
 
   return ruoli.map((r) => {
-    // Pagine: default tutte false, poi applica gli accessi salvati.
+    // Il punto di partenza e' il default del ruolo, non uno "spento" buono per
+    // tutti: dove non c'e' una riga salvata e' il default che il motore dei
+    // permessi applica davvero (lo stesso che applica la RLS, via
+    // crm_current_user_can_action). Mostrare false su una chiave mai salvata
+    // farebbe due danni: racconterebbe un permesso che non e' quello vero, e
+    // al primo salvataggio lo scriverebbe spento per davvero — revocando in
+    // silenzio accessi che nessuno ha toccato.
+    const predefiniti = buildDefaultPermissionSnapshot({
+      ruoloCode: normalizeRoleCode(r.code ?? undefined),
+    })
+
+    // Pagine: default del ruolo, poi applica gli accessi salvati.
     const pagine = Object.fromEntries(
-      PAGINE.map((p) => [p.id, false]),
+      PAGINE.map((p) => {
+        const accesso = predefiniti.pages[p.id]
+        return [p.id, accesso === "r" || accesso === "rw"]
+      }),
     ) as Record<PaginaId, boolean>
     for (const row of permessiPagina) {
       if (row.ruolo_id === r.id && validPagine.has(row.pagina)) {
@@ -127,11 +142,12 @@ function buildRuoli(
         .filter((row) => row.ruolo_id === r.id)
         .map((row) => [row.chiave, row.abilitato]),
     )
-    const azioni = Object.fromEntries(
-      permessiAzione
-        .filter((row) => row.ruolo_id === r.id)
-        .map((row) => [row.azione, row.abilitato]),
+    const azioni: Record<string, boolean> = Object.fromEntries(
+      ACTION_KEYS.map((azione) => [azione, predefiniti.actions[azione] === true]),
     )
+    for (const row of permessiAzione) {
+      if (row.ruolo_id === r.id) azioni[row.azione] = row.abilitato === true
+    }
     // Lo scope per risorsa non ha una tabella propria: `permessi_scope` non
     // esiste nello schema remoto e non e' stata creata, perche' lo scope arriva
     // gia' dal default del ruolo (lib/permissions/constants.ts) e dalle chiavi
@@ -140,9 +156,7 @@ function buildRuoli(
     // Qui si mostra quindi lo scope EFFETTIVO del ruolo, non una riga salvata.
     // Prima si leggeva da una tabella inesistente e il badge diceva "none" a
     // tutti: un'informazione sbagliata su ogni ruolo del CRM.
-    const scope_dati = buildDefaultPermissionSnapshot({
-      ruoloCode: normalizeRoleCode(r.code ?? undefined),
-    }).scopes
+    const scope_dati = predefiniti.scopes
     for (const row of permessiUi) {
       if (row.ruolo_id !== r.id || row.abilitato !== true || !row.chiave.startsWith("scope:")) continue
       const [, resource, scope] = row.chiave.split(":")

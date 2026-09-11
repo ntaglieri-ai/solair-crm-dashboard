@@ -1,14 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import { FolderTree, Save, Sparkles } from "lucide-react"
+import { FolderTree, Save, Sparkles, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { SectionHeader } from "@/components/impostazioni/settings-ui"
+import { NextcloudFolderPicker } from "@/components/nextcloud/nextcloud-folder-picker"
 import { ENTITA_LABEL } from "@/lib/solair-ai/tipi"
 import type { EntitaAI } from "@/lib/solair-ai/tipi"
 
@@ -20,9 +20,9 @@ type Impostazione = {
 }
 
 const AIUTO: Record<EntitaAI, string> = {
-  lead: "Es. Solair/SolairAI/Lead — dentro, una sottocartella per lead oppure file col nome nel titolo.",
-  cliente: "Es. Solair/SolairAI/Clienti.",
-  installatore: "Es. Solair/SolairAI/Installatori.",
+  lead: "Dentro, una sottocartella per lead oppure file col nome nel titolo.",
+  cliente: "La cartella con il materiale dei clienti.",
+  installatore: "La cartella con il materiale degli installatori.",
 }
 
 export function SolairAiSettingsClient({
@@ -82,7 +82,7 @@ export function SolairAiSettingsClient({
     <div className="flex flex-col gap-6">
       <SectionHeader
         title="SolairAI"
-        description="Le cartelle Nextcloud da cui SolairAI legge i documenti, una per tipo di record. Il percorso e' relativo alla tua home Nextcloud, senza slash iniziale."
+        description="Le cartelle Nextcloud da cui SolairAI legge i documenti, una per tipo di record. Si scelgono sfogliando l'albero reale: l'elenco e' quello che vede l'account con cui SolairAI apre Nextcloud."
         action={
           canManage ? (
             <Button type="button" onClick={salva} disabled={!modificate || salvataggio}>
@@ -127,22 +127,42 @@ export function SolairAiSettingsClient({
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label
-                htmlFor={`path-${riga.entita}`}
-                className="text-xs font-medium text-muted-foreground"
-              >
+              <Label className="text-xs font-medium text-muted-foreground">
                 Cartella Nextcloud
               </Label>
-              <div className="flex items-center gap-2">
-                <FolderTree className="size-4 shrink-0 text-muted-foreground" />
-                <Input
-                  id={`path-${riga.entita}`}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-background px-3 py-2">
+                  <FolderTree className="size-4 shrink-0 text-muted-foreground" />
+                  {riga.nextcloudPath ? (
+                    <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">
+                      /{riga.nextcloudPath}
+                    </span>
+                  ) : (
+                    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                      Nessuna cartella scelta
+                    </span>
+                  )}
+                  {canManage && riga.nextcloudPath ? (
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label={`Svuota la cartella di ${ENTITA_LABEL[riga.entita]}`}
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => aggiorna(riga.entita, { nextcloudPath: "" })}
+                    >
+                      <X className="size-3.5" />
+                    </Button>
+                  ) : null}
+                </div>
+                <NextcloudFolderPicker
                   value={riga.nextcloudPath}
                   disabled={!canManage}
-                  placeholder="Solair/SolairAI/..."
-                  onChange={(evento) =>
-                    aggiorna(riga.entita, { nextcloudPath: evento.target.value })
-                  }
+                  browseUrl="/api/crm-settings/solair-ai/browse"
+                  triggerLabel={riga.nextcloudPath ? "Cambia" : "Scegli cartella"}
+                  title={`Cartella di ${ENTITA_LABEL[riga.entita]}`}
+                  description="Naviga le tue cartelle Nextcloud e scegli con un click quella da cui SolairAI deve leggere."
+                  onSelect={(path) => aggiorna(riga.entita, { nextcloudPath: path })}
                 />
               </div>
               <p className="text-xs text-muted-foreground">{AIUTO[riga.entita]}</p>

@@ -126,11 +126,18 @@ const ROLE_COLORS: { id: RuoloColore; label: string }[] = [
   { id: "gray", label: "Neutro" },
 ]
 
+// Un'etichetta per OGNI chiave di ACTION_KEYS: la sezione "Azioni avanzate"
+// le elenca tutte, e una chiave senza etichetta finirebbe a schermo come
+// stringa tecnica.
 const ACTION_LABELS: Record<string, string> = {
   "dashboard.economic.view": "Vede indicatori economici",
   "dashboard.system_status.view": "Vede stato tecnico dei servizi",
+  "widget.bacheca.gestisci": "Pubblica e rimuove annunci in Bacheca",
   "calendario.events.manage_all": "Gestisce tutti gli eventi calendario",
   "clienti.note_interne.view": "Vede e gestisce note interne Clienti",
+  "installatori.note_interne.view": "Vede e gestisce note interne Installatori",
+  "note.gestione": "Gestisce le note e i filtri salvati altrui",
+  "email_template.gestione": "Gestisce i template email",
   "crm_settings.account.audit.view": "Vede Audit & Log",
   "crm_settings.account.session.view": "Vede Session & Access",
   "crm_settings.account.users.manage": "Gestisce utenti",
@@ -138,6 +145,7 @@ const ACTION_LABELS: Record<string, string> = {
   "crm_settings.system.backup.view": "Vede Backup",
   "crm_settings.system.backup.run": "Esegue Backup",
   "crm_settings.system.maintenance.run": "Task manutenzione",
+  "crm_settings.system.schema.manage": "Configura schema e moduli di sistema (incluso SolairAI)",
   "crm_settings.system.default_values.manage": "Gestisce valori predefiniti",
   "company.profile.view": "Vede informazioni aziendali",
   "company.profile.edit": "Modifica informazioni aziendali",
@@ -148,18 +156,72 @@ const ACTION_LABELS: Record<string, string> = {
   "appearance.personal.manage": "Personalizza il proprio aspetto",
   "lead.columns.customize_own": "Personalizza colonne Lead",
   "lead.tags.edit": "Modifica tag Lead",
+  "clienti.tags.edit": "Modifica tag Clienti",
+  "installatori.tags.edit": "Modifica tag Installatori",
   "lead.default_values.manage": "Gestisce default Lead",
   "clienti.default_values.manage": "Gestisce valori Clienti",
   "compiti.default_values.manage": "Gestisce valori Compiti",
   "scadenze.default_values.manage": "Gestisce valori Scadenze",
   "installatori.default_values.manage": "Gestisce valori Installatori",
-  // SolairAI ha una pagina permessi sua (AI Features > Permessi SolairAI):
-  // le etichette servono comunque qui, perche' il riepilogo per ruolo
-  // elenca TUTTE le azioni abilitate e senza etichetta mostrerebbe la
-  // chiave grezza.
+  "lead.fields.view": "Vede i campi Lead",
+  "lead.fields.create": "Crea campi Lead",
+  "lead.fields.edit": "Modifica campi Lead",
+  "lead.fields.delete": "Elimina campi Lead",
+  "lead.fields.reorder": "Riordina campi Lead",
+  "lead.fields.visibility.manage": "Gestisce visibilità campi Lead",
+  "lead.fields.required.manage": "Gestisce obbligatorietà campi Lead",
+  "clienti.fields.view": "Vede i campi Clienti",
+  "clienti.fields.create": "Crea campi Clienti",
+  "clienti.fields.edit": "Modifica campi Clienti",
+  "clienti.fields.delete": "Elimina campi Clienti",
+  "compiti.fields.view": "Vede i campi Compiti",
+  "compiti.fields.create": "Crea campi Compiti",
+  "compiti.fields.edit": "Modifica campi Compiti",
+  "compiti.fields.delete": "Elimina campi Compiti",
+  "scadenze.fields.view": "Vede i campi Scadenze",
+  "scadenze.fields.create": "Crea campi Scadenze",
+  "scadenze.fields.edit": "Modifica campi Scadenze",
+  "scadenze.fields.delete": "Elimina campi Scadenze",
+  "installatori.fields.view": "Vede i campi Installatori",
+  "installatori.fields.create": "Crea campi Installatori",
+  "installatori.fields.edit": "Modifica campi Installatori",
+  "installatori.fields.delete": "Elimina campi Installatori",
+  "offerta_commerciale.manage": "Gestisce listino e offerta commerciale",
   "solair_ai.run": "SolairAI — avvia aggiornamenti e creazioni",
   "solair_ai.revisioni.view": "SolairAI — vede la coda di revisione",
 }
+
+/**
+ * I gruppi della sezione "Azioni avanzate". L'ordine e' quello dei moduli in
+ * sidebar; ogni chiave entra in un gruppo solo, e quelle non previste da
+ * nessun match finiscono in "Altre azioni" — una chiave aggiunta domani a
+ * ACTION_KEYS deve comparire da sola nel pannello, non restare invisibile
+ * finche' qualcuno non si ricorda di elencarla qui.
+ */
+const ACTION_GROUP_MATCHERS: { label: string; match: (key: string) => boolean }[] = [
+  { label: "SolairAI", match: (k) => k.startsWith("solair_ai.") },
+  { label: "Dashboard", match: (k) => k.startsWith("dashboard.") || k.startsWith("widget.") },
+  { label: "Lead", match: (k) => k.startsWith("lead.") },
+  { label: "Clienti", match: (k) => k.startsWith("clienti.") },
+  { label: "Compiti", match: (k) => k.startsWith("compiti.") },
+  { label: "Scadenze", match: (k) => k.startsWith("scadenze.") },
+  { label: "Installatori", match: (k) => k.startsWith("installatori.") },
+  { label: "Calendario", match: (k) => k.startsWith("calendario.") },
+  { label: "Offerta Commerciale", match: (k) => k.startsWith("offerta_commerciale.") },
+  { label: "Azienda", match: (k) => k.startsWith("company.") },
+  { label: "CRM Settings & Admin", match: (k) => k.startsWith("crm_settings.") },
+]
+
+const ACTION_GROUPS: { label: string; keys: string[] }[] = (() => {
+  const restanti = new Set<string>(ACTION_KEYS)
+  const gruppi = ACTION_GROUP_MATCHERS.map(({ label, match }) => {
+    const keys = [...restanti].filter(match)
+    for (const key of keys) restanti.delete(key)
+    return { label, keys }
+  }).filter((gruppo) => gruppo.keys.length > 0)
+  if (restanti.size > 0) gruppi.push({ label: "Altre azioni", keys: [...restanti] })
+  return gruppi
+})()
 
 function withAdvanced(
   permessi: RuoloPermessi,
@@ -268,6 +330,7 @@ function templatePermessi(template: RoleTemplate, source?: Ruolo): RuoloPermessi
           documenti: true,
           installatori: true,
           offerta_commerciale: true,
+          solair_ai: true,
           crm_settings: true,
         },
         record: allRecordPerms(true),
@@ -364,6 +427,7 @@ export function PermissionManagementClient({
   const active = ruoli.find((r) => r.id === activeId) ?? null
   const copySource = ruoli.find((r) => r.id === copyFromRoleId) ?? active ?? ruoli[0]
   const activeRoleCode = active?.code ?? active?.nome ?? "STANDARD"
+  const ruoloAttivoSuperadmin = activeRoleCode.toUpperCase() === "SUPERADMIN"
 
   function applyTemplate(template: RoleTemplate, source = copySource) {
     setRoleTemplate(template)
@@ -467,6 +531,12 @@ export function PermissionManagementClient({
     try {
       const payload: RuoloPermessi = {
         ...draft,
+        // Per SUPERADMIN gli interruttori sono mostrati accesi e bloccati
+        // (il motore lo lascia passare comunque): si salva quello che si
+        // vede, non un eventuale false rimasto a database da prima.
+        azioni: ruoloAttivoSuperadmin
+          ? Object.fromEntries(ACTION_KEYS.map((azione) => [azione, true]))
+          : draft.azioni,
         campi: completeFieldPermissions(draft.campi, activeRoleCode),
       }
       const res = await fetch("/api/crm-settings/permessi", {
@@ -498,6 +568,12 @@ export function PermissionManagementClient({
   function togglePagina(id: PaginaId) {
     setDraft((d) =>
       d ? { ...d, pagine: { ...d.pagine, [id]: !d.pagine[id] } } : d,
+    )
+  }
+
+  function toggleAzione(azione: string, abilitata: boolean) {
+    setDraft((d) =>
+      d ? { ...d, azioni: { ...(d.azioni ?? {}), [azione]: abilitata } } : d,
     )
   }
 
@@ -887,7 +963,57 @@ export function PermissionManagementClient({
               </AccordionContent>
             </AccordionItem>
 
-            {/* 5. Riconfigurazioni CRM */}
+            {/* 5. Azioni avanzate */}
+            <AccordionItem value="azioni">
+              <AccordionTrigger>Azioni avanzate</AccordionTrigger>
+              <AccordionContent>
+                {ruoloAttivoSuperadmin ? (
+                  <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
+                    SUPERADMIN passa comunque: il motore dei permessi gli concede ogni
+                    azione prima di guardare le righe salvate. Gli interruttori restano
+                    accesi e bloccati invece di suggerire una revoca senza effetto.
+                  </p>
+                ) : null}
+                <div className="flex flex-col gap-3">
+                  {ACTION_GROUPS.map((gruppo) => (
+                    <section
+                      key={gruppo.label}
+                      className="rounded-lg border border-border bg-background p-3"
+                    >
+                      <h4 className="mb-2.5 text-sm font-semibold text-foreground">
+                        {gruppo.label}
+                      </h4>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        {gruppo.keys.map((azione) => (
+                          <label
+                            key={azione}
+                            className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm"
+                          >
+                            <span className="min-w-0 break-words text-foreground">
+                              {ACTION_LABELS[azione] ?? azione}
+                            </span>
+                            <Switch
+                              checked={
+                                ruoloAttivoSuperadmin || draft.azioni?.[azione] === true
+                              }
+                              disabled={ruoloAttivoSuperadmin}
+                              onCheckedChange={(v) => toggleAzione(azione, v === true)}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+                <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                  Sono le stesse chiavi che leggono le API e, per SolairAI e le note
+                  interne, anche la RLS del database: toglierle qui le chiude davvero,
+                  non solo a schermo.
+                </p>
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* 6. Riconfigurazioni CRM */}
             <AccordionItem value="riconfig">
               <AccordionTrigger>Riconfigurazioni CRM</AccordionTrigger>
               <AccordionContent>

@@ -30,6 +30,7 @@ export type PaginaId =
   | "documenti"
   | "installatori"
   | "offerta_commerciale"
+  | "solair_ai"
   | "crm_settings"
 
 export const PAGINE: { id: PaginaId; label: string }[] = [
@@ -41,6 +42,7 @@ export const PAGINE: { id: PaginaId; label: string }[] = [
   { id: "documenti", label: "Documenti" },
   { id: "installatori", label: "Installatori" },
   { id: "offerta_commerciale", label: "Offerta Commerciale" },
+  { id: "solair_ai", label: "SolairAI" },
   { id: "crm_settings", label: "CRM Settings & Admin" },
 ]
 
@@ -113,6 +115,7 @@ export const mockRuoli: Ruolo[] = [
         documenti: true,
         installatori: true,
         offerta_commerciale: true,
+        solair_ai: true,
         crm_settings: true,
       },
       record: {
@@ -141,6 +144,7 @@ export const mockRuoli: Ruolo[] = [
         documenti: true,
         installatori: false,
         offerta_commerciale: true,
+        solair_ai: true,
         crm_settings: false,
       },
       record: {
@@ -169,6 +173,7 @@ export const mockRuoli: Ruolo[] = [
         documenti: true,
         installatori: true,
         offerta_commerciale: true,
+        solair_ai: true,
         crm_settings: false,
       },
       record: {

@@ -247,16 +247,6 @@ export const CRM_SETTINGS_CATALOG: CrmSettingsCatalogItem[] = [
     status: "active",
   },
   {
-    id: "solair-ai-permessi",
-    group: "ai-features",
-    title: "Permessi SolairAI",
-    description: "Chi vede il menu, chi avvia le scritture, chi revisiona",
-    href: "/crm-settings/system/solair-ai/permessi",
-    pageKey: "crm_settings.system.solair_ai.permessi",
-    icon: ShieldCheck,
-    status: "active",
-  },
-  {
     id: "company",
     group: "company",
     title: "Informazioni aziendali",

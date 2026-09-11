@@ -113,7 +113,14 @@ export async function listFolder(
     throw new Error(`PROPFIND fallito (HTTP ${res.status})`)
   }
 
-  return parsePropfind(await res.text(), username)
+  // Depth:1 include SEMPRE la cartella richiesta, non solo il suo contenuto.
+  // parsePropfind sa scartare solo la root (path ""), quindi ogni cartella
+  // non-root si ritrovava elencata dentro se stessa: un browser cartelle in
+  // cui si scende all'infinito, e per chi scandisce ricorsivamente (SolairAI)
+  // gli stessi file contati una volta per livello di profondita'. Stessa
+  // esclusione gia' fatta dal gemello admin in admin-webdav.ts.
+  const basePath = normalizeNcPath(path).replace(/\/+$/, "")
+  return parsePropfind(await res.text(), username).filter((entry) => entry.path !== basePath)
 }
 
 function davUrl(username: string, path: string): string {

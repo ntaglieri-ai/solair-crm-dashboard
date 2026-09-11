@@ -309,6 +309,37 @@ export async function moveFile(fromPath: string, toPath: string): Promise<WebDav
   return { ok, status: res?.status ?? 0, ...(ok ? {} : { error: `MOVE fallita (${res?.status})` }) }
 }
 
+/**
+ * Copia un file senza cancellare l'origine. Usato da SolairAI quando un file
+ * trovato in una radice autorizzata viene riconosciuto come allegato di un
+ * record CRM: l'originale resta dov'e', la copia finisce nella cartella
+ * standard del record.
+ */
+export async function copyFile(fromPath: string, toPath: string): Promise<WebDavResult> {
+  const cfg = nextcloudAdminConfig()
+  if (!cfg) return { ok: false, status: 0, error: "Credenziali admin Nextcloud non configurate" }
+
+  const cartella = toPath.split("/").slice(0, -1).join("/")
+  if (cartella) {
+    const esito = await ensureFolder(cartella)
+    if (!esito.ok) return esito
+  }
+
+  const { res, error } = await davRequest("COPY", fromPath, undefined, {
+    Destination: davUrl(toPath, cfg.baseUrl, cfg.adminUser),
+    Overwrite: "F",
+  })
+  if (error) return { ok: false, status: 0, error }
+  if (res?.status === 412) {
+    return { ok: false, status: 412, error: "Destinazione gia' esistente" }
+  }
+  if (res?.status === 404) {
+    return { ok: false, status: 404, error: "Origine non trovata" }
+  }
+  const ok = res?.status === 201 || res?.status === 204
+  return { ok, status: res?.status ?? 0, ...(ok ? {} : { error: `COPY fallita (${res?.status})` }) }
+}
+
 export async function deleteFile(fullPath: string): Promise<WebDavResult> {
   const { res, error } = await davRequest("DELETE", fullPath)
   if (error) return { ok: false, status: 0, error }

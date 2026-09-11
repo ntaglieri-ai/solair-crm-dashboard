@@ -12,6 +12,7 @@ import {
   mediaTypeFromName,
   normalizeMediaType,
 } from "./estrazione-file"
+import { processaDocumentoSuCrmAutomatico } from "./auto-crm"
 import { accessoAI, type AccessoAI } from "./nextcloud"
 import { ENTITA_AI, ENTITA_LABEL, isEntitaAI } from "./tipi"
 import type { EntitaAI } from "./tipi"
@@ -68,6 +69,7 @@ type EsitoFileIndicizzato = {
   chunks: number
   stato: "ready" | "empty" | "unsupported" | "error"
   errore: string | null
+  testo: string
 }
 
 export type SolairAiIndexStats = {
@@ -298,6 +300,7 @@ async function indicizzaVoce(params: {
         chunks: 0,
         stato: "error",
         errore: error?.message ?? "upsert non riuscito",
+        testo: "",
       }
     }
 
@@ -318,11 +321,11 @@ async function indicizzaVoce(params: {
         .from("crm_ai_document_chunks")
         .insert(chunks)
       if (chunksError) {
-        return { chunks: 0, stato: "error", errore: `chunks ${chunksError.message}` }
+        return { chunks: 0, stato: "error", errore: `chunks ${chunksError.message}`, testo: "" }
       }
     }
 
-    return { chunks: chunks.length, stato: estratto.stato, errore: estratto.errore }
+    return { chunks: chunks.length, stato: estratto.stato, errore: estratto.errore, testo: estratto.testo }
   } catch (error) {
     const message = error instanceof Error ? error.message : "indicizzazione fallita"
     await params.supabase.from("crm_ai_documenti").upsert(
@@ -346,7 +349,7 @@ async function indicizzaVoce(params: {
       },
       { onConflict: "entita,path" },
     )
-    return { chunks: 0, stato: "error", errore: message }
+    return { chunks: 0, stato: "error", errore: message, testo: "" }
   }
 }
 
@@ -850,12 +853,27 @@ export async function processaBatchJobSolairAI(params: {
       voce: jobFileToIndicizzabile(file),
       now: new Date().toISOString(),
     })
+
+    let erroreAuto: string | null = null
+    if (esito.stato !== "error") {
+      const auto = await processaDocumentoSuCrmAutomatico({
+        supabase,
+        entita: file.entita,
+        file: jobFileToIndicizzabile(file),
+        testo: esito.testo,
+        utenteId: job.creatoDa,
+      })
+      if (auto.stato === "error") erroreAuto = auto.errore ?? "automazione CRM fallita"
+    }
+
     await finishSolairAiSyncJobFile(file.id, {
-      stato: esito.stato === "error" ? "error" : "done",
+      stato: esito.stato === "error" || erroreAuto ? "error" : "done",
       chunkCount: esito.chunks,
-      errore: esito.errore,
+      errore: esito.errore ?? erroreAuto,
     })
-    if (esito.stato === "error") lastError = esito.errore ?? "indicizzazione fallita"
+    if (esito.stato === "error" || erroreAuto) {
+      lastError = esito.errore ?? erroreAuto ?? "indicizzazione fallita"
+    }
     processed++
 
     const stats = await leggiStatisticheFileJob(job.id)

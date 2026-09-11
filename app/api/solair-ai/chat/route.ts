@@ -14,6 +14,7 @@ import {
   soloNuovi,
 } from "@/lib/solair-ai/nextcloud"
 import { risolviCampoAI } from "@/lib/solair-ai/campi"
+import { entitaDaSelezioneSemplice } from "@/lib/solair-ai/dialogo"
 import { cercaIndiceSolairAI } from "@/lib/solair-ai/indice"
 import { trovaRecord } from "@/lib/solair-ai/records"
 import { leggiImpostazioneAI } from "@/lib/solair-ai/settings"
@@ -91,6 +92,14 @@ export async function POST(request: Request) {
 
   const stato = statoDaPayload(body?.stato)
   const ultimoMessaggio = messaggi[messaggi.length - 1]?.testo ?? ""
+  const entitaSelezionata = entitaDaSelezioneSemplice(ultimoMessaggio)
+  if (entitaSelezionata) {
+    return risposta(
+      `Ok, ${ENTITA_LABEL[entitaSelezionata].toLowerCase()}. ` +
+        `Come si chiama ${ENTITA_ARTICOLO[entitaSelezionata]}?`,
+      { entita: entitaSelezionata, nome: null, proposta: null },
+    )
+  }
 
   let lettura
   try {

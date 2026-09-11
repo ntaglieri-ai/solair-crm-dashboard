@@ -25,9 +25,6 @@ export async function accessoAI(subject: {
   return commercialNextcloudUser(subject)
 }
 
-/** Profondita' massima della discesa nelle sottocartelle. */
-const PROFONDITA_MAX = 3
-
 /** Oltre questa soglia il turno si ferma: leggere 40 file costa e non serve. */
 export const MAX_FILE_PER_TURNO = 8
 
@@ -39,32 +36,47 @@ const MAX_BYTE_FILE = 25 * 1024 * 1024
  * data di modifica. Se il file cambia, cambia l'impronta e il file torna
  * "nuovo" — che e' proprio il comportamento che serve al check delle novita'.
  */
-function fingerprintDi(voce: { size: number | null; lastModified: string | null }): string {
+function fingerprintDi(voce: {
+  etag?: string | null
+  size: number | null
+  lastModified: string | null
+}): string {
+  if (voce.etag) return `etag:${voce.etag}`
   return `size-mtime:${voce.size ?? "?"}-${voce.lastModified ?? "?"}`
 }
 
 async function scendi(
   accesso: AccessoAI,
   path: string,
-  profondita: number,
-): Promise<{ path: string; nome: string; size: number | null; lastModified: string | null }[]> {
-  if (profondita > PROFONDITA_MAX) return []
-  const voci = await listFolder(accesso.username, accesso.appPassword, path)
-  const cartelle = voci.filter((voce) => voce.isDir)
-  const annidati = await Promise.all(
-    cartelle.map((voce) => scendi(accesso, voce.path, profondita + 1)),
-  )
-  return [
-    ...voci
-      .filter((voce) => !voce.isDir)
-      .map((voce) => ({
-        path: voce.path,
-        nome: voce.name,
-        size: voce.size,
-        lastModified: voce.lastModified,
-      })),
-    ...annidati.flat(),
-  ]
+): Promise<
+  { path: string; nome: string; size: number | null; lastModified: string | null; etag: string | null }[]
+> {
+  const visitate = new Set<string>()
+  const file: { path: string; nome: string; size: number | null; lastModified: string | null; etag: string | null }[] = []
+  const coda = [path]
+
+  while (coda.length > 0) {
+    const corrente = coda.shift() ?? ""
+    if (visitate.has(corrente)) continue
+    visitate.add(corrente)
+
+    const voci = await listFolder(accesso.username, accesso.appPassword, corrente)
+    for (const voce of voci) {
+      if (voce.isDir) {
+        coda.push(voce.path)
+      } else {
+        file.push({
+          path: voce.path,
+          nome: voce.name,
+          size: voce.size,
+          lastModified: voce.lastModified,
+          etag: voce.etag,
+        })
+      }
+    }
+  }
+
+  return file
 }
 
 /**
@@ -82,7 +94,7 @@ export async function fileDellaCartella(
   const parole = paroleDelNome(nome)
   if (parole.length === 0) return []
 
-  const tutti = await scendi(accesso, cartella, 0)
+  const tutti = await scendi(accesso, cartella)
 
   return tutti
     .filter((voce) => fileRiguardaNome(voce.path, cartella, parole))

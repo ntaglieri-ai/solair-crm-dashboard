@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server"
 
 import { requireApiPage } from "@/lib/permissions/server"
-import { leggiDocumenti, interpretaTurno } from "@/lib/solair-ai/claude"
+import {
+  leggiDocumenti,
+  interpretaTurno,
+  rispondiDaIndiceSolairAI,
+} from "@/lib/solair-ai/claude"
 import {
   MAX_FILE_PER_TURNO,
   accessoAI,
@@ -10,6 +14,7 @@ import {
   soloNuovi,
 } from "@/lib/solair-ai/nextcloud"
 import { risolviCampoAI } from "@/lib/solair-ai/campi"
+import { cercaIndiceSolairAI } from "@/lib/solair-ai/indice"
 import { trovaRecord } from "@/lib/solair-ai/records"
 import { leggiImpostazioneAI } from "@/lib/solair-ai/settings"
 import {
@@ -85,6 +90,7 @@ export async function POST(request: Request) {
   }
 
   const stato = statoDaPayload(body?.stato)
+  const ultimoMessaggio = messaggi[messaggi.length - 1]?.testo ?? ""
 
   let lettura
   try {
@@ -123,6 +129,27 @@ export async function POST(request: Request) {
 
   const entita = lettura.entita
   if (!entita) {
+    const risultati = await cercaIndiceSolairAI(ultimoMessaggio, { limit: 8 })
+    if (risultati.length > 0) {
+      const messaggio = await rispondiDaIndiceSolairAI({
+        domanda: ultimoMessaggio,
+        risultati,
+      })
+      return risposta(
+        messaggio,
+        { entita: null, nome: lettura.nome, proposta: null },
+        {
+          file: risultati.map((risultato) => ({
+            path: risultato.path,
+            nome: risultato.path.split("/").pop() ?? risultato.path,
+            dimensione: null,
+            modificatoIl: null,
+            fingerprint: "",
+          })),
+        },
+      )
+    }
+
     return risposta(
       lettura.domanda ??
         "Su che cosa stiamo lavorando: un lead, un cliente o un installatore?",
@@ -132,6 +159,27 @@ export async function POST(request: Request) {
 
   const nome = lettura.nome
   if (!nome) {
+    const risultati = await cercaIndiceSolairAI(ultimoMessaggio, { entita, limit: 8 })
+    if (risultati.length > 0) {
+      const messaggio = await rispondiDaIndiceSolairAI({
+        domanda: ultimoMessaggio,
+        risultati,
+      })
+      return risposta(
+        messaggio,
+        { entita, nome: null, proposta: null },
+        {
+          file: risultati.map((risultato) => ({
+            path: risultato.path,
+            nome: risultato.path.split("/").pop() ?? risultato.path,
+            dimensione: null,
+            modificatoIl: null,
+            fingerprint: "",
+          })),
+        },
+      )
+    }
+
     return risposta(
       lettura.domanda ?? `Come si chiama ${ENTITA_ARTICOLO[entita]}?`,
       { entita, nome: null, proposta: null },

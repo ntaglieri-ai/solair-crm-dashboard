@@ -8,19 +8,39 @@ export type ImpostazioneAI = {
   entita: EntitaAI
   nextcloudPath: string
   attivo: boolean
+  indicizzazioneAttiva: boolean
   aggiornatoIl: string | null
+  ultimoSyncIl: string | null
+  ultimoSyncEsito: string | null
+  ultimoSyncErrore: string | null
+  ultimoSyncFile: number
 }
 
 type RigaImpostazione = {
   entita: string
   nextcloud_path: string | null
   attivo: boolean | null
+  indicizzazione_attiva?: boolean | null
   aggiornato_il: string | null
+  ultimo_sync_il?: string | null
+  ultimo_sync_esito?: string | null
+  ultimo_sync_errore?: string | null
+  ultimo_sync_file?: number | null
 }
 
 /** Riga di default per un'entita' che a DB non c'e' ancora (migration non applicata). */
 function vuota(entita: EntitaAI): ImpostazioneAI {
-  return { entita, nextcloudPath: "", attivo: true, aggiornatoIl: null }
+  return {
+    entita,
+    nextcloudPath: "",
+    attivo: true,
+    indicizzazioneAttiva: true,
+    aggiornatoIl: null,
+    ultimoSyncIl: null,
+    ultimoSyncEsito: null,
+    ultimoSyncErrore: null,
+    ultimoSyncFile: 0,
+  }
 }
 
 /**
@@ -32,7 +52,9 @@ export async function leggiImpostazioniAI(): Promise<ImpostazioneAI[]> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("crm_ai_settings")
-    .select("entita, nextcloud_path, attivo, aggiornato_il")
+    .select(
+      "entita, nextcloud_path, attivo, indicizzazione_attiva, aggiornato_il, ultimo_sync_il, ultimo_sync_esito, ultimo_sync_errore, ultimo_sync_file",
+    )
 
   // Tabella assente = migration non ancora applicata. La pagina deve poter
   // aprirsi lo stesso e dire cosa manca, non rispondere 500.
@@ -47,7 +69,12 @@ export async function leggiImpostazioniAI(): Promise<ImpostazioneAI[]> {
           entita: riga.entita as EntitaAI,
           nextcloudPath: riga.nextcloud_path ?? "",
           attivo: riga.attivo !== false,
+          indicizzazioneAttiva: riga.indicizzazione_attiva !== false,
           aggiornatoIl: riga.aggiornato_il,
+          ultimoSyncIl: riga.ultimo_sync_il ?? null,
+          ultimoSyncEsito: riga.ultimo_sync_esito ?? null,
+          ultimoSyncErrore: riga.ultimo_sync_errore ?? null,
+          ultimoSyncFile: riga.ultimo_sync_file ?? 0,
         } satisfies ImpostazioneAI,
       ]),
   )
@@ -77,7 +104,12 @@ export function normalizzaPath(valore: string): string {
 
 export async function salvaImpostazioniAI(
   utenteId: string | null,
-  modifiche: { entita: EntitaAI; nextcloudPath: string; attivo: boolean }[],
+  modifiche: {
+    entita: EntitaAI
+    nextcloudPath: string
+    attivo: boolean
+    indicizzazioneAttiva?: boolean
+  }[],
 ): Promise<void> {
   const supabase = await createClient()
   const adesso = new Date().toISOString()
@@ -91,6 +123,7 @@ export async function salvaImpostazioniAI(
       .update({
         nextcloud_path: normalizzaPath(modifica.nextcloudPath),
         attivo: modifica.attivo,
+        indicizzazione_attiva: modifica.indicizzazioneAttiva !== false,
         aggiornato_da: utenteId,
         aggiornato_il: adesso,
       })

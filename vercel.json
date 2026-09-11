@@ -13,6 +13,14 @@
     {
       "path": "/api/cron/tidycal-sync",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/solair-ai-sync",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/solair-ai-nightly-sync",
+      "schedule": "0 3 * * *"
     }
   ]
 }

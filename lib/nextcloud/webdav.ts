@@ -14,6 +14,7 @@ export type NcEntry = {
   lastModified: string | null // ISO
   favorite: boolean // oc:favorite=1 (stella nativa Nextcloud)
   fileId: string | null // oc:fileid, per i deep link diretti al file (/f/{id})
+  etag: string | null // cambia a ogni modifica del contenuto, quando Nextcloud la espone
 }
 
 function davRoot(username: string): string {
@@ -27,6 +28,7 @@ const PROPFIND_BODY = `<?xml version="1.0"?>
     <d:getlastmodified/>
     <d:getcontentlength/>
     <d:getcontenttype/>
+    <d:getetag/>
     <d:resourcetype/>
     <oc:favorite/>
     <oc:fileid/>
@@ -70,6 +72,8 @@ function parsePropfind(xml: string, username: string): NcEntry[] {
     const isDir = /<[a-z0-9]*:?collection\s*\/?>/i.test(block)
     const sizeRaw = tag(block, "getcontentlength")
     const lastMod = tag(block, "getlastmodified")
+    const etagRaw = tag(block, "getetag")
+    const etag = etagRaw ? etagRaw.replace(/&quot;/g, "").replace(/"/g, "").trim() : null
 
     entries.push({
       path,
@@ -80,6 +84,7 @@ function parsePropfind(xml: string, username: string): NcEntry[] {
       lastModified: lastMod ? new Date(lastMod).toISOString() : null,
       favorite: tag(block, "favorite") === "1",
       fileId: tag(block, "fileid"),
+      etag: etag && etag.length > 0 ? etag : null,
     })
   }
 

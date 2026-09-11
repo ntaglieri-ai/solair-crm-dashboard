@@ -30,8 +30,8 @@ import type {
 import { cn } from "@/lib/utils"
 
 const BENVENUTO =
-  "Ciao, sono SolairAI. Dimmi su cosa stai lavorando — per esempio \"ho caricato dei documenti " +
-  "per un lead\" — e vado a vedere se su Nextcloud c'e' qualcosa di nuovo da leggere."
+  "Ciao, sono SolairAI. Posso rispondere sulle fonti Nextcloud indicizzate oppure leggere " +
+  "novita' per un lead, cliente o installatore e proporti aggiornamenti CRM."
 
 let contatoreId = 0
 function nuovoId() {
@@ -402,7 +402,7 @@ export function SolairAiClient({
           <div>
             <h1 className="text-xl font-semibold text-foreground">SolairAI</h1>
             <p className="text-sm text-muted-foreground">
-              Legge i documenti che carichi su Nextcloud e li porta sulla scheda giusta.
+              Conosce le fonti Nextcloud autorizzate e propone modifiche CRM solo su conferma.
             </p>
           </div>
         </div>
@@ -455,7 +455,7 @@ export function SolairAiClient({
                 disabled={!canRun || inAttesa}
                 placeholder={
                   canRun
-                    ? "Es. ho caricato le info per un lead"
+                    ? "Es. riassumi la pratica di Mario Rossi"
                     : "Serve il permesso di avviare gli aggiornamenti"
                 }
                 rows={2}
@@ -482,8 +482,8 @@ export function SolairAiClient({
             </div>
 
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Non scrivo niente sul CRM senza il tuo &quot;si&apos;&quot; in chat. I campi gia&apos;
-              pieni non li sovrascrivo mai: finiscono in revisione.
+              Le risposte usano l&apos;indice delle fonti autorizzate. Non scrivo niente sul CRM
+              senza il tuo &quot;si&apos;&quot; in chat.
             </p>
           </div>
         </TabsContent>

@@ -2,6 +2,7 @@ import "server-only"
 
 import { CAMPI_AI } from "./campi"
 import type { ContenutoFile } from "./nextcloud"
+import type { SolairAiKnowledgeSnippet } from "./indice"
 import { ENTITA_AI, ENTITA_LABEL, isEntitaAI } from "./tipi"
 import type { EntitaAI } from "./tipi"
 
@@ -145,12 +146,20 @@ const TOOL_INTERPRETA: ToolClaude = {
   input_schema: {
     type: "object",
     additionalProperties: false,
-    required: ["entita", "nome", "conferma", "rifiuto", "domanda"],
+    // `entita` non e' fra i required: e' il modo giusto di dire "facoltativo"
+    // a uno schema con enum. L'alternativa — tenerlo required e ammettere il
+    // null nel tipo — l'API la rifiuta a monte, senza mai arrivare al
+    // modello: "Invalid schema: Enum value 'lead' does not match declared
+    // type '['string', 'null']'". Un enum non convive con un tipo unione.
+    // Gli altri due facoltativi (nome, domanda) restano `["string", "null"]`
+    // perche' non hanno enum: li' l'unione l'API la accetta.
+    required: ["nome", "conferma", "rifiuto", "domanda"],
     properties: {
       entita: {
-        type: ["string", "null"],
-        enum: [...ENTITA_AI, null],
-        description: "Tipo di record. null se dalla conversazione non si capisce ancora.",
+        type: "string",
+        enum: [...ENTITA_AI],
+        description:
+          "Tipo di record. Ometti del tutto il campo se dalla conversazione non si capisce ancora.",
       },
       nome: {
         type: ["string", "null"],
@@ -383,4 +392,65 @@ export async function leggiDocumenti(params: {
       })
       .filter((voce) => voce.campo !== "" && voce.valore !== ""),
   }
+}
+
+// ---------------------------------------------------------------------------
+// 3. Risposta da indice documentale
+// ---------------------------------------------------------------------------
+
+const TOOL_RISPONDI_INDICE: ToolClaude = {
+  name: "rispondi_da_indice",
+  description: "Registra la risposta alla domanda usando solo gli estratti documentali forniti.",
+  strict: true,
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["risposta"],
+    properties: {
+      risposta: {
+        type: "string",
+        description:
+          "Risposta in italiano. Usa solo gli estratti forniti e cita i percorsi file rilevanti.",
+      },
+    },
+  },
+}
+
+export async function rispondiDaIndiceSolairAI(params: {
+  domanda: string
+  risultati: SolairAiKnowledgeSnippet[]
+}): Promise<string> {
+  if (params.risultati.length === 0) {
+    return "Non trovo ancora informazioni utili nell'indice documentale SolairAI."
+  }
+
+  const estratti = params.risultati
+    .map(
+      (risultato, index) =>
+        [
+          `Fonte ${index + 1}`,
+          `Modulo: ${ENTITA_LABEL[risultato.entita]}`,
+          `File: ${risultato.path}`,
+          `Estratto:\n${risultato.contenuto.slice(0, 3000)}`,
+        ].join("\n"),
+    )
+    .join("\n\n---\n\n")
+
+  const input = await chiamaClaude({
+    system:
+      "Sei SolairAI, l'assistente documentale del CRM Solair. Rispondi alle domande usando " +
+      "solo gli estratti dell'indice Nextcloud autorizzato. Se gli estratti non bastano, dillo " +
+      "chiaramente. Cita sempre i percorsi file da cui prendi le informazioni.",
+    messaggi: [
+      {
+        role: "user",
+        content: `Domanda:\n${params.domanda}\n\nEstratti disponibili:\n${estratti}`,
+      },
+    ],
+    tool: TOOL_RISPONDI_INDICE,
+    maxTokens: 3000,
+  })
+
+  return stringa(input.risposta) ?? stringa(input.__testo) ??
+    "Ho trovato documenti pertinenti, ma non sono riuscito a comporre una risposta leggibile."
 }

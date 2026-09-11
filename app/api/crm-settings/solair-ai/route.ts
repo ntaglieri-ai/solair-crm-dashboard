@@ -9,7 +9,12 @@ import type { EntitaAI } from "@/lib/solair-ai/tipi"
 export const dynamic = "force-dynamic"
 
 type PutPayload = {
-  impostazioni?: { entita?: string; nextcloudPath?: string; attivo?: boolean }[]
+  impostazioni?: {
+    entita?: string
+    nextcloudPath?: string
+    attivo?: boolean
+    indicizzazioneAttiva?: boolean
+  }[]
 }
 
 export async function GET() {
@@ -33,6 +38,7 @@ export async function PUT(request: Request) {
       entita: riga.entita as EntitaAI,
       nextcloudPath: typeof riga.nextcloudPath === "string" ? riga.nextcloudPath : "",
       attivo: riga.attivo !== false,
+      indicizzazioneAttiva: riga.indicizzazioneAttiva !== false,
     }))
 
   if (modifiche.length === 0) {

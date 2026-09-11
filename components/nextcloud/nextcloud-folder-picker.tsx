@@ -56,6 +56,17 @@ function briciole(path: string): CartellaNextcloud[] {
   return acc
 }
 
+/**
+ * Cartella che contiene `path`, senza mai risalire sopra `radice`.
+ * Su path vuoto o gia' di primo livello si resta sulla radice.
+ */
+function cartellaGenitore(path: string, radice: string): string {
+  if (!path) return radice
+  const genitore = path.split("/").slice(0, -1).join("/")
+  if (!genitore) return radice
+  return genitore === radice || genitore.startsWith(radice) ? genitore : radice
+}
+
 export function NextcloudFolderPicker({
   value,
   onSelect,
@@ -80,6 +91,8 @@ export function NextcloudFolderPicker({
 }) {
   const [open, setOpen] = useState(false)
   const [path, setPath] = useState(rootPath)
+  /** Riga scelta con un click. "" = nessuna, e il bottone di conferma resta spento. */
+  const [selezionata, setSelezionata] = useState("")
   const [cartelle, setCartelle] = useState<CartellaNextcloud[]>([])
   const [caricamento, setCaricamento] = useState(false)
   const [errore, setErrore] = useState<string | null>(null)
@@ -106,11 +119,14 @@ export function NextcloudFolderPicker({
     [browseUrl],
   )
 
-  // All'apertura si riparte dalla cartella gia' configurata, non dalla radice:
-  // chi apre per correggere un percorso lo trova sotto gli occhi.
+  // All'apertura si mostra la cartella che CONTIENE quella gia' configurata,
+  // con quella configurata gia' selezionata: chi apre per correggere un
+  // percorso se lo trova evidenziato in mezzo alle sorelle, e cambiarlo e' un
+  // click solo. Entrare dentro mostrerebbe il contenuto e non la scelta.
   function apri() {
-    const partenza = value || rootPath
+    const partenza = cartellaGenitore(value, rootPath)
     setPath(partenza)
+    setSelezionata(value)
     setOpen(true)
     void carica(partenza)
   }
@@ -188,32 +204,60 @@ export function NextcloudFolderPicker({
                   Nessuna sottocartella qui.
                 </div>
               ) : (
-                <ul className="divide-y divide-border">
-                  {cartelle.map((cartella) => (
-                    <li key={cartella.path}>
-                      <button
-                        type="button"
-                        onClick={() => vaiA(cartella.path)}
-                        className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-muted"
-                      >
-                        <Folder className="size-4 shrink-0 text-[#2E8B72]" aria-hidden="true" />
-                        <span className="min-w-0 flex-1 truncate">{cartella.nome}</span>
-                        <ChevronRight
-                          className="size-4 shrink-0 text-muted-foreground"
-                          aria-hidden="true"
-                        />
-                      </button>
-                    </li>
-                  ))}
+                <ul className="divide-y divide-border" role="listbox" aria-label="Cartelle">
+                  {cartelle.map((cartella) => {
+                    const scelta = cartella.path === selezionata
+                    return (
+                      <li key={cartella.path}>
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={scelta}
+                          onClick={() => setSelezionata(cartella.path)}
+                          onDoubleClick={() => vaiA(cartella.path)}
+                          // Da tastiera il doppio click non esiste: Invio
+                          // seleziona (e' il click del bottone) e la freccia
+                          // destra apre, come in un albero di cartelle.
+                          onKeyDown={(evento) => {
+                            if (evento.key === "ArrowRight") {
+                              evento.preventDefault()
+                              setSelezionata(cartella.path)
+                              vaiA(cartella.path)
+                            }
+                          }}
+                          className={cn(
+                            "flex w-full select-none items-center gap-2.5 px-3 py-2 text-left text-sm",
+                            scelta
+                              ? "bg-teal/12 font-medium text-foreground ring-1 ring-inset ring-teal/40"
+                              : "hover:bg-muted",
+                          )}
+                        >
+                          <Folder
+                            className={cn(
+                              "size-4 shrink-0",
+                              scelta ? "text-teal" : "text-[#2E8B72]",
+                            )}
+                            aria-hidden="true"
+                          />
+                          <span className="min-w-0 flex-1 truncate">{cartella.nome}</span>
+                        </button>
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
             </div>
 
-            <p className="truncate text-xs text-muted-foreground">
-              {dentroLaRadice
-                ? `Selezione: /${path}`
-                : "Entra in una cartella per poterla selezionare."}
-            </p>
+            <div className="flex flex-col gap-0.5">
+              <p className="truncate text-xs text-muted-foreground">
+                {selezionata
+                  ? `Selezione: /${selezionata}`
+                  : "Nessuna cartella selezionata."}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Un click seleziona la cartella, doppio click la apre.
+              </p>
+            </div>
           </div>
 
           <DialogFooter>
@@ -222,9 +266,9 @@ export function NextcloudFolderPicker({
             </Button>
             <Button
               type="button"
-              disabled={!dentroLaRadice}
+              disabled={!selezionata}
               onClick={() => {
-                onSelect(path)
+                onSelect(selezionata)
                 setOpen(false)
               }}
             >

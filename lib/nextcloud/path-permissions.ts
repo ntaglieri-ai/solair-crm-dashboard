@@ -64,6 +64,11 @@ const TEAM_FOLDER_ROOT = "Solair"
 // il comportamento resta byte-identico anche prima del seed, senza mai aprire
 // per sbaglio cartelle ristrette.
 const FALLBACK_RULES: NcPathRule[] = [
+  // L'archivio clienti e' passato qui da "Vendita-Digitale/Clienti 2.0":
+  // la restrizione lo segue, altrimenti spostando la cartella si sarebbero
+  // aperti a Commerciali e Installatori documenti che prima vedevano solo
+  // Direttori e superiori.
+  uniformRule("Solair-Group/Clienti/", 9, DIRECTOR_PLUS),
   uniformRule("Vendita-Digitale/Clienti 2.0/", 10, DIRECTOR_PLUS),
   uniformRule("My-Space/Apps/Zoho CRM/Clienti/", 20, DIRECTOR_PLUS),
   uniformRule("Vendita-Digitale/Finanziaria/", 30, DIRECTOR_PLUS),

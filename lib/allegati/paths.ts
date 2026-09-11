@@ -16,9 +16,19 @@ export type AllegatoRecordTipo = "lead" | "cliente" | "installatore"
 
 const TEAM_FOLDER_ROOT = "Solair/Vendita-Digitale"
 
+/**
+ * I Clienti stanno nell'archivio storico, non sotto Vendita-Digitale.
+ *
+ * E' la cartella arrivata da WorkDrive — decine di migliaia di file
+ * organizzati per cliente — ed e' quella che l'ufficio usa davvero, anche
+ * fuori dal CRM. Tenere un secondo archivio parallelo avrebbe significato
+ * avere i documenti in due posti a seconda di chi li ha caricati.
+ */
+const ARCHIVIO_CLIENTI = "Solair/Solair-Group/Clienti"
+
 const BASE_BY_TIPO: Record<AllegatoRecordTipo, string> = {
   lead: `${TEAM_FOLDER_ROOT}/Preventivi progetto 2.0`,
-  cliente: `${TEAM_FOLDER_ROOT}/Clienti 2.0`,
+  cliente: ARCHIVIO_CLIENTI,
   installatore: `${TEAM_FOLDER_ROOT}/INSTALLATORI`,
 }
 
@@ -45,6 +55,21 @@ export function folderPathForRecord(
   nomeRecord: string,
 ): string {
   const base = BASE_BY_TIPO[tipo]
+
+  // I Clienti usano il solo nome, senza il suffisso dell'id.
+  //
+  // Le cartelle dell'archivio storico sono state create da persone negli
+  // anni ("Gilda Monterosso", "Ballatore Marzia"): aggiungere un suffisso
+  // tecnico creerebbe una cartella nuova accanto a quella esistente invece
+  // di trovarla, e i documenti finirebbero in due posti.
+  //
+  // Il prezzo e' che il nome sulla scheda deve corrispondere a quello della
+  // cartella. Se non corrisponde, il CRM non mostra documenti — non ne
+  // mostra di sbagliati, che sarebbe peggio.
+  if (tipo === "cliente") {
+    return `${base}/${sanitizeName(nomeRecord)}`
+  }
+
   const cartella = `${sanitizeName(nomeRecord)} - ${suffisso(recordId)}`
   return `${base}/${cartella}`
 }

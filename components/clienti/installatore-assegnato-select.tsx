@@ -1,19 +1,15 @@
 "use client"
 
-// Selettore "Installatore assegnato" con suggerimento automatico per zona
-// (spec FASE 3, punto 3.3): i compatibili con la provincia del cliente sono
-// raggruppati in testa, le coperture a raggio non valutabili (PM Technology
-// senza coordinate cliente) escono come "da verificare", tutti gli altri
-// restano comunque selezionabili — il suggerimento non blocca mai la scelta.
+// Selettore "Installatore assegnato": la sorgente puo' ordinare i risultati
+// per compatibilita' territoriale, ma in scheda deve restare un elenco semplice
+// di nomi. Le categorie tecniche non sono linguaggio da CRM operativo.
 import { useEffect, useMemo, useState } from "react"
 import { usePermissions } from "@/lib/permissions/provider"
 import { toast } from "sonner"
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -74,20 +70,21 @@ export function InstallatoreAssegnatoSelect({
   // Il valore salvato a DB e' il nome (clienti.installatore, testo da Zoho):
   // il Select usa il nome come value, cosi' anche un assegnato storico che non
   // esiste piu' in anagrafica resta visibile e riselezionabile.
-  const { items, idPerNome, assegnatoFuoriLista } = useMemo(() => {
+  const { items, idPerNome, nomi } = useMemo(() => {
     const idPerNome = new Map<string, string>()
     for (const gruppo of [dati?.suggeriti, dati?.daVerificare, dati?.altri]) {
       for (const i of gruppo ?? []) idPerNome.set(i.nome, i.id)
     }
     const items: Record<string, string> = {}
-    for (const nome of idPerNome.keys()) items[nome] = nome
+    const nomi = [...idPerNome.keys()]
     const assegnatoFuoriLista = Boolean(
       installatoreAttuale && !idPerNome.has(installatoreAttuale),
     )
     if (installatoreAttuale && assegnatoFuoriLista) {
-      items[installatoreAttuale] = installatoreAttuale
+      nomi.push(installatoreAttuale)
     }
-    return { items, idPerNome, assegnatoFuoriLista }
+    for (const nome of nomi) items[nome] = nome
+    return { items, idPerNome, nomi }
   }, [dati, installatoreAttuale])
 
   async function handleChange(nome: string | null) {
@@ -127,13 +124,6 @@ export function InstallatoreAssegnatoSelect({
     )
   }
 
-  const motivoSelezionato =
-    value != null
-      ? [...(dati?.suggeriti ?? []), ...(dati?.daVerificare ?? [])].find(
-          (s) => s.nome === value,
-        )?.motivo ?? null
-      : null
-
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -149,61 +139,13 @@ export function InstallatoreAssegnatoSelect({
           <SelectValue placeholder={dati ? "Seleziona installatore" : "Caricamento…"} />
         </SelectTrigger>
         <SelectContent>
-          {dati && dati.suggeriti.length > 0 ? (
-            <SelectGroup>
-              <SelectLabel>
-                {dati.regione
-                  ? `Suggeriti — ${dati.regione} (${dati.provincia})`
-                  : "Suggeriti"}
-              </SelectLabel>
-              {dati.suggeriti.map((s) => (
-                <SelectItem key={s.id} value={s.nome}>
-                  {s.nome}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          ) : null}
-          {dati && dati.daVerificare.length > 0 ? (
-            <SelectGroup>
-              <SelectLabel>Da verificare — copertura a raggio</SelectLabel>
-              {dati.daVerificare.map((s) => (
-                <SelectItem key={s.id} value={s.nome}>
-                  {s.nome}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          ) : null}
-          {dati && dati.altri.length > 0 ? (
-            <SelectGroup>
-              <SelectLabel>Altri installatori</SelectLabel>
-              {dati.altri.map((i) => (
-                <SelectItem key={i.id} value={i.nome}>
-                  {i.nome}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          ) : null}
-          {assegnatoFuoriLista && installatoreAttuale ? (
-            <SelectGroup>
-              <SelectLabel>Assegnato (non in anagrafica)</SelectLabel>
-              <SelectItem value={installatoreAttuale}>{installatoreAttuale}</SelectItem>
-            </SelectGroup>
-          ) : null}
+          {nomi.map((nome) => (
+            <SelectItem key={nome} value={nome}>
+              {nome}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
-      {motivoSelezionato ? (
-        <span className="text-[11px] text-muted-foreground">{motivoSelezionato}</span>
-      ) : null}
-      {dati && !provincia ? (
-        <span className="text-[11px] text-muted-foreground">
-          Provincia indirizzo postale non impostata: nessun suggerimento territoriale.
-        </span>
-      ) : null}
-      {dati && provincia && !dati.regione ? (
-        <span className="text-[11px] text-muted-foreground">
-          Provincia “{provincia}” non riconosciuta: nessun suggerimento territoriale.
-        </span>
-      ) : null}
     </div>
   )
 }

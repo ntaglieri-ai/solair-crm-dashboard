@@ -21,7 +21,10 @@ import { CSS } from "@dnd-kit/utilities"
 import { GripVertical } from "lucide-react"
 import { AlertTriangle, Sigma } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { InlineEditableField } from "@/components/shared/inline-edit-field"
+import {
+  InlineEditableField,
+  type InlineEditableValueProps,
+} from "@/components/shared/inline-edit-field"
 import type { FieldModuleKey } from "@/lib/permissions/field-catalog"
 import type { LayoutBlocco, LayoutCampo, LayoutPagina } from "@/lib/crm-settings/layout"
 import {
@@ -61,6 +64,10 @@ export type RisolviModifica = (
   type?: string
   options?: string[]
   optionLabels?: Record<string, string>
+  allowEmptyOption?: boolean
+  emptyLabel?: string
+  nullWhenEmpty?: boolean
+  custom?: InlineEditableValueProps["custom"]
 } | null
 
 export function LayoutRenderer({
@@ -439,7 +446,7 @@ function CampoRenderer({
           {...modifica}
           label={etichetta}
           type={modifica.type as never}
-          emptyLabel={campo.formato.placeholder ?? "—"}
+          emptyLabel={modifica.emptyLabel ?? campo.formato.placeholder ?? "—"}
           displayValue={giaPronto ?? testo}
           onSaved={(nuovoValore) => onSalvato?.(campo.fieldKey, nuovoValore)}
         />

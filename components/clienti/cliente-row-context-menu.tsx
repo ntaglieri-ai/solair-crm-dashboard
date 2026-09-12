@@ -48,6 +48,7 @@ import { SEDE_LABELS, type ClienteRecord } from "@/lib/mock-data"
 import { ClienteTagPicker } from "./cliente-tag-controls"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
+import { CLIENTI_PICKLIST_FALLBACKS } from "@/lib/clienti/picklist-options"
 import { usePermissions } from "@/lib/permissions/provider"
 import { EditRecordDialog, buildClienteEditFields } from "@/components/shared/edit-record-dialog"
 import { telHref } from "@/components/shared/quick-contact-icons"
@@ -82,6 +83,30 @@ export function ClienteRowContextMenu({
     "Clienti",
     "sede",
     SEDE_LABELS.map((value) => option(value)),
+    { includeFallback: true },
+  ).options
+  const statoSopralluogoOptions = useColumnValueOptions(
+    "Clienti",
+    CLIENTI_PICKLIST_FALLBACKS["Stato sopralluogo"].column,
+    CLIENTI_PICKLIST_FALLBACKS["Stato sopralluogo"].options,
+    { includeFallback: true },
+  ).options
+  const tipoCtrOptions = useColumnValueOptions(
+    "Clienti",
+    CLIENTI_PICKLIST_FALLBACKS["TIPO CTR"].column,
+    CLIENTI_PICKLIST_FALLBACKS["TIPO CTR"].options,
+    { includeFallback: true },
+  ).options
+  const tipologiaProprietarioOptions = useColumnValueOptions(
+    "Clienti",
+    CLIENTI_PICKLIST_FALLBACKS["TIPOLOGIA PROPRIETARIO"].column,
+    CLIENTI_PICKLIST_FALLBACKS["TIPOLOGIA PROPRIETARIO"].options,
+    { includeFallback: true },
+  ).options
+  const richiestaSaldoOptions = useColumnValueOptions(
+    "Clienti",
+    CLIENTI_PICKLIST_FALLBACKS["Richiesta Saldo"].column,
+    CLIENTI_PICKLIST_FALLBACKS["Richiesta Saldo"].options,
     { includeFallback: true },
   ).options
   const permissions = usePermissions()
@@ -363,7 +388,15 @@ export function ClienteRowContextMenu({
           permissions,
           installers,
           (statoOptions ?? []).map((s) => s.valore),
-          { sedi: sedeOptions.map((s) => s.value) },
+          {
+            sedi: sedeOptions.map((s) => s.value),
+            picklists: {
+              "Stato sopralluogo": statoSopralluogoOptions.map((s) => s.value),
+              "TIPO CTR": tipoCtrOptions.map((s) => s.value),
+              "TIPOLOGIA PROPRIETARIO": tipologiaProprietarioOptions.map((s) => s.value),
+              "Richiesta Saldo": richiestaSaldoOptions.map((s) => s.value),
+            },
+          },
         )}
         onSaved={onRefresh}
       />

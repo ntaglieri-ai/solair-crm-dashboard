@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { AllegatiSection } from "@/components/shared/allegati-section"
@@ -51,13 +51,23 @@ import {
 } from "@/components/shared/inline-edit-field"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
-import { type ClienteRecord, type Compito, type CustomFieldValue, OPEN_TASK_STATI } from "@/lib/mock-data"
+import {
+  type ClienteRecord,
+  type Compito,
+  type CustomFieldValue,
+  OPEN_TASK_STATI,
+  STATO_CLIENTE_VALUES,
+} from "@/lib/mock-data"
 import { ClienteAvatar } from "./cliente-utils"
 import { InstallatoreAssegnatoSelect } from "./installatore-assegnato-select"
 import { QuickCompitoDialog } from "@/components/compiti/quick-compito-dialog"
+import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { displayClienteOwner } from "@/lib/clienti/owner-display"
+import { CLIENTI_PICKLIST_FALLBACKS } from "@/lib/clienti/picklist-options"
 import { CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
+import { option, withCurrentColumnOption, type ColumnValueOption } from "@/lib/crm-settings/column-values"
+import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 import { CUSTOM_FIELD_PREFIX } from "@/lib/crm-settings/custom-fields"
 
 /* ---------- Helpers ---------- */
@@ -88,10 +98,16 @@ function valCustomField(tipo: string, v: unknown): string {
 }
 
 const ClienteInlineEditContext = createContext<ClienteRecord | null>(null)
+type ClienteInlineSelectOverride = Pick<
+  InlineEditableValueProps,
+  "type" | "options" | "optionLabels" | "allowEmptyOption" | "emptyLabel" | "nullWhenEmpty"
+>
+const ClienteInlineSelectContext = createContext<Record<string, ClienteInlineSelectOverride>>({})
 
 const CLIENTI_INLINE_LABEL_ALIASES: Record<string, string> = {
   "Stratigrafia superficie": "Stratigrafia superficie di installazione",
   "Conferma Iter E-distribuzione": "Data conferma Iter E-distribuzione",
+  "Data esecuzione sopralluogo": "Data sopralluogo",
   "Potenza (Wp)": "Potenza Moduli Wp",
   "COD. Moduli": "COD- MODULI",
   "Potenza": "Potenza Inverter",
@@ -117,6 +133,7 @@ function clienteInlineType(
 function clienteInlineEdit(
   cliente: ClienteRecord | null,
   label: string,
+  selectOverrides: Record<string, ClienteInlineSelectOverride> = {},
 ): Omit<InlineEditableValueProps, "label"> | null {
   if (!cliente) return null
   const appField = CLIENTI_INLINE_LABEL_ALIASES[label] ?? label
@@ -132,6 +149,7 @@ function clienteInlineEdit(
   ) {
     return null
   }
+  const selectOverride = selectOverrides[field.appField]
   return {
     module: "clienti",
     field: field.column,
@@ -140,7 +158,82 @@ function clienteInlineEdit(
     value,
     type: clienteInlineType(field.type, field.appField),
     emptyLabel: "—",
+    ...selectOverride,
   }
+}
+
+function useClienteColumnSelectOptions(
+  columnName: string,
+  fallback: ColumnValueOption[],
+  current: unknown,
+) {
+  const configuredOptions = useColumnValueOptions(
+    "Clienti",
+    columnName,
+    fallback,
+    { includeFallback: true },
+  ).options
+  const options = withCurrentColumnOption(configuredOptions, current)
+
+  return {
+    values: options.map((item) => item.value),
+    labels: Object.fromEntries(options.map((item) => [item.value, item.label])),
+  }
+}
+
+function picklistOverride(
+  options: { values: string[]; labels: Record<string, string> },
+): ClienteInlineSelectOverride {
+  return {
+    type: "select",
+    options: options.values,
+    optionLabels: options.labels,
+    allowEmptyOption: true,
+    emptyLabel: "Nessuno",
+    nullWhenEmpty: true,
+  }
+}
+
+function useClienteSelectOverrides(cliente: ClienteRecord) {
+  const { data: statoCliente } = useStatoClienteQuery()
+  const statoOptions = withCurrentColumnOption(
+    (statoCliente?.length ? statoCliente.map((item) => option(item.valore)) : STATO_CLIENTE_VALUES.map((value) => option(value))),
+    cliente.Stato,
+  )
+  const statoSopralluogo = useClienteColumnSelectOptions(
+    CLIENTI_PICKLIST_FALLBACKS["Stato sopralluogo"].column,
+    CLIENTI_PICKLIST_FALLBACKS["Stato sopralluogo"].options,
+    cliente["Stato sopralluogo"],
+  )
+  const tipoCtr = useClienteColumnSelectOptions(
+    CLIENTI_PICKLIST_FALLBACKS["TIPO CTR"].column,
+    CLIENTI_PICKLIST_FALLBACKS["TIPO CTR"].options,
+    cliente["TIPO CTR"],
+  )
+  const tipologiaProprietario = useClienteColumnSelectOptions(
+    CLIENTI_PICKLIST_FALLBACKS["TIPOLOGIA PROPRIETARIO"].column,
+    CLIENTI_PICKLIST_FALLBACKS["TIPOLOGIA PROPRIETARIO"].options,
+    cliente["TIPOLOGIA PROPRIETARIO"],
+  )
+  const richiestaSaldo = useClienteColumnSelectOptions(
+    CLIENTI_PICKLIST_FALLBACKS["Richiesta Saldo"].column,
+    CLIENTI_PICKLIST_FALLBACKS["Richiesta Saldo"].options,
+    cliente["Richiesta Saldo"],
+  )
+
+  return useMemo<Record<string, ClienteInlineSelectOverride>>(
+    () => ({
+      Stato: picklistOverride({
+        values: statoOptions.map((item) => item.value),
+        labels: Object.fromEntries(statoOptions.map((item) => [item.value, item.label])),
+      }),
+      "Stato sopralluogo": picklistOverride(statoSopralluogo),
+      "TIPO CTR": picklistOverride(tipoCtr),
+      "TIPOLOGIA PROPRIETARIO": picklistOverride(tipologiaProprietario),
+      "Richiesta Saldo": picklistOverride(richiestaSaldo),
+    }),
+    [richiestaSaldo, statoOptions, statoSopralluogo, tipoCtr, tipologiaProprietario],
+  )
 }
 
 function customInlineType(campo: CustomFieldValue): InlineEditableValueProps["type"] {
@@ -273,7 +366,8 @@ function DataField({
   children: React.ReactNode
 }) {
   const cliente = useContext(ClienteInlineEditContext)
-  const edit = clienteInlineEdit(cliente, label)
+  const selectOverrides = useContext(ClienteInlineSelectContext)
+  const edit = clienteInlineEdit(cliente, label, selectOverrides)
   if (edit) return <InlineEditableField label={label} {...edit} displayValue={children} />
 
   return (
@@ -296,7 +390,8 @@ function CopyField({
   icon: typeof IconMail
 }) {
   const cliente = useContext(ClienteInlineEditContext)
-  const edit = clienteInlineEdit(cliente, label)
+  const selectOverrides = useContext(ClienteInlineSelectContext)
+  const edit = clienteInlineEdit(cliente, label, selectOverrides)
   if (edit) {
     return (
       <InlineEditableField
@@ -1057,14 +1152,29 @@ function Iter({ cliente }: { cliente: ClienteRecord }) {
       <div className="rounded-xl border border-border bg-secondary/30 p-4">
         <IterStepper cliente={cliente} />
       </div>
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
+          <IconTool size={16} stroke={1.8} className="text-teal" />
+          Sopralluogo
+        </div>
+        <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+          <InstallatoreAssegnatoSelect
+            clienteId={cliente.id}
+            provincia={cliente["Provincia indirizzo postale"]}
+            installatoreAttuale={cliente.Installatore}
+          />
+          <DataField label="Stato sopralluogo">{val(cliente["Stato sopralluogo"])}</DataField>
+          <DataField label="Data affidamento sopralluogo">
+            {val(cliente["Data affidamento sopralluogo"])}
+          </DataField>
+          <DataField label="Data esecuzione sopralluogo">
+            {val(cliente["Data sopralluogo"])}
+          </DataField>
+        </div>
+      </div>
       <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
         <DataField label="POD">{val(cliente.POD)}</DataField>
         <DataField label="Data ammissibilità">{val(cliente["Data ammissibilità"])}</DataField>
-        <DataField label="Data sopralluogo">{val(cliente["Data sopralluogo"])}</DataField>
-        <DataField label="Data affidamento sopralluogo">
-          {val(cliente["Data affidamento sopralluogo"])}
-        </DataField>
-        <DataField label="Stato sopralluogo">{val(cliente["Stato sopralluogo"])}</DataField>
         <DataField label="Conferma Iter E-distribuzione">
           {val(cliente["Data conferma Iter E-distribuzione"])}
         </DataField>
@@ -1129,13 +1239,6 @@ function Logistica({ cliente }: { cliente: ClienteRecord }) {
         </DataField>
         <DataField label="Intervento 1">{val(cliente["Intervento 1"])}</DataField>
         <DataField label="Intervento 2">{val(cliente["Intervento 2"])}</DataField>
-      </div>
-      <div className="border-t border-border pt-4">
-        <InstallatoreAssegnatoSelect
-          clienteId={cliente.id}
-          provincia={cliente["Provincia indirizzo postale"]}
-          installatoreAttuale={cliente.Installatore}
-        />
       </div>
     </div>
   )
@@ -1592,6 +1695,7 @@ export function ClienteDetailContent({
 }) {
   const permissions = usePermissions()
   const vediNoteInterne = canAccessNoteInterne(permissions.snapshot.subject.ruoloCode)
+  const selectOverrides = useClienteSelectOverrides(cliente)
 
   // Con un layout configurato la scheda si disegna da quello. Senza, resta
   // il rendering scritto qui sotto: e' il percorso di riserva se le tabelle
@@ -1604,14 +1708,16 @@ export function ClienteDetailContent({
         emailLog={emailLog}
         layout={paginePronte}
         vediNoteInterne={vediNoteInterne}
+        selectOverrides={selectOverrides}
       />
     )
   }
 
   return (
     <ClienteInlineEditContext.Provider value={cliente}>
-    <div className="flex min-w-0 flex-1 flex-col gap-1">
-      <RelatedNav vediNoteInterne={vediNoteInterne} customFields={cliente.customFields ?? []} />
+    <ClienteInlineSelectContext.Provider value={selectOverrides}>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <RelatedNav vediNoteInterne={vediNoteInterne} customFields={cliente.customFields ?? []} />
 
       <Section id="section-anagrafica" title="Anagrafica" icon={IconUser}>
         <Anagrafica cliente={cliente} />
@@ -1697,7 +1803,8 @@ export function ClienteDetailContent({
       <Section id="section-attivita" title="Attività" icon={IconChecklist}>
         <Attivita cliente={cliente} />
       </Section>
-    </div>
+      </div>
+    </ClienteInlineSelectContext.Provider>
     </ClienteInlineEditContext.Provider>
   )
 }
@@ -1715,11 +1822,13 @@ function ClienteDaLayout({
   emailLog,
   layout,
   vediNoteInterne,
+  selectOverrides,
 }: {
   cliente: ClienteRecord
   emailLog: EmailLogEntry[]
   layout: LayoutPagina[]
   vediNoteInterne: boolean
+  selectOverrides: Record<string, ClienteInlineSelectOverride>
 }) {
   const router = useRouter()
   const { ownerNames } = useClienteTags()
@@ -1787,7 +1896,7 @@ function ClienteDaLayout({
   // La modifica inline riusa la risoluzione gia' in uso nella scheda scritta
   // a mano: stessa colonna, stesso endpoint, stessi permessi di campo.
   const risolviModifica: RisolviModifica = (fieldKey) => {
-    const edit = clienteInlineEdit(cliente, fieldKey)
+    const edit = clienteInlineEdit(cliente, fieldKey, selectOverrides)
     if (!edit) return null
 
     // Il proprietario e' salvato come id utente: come campo di testo si
@@ -1818,19 +1927,21 @@ function ClienteDaLayout({
 
   return (
     <ClienteInlineEditContext.Provider value={cliente}>
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <NavDaLayout pagine={pagineVisibili} />
-        <LayoutRenderer
-          pagine={pagineVisibili}
-          record={cliente as unknown as Record<string, unknown>}
-          risolviModifica={risolviModifica}
-          componenti={componenti}
-          valoriVisualizzati={valoriVisualizzati}
-          onRiordinaBlocchi={riordinaBlocchi}
-          onRiordinaCampi={riordinaCampi}
-          onSalvato={() => router.refresh()}
-        />
-      </div>
+      <ClienteInlineSelectContext.Provider value={selectOverrides}>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <NavDaLayout pagine={pagineVisibili} />
+          <LayoutRenderer
+            pagine={pagineVisibili}
+            record={cliente as unknown as Record<string, unknown>}
+            risolviModifica={risolviModifica}
+            componenti={componenti}
+            valoriVisualizzati={valoriVisualizzati}
+            onRiordinaBlocchi={riordinaBlocchi}
+            onRiordinaCampi={riordinaCampi}
+            onSalvato={() => router.refresh()}
+          />
+        </div>
+      </ClienteInlineSelectContext.Provider>
     </ClienteInlineEditContext.Provider>
   )
 }

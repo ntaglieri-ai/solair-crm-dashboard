@@ -236,7 +236,7 @@ export function buildClienteEditFields(
   // Lista configurabile (crm_stato_cliente), non piu' STATO_CLIENTE_VALUES
   // fisso nel codice — vedi lib/clienti/stato-cliente-store.tsx.
   statoOptions: string[],
-  options: { sedi?: string[] } = {},
+  options: { sedi?: string[]; picklists?: Record<string, string[]> } = {},
 ): EditField[] {
   const fields: EditField[] = CLIENTI_RECORD_FIELDS
     .filter((field) => !["Ora modifica", "Ora creazione"].includes(field.appField))
@@ -259,6 +259,20 @@ export function buildClienteEditFields(
           value: cliente[field.appField as keyof ClienteRecord],
           type: "select" as const,
           options: withCurrentOption(options.sedi ?? [], cliente[field.appField as keyof ClienteRecord]),
+        }
+      }
+      const picklistOptions = options.picklists?.[field.appField]
+      if (picklistOptions) {
+        return {
+          key: field.appField,
+          label: field.appField,
+          value: cliente[field.appField as keyof ClienteRecord],
+          type: "select" as const,
+          options: withCurrentOption(
+            picklistOptions,
+            cliente[field.appField as keyof ClienteRecord],
+          ),
+          nullWhenEmpty: true,
         }
       }
       if (field.appField === "Installatore") {

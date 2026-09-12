@@ -34,7 +34,11 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { EmailHistorySection } from "@/components/shared/email-history-section"
-import { LayoutRenderer, type RisolviModifica } from "@/components/shared/layout-renderer"
+import {
+  LayoutRenderer,
+  type RenderCampoLayout,
+  type RisolviModifica,
+} from "@/components/shared/layout-renderer"
 import { NotaAzioni } from "@/components/shared/nota-azioni"
 import type { LayoutPagina } from "@/lib/crm-settings/layout"
 import { ancoraPagina, paginePiene } from "@/lib/crm-settings/layout-render"
@@ -56,6 +60,7 @@ import {
   type Compito,
   type CustomFieldValue,
   OPEN_TASK_STATI,
+  SEDE_LABELS,
   STATO_CLIENTE_VALUES,
 } from "@/lib/mock-data"
 import { ClienteAvatar } from "./cliente-utils"
@@ -127,6 +132,8 @@ function clienteInlineType(
   if (fieldType === "boolean") return "boolean"
   if (fieldType === "numeric") return "number"
   if (fieldType === "timestamp") return "date"
+  if (/mail/i.test(appField)) return "email"
+  if (/telefono|cellulare/i.test(appField)) return "tel"
   return /descrizione|note|materiali|assistenza|stratigrafia/i.test(appField) ? "textarea" : "text"
 }
 
@@ -200,6 +207,11 @@ function useClienteSelectOverrides(cliente: ClienteRecord) {
     (statoCliente?.length ? statoCliente.map((item) => option(item.valore)) : STATO_CLIENTE_VALUES.map((value) => option(value))),
     cliente.Stato,
   )
+  const sede = useClienteColumnSelectOptions(
+    "sede",
+    SEDE_LABELS.map((value) => option(value)),
+    cliente.Sede,
+  )
   const statoSopralluogo = useClienteColumnSelectOptions(
     CLIENTI_PICKLIST_FALLBACKS["Stato sopralluogo"].column,
     CLIENTI_PICKLIST_FALLBACKS["Stato sopralluogo"].options,
@@ -227,12 +239,13 @@ function useClienteSelectOverrides(cliente: ClienteRecord) {
         values: statoOptions.map((item) => item.value),
         labels: Object.fromEntries(statoOptions.map((item) => [item.value, item.label])),
       }),
+      Sede: picklistOverride(sede),
       "Stato sopralluogo": picklistOverride(statoSopralluogo),
       "TIPO CTR": picklistOverride(tipoCtr),
       "TIPOLOGIA PROPRIETARIO": picklistOverride(tipologiaProprietario),
       "Richiesta Saldo": picklistOverride(richiestaSaldo),
     }),
-    [richiestaSaldo, statoOptions, statoSopralluogo, tipoCtr, tipologiaProprietario],
+    [richiestaSaldo, sede, statoOptions, statoSopralluogo, tipoCtr, tipologiaProprietario],
   )
 }
 
@@ -384,14 +397,16 @@ function CopyField({
   label,
   value,
   icon: Icon,
+  editLabel = label,
 }: {
   label: string
   value: string | undefined
   icon: typeof IconMail
+  editLabel?: string
 }) {
   const cliente = useContext(ClienteInlineEditContext)
   const selectOverrides = useContext(ClienteInlineSelectContext)
-  const edit = clienteInlineEdit(cliente, label, selectOverrides)
+  const edit = clienteInlineEdit(cliente, editLabel, selectOverrides)
   if (edit) {
     return (
       <InlineEditableField
@@ -1893,6 +1908,37 @@ function ClienteDaLayout({
     attivita: <Attivita cliente={cliente} />,
   }
 
+  const renderCampo: RenderCampoLayout = ({ campo, etichetta }) => {
+    if (campo.fieldKey === "Installatore") {
+      return (
+        <InstallatoreAssegnatoSelect
+          clienteId={cliente.id}
+          provincia={cliente["Provincia indirizzo postale"]}
+          installatoreAttuale={cliente.Installatore}
+          label={etichetta}
+        />
+      )
+    }
+
+    if (campo.fieldKey === "E-mail") {
+      return <CopyField label={etichetta} editLabel={campo.fieldKey} value={cliente["E-mail"]} icon={IconMail} />
+    }
+    if (campo.fieldKey === "E-mail secondaria") {
+      return <CopyField label={etichetta} editLabel={campo.fieldKey} value={cliente["E-mail secondaria"]} icon={IconMail} />
+    }
+    if (campo.fieldKey === "Cellulare") {
+      return <CopyField label={etichetta} editLabel={campo.fieldKey} value={cliente.Cellulare} icon={IconPhone} />
+    }
+    if (campo.fieldKey === "Altro telefono") {
+      return <CopyField label={etichetta} editLabel={campo.fieldKey} value={cliente["Altro telefono"]} icon={IconPhone} />
+    }
+    if (campo.fieldKey === "IBAN") {
+      return <CopyField label={etichetta} editLabel={campo.fieldKey} value={cliente.IBAN} icon={IconReceipt2} />
+    }
+
+    return null
+  }
+
   // La modifica inline riusa la risoluzione gia' in uso nella scheda scritta
   // a mano: stessa colonna, stesso endpoint, stessi permessi di campo.
   const risolviModifica: RisolviModifica = (fieldKey) => {
@@ -1916,12 +1962,7 @@ function ClienteDaLayout({
     }
 
     return {
-      module: edit.module,
-      field: edit.field,
-      endpoint: edit.endpoint,
-      patchKey: edit.patchKey,
-      value: edit.value,
-      type: edit.type,
+      ...edit,
     }
   }
 
@@ -1936,6 +1977,7 @@ function ClienteDaLayout({
             risolviModifica={risolviModifica}
             componenti={componenti}
             valoriVisualizzati={valoriVisualizzati}
+            renderCampo={renderCampo}
             appearance="clientiSalesforce"
             onRiordinaBlocchi={riordinaBlocchi}
             onRiordinaCampi={riordinaCampi}

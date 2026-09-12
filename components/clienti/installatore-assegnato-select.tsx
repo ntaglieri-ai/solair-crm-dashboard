@@ -32,10 +32,12 @@ export function InstallatoreAssegnatoSelect({
   clienteId,
   provincia,
   installatoreAttuale,
+  label = "Installatore assegnato",
 }: {
   clienteId: string
   provincia?: string
   installatoreAttuale?: string
+  label?: string
 }) {
   // Chi non puo' assegnare (AGENT: niente clienti.edit ne' installatori.view)
   // non deve nemmeno chiedere l'elenco: la richiesta tornerebbe 403 e finirebbe
@@ -118,7 +120,7 @@ export function InstallatoreAssegnatoSelect({
     return (
       <div className="flex flex-col gap-0.5">
         <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Installatore assegnato
+          {label}
         </span>
         <span className="text-[13px] text-foreground">{value ?? "—"}</span>
       </div>
@@ -135,7 +137,7 @@ export function InstallatoreAssegnatoSelect({
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        Installatore assegnato
+        {label}
       </span>
       <Select
         items={items}

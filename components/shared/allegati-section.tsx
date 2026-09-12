@@ -13,6 +13,7 @@ import {
   IconLink,
   IconPlus,
   IconExternalLink,
+  IconAlertTriangle,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { NextcloudOpenLink } from "@/components/nextcloud/nextcloud-open-link"
@@ -112,6 +113,7 @@ export function AllegatiSection({
   const [collegamenti, setCollegamenti] = useState<CollegamentoRow[]>([])
   const [folderPath, setFolderPath] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkTitolo, setLinkTitolo] = useState("")
@@ -139,17 +141,24 @@ export function AllegatiSection({
     setLoading(true)
     try {
       const res = await fetch(`/api/allegati?${recordQuery}`, { cache: "no-store" })
-      if (!res.ok) throw new Error()
-      const data = (await res.json()) as {
-        folderPath: string
-        documenti: DocumentoRow[]
-        collegamenti: CollegamentoRow[]
+      const data = (await res.json().catch(() => null)) as {
+        folderPath?: string
+        documenti?: DocumentoRow[]
+        collegamenti?: CollegamentoRow[]
+        error?: string
+      } | null
+      if (!res.ok) throw new Error(data?.error ?? "Impossibile caricare gli allegati")
+      if (!data?.folderPath || !data.documenti || !data.collegamenti) {
+        throw new Error("Risposta allegati non valida")
       }
+      setErrorMessage(null)
       setFolderPath(data.folderPath)
       setDocumenti(data.documenti)
       setCollegamenti(data.collegamenti)
-    } catch {
-      toast.error("Impossibile caricare gli allegati")
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Impossibile caricare gli allegati")
+      setDocumenti([])
+      setCollegamenti([])
     } finally {
       setLoading(false)
     }
@@ -366,6 +375,14 @@ export function AllegatiSection({
 
       {loading ? (
         <p className="py-4 text-center text-sm text-muted-foreground">Caricamento...</p>
+      ) : errorMessage ? (
+        <div className="flex items-start gap-3 rounded-xl border border-destructive/20 bg-destructive/5 px-3.5 py-3 text-sm text-destructive">
+          <IconAlertTriangle className="mt-0.5 size-4 shrink-0" stroke={2} />
+          <div className="min-w-0">
+            <p className="font-semibold">Impossibile caricare gli allegati</p>
+            <p className="mt-0.5 break-words text-xs text-destructive/80">{errorMessage}</p>
+          </div>
+        </div>
       ) : isEmpty ? (
         <p className="rounded-lg border border-dashed border-border bg-secondary/30 py-6 text-center text-sm text-muted-foreground">
           {soloFile ? "Nessun documento caricato" : "Nessun allegato"}

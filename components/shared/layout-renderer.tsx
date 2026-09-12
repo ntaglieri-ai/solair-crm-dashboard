@@ -72,12 +72,20 @@ export type RisolviModifica = (
 
 type LayoutAppearance = "default" | "clientiSalesforce"
 
+export type RenderCampoLayout = (params: {
+  campo: LayoutCampo
+  etichetta: string
+  valore: unknown
+  testo: string
+}) => ReactNode | null
+
 export function LayoutRenderer({
   pagine,
   record,
   risolviModifica,
   componenti,
   valoriVisualizzati,
+  renderCampo,
   appearance = "default",
   onRiordinaBlocchi,
   onRiordinaCampi,
@@ -91,6 +99,12 @@ export function LayoutRenderer({
    * dove vanno, il modulo dice come sono fatti.
    */
   componenti?: Record<string, ReactNode>
+  /**
+   * Override puntuale per campi che non sono un semplice label/valore:
+   * esempi: installatore cliente da elenco installatori, contatti con copia,
+   * lookup o altri controlli specialistici del modulo.
+   */
+  renderCampo?: RenderCampoLayout
   /**
    * Valori gia' pronti per la lettura, per i campi che nel database
    * contengono un riferimento invece del testo da mostrare: il proprietario,
@@ -164,6 +178,7 @@ export function LayoutRenderer({
             valori={valori}
             risolviModifica={risolviModifica}
             valoriVisualizzati={valoriVisualizzati}
+            renderCampo={renderCampo}
             appearance={appearance}
             onRiordinaBlocchi={onRiordinaBlocchi}
             onRiordinaCampi={onRiordinaCampi}
@@ -181,6 +196,7 @@ function BloccoRenderer({
   valori,
   risolviModifica,
   valoriVisualizzati,
+  renderCampo,
   appearance,
   trascinabile,
   onRiordinaCampi,
@@ -191,6 +207,7 @@ function BloccoRenderer({
   valori: ReturnType<typeof mappaValori>
   risolviModifica?: RisolviModifica
   valoriVisualizzati?: Record<string, ReactNode>
+  renderCampo?: RenderCampoLayout
   appearance: LayoutAppearance
   trascinabile?: boolean
   onRiordinaCampi?: (blockKey: string, ordine: string[]) => void
@@ -307,6 +324,7 @@ function BloccoRenderer({
             valori={valori}
             risolviModifica={risolviModifica}
             valoriVisualizzati={valoriVisualizzati}
+            renderCampo={renderCampo}
             appearance={appearance}
             trascinabile={Boolean(onRiordinaCampi)}
             onSalvato={onSalvato}
@@ -454,6 +472,7 @@ function CampoRenderer({
   valori,
   risolviModifica,
   valoriVisualizzati,
+  renderCampo,
   appearance,
   trascinabile,
   onSalvato,
@@ -463,6 +482,7 @@ function CampoRenderer({
   valori: ReturnType<typeof mappaValori>
   risolviModifica?: RisolviModifica
   valoriVisualizzati?: Record<string, ReactNode>
+  renderCampo?: RenderCampoLayout
   appearance: LayoutAppearance
   trascinabile?: boolean
   onSalvato?: (fieldKey: string, nuovoValore: unknown) => void
@@ -500,6 +520,20 @@ function CampoRenderer({
   // lettura: senza, un booleano mostrava "Sì" da fermo e "true" da
   // modificabile, e una data restava in forma ISO.
   const testo = formattaValore(esito.valore, campo.formato, configurazione?.type)
+  const override = renderCampo?.({
+    campo,
+    etichetta,
+    valore: esito.valore,
+    testo,
+  })
+
+  if (override !== null && override !== undefined) {
+    return (
+      <ContenitoreCampo campo={campo} etichetta={etichetta} trascinabile={trascinabile} appearance={appearance}>
+        {override}
+      </ContenitoreCampo>
+    )
+  }
 
   if (modifica) {
     return (
@@ -514,7 +548,7 @@ function CampoRenderer({
             appearance === "clientiSalesforce" &&
               "rounded-xl border-slate-200 bg-slate-50/75 px-2.5 shadow-inner transition-all hover:border-teal/35 hover:bg-teal/5",
           )}
-          showSelectIndicator={appearance === "clientiSalesforce" && modifica.type === "select"}
+          showSelectIndicator={modifica.type === "select"}
           onSaved={(nuovoValore) => onSalvato?.(campo.fieldKey, nuovoValore)}
         />
       </ContenitoreCampo>
@@ -547,6 +581,7 @@ function BlocchiTrascinabili({
   valori,
   risolviModifica,
   valoriVisualizzati,
+  renderCampo,
   appearance,
   onRiordinaBlocchi,
   onRiordinaCampi,
@@ -557,6 +592,7 @@ function BlocchiTrascinabili({
   valori: ReturnType<typeof mappaValori>
   risolviModifica?: RisolviModifica
   valoriVisualizzati?: Record<string, ReactNode>
+  renderCampo?: RenderCampoLayout
   appearance: LayoutAppearance
   onRiordinaBlocchi?: (pageKey: string, ordine: string[]) => void
   onRiordinaCampi?: (blockKey: string, ordine: string[]) => void
@@ -584,6 +620,7 @@ function BlocchiTrascinabili({
       valori={valori}
       risolviModifica={risolviModifica}
       valoriVisualizzati={valoriVisualizzati}
+      renderCampo={renderCampo}
       appearance={appearance}
       trascinabile={Boolean(onRiordinaBlocchi)}
       onRiordinaCampi={onRiordinaCampi}

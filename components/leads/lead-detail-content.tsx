@@ -1332,7 +1332,24 @@ function LeadDaLayout({
   onTaskCreated: (compito: Compito) => void
 }) {
   const router = useRouter()
-  const { ownerNames } = useTags()
+  const { ownerNames, installers } = useTags()
+  const configuredStatoOptions = useColumnValueOptions(
+    "Lead",
+    "stato_lead",
+    STATO_LEAD_ORDER.map((value) => option(value)),
+    { includeFallback: true },
+  ).options
+  const statoOptions = withCurrentColumnOption(configuredStatoOptions, lead["Stato Lead"])
+  const statoValues = statoOptions.map((item) => item.value)
+  const statoLabels = Object.fromEntries(statoOptions.map((item) => [item.value, item.label]))
+  const installerOptions = installers.map((installer) => installer.id)
+  const installerLabels = Object.fromEntries(installers.map((installer) => [installer.id, installer.nome]))
+  const currentInstaller = lead.InstallatoreSopralluogoId ?? ""
+  if (currentInstaller && !installerOptions.includes(currentInstaller)) {
+    installerOptions.push(currentInstaller)
+    installerLabels[currentInstaller] =
+      lead["Installatore - Incaricato sopralluogo"] ?? "Installatore storico"
+  }
 
   // Il proprietario e' salvato come id utente: senza questo la scheda
   // mostrerebbe l'UUID al posto del nome, come gia' faceva la versione
@@ -1415,6 +1432,35 @@ function LeadDaLayout({
       typeof value !== "boolean"
     ) {
       return null
+    }
+
+    if (fieldKey === "Stato Lead") {
+      return {
+        module: "lead",
+        field: campo.column,
+        endpoint: `/api/leads/${lead.id}`,
+        patchKey: fieldKey,
+        value,
+        type: "select",
+        options: statoValues,
+        optionLabels: statoLabels,
+      }
+    }
+
+    if (fieldKey === "Installatore - Incaricato sopralluogo") {
+      return {
+        module: "lead",
+        field: "installatore_sopralluogo_id",
+        endpoint: `/api/leads/${lead.id}`,
+        patchKey: fieldKey,
+        value: currentInstaller,
+        type: "select",
+        options: installerOptions,
+        optionLabels: installerLabels,
+        allowEmptyOption: true,
+        emptyLabel: "Nessuno",
+        nullWhenEmpty: true,
+      }
     }
 
     return {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { nextcloudProvisioningConfig } from "../config"
+import { nextcloudProvisioningConfig, normalizeNextcloudBaseUrl } from "../config"
 import { nextcloudGroupForRole } from "../provisioning"
 
 afterEach(() => {
@@ -23,6 +23,11 @@ describe("nextcloudGroupForRole", () => {
 })
 
 describe("nextcloudProvisioningConfig", () => {
+  it("normalizza la URL Nextcloud anche se manca il protocollo", () => {
+    expect(normalizeNextcloudBaseUrl("cloud.example.test/")).toBe("https://cloud.example.test")
+    expect(normalizeNextcloudBaseUrl(" https://cloud.example.test/ ")).toBe("https://cloud.example.test")
+  })
+
   it("preferisce la credenziale primaria dedicata", () => {
     vi.stubEnv("NEXTCLOUD_URL", "https://cloud.example.test/")
     vi.stubEnv("NEXTCLOUD_ADMIN_USER", "legacy")

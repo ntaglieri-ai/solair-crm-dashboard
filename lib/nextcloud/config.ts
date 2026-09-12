@@ -8,11 +8,27 @@ export type NextcloudAdminConfig = {
   adminPassword: string
 }
 
+export function normalizeNextcloudBaseUrl(value: string | undefined): string | null {
+  const raw = value?.trim()
+  if (!raw) return null
+
+  const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+  try {
+    const url = new URL(candidate)
+    if (!url.hostname) return null
+    url.hash = ""
+    url.search = ""
+    return url.toString().replace(/\/+$/, "")
+  } catch {
+    return null
+  }
+}
+
 /** URL base Nextcloud, senza slash finale. Lancia se assente. */
 export function nextcloudBaseUrl(): string {
-  const url = process.env.NEXTCLOUD_URL
-  if (!url) throw new Error("NEXTCLOUD_URL non configurato")
-  return url.replace(/\/+$/, "")
+  const url = normalizeNextcloudBaseUrl(process.env.NEXTCLOUD_URL)
+  if (!url) throw new Error("NEXTCLOUD_URL non configurato o non valido")
+  return url
 }
 
 /**
@@ -21,7 +37,7 @@ export function nextcloudBaseUrl(): string {
  * invece di crashare.
  */
 export function nextcloudAdminConfig(): NextcloudAdminConfig | null {
-  const baseUrl = process.env.NEXTCLOUD_URL?.replace(/\/+$/, "")
+  const baseUrl = normalizeNextcloudBaseUrl(process.env.NEXTCLOUD_URL)
   const adminUser = process.env.NEXTCLOUD_ADMIN_USER
   const adminPassword = process.env.NEXTCLOUD_ADMIN_PASSWORD
   if (!baseUrl || !adminUser || !adminPassword) return null
@@ -38,7 +54,7 @@ export function nextcloudAdminConfig(): NextcloudAdminConfig | null {
  * account tecnico dedicato, senza riusare l'account umano amministratore.
  */
 export function nextcloudProvisioningConfig(): NextcloudAdminConfig | null {
-  const baseUrl = process.env.NEXTCLOUD_URL?.replace(/\/+$/, "")
+  const baseUrl = normalizeNextcloudBaseUrl(process.env.NEXTCLOUD_URL)
   const adminUser = process.env.NEXTCLOUD_PROVISIONING_USER || process.env.NEXTCLOUD_ADMIN_USER
   const adminPassword =
     process.env.NEXTCLOUD_PROVISIONING_PASSWORD || process.env.NEXTCLOUD_ADMIN_PASSWORD

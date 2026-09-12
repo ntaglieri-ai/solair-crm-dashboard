@@ -6,7 +6,6 @@ import { Eye, Loader2, Mail, Pencil, Plus, RotateCcw, Trash2, Wand2 } from "luci
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import {
   Select,
@@ -15,6 +14,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
   DialogContent,
@@ -24,8 +24,10 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { SectionHeader } from "@/components/impostazioni/settings-ui"
+import { EmailTemplateEditor } from "@/components/shared/email-template-editor"
 import { usePermissions } from "@/lib/permissions/provider"
 import { BULK_PLACEHOLDERS } from "@/lib/email/bulk-template"
+import { modelloBase } from "@/lib/email/modello-base"
 
 /**
  * Libreria dei modelli e-mail.
@@ -69,6 +71,7 @@ const VUOTO = {
 } satisfies Template
 
 const SUFFISSO_NUOVO = " (nuovo)"
+const VARIABILI_EDITOR = BULK_PLACEHOLDERS.map((p) => `{${p}}`)
 
 function isModuloTemplate(valore: unknown): valore is ModuloTemplate {
   return typeof valore === "string" && MODULI.some((modulo) => modulo.valore === valore)
@@ -426,24 +429,66 @@ function htmlSicuro(html: string): string {
     .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
 }
 
+function escapeHtmlPreview(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+function corpoAnteprima(corpo: string): string {
+  const content = corpo.trim()
+  if (!content) {
+    return '<p class="empty">Modello senza corpo.</p>'
+  }
+  if (/<\s*(html|body|table|div|p|br|span|ul|ol|li|strong|b)\b/i.test(content)) {
+    const match = htmlSicuro(content).match(/<body\b[^>]*>([\s\S]*?)<\/body>/i)
+    return match?.[1] ?? htmlSicuro(content)
+  }
+
+  return content
+    .replace(/\r\n|\r/g, "\n")
+    .split(/\n\s*\n/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block) => `<p>${escapeHtmlPreview(block).replace(/\n/g, "<br>")}</p>`)
+    .join("")
+}
+
 function documentoAnteprima(modello: Template): string {
   const corpo = modello.corpo.trim()
-  const contenuto = corpo
-    ? htmlSicuro(corpo)
-    : "<p style=\"font-family:Arial,sans-serif;color:#64748b\">Modello senza corpo.</p>"
+  if (/<\s*(html|body)\b/i.test(corpo)) {
+    return htmlSicuro(corpo)
+  }
 
-  if (/<\s*(html|body)\b/i.test(contenuto)) return contenuto
+  return modelloBase(corpo ? corpoAnteprima(corpo) : '<p style="color:#64748b">Modello senza corpo.</p>')
+}
 
-  return `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-  </head>
-  <body style="margin:0;padding:24px;background:#ffffff;">
-    ${contenuto}
-  </body>
-</html>`
+function segnapostoNelModello(modello: Template): string[] {
+  const testo = `${modello.oggetto}\n${modello.corpo}`
+  const trovati = new Set<string>()
+  for (const match of testo.matchAll(/\$\{[^}]+\}|\{[^{}]+\}/g)) {
+    trovati.add(match[0])
+  }
+  return Array.from(trovati)
+}
+
+function testoDaHtml(value: string): string {
+  return value
+    .replace(/<head\b[\s\S]*?<\/head>/gi, "")
+    .replace(/<style\b[\s\S]*?<\/style>/gi, "")
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|tr|h[1-6])>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 function DialogoAnteprima({
@@ -453,25 +498,89 @@ function DialogoAnteprima({
   modello: Template
   onChiudi: () => void
 }) {
+  const segnaposto = segnapostoNelModello(modello)
+  const testo = testoDaHtml(modello.corpo)
+
   return (
     <Dialog open onOpenChange={(aperto) => (!aperto ? onChiudi() : undefined)}>
       <DialogContent className="flex h-[90vh] w-[min(1120px,96vw)] max-w-none flex-col gap-0 p-0 sm:max-w-none">
-        <DialogHeader className="border-b border-border px-5 py-4">
-          <DialogTitle>Anteprima modello</DialogTitle>
-          <DialogDescription className="space-y-1">
-            <span className="block font-medium text-foreground">{nomeVisibile(modello.nome)}</span>
-            <span className="block truncate">{modello.oggetto}</span>
-          </DialogDescription>
-        </DialogHeader>
+        <Tabs defaultValue="anteprima" className="min-h-0 flex-1 gap-0">
+          <DialogHeader className="border-b border-border px-5 py-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <DialogTitle>Anteprima modello</DialogTitle>
+                <DialogDescription className="space-y-1">
+                  <span className="block font-medium text-foreground">
+                    {nomeVisibile(modello.nome)}
+                  </span>
+                  <span className="block truncate">{modello.oggetto}</span>
+                </DialogDescription>
+              </div>
+              <TabsList className="h-9 rounded-full">
+                <TabsTrigger value="anteprima" className="rounded-full px-5">
+                  Anteprima
+                </TabsTrigger>
+                <TabsTrigger value="analisi" className="rounded-full px-5">
+                  Analisi
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </DialogHeader>
 
-        <div className="min-h-0 flex-1 bg-muted/40 p-4">
-          <iframe
-            title={`Anteprima ${nomeVisibile(modello.nome)}`}
-            srcDoc={documentoAnteprima(modello)}
-            sandbox=""
-            className="h-full w-full rounded-md border border-border bg-white shadow-sm"
-          />
-        </div>
+          <TabsContent value="anteprima" className="min-h-0 bg-[#eeeeee] p-0">
+            <iframe
+              title={`Anteprima ${nomeVisibile(modello.nome)}`}
+              srcDoc={documentoAnteprima(modello)}
+              sandbox=""
+              className="h-full w-full border-0 bg-[#eeeeee]"
+            />
+          </TabsContent>
+
+          <TabsContent value="analisi" className="min-h-0 overflow-y-auto bg-muted/30 p-5">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-border bg-card p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Caratteri
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-foreground">{testo.length}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-card p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Segnaposto
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-foreground">{segnaposto.length}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-card p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Stato
+                </p>
+                <p className="mt-2 text-sm font-semibold text-foreground">
+                  {modello.attivo ? "Attivo" : "Spento"}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-border bg-card p-4">
+              <p className="text-sm font-semibold text-foreground">Segnaposto trovati</p>
+              {segnaposto.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {segnaposto.map((token) => (
+                    <span
+                      key={token}
+                      className="rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground"
+                    >
+                      {token}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Nessun segnaposto nel modello.
+                </p>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
 
         <DialogFooter className="border-t border-border px-5 py-4">
           <Button variant="outline" onClick={onChiudi}>
@@ -578,14 +687,14 @@ function DialogoModello({
           </div>
 
           <div className="flex min-h-0 flex-col gap-1.5">
-            <Label htmlFor="modello-corpo">Testo</Label>
-            <Textarea
+            <Label htmlFor="modello-corpo">Corpo e-mail</Label>
+            <EmailTemplateEditor
               id="modello-corpo"
               value={bozza.corpo}
-              onChange={(e) => setBozza({ ...bozza, corpo: e.target.value })}
-              rows={14}
-              className="font-mono text-xs"
-              placeholder={"Gentile {nome},\n\nle confermiamo il sopralluogo…"}
+              onChange={(corpo) => setBozza((corrente) => ({ ...corrente, corpo }))}
+              disabled={inCorso}
+              variables={VARIABILI_EDITOR}
+              placeholder="Gentile {nome}, scrivi qui il corpo del modello..."
             />
           </div>
         </div>

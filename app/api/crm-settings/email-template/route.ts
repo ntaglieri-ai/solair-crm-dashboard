@@ -2,7 +2,12 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getCurrentPermissions } from "@/lib/permissions/server"
-import { aziendaDaProfilo, convertiDaZoho, type AziendaEmail } from "@/lib/email/modello-base"
+import {
+  aziendaDaProfilo,
+  convertiDaZoho,
+  modelloBase,
+  type AziendaEmail,
+} from "@/lib/email/modello-base"
 
 /**
  * Modelli e-mail condivisi.
@@ -45,6 +50,20 @@ async function richiediGestione() {
     }
   }
   return { permissions, admin, errore: null }
+}
+
+function isDocumentoEmailCompleto(corpo: string): boolean {
+  return /<\s*(html|body)\b/i.test(corpo)
+}
+
+async function preparaCorpoPerSalvataggio(
+  admin: NonNullable<Awaited<ReturnType<typeof richiediGestione>>["admin"]>,
+  corpo: string,
+): Promise<string> {
+  const pulito = corpo.trim()
+  if (!pulito || isDocumentoEmailCompleto(pulito)) return corpo
+
+  return modelloBase(corpo, await caricaAzienda(admin))
 }
 
 export async function GET(request: Request) {
@@ -122,7 +141,7 @@ export async function POST(request: Request) {
       nome,
       modulo: body.modulo,
       oggetto,
-      corpo,
+      corpo: await preparaCorpoPerSalvataggio(guardia.admin!, corpo),
       cartella: typeof body.cartella === "string" ? body.cartella.trim() || null : null,
       attivo: typeof body.attivo === "boolean" ? body.attivo : true,
       creato_da: guardia.permissions.snapshot.subject.userId,
@@ -320,7 +339,9 @@ export async function PATCH(request: Request) {
     if (!oggetto) return NextResponse.json({ error: "Oggetto mancante" }, { status: 400 })
     patch.oggetto = oggetto
   }
-  if (typeof body.corpo === "string") patch.corpo = body.corpo
+  if (typeof body.corpo === "string") {
+    patch.corpo = await preparaCorpoPerSalvataggio(guardia.admin!, body.corpo)
+  }
   if (typeof body.cartella === "string") patch.cartella = body.cartella.trim() || null
   if (typeof body.attivo === "boolean") patch.attivo = body.attivo
   if (isModulo(body.modulo)) patch.modulo = body.modulo

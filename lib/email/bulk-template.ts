@@ -41,8 +41,9 @@ export function renderTemplate(
   // Il contenuto e' HTML e puo' contenere graffe che non sono segnaposto
   // (regole CSS, per esempio). Non e' un problema: un token che non
   // corrisponde a nulla resta intatto invece di diventare vuoto.
-  return template.replace(/\{([^{}]+)\}/g, (match, key: string) => {
-    const normalized = key.trim().toLowerCase()
+  return template.replace(/\$\{([^{}]+)\}|\{([^{}]+)\}/g, (match, zohoKey: string, simpleKey: string) => {
+    const key = normalizzaChiaveSegnaposto(zohoKey ?? simpleKey)
+    const normalized = key.toLowerCase()
     if ((BULK_PLACEHOLDERS as readonly string[]).includes(normalized)) {
       return placeholders[normalized] ?? ""
     }
@@ -61,6 +62,11 @@ export function renderTemplate(
 
     return match
   })
+}
+
+function normalizzaChiaveSegnaposto(raw: string): string {
+  const key = raw.trim()
+  return key.replace(/^(Clienti|Leads|Lead|Installatori)\./i, "").trim()
 }
 
 /**

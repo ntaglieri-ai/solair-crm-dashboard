@@ -39,6 +39,23 @@ describe("renderTemplate", () => {
     )
   })
 
+  it("sostituisce i segnaposto Zoho con modulo", () => {
+    const campi = { "Città indirizzo postale": "Catania", "Via indirizzo postale": "Via Etnea 1" }
+    expect(
+      renderTemplate(
+        "Situato presso: ${Clienti.Città indirizzo postale}, ${Clienti.Via indirizzo postale}",
+        BASE,
+        campi,
+      ),
+    ).toBe("Situato presso: Catania, Via Etnea 1")
+  })
+
+  it("sostituisce i segnaposto Zoho di base", () => {
+    expect(renderTemplate("Cliente: ${Clienti.Nome} ${Clienti.Cognome}", BASE)).toBe(
+      "Cliente: Mario Rossi",
+    )
+  })
+
   it("trova il campo anche con maiuscole diverse", () => {
     // I nomi dei campi vengono scritti a mano nei modelli.
     const campi = { "COD- MODULI": "ABC123" }
@@ -62,6 +79,12 @@ describe("renderTemplate", () => {
     const html = "<style>.riga { margin: 0; padding: 4px }</style><p>Ciao {nome}</p>"
     expect(renderTemplate(html, BASE)).toBe(
       "<style>.riga { margin: 0; padding: 4px }</style><p>Ciao Mario</p>",
+    )
+  })
+
+  it("lascia intatto un segnaposto Zoho non conosciuto", () => {
+    expect(renderTemplate("Dato: ${Clienti.Sconosciuto}", BASE)).toBe(
+      "Dato: ${Clienti.Sconosciuto}",
     )
   })
 

@@ -281,7 +281,7 @@ async function extractWithClaude(params: {
   mediaType: string
   base64: string
 }) {
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const apiKey = process.env.SOLAIR_AI_API_KEY
   if (!apiKey || !canExtractWithClaude(params.mediaType)) return null
 
   const sourceBlock =

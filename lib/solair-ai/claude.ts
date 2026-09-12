@@ -30,10 +30,10 @@ function modello(): string {
 }
 
 function apiKey(): string {
-  const chiave = process.env.ANTHROPIC_API_KEY
+  const chiave = process.env.SOLAIR_AI_API_KEY
   if (!chiave) {
     throw new Error(
-      "SolairAI non e' configurato: manca ANTHROPIC_API_KEY fra le variabili d'ambiente.",
+      "SolairAI non e' configurato: manca SOLAIR_AI_API_KEY fra le variabili d'ambiente.",
     )
   }
   return chiave

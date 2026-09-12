@@ -501,7 +501,7 @@ function catalogItems(documento: ListinoDocumento, testo: string, categoria: str
 }
 
 async function extractScanWithClaude(documento: ListinoDocumento) {
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const apiKey = process.env.ROBERTA_API_KEY
   const mediaType = documento.mediaType ?? mediaTypeFromName(documento.nome)
   if (!apiKey || !documento.contenuto_base64 || !canExtractWithClaude(mediaType)) return null
 

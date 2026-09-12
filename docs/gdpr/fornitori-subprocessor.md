@@ -136,23 +136,25 @@ oggi, e se esista un DPA. Dal solo codice si vede la chiave, non il traffico.
 
 ---
 
-## Configurati ma non attivi in produzione
+## Configurati per funzioni AI interne
 
 ### Anthropic — API Claude
 
-`ANTHROPIC_API_KEY` è presente **solo in `.env.local`**, non nell'ambiente
-Production di Vercel. La funzione che la usa (`extractScanWithClaude` in
-`lib/roberta/knowledge.ts`) esce restituendo `null` quando la chiave manca:
-**in produzione la chiamata non avviene.**
+`ROBERTA_API_KEY` e `SOLAIR_AI_API_KEY` sono separate da `ANTHROPIC_API_KEY`:
+Roberta e SolairAI possono essere ruotate, revocate e monitorate senza
+condividere la stessa chiave Anthropic. Le due variabili risultano configurate
+negli ambienti Preview e Production di Vercel.
 
-Cosa verrebbe inviato se attivata: i PDF dei **listini prezzi** letti da
-Nextcloud, in base64, per estrarne il testo commerciale. Sono documenti di
-prodotto — prezzi, potenze, garanzie — **nessun dato personale di lead o
-clienti**. Il cron `/api/cron/roberta-sync` (ore 02:00) alimenta la base di
-conoscenza del chatbot con questo materiale.
+Roberta invia ad Anthropic i PDF dei **listini prezzi** letti da Nextcloud,
+in base64, per estrarne il testo commerciale. Sono documenti di prodotto —
+prezzi, potenze, garanzie — **nessun dato personale di lead o clienti**. Il
+cron `/api/cron/roberta-sync` (ore 02:00) alimenta la base di conoscenza del
+chatbot con questo materiale.
 
-**DPA: da verificare con Nando**, se e quando la chiave venga portata in
-produzione.
+SolairAI usa una chiave dedicata per chat e lettura file richieste dall'utente
+nel CRM.
+
+**DPA: da verificare con Nando**.
 
 ### Twilio — WhatsApp
 

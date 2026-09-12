@@ -19,6 +19,7 @@ import {
   entitaDaSelezioneSemplice,
   nomeDaRispostaSemplice,
   richiestaLetturaDocumenti,
+  ricercaRecordSemplice,
   rifiutoSemplice,
   salutoSemplice,
 } from "@/lib/solair-ai/dialogo"
@@ -81,6 +82,72 @@ function statoDaPayload(grezzo: Partial<StatoConversazione> | undefined): StatoC
     // di scrivere. Qui serve solo a sapere che c'e' una domanda in sospeso.
     proposta: grezzo.proposta ?? null,
   }
+}
+
+async function rispondiDaCrmOIndice(params: {
+  entita: NonNullable<StatoConversazione["entita"]>
+  nome: string
+  domanda: string
+  soloVerificaRecord?: boolean
+}) {
+  const record = await trovaRecord(params.entita, params.nome)
+  const risultati = await cercaIndiceSolairAI(`${params.nome} ${params.domanda}`, {
+    entita: params.entita,
+    limit: 8,
+  })
+  const file = fileDaRisultatiIndice(risultati)
+
+  if (params.soloVerificaRecord) {
+    if (record) {
+      return risposta(
+        `Si, trovo ${ENTITA_ARTICOLO[params.entita]} "${record.etichetta}" nel CRM.` +
+          (file.length > 0
+            ? ` Ho anche ${file.length} ${file.length === 1 ? "estratto indicizzato" : "estratti indicizzati"} collegati.`
+            : " Non vedo ancora estratti documentali indicizzati collegati a questo nome."),
+        { entita: params.entita, nome: record.etichetta, proposta: null },
+        { file },
+      )
+    }
+
+    return risposta(
+      `Non trovo ${ENTITA_ARTICOLO[params.entita]} "${params.nome}" nel CRM.` +
+        (file.length > 0
+          ? ` Pero' trovo ${file.length} ${file.length === 1 ? "estratto indicizzato" : "estratti indicizzati"} con questo nome.`
+          : " Non vedo nemmeno estratti documentali indicizzati collegati a questo nome."),
+      { entita: params.entita, nome: params.nome, proposta: null },
+      { file },
+    )
+  }
+
+  if (risultati.length > 0) {
+    const messaggio = await rispondiDaIndiceSolairAI({
+      domanda: `${params.domanda}\n\nContesto record: ${ENTITA_LABEL[params.entita]} ${params.nome}.`,
+      risultati,
+    })
+    return risposta(
+      messaggio,
+      {
+        entita: params.entita,
+        nome: record?.etichetta ?? params.nome,
+        proposta: null,
+      },
+      { file },
+    )
+  }
+
+  if (record) {
+    return risposta(
+      `Si, trovo ${ENTITA_ARTICOLO[params.entita]} "${record.etichetta}" nel CRM. ` +
+        "Nei documenti indicizzati non trovo ancora estratti utili su questa richiesta.",
+      { entita: params.entita, nome: record.etichetta, proposta: null },
+    )
+  }
+
+  return risposta(
+    `Non trovo ${ENTITA_ARTICOLO[params.entita]} "${params.nome}" nel CRM. ` +
+      "Non ho trovato nemmeno estratti indicizzati collegati a questo nome.",
+    { entita: params.entita, nome: params.nome, proposta: null },
+  )
 }
 
 export async function POST(request: Request) {
@@ -155,28 +222,22 @@ export async function POST(request: Request) {
   }
 
   const letturaLiveRichiesta = richiestaLetturaDocumenti(ultimoMessaggio)
-  if (stato.entita && stato.nome && !stato.proposta && !letturaLiveRichiesta) {
-    const risultati = await cercaIndiceSolairAI(`${stato.nome} ${ultimoMessaggio}`, {
-      entita: stato.entita,
-      limit: 8,
+  const ricercaRapida = !stato.proposta ? ricercaRecordSemplice(ultimoMessaggio) : null
+  if (ricercaRapida && !letturaLiveRichiesta) {
+    return rispondiDaCrmOIndice({
+      entita: ricercaRapida.entita,
+      nome: ricercaRapida.nome,
+      domanda: ultimoMessaggio,
+      soloVerificaRecord: true,
     })
-    if (risultati.length > 0) {
-      const messaggio = await rispondiDaIndiceSolairAI({
-        domanda: `${ultimoMessaggio}\n\nContesto record: ${ENTITA_LABEL[stato.entita]} ${stato.nome}.`,
-        risultati,
-      })
-      return risposta(
-        messaggio,
-        { entita: stato.entita, nome: stato.nome, proposta: null },
-        { file: fileDaRisultatiIndice(risultati) },
-      )
-    }
+  }
 
-    return risposta(
-      "Non trovo ancora abbastanza nell'indice per rispondere su questo record. " +
-        "Se vuoi controllare Nextcloud live e preparare aggiornamenti CRM, scrivi \"leggi documenti\".",
-      { entita: stato.entita, nome: stato.nome, proposta: null },
-    )
+  if (stato.entita && stato.nome && !stato.proposta && !letturaLiveRichiesta) {
+    return rispondiDaCrmOIndice({
+      entita: stato.entita,
+      nome: stato.nome,
+      domanda: ultimoMessaggio,
+    })
   }
 
   let lettura
@@ -265,6 +326,10 @@ export async function POST(request: Request) {
       lettura.domanda ?? `Come si chiama ${ENTITA_ARTICOLO[entita]}?`,
       { entita, nome: null, proposta: null },
     )
+  }
+
+  if (!letturaLiveRichiesta) {
+    return rispondiDaCrmOIndice({ entita, nome, domanda: ultimoMessaggio })
   }
 
   const impostazione = await leggiImpostazioneAI(entita)

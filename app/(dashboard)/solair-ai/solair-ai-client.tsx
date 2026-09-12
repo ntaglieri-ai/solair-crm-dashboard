@@ -443,7 +443,7 @@ export function SolairAiClient({
               {inAttesa ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" />
-                  Sto guardando su Nextcloud...
+                  Sto controllando...
                 </div>
               ) : null}
               <div ref={fondo} />

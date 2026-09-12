@@ -129,3 +129,29 @@ export function richiestaLetturaDocumenti(messaggio: string): boolean {
     /\b(nuovi documenti|documenti nuovi|novita)\b/.test(testo)
   )
 }
+
+export function ricercaRecordSemplice(
+  messaggio: string,
+): { entita: EntitaAI; nome: string } | null {
+  const testo = normalizzaTestoDialogo(messaggio)
+  if (testo === "") return null
+  if (!/\b(vedi|cerca|trova|controlla|esiste|presente|hai)\b/.test(testo)) return null
+
+  let entita: EntitaAI | null = null
+  if (/\b(clienti|cliente)\b/.test(testo)) entita = "cliente"
+  else if (/\b(leads|lead)\b/.test(testo)) entita = "lead"
+  else if (/\b(installatori|installatore)\b/.test(testo)) entita = "installatore"
+  if (!entita) return null
+
+  const nome = testo
+    .replace(/\b(vedi|cerca|trova|controlla|esiste|presente|hai|mi|se|c|e|ce|lo|la|tra|fra|nei|nelle|negli|nel|nella|in|i|il|un|una|gli|le|crm|scheda|record)\b/g, " ")
+    .replace(/\b(clienti|cliente|leads|lead|installatori|installatore)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  const parole = nome.split(" ").filter(Boolean)
+  if (parole.length < 2 || parole.length > 8) return null
+  if (parole.some((parola) => PAROLE_DOMANDA.has(parola))) return null
+
+  return { entita, nome }
+}

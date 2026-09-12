@@ -5,6 +5,7 @@ import {
   entitaDaSelezioneSemplice,
   nomeDaRispostaSemplice,
   richiestaLetturaDocumenti,
+  ricercaRecordSemplice,
   rifiutoSemplice,
   salutoSemplice,
 } from "@/lib/solair-ai/dialogo"
@@ -65,5 +66,19 @@ describe("richiestaLetturaDocumenti", () => {
 
   it("lascia le normali domande documentali al percorso indice", () => {
     expect(richiestaLetturaDocumenti("quale contratto ha firmato?")).toBe(false)
+  })
+})
+
+describe("ricercaRecordSemplice", () => {
+  it("riconosce una ricerca CRM senza trasformarla in lettura Nextcloud", () => {
+    expect(ricercaRecordSemplice("vedi nando taglieri tra i clienti")).toEqual({
+      entita: "cliente",
+      nome: "nando taglieri",
+    })
+    expect(richiestaLetturaDocumenti("vedi nando taglieri tra i clienti")).toBe(false)
+  })
+
+  it("non scambia domande aggregate per una ricerca anagrafica", () => {
+    expect(ricercaRecordSemplice("quali clienti hanno il CER?")).toBeNull()
   })
 })

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { IconPencil, IconTrash } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
+import { AiAllegatiButton } from "@/components/shared/ai-allegati-button"
 import {
   Dialog,
   DialogContent,
@@ -52,6 +53,7 @@ export function InstallatoreDetailActions({
         <IconPencil size={15} stroke={1.8} data-icon="inline-start" />
         Modifica
       </Button>
+      <AiAllegatiButton size="sm" />
       {permissions.canRecord("installatori", "delete") ? (
         <Button
           variant="outline"

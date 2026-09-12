@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { QuickContactIcons } from "@/components/shared/quick-contact-icons"
+import { AiAllegatiButton } from "@/components/shared/ai-allegati-button"
 import { leadPrimaryPhone } from "@/lib/leads/contact"
 import { EditRecordDialog, buildLeadEditFields } from "@/components/shared/edit-record-dialog"
 import { useDeleteLead, useCreateLead } from "@/lib/leads/hooks"
@@ -187,6 +188,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
             <Pencil data-icon="inline-start" />
             Modifica
           </Button>
+          <AiAllegatiButton className="h-9 px-3 text-sm font-semibold" />
           <QuickContactIcons
             kind="lead"
             recordId={lead.id}

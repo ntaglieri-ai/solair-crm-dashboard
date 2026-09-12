@@ -34,7 +34,7 @@ function vuota(entita: EntitaAI): ImpostazioneAI {
     entita,
     nextcloudPath: "",
     attivo: true,
-    indicizzazioneAttiva: true,
+    indicizzazioneAttiva: false,
     aggiornatoIl: null,
     ultimoSyncIl: null,
     ultimoSyncEsito: null,
@@ -69,7 +69,7 @@ export async function leggiImpostazioniAI(): Promise<ImpostazioneAI[]> {
           entita: riga.entita as EntitaAI,
           nextcloudPath: riga.nextcloud_path ?? "",
           attivo: riga.attivo !== false,
-          indicizzazioneAttiva: riga.indicizzazione_attiva !== false,
+          indicizzazioneAttiva: false,
           aggiornatoIl: riga.aggiornato_il,
           ultimoSyncIl: riga.ultimo_sync_il ?? null,
           ultimoSyncEsito: riga.ultimo_sync_esito ?? null,
@@ -123,7 +123,7 @@ export async function salvaImpostazioniAI(
       .update({
         nextcloud_path: normalizzaPath(modifica.nextcloudPath),
         attivo: modifica.attivo,
-        indicizzazione_attiva: modifica.indicizzazioneAttiva !== false,
+        indicizzazione_attiva: false,
         aggiornato_da: utenteId,
         aggiornato_il: adesso,
       })

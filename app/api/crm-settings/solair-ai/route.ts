@@ -13,7 +13,6 @@ type PutPayload = {
     entita?: string
     nextcloudPath?: string
     attivo?: boolean
-    indicizzazioneAttiva?: boolean
   }[]
 }
 
@@ -38,7 +37,7 @@ export async function PUT(request: Request) {
       entita: riga.entita as EntitaAI,
       nextcloudPath: typeof riga.nextcloudPath === "string" ? riga.nextcloudPath : "",
       attivo: riga.attivo !== false,
-      indicizzazioneAttiva: riga.indicizzazioneAttiva !== false,
+      indicizzazioneAttiva: false,
     }))
 
   if (modifiche.length === 0) {

@@ -33,6 +33,7 @@ import {
 import { toast } from "sonner"
 import { SEDE_LABELS, type ClienteRecord } from "@/lib/mock-data"
 import { EditRecordDialog, buildClienteEditFields } from "@/components/shared/edit-record-dialog"
+import { AiAllegatiButton } from "@/components/shared/ai-allegati-button"
 import { useDeleteCliente } from "@/lib/clienti/hooks"
 import { usePermissions } from "@/lib/permissions/provider"
 import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
@@ -97,6 +98,7 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
             <Pencil data-icon="inline-start" />
             Modifica
           </Button>
+          <AiAllegatiButton className="h-9 px-3 text-sm font-semibold" />
           <QuickContactIcons
             kind="cliente"
             recordId={cliente.id}

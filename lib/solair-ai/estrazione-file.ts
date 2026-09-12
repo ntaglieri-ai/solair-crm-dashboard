@@ -5,6 +5,8 @@ import { createExtractorFromData, type FileHeader } from "node-unrar-js"
 
 import { estraiTestoDaPdf } from "@/lib/listino/pdf-testo"
 
+import { richiediMessaggioClaude } from "./anthropic"
+
 export const MAX_FILE_INDEX_BYTES = 25 * 1024 * 1024
 
 const DEFAULT_INGEST_MODEL = "claude-sonnet-5"
@@ -295,14 +297,10 @@ async function extractWithClaude(params: {
         }
 
   const model = process.env.SOLAIR_AI_INGEST_MODEL?.trim() || DEFAULT_INGEST_MODEL
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
+  const esito = await richiediMessaggioClaude({
+    apiKey,
+    etichetta: `estrazione ${params.nome}`,
+    corpo: {
       model,
       max_tokens: 4096,
       messages: [
@@ -318,18 +316,18 @@ async function extractWithClaude(params: {
           ],
         },
       ],
-    }),
+    },
   })
 
-  const body = (await response.json().catch(() => null)) as unknown
-  if (!response.ok) {
+  const body = esito.corpo
+  if (!esito.ok) {
     const message =
       typeof body === "object" &&
       body != null &&
       "error" in body &&
       typeof (body as { error?: { message?: unknown } }).error?.message === "string"
         ? (body as { error: { message: string } }).error.message
-        : `HTTP ${response.status}`
+        : `HTTP ${esito.status}`
     throw new Error(`Anthropic ${params.nome}: ${message}`)
   }
 
@@ -356,6 +354,7 @@ async function extractZipArchive(params: {
   path: string
   buffer: Uint8Array
   depth: number
+  usaClaude: boolean
 }) {
   if (params.depth >= MAX_ARCHIVE_DEPTH) {
     return {
@@ -388,6 +387,7 @@ async function extractZipArchive(params: {
       buffer: innerBuffer,
       contentType: null,
       depth: params.depth + 1,
+      usaClaude: params.usaClaude,
     })
     if (inner.testo) parts.push(`--- File interno: ${entry.name} ---\n${inner.testo}`)
     else if (inner.errore) warnings.push(`${entry.name}: ${inner.errore}`)
@@ -405,6 +405,7 @@ async function extractRarArchive(params: {
   path: string
   buffer: Uint8Array
   depth: number
+  usaClaude: boolean
 }) {
   if (params.depth >= MAX_ARCHIVE_DEPTH) {
     return {
@@ -459,6 +460,7 @@ async function extractRarArchive(params: {
       buffer: entry.extraction,
       contentType: null,
       depth: params.depth + 1,
+      usaClaude: params.usaClaude,
     })
     if (inner.testo) parts.push(`--- File interno: ${entry.fileHeader.name} ---\n${inner.testo}`)
     else if (inner.errore) warnings.push(`${entry.fileHeader.name}: ${inner.errore}`)
@@ -467,14 +469,31 @@ async function extractRarArchive(params: {
   return { testo: parts.join("\n\n").trim(), errore: warnings.join("; ") || null }
 }
 
+/**
+ * Ripulisce il testo estratto da cio' che Postgres non sa memorizzare.
+ *
+ * Il byte NUL e i surrogati spaiati non sono rari nei PDF e negli xlsx reali,
+ * e arrivavano fino alla INSERT: "unsupported Unicode escape sequence", file
+ * perso. Non e' un problema del parallelo — si vedeva anche prima — ma su
+ * 25.000 file diventa una fetta che vale la pena non buttare.
+ */
+export function ripuliTestoPerDatabase(testo: string): string {
+  return testo
+    .replace(/\u0000/g, "")
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, "")
+    .replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "")
+}
+
 export async function estraiContenutoDaBuffer(params: {
   nome: string
   path: string
   buffer: Uint8Array
   contentType: string | null
   depth?: number
+  usaClaude?: boolean
 }): Promise<EstrazioneIndicizzabile> {
   const depth = params.depth ?? 0
+  const usaClaude = params.usaClaude ?? true
   const ext = extensionOf(params.nome)
   const mediaType =
     (WORD_OPEN_XML_EXTENSIONS.has(ext) ||
@@ -515,6 +534,7 @@ export async function estraiContenutoDaBuffer(params: {
       path: params.path,
       buffer: params.buffer,
       depth,
+      usaClaude,
     })
     return {
       stato: archivio.testo ? "ready" : "empty",
@@ -530,6 +550,7 @@ export async function estraiContenutoDaBuffer(params: {
       path: params.path,
       buffer: params.buffer,
       depth,
+      usaClaude,
     })
     return {
       stato: archivio.testo ? "ready" : "empty",
@@ -554,13 +575,22 @@ export async function estraiContenutoDaBuffer(params: {
     return { stato: testo ? "ready" : "empty", testo, mediaType, errore: null }
   }
 
-  if (canExtractWithClaude(mediaType)) {
+  if (usaClaude && canExtractWithClaude(mediaType)) {
     const testo = await extractWithClaude({
       nome: params.nome,
       mediaType,
       base64: Buffer.from(params.buffer).toString("base64"),
     })
     return { stato: testo ? "ready" : "empty", testo: testo ?? "", mediaType, errore: null }
+  }
+
+  if (canExtractWithClaude(mediaType)) {
+    return {
+      stato: "empty",
+      testo: "",
+      mediaType,
+      errore: "Contenuto non estratto automaticamente senza OCR/Claude",
+    }
   }
 
   return {

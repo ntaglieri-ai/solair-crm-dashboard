@@ -16,7 +16,7 @@
     },
     {
       "path": "/api/cron/solair-ai-sync",
-      "schedule": "*/5 * * * *"
+      "schedule": "* * * * *"
     },
     {
       "path": "/api/cron/solair-ai-nightly-sync",

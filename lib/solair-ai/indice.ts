@@ -11,21 +11,24 @@ import {
   MAX_FILE_INDEX_BYTES,
   mediaTypeFromName,
   normalizeMediaType,
+  ripuliTestoPerDatabase,
 } from "./estrazione-file"
+import { eGuastoDiAccount, guastoDiAccountRecente } from "./anthropic"
 import { processaDocumentoSuCrmAutomatico } from "./auto-crm"
 import { accessoAI, type AccessoAI } from "./nextcloud"
 import { ENTITA_AI, ENTITA_LABEL, isEntitaAI } from "./tipi"
 import type { EntitaAI } from "./tipi"
 import { leggiImpostazioneAI, leggiImpostazioniAI } from "./settings"
 import {
+  claimSolairAiSyncJobFiles,
   finishSolairAiSyncJob,
   finishSolairAiSyncJobFile,
-  getQueuedSolairAiSyncJobFiles,
+  rilasciaSolairAiSyncJobFiles,
   getSolairAiSyncJob,
   insertSolairAiSyncJobFiles,
   leggiStatisticheFileJob,
-  markSolairAiSyncJobFileRunning,
   resetStaleSolairAiSyncJobFiles,
+  sommaChunkJob,
   updateSolairAiSyncJob,
   type SolairAiJobProgress,
   type SolairAiSyncJobFile,
@@ -70,6 +73,13 @@ type EsitoFileIndicizzato = {
   stato: "ready" | "empty" | "unsupported" | "error"
   errore: string | null
   testo: string
+}
+
+type ProgressoScansione = {
+  scanned: number
+  totaleBytes: number
+  ultimoPath: string | null
+  warnings: number
 }
 
 export type SolairAiIndexStats = {
@@ -175,11 +185,27 @@ function chunkText(testo: string) {
 async function scansionaFonte(
   accesso: AccessoAI,
   sourcePath: string,
+  onProgress?: (progress: ProgressoScansione) => Promise<void> | void,
 ): Promise<{ file: FileIndicizzabile[]; warnings: string[] }> {
   const visitate = new Set<string>()
   const coda = [sourcePath]
   const file: FileIndicizzabile[] = []
   const warnings: string[] = []
+  let totaleBytes = 0
+  let ultimoPath: string | null = null
+  let ultimoProgress = 0
+
+  async function scriviProgresso(force = false) {
+    const ora = Date.now()
+    if (!force && ora - ultimoProgress < 2000) return
+    ultimoProgress = ora
+    await onProgress?.({
+      scanned: file.length,
+      totaleBytes,
+      ultimoPath,
+      warnings: warnings.length,
+    })
+  }
 
   while (coda.length > 0) {
     const corrente = coda.shift() ?? ""
@@ -201,14 +227,18 @@ async function scansionaFonte(
             fileId: voce.fileId,
             fingerprint: fingerprintDi(voce),
           })
+          totaleBytes += voce.size ?? 0
+          ultimoPath = voce.path
         }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "lettura cartella fallita"
       warnings.push(`${corrente}: ${message}`)
     }
+    await scriviProgresso()
   }
 
+  await scriviProgresso(true)
   return { file, warnings }
 }
 
@@ -222,14 +252,28 @@ async function estraiContenuto(accesso: AccessoAI, file: FileIndicizzabile) {
     }
   }
 
-  const risposta = await downloadFile(accesso.username, accesso.appPassword, file.path)
-  const buffer = new Uint8Array(await risposta.arrayBuffer())
-  return estraiContenutoDaBuffer({
-    nome: file.nome,
-    path: file.path,
-    buffer,
-    contentType: risposta.headers.get("content-type") ?? file.contentType,
-  })
+  // Con N download in volo Nextcloud ogni tanto chiude la connessione
+  // (GOAWAY / UND_ERR_SOCKET): e' un incidente di trasporto, non un file
+  // illeggibile, e senza un secondo tentativo costava un file perso per
+  // volta. Tre tentativi con attesa crescente.
+  let ultimoErrore: unknown = null
+  for (let tentativo = 0; tentativo < 3; tentativo++) {
+    try {
+      const risposta = await downloadFile(accesso.username, accesso.appPassword, file.path)
+      const buffer = new Uint8Array(await risposta.arrayBuffer())
+      return await estraiContenutoDaBuffer({
+        nome: file.nome,
+        path: file.path,
+        buffer,
+        contentType: risposta.headers.get("content-type") ?? file.contentType,
+        usaClaude: false,
+      })
+    } catch (errore) {
+      ultimoErrore = errore
+      if (tentativo < 2) await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** tentativo))
+    }
+  }
+  throw ultimoErrore instanceof Error ? ultimoErrore : new Error("download Nextcloud fallito")
 }
 
 function scoreChunk(queryTokens: string[], row: ChunkRow) {
@@ -268,7 +312,8 @@ async function indicizzaVoce(params: {
   now: string
 }): Promise<EsitoFileIndicizzato> {
   try {
-    const estratto = await estraiContenuto(params.accesso, params.voce)
+    const grezzo = await estraiContenuto(params.accesso, params.voce)
+    const estratto = { ...grezzo, testo: ripuliTestoPerDatabase(grezzo.testo) }
     const { data: upserted, error } = await params.supabase
       .from("crm_ai_documenti")
       .upsert(
@@ -353,6 +398,42 @@ async function indicizzaVoce(params: {
   }
 }
 
+async function upsertMetadatiDocumenti(params: {
+  supabase: SupabaseClient
+  entita: EntitaAI
+  sourcePath: string
+  file: FileIndicizzabile[]
+  now: string
+}) {
+  const batchSize = 500
+  for (let index = 0; index < params.file.length; index += batchSize) {
+    const batch = params.file.slice(index, index + batchSize)
+    const { error } = await params.supabase.from("crm_ai_documenti").upsert(
+      batch.map((voce) => ({
+        entita: params.entita,
+        source_path: params.sourcePath,
+        path: voce.path,
+        nome: voce.nome,
+        estensione: extensionOf(voce.nome),
+        content_type: normalizeMediaType(voce.contentType) ?? mediaTypeFromName(voce.nome),
+        file_id: voce.fileId,
+        fingerprint: voce.fingerprint,
+        dimensione: voce.dimensione,
+        modificato_il: voce.modificatoIl,
+        trovato_il: params.now,
+        indicizzato_il: null,
+        stato: "empty",
+        testo_estratto: null,
+        testo_chars: 0,
+        errore: null,
+      })),
+      { onConflict: "entita,path" },
+    )
+
+    if (error) throw new Error(`catalogo metadati: ${error.message}`)
+  }
+}
+
 async function aggiornaSyncSettings(
   supabase: SupabaseClient,
   result: SolairAiSyncResult,
@@ -411,7 +492,16 @@ export async function sincronizzaIndiceSolairAI(params: {
   }
 
   await params.onProgress?.({ stato: "scanning", fase: "scansione cartelle" })
-  const { file, warnings } = await scansionaFonte(accesso, impostazione.nextcloudPath)
+  const { file, warnings } = await scansionaFonte(accesso, impostazione.nextcloudPath, (progress) =>
+    params.onProgress?.({
+      stato: "scanning",
+      fase: "scansione cartelle",
+      scanned: progress.scanned,
+      totaleBytes: progress.totaleBytes,
+      warnings: progress.warnings,
+      ultimoPath: progress.ultimoPath,
+    }),
+  )
   result.warnings.push(...warnings)
   result.scanned = file.length
   const totaleBytes = file.reduce((sum, voce) => sum + (voce.dimensione ?? 0), 0)
@@ -592,7 +682,16 @@ export async function controllaIndiceSolairAI(params: {
   }
 
   await params.onProgress?.({ stato: "scanning", fase: "scansione cartelle" })
-  const { file, warnings } = await scansionaFonte(accesso, impostazione.nextcloudPath)
+  const { file, warnings } = await scansionaFonte(accesso, impostazione.nextcloudPath, (progress) =>
+    params.onProgress?.({
+      stato: "scanning",
+      fase: "scansione cartelle",
+      scanned: progress.scanned,
+      totaleBytes: progress.totaleBytes,
+      warnings: progress.warnings,
+      ultimoPath: progress.ultimoPath,
+    }),
+  )
   result.warnings.push(...warnings)
   result.scanned = file.length
   result.totaleBytes = file.reduce((sum, voce) => sum + (voce.dimensione ?? 0), 0)
@@ -701,7 +800,16 @@ export async function preparaCodaSincronizzazioneSolairAI(params: {
     return result
   }
 
-  const { file, warnings } = await scansionaFonte(accesso, impostazione.nextcloudPath)
+  const { file, warnings } = await scansionaFonte(accesso, impostazione.nextcloudPath, (progress) =>
+    updateSolairAiSyncJob(params.jobId, {
+      stato: "scanning",
+      fase: "scansione cartelle",
+      scanned: progress.scanned,
+      totaleBytes: progress.totaleBytes,
+      warnings: progress.warnings,
+      ultimoPath: progress.ultimoPath,
+    }),
+  )
   result.warnings.push(...warnings)
   result.scanned = file.length
   result.totaleBytes = file.reduce((sum, voce) => sum + (voce.dimensione ?? 0), 0)
@@ -764,6 +872,26 @@ export async function preparaCodaSincronizzazioneSolairAI(params: {
   result.daAggiornare = daLeggere.length
   result.invariati = file.length - daLeggere.length
 
+  if (daLeggere.length > 0) {
+    try {
+      await upsertMetadatiDocumenti({
+        supabase,
+        entita: params.entita,
+        sourcePath: impostazione.nextcloudPath,
+        file: daLeggere,
+        now: new Date().toISOString(),
+      })
+      const vecchiChunk = daLeggere
+        .map((voce) => existing.get(voce.path)?.id)
+        .filter((id): id is string => typeof id === "string" && id !== "")
+      if (vecchiChunk.length > 0) {
+        await supabase.from("crm_ai_document_chunks").delete().in("documento_id", vecchiChunk)
+      }
+    } catch (error) {
+      result.errors.push(error instanceof Error ? error.message : "catalogo metadati non aggiornato")
+    }
+  }
+
   const inserimento = await insertSolairAiSyncJobFiles({
     jobId: params.jobId,
     files: daLeggere.map((voce) => ({
@@ -817,14 +945,25 @@ async function subjectDaJobCreatore(userId: string | null) {
   return { userId, email: data.email }
 }
 
+/** File in volo per giro. Alzabile da env senza toccare il codice. */
+export const SOLAIR_AI_SYNC_CONCORRENZA = Math.max(
+  1,
+  Math.min(64, Number(process.env.SOLAIR_AI_SYNC_CONCURRENCY ?? 12) || 12),
+)
+
+/** Ogni quanto si riscrive il progresso sul job: il contatore live legge li'. */
+const PROGRESSO_OGNI_MS = 2000
+
 export async function processaBatchJobSolairAI(params: {
   jobId: string
   maxFiles?: number
   maxMs?: number
+  concorrenza?: number
 }) {
   const started = Date.now()
-  const maxFiles = params.maxFiles ?? 8
+  const maxFiles = params.maxFiles ?? 2000
   const maxMs = params.maxMs ?? 45_000
+  const concorrenza = Math.max(1, params.concorrenza ?? SOLAIR_AI_SYNC_CONCORRENZA)
   const supabase = createAdminClient()
   if (!supabase) throw new Error("Supabase admin client non configurato")
 
@@ -839,14 +978,37 @@ export async function processaBatchJobSolairAI(params: {
   await resetStaleSolairAiSyncJobFiles(job.id)
 
   let processed = 0
+  let ultimoPath: string | null = job.ultimoPath
   let lastError: string | null = null
-  while (processed < maxFiles && Date.now() - started < maxMs) {
-    const [file] = await getQueuedSolairAiSyncJobFiles(job.id, 1)
-    if (!file) break
+  /** Alzata da un guasto di account: ferma tutti i worker, non solo il suo. */
+  let fermaTutto = false
 
-    await markSolairAiSyncJobFileRunning(file.id)
+  // Buffer condiviso dai worker: si prende in carico un lotto per volta
+  // invece di una query di claim per file.
+  let buffer: SolairAiSyncJobFile[] = []
+  let codaEsaurita = false
+  let claimInCorso: Promise<void> | null = null
+
+  async function riempiBuffer() {
+    const quanti = Math.min(concorrenza * 2, Math.max(1, maxFiles - processed - buffer.length))
+    const lotto = await claimSolairAiSyncJobFiles(job!.id, quanti)
+    if (lotto.length === 0) codaEsaurita = true
+    else buffer.push(...lotto)
+    claimInCorso = null
+  }
+
+  async function prossimoFile(): Promise<SolairAiSyncJobFile | null> {
+    while (true) {
+      if (buffer.length > 0) return buffer.shift() ?? null
+      if (codaEsaurita) return null
+      if (!claimInCorso) claimInCorso = riempiBuffer()
+      await claimInCorso
+    }
+  }
+
+  async function lavoraFile(file: SolairAiSyncJobFile) {
     const esito = await indicizzaVoce({
-      supabase,
+      supabase: supabase!,
       accesso,
       entita: file.entita,
       sourcePath: file.sourcePath,
@@ -857,47 +1019,113 @@ export async function processaBatchJobSolairAI(params: {
     let erroreAuto: string | null = null
     if (esito.stato !== "error") {
       const auto = await processaDocumentoSuCrmAutomatico({
-        supabase,
+        supabase: supabase!,
         entita: file.entita,
         file: jobFileToIndicizzabile(file),
         testo: esito.testo,
-        utenteId: job.creatoDa,
+        utenteId: job!.creatoDa,
       })
       if (auto.stato === "error") erroreAuto = auto.errore ?? "automazione CRM fallita"
     }
 
-    await finishSolairAiSyncJobFile(file.id, {
-      stato: esito.stato === "error" || erroreAuto ? "error" : "done",
-      chunkCount: esito.chunks,
-      errore: esito.errore ?? erroreAuto,
-    })
-    if (esito.stato === "error" || erroreAuto) {
-      lastError = esito.errore ?? erroreAuto ?? "indicizzazione fallita"
-    }
-    processed++
+    const fallito = esito.stato === "error" || erroreAuto !== null
+    const motivo = esito.errore ?? erroreAuto
 
-    const stats = await leggiStatisticheFileJob(job.id)
-    await updateSolairAiSyncJob(job.id, {
+    // Credito finito o chiave non valida: il file e' sano, e' l'account a
+    // essere fermo. Torna in coda e si chiude il giro — altrimenti in pochi
+    // minuti l'intera coda finirebbe in "error" per un problema di
+    // fatturazione, e andrebbe ripescata a mano.
+    if (fallito && (guastoDiAccountRecente() || eGuastoDiAccount(motivo))) {
+      await rilasciaSolairAiSyncJobFiles([file.id])
+      fermaTutto = true
+      lastError = motivo ?? "account Anthropic non disponibile"
+      return
+    }
+
+    await finishSolairAiSyncJobFile(file.id, {
+      stato: fallito ? "error" : "done",
+      chunkCount: esito.chunks,
+      errore: motivo,
+    })
+
+    processed++
+    ultimoPath = file.path
+    if (fallito) lastError = motivo ?? "indicizzazione fallita"
+  }
+
+  /**
+   * Il contatore live continua a leggere dalla riga del job: qui cambia solo
+   * COSA ci si scrive e ogni quanto. I numeri vengono contati a database
+   * (index-only scan, ~10ms l'uno) invece che tenuti a mente dal singolo
+   * giro: cosi' restano esatti anche quando piu' invocazioni del cron si
+   * sovrappongono, cosa che con il claim atomico e' voluta — e' il modo in
+   * cui si moltiplicano i file in volo senza caricare una sola funzione.
+   */
+  async function scriviProgresso() {
+    const correnti = await leggiStatisticheFileJob(job!.id)
+    await updateSolairAiSyncJob(job!.id, {
       stato: "running",
       fase: "lettura file",
-      processati: stats.done + stats.error + stats.skipped,
-      aggiornati: stats.done,
-      chunks: stats.chunks,
-      errori: stats.error,
-      ultimoPath: file.path,
+      processati: correnti.done + correnti.error + correnti.skipped,
+      aggiornati: correnti.done,
+      errori: correnti.error,
+      ultimoPath: ultimoPath ?? undefined,
     })
+  }
+
+  const battito = setInterval(() => {
+    void scriviProgresso().catch(() => {})
+  }, PROGRESSO_OGNI_MS)
+
+  try {
+    await Promise.all(
+      Array.from({ length: concorrenza }, async () => {
+        while (!fermaTutto && processed < maxFiles && Date.now() - started < maxMs) {
+          const file = await prossimoFile()
+          if (!file) return
+          try {
+            await lavoraFile(file)
+          } catch (errore) {
+            const messaggio = errore instanceof Error ? errore.message : "file non indicizzato"
+            if (guastoDiAccountRecente() || eGuastoDiAccount(messaggio)) {
+              await rilasciaSolairAiSyncJobFiles([file.id])
+              fermaTutto = true
+              lastError = messaggio
+              return
+            }
+            // Un file che esplode non deve portarsi via il worker: si
+            // registra l'errore e si passa al prossimo.
+            await finishSolairAiSyncJobFile(file.id, { stato: "error", errore: messaggio })
+            processed++
+            ultimoPath = file.path
+            lastError = messaggio
+          }
+        }
+      }),
+    )
+  } finally {
+    clearInterval(battito)
+  }
+
+  // I file rimasti nel buffer sono stati presi in carico ma non lavorati
+  // (tempo scaduto): vanno rimessi in coda, o resterebbero "running" fino
+  // allo scadere dello stallo.
+  if (buffer.length > 0) {
+    await rilasciaSolairAiSyncJobFiles(buffer.map((file) => file.id))
+    buffer = []
   }
 
   const stats = await leggiStatisticheFileJob(job.id)
   const done = stats.queued === 0 && stats.running === 0
   if (done) {
+    const chunksTotali = await sommaChunkJob(job.id)
     await finishSolairAiSyncJob(job.id, {
       errore: stats.error > 0 ? `${stats.error} file non indicizzati` : null,
       progress: {
         fase: "completed",
         processati: stats.done + stats.error + stats.skipped,
         aggiornati: stats.done,
-        chunks: stats.chunks,
+        chunks: chunksTotali,
         errori: stats.error,
       },
     })
@@ -908,10 +1136,12 @@ export async function processaBatchJobSolairAI(params: {
       updated: stats.done,
       reused: job.invariati,
       deleted: job.cancellati,
-      chunks: stats.chunks,
+      chunks: chunksTotali,
       errors: stats.error > 0 ? [`${stats.error} file non indicizzati`] : [],
       warnings: [],
     })
+  } else {
+    await scriviProgresso()
   }
 
   return { jobId: job.id, processed, done, error: lastError }

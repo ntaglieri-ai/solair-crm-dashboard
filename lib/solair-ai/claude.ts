@@ -1,5 +1,6 @@
 import "server-only"
 
+import { richiediMessaggioClaude } from "./anthropic"
 import { CAMPI_AI } from "./campi"
 import type { ContenutoFile } from "./nextcloud"
 import type { SolairAiKnowledgeSnippet } from "./indice"
@@ -23,7 +24,6 @@ import type { EntitaAI } from "./tipi"
  */
 
 const MODELLO_DEFAULT = "claude-opus-5"
-const ENDPOINT = "https://api.anthropic.com/v1/messages"
 
 function modello(): string {
   return process.env.SOLAIR_AI_MODEL?.trim() || MODELLO_DEFAULT
@@ -68,27 +68,23 @@ async function chiamaClaude(params: {
   tool: ToolClaude
   maxTokens: number
 }): Promise<Record<string, unknown>> {
-  const risposta = await fetch(ENDPOINT, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": apiKey(),
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
+  const esito = await richiediMessaggioClaude({
+    apiKey: apiKey(),
+    etichetta: params.tool.name,
+    corpo: {
       model: modello(),
       max_tokens: params.maxTokens,
       system: params.system,
       messages: params.messaggi,
       tools: [params.tool],
       tool_choice: { type: "auto" },
-    }),
+    },
   })
 
-  const corpo = (await risposta.json().catch(() => null)) as RispostaClaude | null
-  if (!risposta.ok) {
+  const corpo = esito.corpo as RispostaClaude | null
+  if (!esito.ok) {
     throw new Error(
-      `Claude non ha risposto (${corpo?.error?.message ?? `HTTP ${risposta.status}`}).`,
+      `Claude non ha risposto (${corpo?.error?.message ?? `HTTP ${esito.status}`}).`,
     )
   }
 

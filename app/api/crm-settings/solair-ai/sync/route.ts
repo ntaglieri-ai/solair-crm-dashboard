@@ -6,7 +6,6 @@ import {
   controllaIndiceSolairAI,
   leggiStatoIndiceSolairAI,
   preparaCodaSincronizzazioneSolairAI,
-  processaBatchJobSolairAI,
 } from "@/lib/solair-ai/indice"
 import { isEntitaAI } from "@/lib/solair-ai/tipi"
 import type { EntitaAI } from "@/lib/solair-ai/tipi"
@@ -137,8 +136,6 @@ export async function POST(request: Request) {
               totaleBytes: risultato.totaleBytes,
             },
           })
-        } else {
-          await processaBatchJobSolairAI({ jobId: job.id, maxFiles: 8, maxMs: 50_000 })
         }
 
         await logAudit({

@@ -389,6 +389,49 @@ export async function getQueuedSolairAiSyncJobFiles(jobId: string, limit: number
   return (data as unknown as JobFileRow[]).map(mapJobFile)
 }
 
+/**
+ * Somma dei chunk prodotti da un job. Paginata perche' PostgREST non somma e
+ * si ferma a 1.000 righe per pagina. Si chiama una volta sola, a job finito:
+ * durante la corsa il numero che conta e' quello dei file.
+ */
+export async function sommaChunkJob(jobId: string): Promise<number> {
+  const admin = createAdminClient()
+  if (!admin) return 0
+
+  const pagina = 1000
+  let totale = 0
+  for (let da = 0; ; da += pagina) {
+    const { data, error } = await admin
+      .from("crm_ai_sync_job_files")
+      .select("chunk_count")
+      .eq("job_id", jobId)
+      .range(da, da + pagina - 1)
+
+    if (error || !data) break
+    for (const riga of data as { chunk_count: number | null }[]) totale += riga.chunk_count ?? 0
+    if (data.length < pagina) break
+  }
+  return totale
+}
+
+/**
+ * Rimette in coda i file presi in carico ma non lavorati (tempo del giro
+ * scaduto). Senza, resterebbero `running` fino allo scadere dello stallo e il
+ * giro successivo non li toccherebbe.
+ */
+export async function rilasciaSolairAiSyncJobFiles(fileIds: string[]) {
+  const admin = createAdminClient()
+  if (!admin || fileIds.length === 0) return
+
+  const { error } = await admin
+    .from("crm_ai_sync_job_files")
+    .update({ stato: "queued", updated_at: new Date().toISOString() })
+    .in("id", fileIds)
+    .eq("stato", "running")
+
+  if (error) console.error("[solair-ai-sync] rilascio file:", error.message)
+}
+
 export async function markSolairAiSyncJobFileRunning(fileId: string) {
   const admin = createAdminClient()
   if (!admin) return
@@ -423,32 +466,89 @@ export async function finishSolairAiSyncJobFile(
   if (error) console.error(`[solair-ai-sync] finish file ${fileId}:`, error.message)
 }
 
+const STATI_FILE: SolairAiSyncJobFileStatus[] = ["queued", "running", "done", "error", "skipped"]
+
+/**
+ * Quanti file per stato, contati dal database.
+ *
+ * Prima si scaricavano le righe e si contavano a mano: con una coda da 25.000
+ * file PostgREST ne restituiva 1.000 (il suo tetto) e il conteggio usciva da
+ * quel campione — "8 processati" dopo un'ora e mezza, mentre a database ne
+ * risultavano 192. Un `count` esatto per stato non ha campione e non scarica
+ * niente.
+ *
+ * `chunks` non sta qui: PostgREST non somma. Lo tiene il chiamante, che
+ * conosce i chunk prodotti nel proprio giro e li aggiunge al totale del job.
+ */
 export async function leggiStatisticheFileJob(jobId: string) {
+  const vuote = { queued: 0, running: 0, done: 0, error: 0, skipped: 0, errors: 0 }
   const admin = createAdminClient()
-  if (!admin) {
-    return { queued: 0, running: 0, done: 0, error: 0, skipped: 0, chunks: 0, errors: 0 }
-  }
+  if (!admin) return vuote
+
+  const conteggi = await Promise.all(
+    STATI_FILE.map(async (stato) => {
+      const { count, error } = await admin
+        .from("crm_ai_sync_job_files")
+        .select("*", { count: "exact", head: true })
+        .eq("job_id", jobId)
+        .eq("stato", stato)
+      if (error) {
+        console.error(`[solair-ai-sync] conteggio ${stato} job ${jobId}:`, error.message)
+        return 0
+      }
+      return count ?? 0
+    }),
+  )
+
+  const stats = { ...vuote }
+  STATI_FILE.forEach((stato, indice) => {
+    stats[stato] = conteggi[indice]
+  })
+  stats.errors = stats.error
+  return stats
+}
+
+/**
+ * Prende in carico fino a `limit` file passandoli da `queued` a `running`
+ * in una sola UPDATE.
+ *
+ * Il filtro `stato = queued` dentro la UPDATE e' quello che rende il claim
+ * sicuro: due giri di cron sovrapposti, o due worker dello stesso giro, non
+ * possono portarsi via la stessa riga — la seconda UPDATE non la trova piu'
+ * in `queued` e il file torna indietro solo a chi l'ha vinto. Il vecchio
+ * "leggi una riga, poi marcala" non lo garantiva, e in parallelo avrebbe
+ * fatto lavorare due volte gli stessi file.
+ */
+export async function claimSolairAiSyncJobFiles(jobId: string, limit: number) {
+  const admin = createAdminClient()
+  if (!admin || limit <= 0) return []
+
+  const { data: candidati, error: erroreLettura } = await admin
+    .from("crm_ai_sync_job_files")
+    .select("id")
+    .eq("job_id", jobId)
+    .eq("stato", "queued")
+    .order("priority", { ascending: true })
+    .order("path", { ascending: true })
+    .limit(limit)
+
+  if (erroreLettura || !candidati || candidati.length === 0) return []
 
   const { data, error } = await admin
     .from("crm_ai_sync_job_files")
-    .select("stato, chunk_count")
-    .eq("job_id", jobId)
+    .update({ stato: "running", updated_at: new Date().toISOString() })
+    .in(
+      "id",
+      (candidati as { id: string }[]).map((riga) => riga.id),
+    )
+    .eq("stato", "queued")
+    .select(JOB_FILE_COLUMNS)
 
   if (error || !data) {
-    return { queued: 0, running: 0, done: 0, error: 0, skipped: 0, chunks: 0, errors: 0 }
+    if (error) console.error(`[solair-ai-sync] claim job ${jobId}:`, error.message)
+    return []
   }
-
-  const stats = { queued: 0, running: 0, done: 0, error: 0, skipped: 0, chunks: 0, errors: 0 }
-  for (const row of data as Array<{ stato: string; chunk_count: number | null }>) {
-    if (row.stato === "queued") stats.queued++
-    else if (row.stato === "running") stats.running++
-    else if (row.stato === "done") stats.done++
-    else if (row.stato === "error") stats.error++
-    else if (row.stato === "skipped") stats.skipped++
-    stats.chunks += row.chunk_count ?? 0
-  }
-  stats.errors = stats.error
-  return stats
+  return (data as unknown as JobFileRow[]).map(mapJobFile)
 }
 
 export async function getOpenSolairAiSyncJobs(limit = 3) {

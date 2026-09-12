@@ -17,6 +17,7 @@ import {
   risolviCampoAI,
   smistaCampi,
 } from "./campi"
+import { classificaDocumentoCrm } from "./document-filter"
 import { scegliRecordPerDocumento } from "./record-match"
 import type { CampoProposto, EntitaAI, FileCandidato } from "./tipi"
 
@@ -146,18 +147,23 @@ async function copiaComeAllegato(
     if (stessaImpronta) return stessaImpronta.path
   }
 
-  const nome = listing.ok
-    ? nomeSenzaCollisioni(
-        sanitizeName(file.nome) || "documento",
-        listing.items.map((item) => item.nome),
-      )
-    : sanitizeName(file.nome) || "documento"
-  const destinazione = `${cartella}/${nome}`
-  const esito = await copyFile(file.path, destinazione)
-  if (!esito.ok) {
-    throw new Error(esito.error ?? `Copia allegato fallita (${esito.status})`)
+  // Il nome libero si sceglie dall'elenco letto un attimo prima: con piu'
+  // file in lavorazione insieme due worker possono scegliere lo stesso e il
+  // secondo si prende "Destinazione gia' esistente". Chi perde la corsa
+  // riprova aggiungendo i nomi gia' tentati a quelli occupati.
+  const occupati = listing.ok ? listing.items.map((item) => item.nome) : []
+  const base = sanitizeName(file.nome) || "documento"
+
+  let ultimoErrore: string | null = null
+  for (let tentativo = 0; tentativo < 4; tentativo++) {
+    const nome = nomeSenzaCollisioni(base, occupati)
+    const destinazione = `${cartella}/${nome}`
+    const esito = await copyFile(file.path, destinazione)
+    if (esito.ok) return destinazione
+    ultimoErrore = esito.error ?? `Copia allegato fallita (${esito.status})`
+    occupati.push(nome)
   }
-  return destinazione
+  throw new Error(ultimoErrore ?? "Copia allegato fallita")
 }
 
 async function aggiornaCrmDaDocumento(params: {
@@ -169,6 +175,13 @@ async function aggiornaCrmDaDocumento(params: {
   testo: string
 }): Promise<{ aggiornati: CampoProposto[]; revisioni: CampoProposto[] }> {
   if (params.testo.trim() === "") return { aggiornati: [], revisioni: [] }
+
+  const classificazione = classificaDocumentoCrm({
+    nome: params.file.nome,
+    path: params.file.path,
+    testo: params.testo,
+  })
+  if (!classificazione.usaLlm) return { aggiornati: [], revisioni: [] }
 
   const estrazione = await leggiDocumenti({
     entita: params.entita,
@@ -214,21 +227,61 @@ async function aggiornaCrmDaDocumento(params: {
   }
 
   if (smistamento.inRevisione.length > 0) {
-    const { error } = await params.supabase.from("crm_revisioni_pending").upsert(
-      smistamento.inRevisione.map((riga) => ({
-        record_tipo: params.entita,
-        record_id: params.record.id,
-        campo: riga.campo.campo,
-        campo_etichetta: riga.campo.etichetta,
-        valore_attuale: riga.valoreAttuale,
-        valore_proposto: riga.campo.valore,
-        fonte_documento: riga.campo.fonte,
-        stato: "pending",
-        creato_da: params.utenteId,
-      })),
-      { onConflict: "record_tipo,record_id,campo" },
-    )
-    if (error) throw new Error(`Revisione automatica non registrata: ${error.message}`)
+    // L'unico indice unico su (record_tipo, record_id, campo) e' PARZIALE —
+    // vale solo per `stato = 'pending'`. Un upsert non puo' puntarlo, perche'
+    // PostgREST non sa esprimere il predicato dell'indice: usciva
+    // "there is no unique or exclusion constraint matching the ON CONFLICT
+    // specification", e ogni file che proponeva una revisione finiva in
+    // errore. La riga pendente si sostituisce a mano: prima si toglie quella
+    // vecchia sullo stesso campo, poi si inserisce la nuova.
+    //
+    // Delete e insert non sono atomiche insieme: due documenti dello stesso
+    // record lavorati in parallelo possono cancellare entrambi e poi
+    // scontrarsi sull'indice. Non e' un caso da evitare, e' un caso da
+    // ripetere — vince l'ultimo che scrive, che e' la semantica giusta per
+    // "il valore proposto piu' recente".
+    const campi = smistamento.inRevisione.map((riga) => riga.campo.campo)
+    const righe = smistamento.inRevisione.map((riga) => ({
+      record_tipo: params.entita,
+      record_id: params.record.id,
+      campo: riga.campo.campo,
+      campo_etichetta: riga.campo.etichetta,
+      valore_attuale: riga.valoreAttuale,
+      valore_proposto: riga.campo.valore,
+      fonte_documento: riga.campo.fonte,
+      stato: "pending",
+      creato_da: params.utenteId,
+    }))
+
+    let ultimoErrore: string | null = null
+    for (let tentativo = 0; tentativo < 3; tentativo++) {
+      const { error: erroreRimozione } = await params.supabase
+        .from("crm_revisioni_pending")
+        .delete()
+        .eq("record_tipo", params.entita)
+        .eq("record_id", params.record.id)
+        .eq("stato", "pending")
+        .in("campo", campi)
+      if (erroreRimozione) {
+        throw new Error(`Revisione automatica non registrata: ${erroreRimozione.message}`)
+      }
+
+      const { error } = await params.supabase.from("crm_revisioni_pending").insert(righe)
+      if (!error) {
+        ultimoErrore = null
+        break
+      }
+      // 23505 = violazione di unicita': un altro worker ha inserito la sua
+      // riga fra la nostra delete e la nostra insert.
+      if (error.code !== "23505") {
+        throw new Error(`Revisione automatica non registrata: ${error.message}`)
+      }
+      ultimoErrore = error.message
+      await new Promise((resolve) => setTimeout(resolve, 120 * (tentativo + 1)))
+    }
+    if (ultimoErrore) {
+      throw new Error(`Revisione automatica non registrata: ${ultimoErrore}`)
+    }
   }
 
   const aggiornati = smistamento.daScrivere.map((voce) => voce.campo)

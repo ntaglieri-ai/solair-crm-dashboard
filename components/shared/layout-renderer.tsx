@@ -70,12 +70,15 @@ export type RisolviModifica = (
   custom?: InlineEditableValueProps["custom"]
 } | null
 
+type LayoutAppearance = "default" | "clientiSalesforce"
+
 export function LayoutRenderer({
   pagine,
   record,
   risolviModifica,
   componenti,
   valoriVisualizzati,
+  appearance = "default",
   onRiordinaBlocchi,
   onRiordinaCampi,
   onSalvato,
@@ -94,6 +97,7 @@ export function LayoutRenderer({
    * per esempio, e' salvato come id utente e va letto come nome.
    */
   valoriVisualizzati?: Record<string, ReactNode>
+  appearance?: LayoutAppearance
   /**
    * Riordino personale dei blocchi. Riceve la pagina e il nuovo ordine delle
    * sue chiavi di blocco; chi chiama lo salva come preferenza dell'utente.
@@ -124,14 +128,31 @@ export function LayoutRenderer({
   )
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className={cn("flex flex-col", appearance === "clientiSalesforce" ? "gap-5" : "gap-4")}>
       {pagine.map((pagina) => (
         <section
           key={pagina.id}
           id={ancoraPagina(pagina.pageKey)}
-          className="scroll-mt-[var(--detail-header-h,0px)]"
+          className={cn(
+            "scroll-mt-[var(--detail-header-h,0px)]",
+            appearance === "clientiSalesforce" && "rounded-[1.35rem]",
+          )}
         >
-          <h2 className="mb-2 text-sm font-bold text-foreground">{pagina.label}</h2>
+          <h2
+            className={cn(
+              "mb-2 text-sm font-bold text-foreground",
+              appearance === "clientiSalesforce" &&
+                "mb-3 flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-slate-900",
+            )}
+          >
+            {appearance === "clientiSalesforce" ? (
+              <span
+                aria-hidden="true"
+                className="h-6 w-1.5 rounded-full bg-[linear-gradient(180deg,var(--teal),var(--info),var(--warning))] shadow-[0_0_0_4px_rgb(46_139_114/0.10)]"
+              />
+            ) : null}
+            <span>{pagina.label}</span>
+          </h2>
 
           {pagina.componente ? (
             <div className="mb-3">{componenti?.[pagina.componente] ?? null}</div>
@@ -143,6 +164,7 @@ export function LayoutRenderer({
             valori={valori}
             risolviModifica={risolviModifica}
             valoriVisualizzati={valoriVisualizzati}
+            appearance={appearance}
             onRiordinaBlocchi={onRiordinaBlocchi}
             onRiordinaCampi={onRiordinaCampi}
             onSalvato={salvato}
@@ -159,6 +181,7 @@ function BloccoRenderer({
   valori,
   risolviModifica,
   valoriVisualizzati,
+  appearance,
   trascinabile,
   onRiordinaCampi,
   onSalvato,
@@ -168,6 +191,7 @@ function BloccoRenderer({
   valori: ReturnType<typeof mappaValori>
   risolviModifica?: RisolviModifica
   valoriVisualizzati?: Record<string, ReactNode>
+  appearance: LayoutAppearance
   trascinabile?: boolean
   onRiordinaCampi?: (blockKey: string, ordine: string[]) => void
   onSalvato?: (fieldKey: string, nuovoValore: unknown) => void
@@ -209,15 +233,27 @@ function BloccoRenderer({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "rounded-xl border border-border bg-card p-4",
+        appearance === "clientiSalesforce" &&
+          "relative overflow-hidden rounded-[1.35rem] border-slate-200/90 bg-white p-5 shadow-[0_18px_44px_-30px_rgb(15_23_42/0.72)] ring-1 ring-white/80 before:absolute before:inset-x-0 before:top-0 before:h-1.5 before:bg-[linear-gradient(90deg,var(--teal)_0%,var(--info)_42%,var(--warning)_72%,var(--destructive)_100%)]",
         isDragging && "z-10 shadow-lg",
       )}
     >
       {blocco.mostraTitolo || trascinabile ? (
-        <div className="mb-3 flex items-center gap-1.5">
+        <div
+          className={cn(
+            "mb-3 flex items-center gap-1.5",
+            appearance === "clientiSalesforce" &&
+              "mb-4 border-b border-slate-100 pb-3 pt-0.5",
+          )}
+        >
           {trascinabile ? (
             <button
               type="button"
-              className="cursor-grab touch-none p-0.5 text-muted-foreground/60 transition-colors hover:text-foreground active:cursor-grabbing"
+              className={cn(
+                "cursor-grab touch-none p-0.5 text-muted-foreground/60 transition-colors hover:text-foreground active:cursor-grabbing",
+                appearance === "clientiSalesforce" &&
+                  "text-slate-300 hover:text-teal",
+              )}
               aria-label={`Trascina per spostare il riquadro ${blocco.label}`}
               title="Trascina per spostare questo riquadro"
               {...attributes}
@@ -227,9 +263,23 @@ function BloccoRenderer({
             </button>
           ) : null}
           {blocco.mostraTitolo ? (
-            <h3 className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-              {blocco.label}
-            </h3>
+            <div className="flex min-w-0 items-center gap-2">
+              {appearance === "clientiSalesforce" ? (
+                <span
+                  aria-hidden="true"
+                  className="size-2 rounded-full bg-teal shadow-[0_0_0_4px_rgb(46_139_114/0.13)]"
+                />
+              ) : null}
+              <h3
+                className={cn(
+                  "text-[11px] font-bold uppercase tracking-wide text-muted-foreground",
+                  appearance === "clientiSalesforce" &&
+                    "truncate text-xs font-extrabold tracking-[0.105em] text-[#526985]",
+                )}
+              >
+                {blocco.label}
+              </h3>
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -242,6 +292,7 @@ function BloccoRenderer({
         onFine={fineTrascinaCampi}
         className={cn(
           "grid gap-x-8 gap-y-4",
+          appearance === "clientiSalesforce" && "gap-x-10 gap-y-5",
           blocco.colonne === 1 && "grid-cols-1",
           blocco.colonne === 2 && "grid-cols-1 sm:grid-cols-2",
           blocco.colonne === 3 && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
@@ -256,6 +307,7 @@ function BloccoRenderer({
             valori={valori}
             risolviModifica={risolviModifica}
             valoriVisualizzati={valoriVisualizzati}
+            appearance={appearance}
             trascinabile={Boolean(onRiordinaCampi)}
             onSalvato={onSalvato}
           />
@@ -293,12 +345,14 @@ function ContenitoreCampo({
   campo,
   etichetta,
   trascinabile,
+  appearance,
   className,
   children,
 }: {
   campo: LayoutCampo
   etichetta: string
   trascinabile?: boolean
+  appearance: LayoutAppearance
   className?: string
   children: ReactNode
 }) {
@@ -322,6 +376,8 @@ function ContenitoreCampo({
         // Lo spazio per la maniglia si aggiunge solo quando serve, cosi' i
         // campi non trascinabili restano allineati come prima.
         trascinabile && "pl-4",
+        appearance === "clientiSalesforce" &&
+          "rounded-xl border border-transparent p-2 transition-all duration-150 hover:border-teal/20 hover:bg-[linear-gradient(135deg,rgb(46_139_114/0.08),rgb(59_130_246/0.055),rgb(245_158_11/0.06))]",
         isDragging && "z-10 opacity-80",
         className,
       )}
@@ -333,7 +389,11 @@ function ContenitoreCampo({
           // o passando sul campo. Prima era nascosta e compariva solo
           // all'hover, ma la combinazione di prefisso responsive e gruppo
           // con nome non produceva la classe attesa e restava invisibile.
-          className="absolute left-0 top-0.5 cursor-grab touch-none p-0.5 text-muted-foreground/30 transition-colors hover:text-foreground group-hover/campo:text-muted-foreground/70 active:cursor-grabbing"
+          className={cn(
+            "absolute left-0 top-0.5 cursor-grab touch-none p-0.5 text-muted-foreground/30 transition-colors hover:text-foreground group-hover/campo:text-muted-foreground/70 active:cursor-grabbing",
+            appearance === "clientiSalesforce" &&
+              "text-slate-300 hover:text-teal group-hover/campo:text-teal/70",
+          )}
           aria-label={`Trascina per spostare il campo ${etichetta}`}
           {...attributes}
           {...listeners}
@@ -394,6 +454,7 @@ function CampoRenderer({
   valori,
   risolviModifica,
   valoriVisualizzati,
+  appearance,
   trascinabile,
   onSalvato,
 }: {
@@ -402,6 +463,7 @@ function CampoRenderer({
   valori: ReturnType<typeof mappaValori>
   risolviModifica?: RisolviModifica
   valoriVisualizzati?: Record<string, ReactNode>
+  appearance: LayoutAppearance
   trascinabile?: boolean
   onSalvato?: (fieldKey: string, nuovoValore: unknown) => void
 }) {
@@ -415,8 +477,8 @@ function CampoRenderer({
   // vede che c'e' un problema, e resta chiaro quale.
   if (esito.stato === "errore") {
     return (
-      <ContenitoreCampo campo={campo} etichetta={etichetta} trascinabile={trascinabile} className="flex flex-col gap-0.5">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <ContenitoreCampo campo={campo} etichetta={etichetta} trascinabile={trascinabile} appearance={appearance} className="flex flex-col gap-0.5">
+        <span className={cn("text-[11px] font-medium uppercase tracking-wide text-muted-foreground", appearance === "clientiSalesforce" && "text-[11px] font-bold tracking-[0.08em] text-[#6f7f98]")}>
           {etichetta}
         </span>
         <span
@@ -441,13 +503,17 @@ function CampoRenderer({
 
   if (modifica) {
     return (
-      <ContenitoreCampo campo={campo} etichetta={etichetta} trascinabile={trascinabile}>
+      <ContenitoreCampo campo={campo} etichetta={etichetta} trascinabile={trascinabile} appearance={appearance}>
         <InlineEditableField
           {...modifica}
           label={etichetta}
           type={modifica.type as never}
           emptyLabel={modifica.emptyLabel ?? campo.formato.placeholder ?? "—"}
           displayValue={giaPronto ?? testo}
+          className={cn(
+            appearance === "clientiSalesforce" &&
+              "rounded-xl border-slate-200 bg-slate-50/75 px-2.5 shadow-inner transition-all hover:border-teal/35 hover:bg-teal/5",
+          )}
           onSaved={(nuovoValore) => onSalvato?.(campo.fieldKey, nuovoValore)}
         />
       </ContenitoreCampo>
@@ -455,14 +521,14 @@ function CampoRenderer({
   }
 
   return (
-    <ContenitoreCampo campo={campo} etichetta={etichetta} trascinabile={trascinabile} className="flex flex-col gap-0.5">
-      <span className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+    <ContenitoreCampo campo={campo} etichetta={etichetta} trascinabile={trascinabile} appearance={appearance} className="flex flex-col gap-0.5">
+      <span className={cn("flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground", appearance === "clientiSalesforce" && "text-[11px] font-bold tracking-[0.08em] text-[#6f7f98]")}>
         {etichetta}
         {esito.stato === "calcolato" ? (
           <Sigma className="size-3 text-info" aria-label="Campo calcolato" />
         ) : null}
       </span>
-      <div className="text-[13px] text-foreground">{giaPronto ?? testo}</div>
+      <div className={cn("text-[13px] text-foreground", appearance === "clientiSalesforce" && "text-[15px] font-medium leading-6 text-slate-900")}>{giaPronto ?? testo}</div>
     </ContenitoreCampo>
   )
 }
@@ -480,6 +546,7 @@ function BlocchiTrascinabili({
   valori,
   risolviModifica,
   valoriVisualizzati,
+  appearance,
   onRiordinaBlocchi,
   onRiordinaCampi,
   onSalvato,
@@ -489,6 +556,7 @@ function BlocchiTrascinabili({
   valori: ReturnType<typeof mappaValori>
   risolviModifica?: RisolviModifica
   valoriVisualizzati?: Record<string, ReactNode>
+  appearance: LayoutAppearance
   onRiordinaBlocchi?: (pageKey: string, ordine: string[]) => void
   onRiordinaCampi?: (blockKey: string, ordine: string[]) => void
   onSalvato?: (fieldKey: string, nuovoValore: unknown) => void
@@ -515,6 +583,7 @@ function BlocchiTrascinabili({
       valori={valori}
       risolviModifica={risolviModifica}
       valoriVisualizzati={valoriVisualizzati}
+      appearance={appearance}
       trascinabile={Boolean(onRiordinaBlocchi)}
       onRiordinaCampi={onRiordinaCampi}
       onSalvato={onSalvato}
@@ -522,7 +591,7 @@ function BlocchiTrascinabili({
   ))
 
   if (!onRiordinaBlocchi) {
-    return <div className="flex flex-col gap-3">{contenuto}</div>
+    return <div className={cn("flex flex-col gap-3", appearance === "clientiSalesforce" && "gap-4")}>{contenuto}</div>
   }
 
   function fineTrascinamento(evento: DragEndEvent) {
@@ -546,7 +615,7 @@ function BlocchiTrascinabili({
       onDragEnd={fineTrascinamento}
     >
       <SortableContext items={blocchi.map((b) => b.id)} strategy={verticalListSortingStrategy}>
-        <div className="flex flex-col gap-3">{contenuto}</div>
+        <div className={cn("flex flex-col gap-3", appearance === "clientiSalesforce" && "gap-4")}>{contenuto}</div>
       </SortableContext>
     </DndContext>
   )

@@ -195,7 +195,7 @@ function ClienteMobileList({
             key={cliente.id}
             role="button"
             tabIndex={0}
-            className="grid min-h-[112px] shrink-0 cursor-pointer grid-cols-[auto_auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 rounded-2xl border border-border/70 bg-card px-3.5 py-3 shadow-[0_14px_34px_-28px_rgb(15_23_42/0.6)] transition-all hover:-translate-y-0.5 hover:border-teal/40 hover:shadow-[0_18px_42px_-30px_rgb(15_23_42/0.65)] active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="relative grid min-h-[112px] shrink-0 cursor-pointer grid-cols-[auto_auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 overflow-hidden rounded-[1.25rem] border border-teal/20 bg-card px-3.5 py-3 shadow-[0_16px_38px_-28px_rgb(15_23_42/0.72)] ring-1 ring-white/80 transition-all before:absolute before:inset-x-0 before:top-0 before:h-1 before:bg-[linear-gradient(90deg,var(--teal),var(--info),var(--warning))] hover:-translate-y-0.5 hover:border-teal/45 hover:bg-[linear-gradient(135deg,#fff,rgb(46_139_114/0.07),rgb(59_130_246/0.05))] hover:shadow-[0_22px_48px_-30px_rgb(15_23_42/0.75)] active:translate-y-0 active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             onClick={() => {
               startNavigationFeedback()
               router.push(`/clienti/${cliente.id}`)
@@ -418,6 +418,7 @@ export function ClienteTable({
         <DataTableShell
           ariaLabel="Tabella clienti"
           minTableWidth={tableWidth}
+          className="rounded-[1.4rem] border-teal/20 bg-[linear-gradient(135deg,rgb(46_139_114/0.12),rgb(59_130_246/0.09),rgb(245_158_11/0.08),#fff_42%)] shadow-[0_24px_60px_-36px_rgb(15_23_42/0.78)] ring-1 ring-white/80"
           alwaysShowVerticalScrollbar
           onScroll={(el) => setStuck(el.scrollTop > 0)}
         >
@@ -431,7 +432,7 @@ export function ClienteTable({
       <TableHeader className={cn(LIGHTNING.header, stuck && LIGHTNING.headerStuck)}>
           <TableRow className="hover:bg-transparent">
             {/* Selezione */}
-            <TableHead className={cn(LIGHTNING.headCell, "sticky left-0 z-30 w-11")}>
+            <TableHead className={cn(LIGHTNING.headCell, "sticky left-0 z-30 w-11 !border-b-teal/35 !bg-[linear-gradient(135deg,rgb(46_139_114/0.18),rgb(59_130_246/0.12))]")}>
               <Checkbox
                 checked={allSelected}
                 onCheckedChange={onToggleAll}
@@ -472,7 +473,7 @@ export function ClienteTable({
                   }}
                   className={cn(
                     LIGHTNING.headCell,
-                    "group relative overflow-hidden whitespace-nowrap transition-colors",
+                    "group relative overflow-hidden whitespace-nowrap !border-b-teal/35 !bg-[linear-gradient(135deg,rgb(46_139_114/0.14),rgb(59_130_246/0.10),rgb(245_158_11/0.08))] transition-colors",
                     draggingColumn === col.id && "opacity-45",
                     dragOverColumn === col.id && "bg-teal/10",
                     left ? "text-left" : "text-center",
@@ -542,7 +543,12 @@ export function ClienteTable({
               )
             })}
             <TableHead
-              className={cn(LIGHTNING.headCell, LIGHTNING.headLabel, LIGHTNING.headActions)}
+              className={cn(
+                LIGHTNING.headCell,
+                LIGHTNING.headLabel,
+                LIGHTNING.headActions,
+                "!border-b-teal/35 !bg-[linear-gradient(135deg,rgb(46_139_114/0.18),rgb(59_130_246/0.12))]",
+              )}
               style={{
                 width: CLIENTE_ACTIONS_COLUMN_WIDTH,
                 minWidth: CLIENTE_ACTIONS_COLUMN_WIDTH,
@@ -568,7 +574,10 @@ export function ClienteTable({
                 startNavigationFeedback()
                 router.push(`/clienti/${cliente.id}`)
               }}
-              className={LIGHTNING.row}
+              className={cn(
+                LIGHTNING.row,
+                "hover:!bg-[linear-gradient(90deg,rgb(46_139_114/0.13),rgb(59_130_246/0.08),rgb(245_158_11/0.055))] data-[state=selected]:!bg-[linear-gradient(90deg,rgb(59_130_246/0.15),rgb(46_139_114/0.10))]",
+              )}
               data-state={selected.has(cliente.id) ? "selected" : undefined}
             >
               {/* Selezione */}

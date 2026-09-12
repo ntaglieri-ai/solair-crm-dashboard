@@ -1936,6 +1936,7 @@ function ClienteDaLayout({
             risolviModifica={risolviModifica}
             componenti={componenti}
             valoriVisualizzati={valoriVisualizzati}
+            appearance="clientiSalesforce"
             onRiordinaBlocchi={riordinaBlocchi}
             onRiordinaCampi={riordinaCampi}
             onSalvato={() => router.refresh()}

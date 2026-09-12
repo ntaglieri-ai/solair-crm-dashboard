@@ -22,6 +22,10 @@ type UserRow = {
   email: string
 }
 
+function solairAiCronEnabled() {
+  return process.env.SOLAIR_AI_CRON_ENABLED === "true"
+}
+
 async function defaultSyncUser() {
   const supabase = createAdminClient()
   if (!supabase) return null
@@ -51,6 +55,14 @@ export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  if (!solairAiCronEnabled()) {
+    return NextResponse.json({
+      ok: true,
+      disabled: true,
+      reason: "SOLAIR_AI_CRON_ENABLED non attivo: sync notturna SolairAI ferma.",
+    })
   }
 
   const started = Date.now()

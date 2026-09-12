@@ -12,10 +12,22 @@ export const maxDuration = 300
  */
 const BUDGET_MS = 265_000
 
+function solairAiCronEnabled() {
+  return process.env.SOLAIR_AI_CRON_ENABLED === "true"
+}
+
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  if (!solairAiCronEnabled()) {
+    return NextResponse.json({
+      ok: true,
+      disabled: true,
+      reason: "SOLAIR_AI_CRON_ENABLED non attivo: worker SolairAI fermo.",
+    })
   }
 
   const started = Date.now()

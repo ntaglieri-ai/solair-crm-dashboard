@@ -234,7 +234,7 @@ function BloccoRenderer({
       className={cn(
         "rounded-xl border border-border bg-card p-4",
         appearance === "clientiSalesforce" &&
-          "relative overflow-hidden rounded-[1.35rem] border-slate-200/90 bg-white p-5 shadow-[0_18px_44px_-30px_rgb(15_23_42/0.72)] ring-1 ring-white/80 before:absolute before:inset-x-0 before:top-0 before:h-1.5 before:bg-[linear-gradient(90deg,var(--teal)_0%,var(--info)_42%,var(--warning)_72%,var(--destructive)_100%)]",
+          "relative rounded-[1.35rem] border-slate-200/90 bg-white p-5 shadow-[0_18px_44px_-30px_rgb(15_23_42/0.72)] ring-1 ring-white/80 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-1.5 before:rounded-t-[1.35rem] before:bg-[linear-gradient(90deg,var(--teal)_0%,var(--info)_42%,var(--warning)_72%,var(--destructive)_100%)]",
         isDragging && "z-10 shadow-lg",
       )}
     >
@@ -514,6 +514,7 @@ function CampoRenderer({
             appearance === "clientiSalesforce" &&
               "rounded-xl border-slate-200 bg-slate-50/75 px-2.5 shadow-inner transition-all hover:border-teal/35 hover:bg-teal/5",
           )}
+          showSelectIndicator={appearance === "clientiSalesforce" && modifica.type === "select"}
           onSaved={(nuovoValore) => onSalvato?.(campo.fieldKey, nuovoValore)}
         />
       </ContenitoreCampo>

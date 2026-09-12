@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Check, Loader2, Pencil, X } from "lucide-react"
+import { Check, ChevronDown, Loader2, Pencil, X } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -40,6 +40,7 @@ export type InlineEditableValueProps = {
   displayValue?: ReactNode
   className?: string
   valueClassName?: string
+  showSelectIndicator?: boolean
   /**
    * Riceve il valore appena salvato. Serve a chi mostra campi calcolati:
    * router.refresh() ricarica dal server, ma nel frattempo la formula
@@ -249,7 +250,11 @@ function InlineEditableValueInner(props: InlineEditableValueProps) {
         {renderedDisplay ?? displayText(currentValue, type, emptyLabel, props.optionLabels)}
       </span>
       {canEdit ? (
-        <Pencil className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+        type === "select" && props.showSelectIndicator ? (
+          <ChevronDown className="size-4 shrink-0 text-teal opacity-80 transition-all group-hover:opacity-100 group-focus-visible:opacity-100" />
+        ) : (
+          <Pencil className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+        )
       ) : null}
     </button>
   )

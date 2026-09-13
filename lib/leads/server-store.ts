@@ -25,6 +25,25 @@ import {
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
 
+let leadRatingColumnAvailable: boolean | null = null
+
+function canUseLeadRatingColumn() {
+  return leadRatingColumnAvailable !== false
+}
+
+function isMissingLeadRatingColumn(error: { message?: string } | null | undefined) {
+  return /column leads\.rating does not exist/i.test(error?.message ?? "")
+}
+
+function disableLeadRatingColumn(error: { message?: string } | null | undefined) {
+  if (!isMissingLeadRatingColumn(error)) return false
+  leadRatingColumnAvailable = false
+  console.warn(
+    "[server-store] colonna leads.rating assente: applicare la migration 20260913_leads_rating.sql. Uso fallback senza Valutazione.",
+  )
+  return true
+}
+
 async function createReadClient(trustedRead?: boolean): Promise<SupabaseServerClient> {
   if (trustedRead) {
     const admin = createAdminClient()
@@ -153,8 +172,6 @@ function mapRow(row: Record<string, unknown>): Lead {
   }
 }
 
-const LIST_COLUMNS = leadListColumnsForFields(["*"])
-
 // Whitelist sicura: id colonna UI -> colonna DB ordinabile. Qualsiasi valore
 // non presente qui ricade su "updated_at" (ultimo movimento interno del record).
 const SORT_COLUMN: Record<string, string> = {
@@ -183,6 +200,9 @@ const SORT_COLUMN: Record<string, string> = {
 // Risolve la colonna DB di ordinamento e la direzione, con fallback su
 // updated_at desc quando la colonna non è ordinabile lato DB.
 function resolveSort(sortBy?: string | null, sortDir?: "asc" | "desc") {
+  if (sortBy === "Valutazione" && !canUseLeadRatingColumn()) {
+    return { column: "updated_at", ascending: false }
+  }
   const column = (sortBy && SORT_COLUMN[sortBy]) || "updated_at"
   const ascending = sortDir === "asc"
   return { column, ascending }
@@ -246,6 +266,13 @@ const ADVANCED_DB_COLUMN: Record<string, string> = {
  * anche con gruppi annidati. Un albero non valido non filtra nulla invece di
  * far fallire la lettura: meglio una lista intera che una pagina in errore.
  */
+function advancedDbColumn() {
+  if (canUseLeadRatingColumn()) return ADVANCED_DB_COLUMN
+  const { Valutazione: _rating, ...fallback } = ADVANCED_DB_COLUMN
+  void _rating
+  return fallback
+}
+
 function applyAlbero<Q extends { or: (expr: string) => Q }>(
   query: Q,
   albero?: Gruppo | null,
@@ -262,7 +289,7 @@ function applyAlbero<Q extends { or: (expr: string) => Q }>(
   const validato = validaAlbero(albero, catalogo)
   if (!validato.ok) return query
 
-  const tradotto = traduciAlbero(validato.gruppo, catalogo, ADVANCED_DB_COLUMN)
+  const tradotto = traduciAlbero(validato.gruppo, catalogo, advancedDbColumn())
   if (!tradotto.ok || !tradotto.espressione) return query
 
   // PostgREST accetta l'espressione annidata dentro or(): con un solo ramo
@@ -282,6 +309,7 @@ function applyAdvancedFilters<
   if (!advanced) return query
   for (const [fid, fv] of Object.entries(advanced.fields)) {
     const col = ADVANCED_DB_COLUMN[fid]
+    if (col === "rating" && !canUseLeadRatingColumn()) continue
     if (!col) continue
     if (fv.type === "text") {
       const c = fv.contains.trim()
@@ -337,6 +365,7 @@ export async function getAllLeads(filters?: {
   // Ordinamento reale lato query, applicato PRIMA di range/paginazione.
   const { column, ascending } = resolveSort(filters?.sortBy, filters?.sortDir)
   const fields = filters?.fields ?? ["*"]
+  const includeRating = canUseLeadRatingColumn()
   const includeInstallatoreSopralluogo =
     filters?.includeInstallatoreSopralluogo ??
     leadListNeedsInstallatoreSopralluogo(fields)
@@ -347,7 +376,7 @@ export async function getAllLeads(filters?: {
 
   let query = supabase
     .from("leads")
-    .select(leadListColumnsForFields(fields, filters?.sortBy))
+    .select(leadListColumnsForFields(fields, filters?.sortBy, { includeRating }))
     .order(column, { ascending, nullsFirst: false })
 
   if (filters?.visibleOwnerIds) {
@@ -425,6 +454,7 @@ export async function getAllLeads(filters?: {
 
   const { data, error } = await query
   if (error) {
+    if (includeRating && disableLeadRatingColumn(error)) return getAllLeads(filters)
     // NON restituire una lista vuota: la pagina mostrerebbe "nessun lead",
     // indistinguibile da "non ne hai". Successo il 22/08/2026 durante il
     // riavvio del database per l'upgrade del piano: la lista risultava vuota
@@ -573,6 +603,7 @@ export async function getTotalCount(filters?: {
 
   const { count, error } = await query
   if (error) {
+    if (disableLeadRatingColumn(error)) return getTotalCount(filters)
     // Come sopra: uno 0 finto farebbe leggere "0 lead disponibili".
     console.error("[server-store] getTotalCount error:", error.message)
     throw new Error(`Conteggio lead non riuscito: ${error.message}`)
@@ -651,11 +682,13 @@ export async function getLeadsByIds(ids: Iterable<string>): Promise<Lead[]> {
   const idArray = Array.from(ids)
   if (idArray.length === 0) return []
   const supabase = await createClient()
+  const includeRating = canUseLeadRatingColumn()
   const { data, error } = await supabase
     .from("leads")
-    .select(LIST_COLUMNS)
+    .select(leadListColumnsForFields(["*"], null, { includeRating }))
     .in("id", idArray)
   if (error) {
+    if (includeRating && disableLeadRatingColumn(error)) return getLeadsByIds(idArray)
     console.error("[server-store] getLeadsByIds error:", error.message)
     throw new Error(`Lettura lead non riuscita: ${error.message}`)
   }
@@ -668,42 +701,47 @@ export async function getLeadsByIds(ids: Iterable<string>): Promise<Lead[]> {
 
 export async function insertLead(lead: Lead): Promise<Lead> {
   const supabase = await createClient()
+  const row: Record<string, unknown> = {
+    nome: lead.Nome || null,
+    cognome: lead.Cognome || null,
+    nome_lead: lead["Nome Lead"] || null,
+    email: lead["E-mail"] || null,
+    telefono: lead.Telefono || null,
+    mobile_fisso: lead["Mobile/Fisso"] || null,
+    stato_lead: lead["Stato Lead"],
+    stato_email: lead.Stato || null,
+    rating: lead.Valutazione || null,
+    valutazione: lead.Punteggio ?? 0,
+    lead_proprietario_id: lead["Lead Proprietario"] || null,
+    origine_lead: lead["Origine Lead"] || null,
+    sede: lead.Sede || null,
+    campaign_name: lead["campaign name"] || null,
+    citta: lead["Città"] || null,
+    provincia: lead.Provincia || null,
+    codice_postale: lead["Codice postale"] || null,
+    paese: lead.Paese || "Italia",
+    descrizione: lead.Descrizione || null,
+    residente_in_sicilia: lead["Residente in Sicilia"] ?? false,
+    wallbox_richiesto: lead["Wallbox richiesto"] ?? false,
+    kwp: lead.kWp || null,
+    kwh: lead.kWh || null,
+    modello_pannello: lead["Modello pannello"] || null,
+    data_click: lead["Data Click"] || null,
+    data_ora: lead["Data/Ora"] || null,
+    creato_da: lead["Creato da"] || null,
+  }
+  if (!canUseLeadRatingColumn()) delete row.rating
   const { data, error } = await supabase
     .from("leads")
-    .insert({
-      nome: lead.Nome || null,
-      cognome: lead.Cognome || null,
-      nome_lead: lead["Nome Lead"] || null,
-      email: lead["E-mail"] || null,
-      telefono: lead.Telefono || null,
-      mobile_fisso: lead["Mobile/Fisso"] || null,
-      stato_lead: lead["Stato Lead"],
-      stato_email: lead.Stato || null,
-      rating: lead.Valutazione || null,
-      valutazione: lead.Punteggio ?? 0,
-      lead_proprietario_id: lead["Lead Proprietario"] || null,
-      origine_lead: lead["Origine Lead"] || null,
-      sede: lead.Sede || null,
-      campaign_name: lead["campaign name"] || null,
-      citta: lead["Città"] || null,
-      provincia: lead.Provincia || null,
-      codice_postale: lead["Codice postale"] || null,
-      paese: lead.Paese || "Italia",
-      descrizione: lead.Descrizione || null,
-      residente_in_sicilia: lead["Residente in Sicilia"] ?? false,
-      wallbox_richiesto: lead["Wallbox richiesto"] ?? false,
-      kwp: lead.kWp || null,
-      kwh: lead.kWh || null,
-      modello_pannello: lead["Modello pannello"] || null,
-      data_click: lead["Data Click"] || null,
-      data_ora: lead["Data/Ora"] || null,
-      creato_da: lead["Creato da"] || null,
-    })
+    .insert(row)
     .select()
     .single()
-  if (error) throw new Error(`insertLead: ${error.message}`)
-  const [row] = await attachInstallatoreSopralluogoNames(supabase, [data as Record<string, unknown>])
-  return mapRow(row)
+  if (error) {
+    if (disableLeadRatingColumn(error)) return insertLead(lead)
+    throw new Error(`insertLead: ${error.message}`)
+  }
+  const [insertedRow] = await attachInstallatoreSopralluogoNames(supabase, [data as Record<string, unknown>])
+  return mapRow(insertedRow)
 }
 
 /** Colonne native: un campo personalizzato non puo' scriverci sopra. */
@@ -727,6 +765,7 @@ export async function patchLead(id: string, patch: Partial<Lead>): Promise<Lead 
   }
   const patchRecord = patch as Record<string, unknown>
   for (const field of LEAD_RECORD_FIELDS) {
+    if (field.column === "rating" && !canUseLeadRatingColumn()) continue
     if (field.appField in patchRecord) row[field.column] = patchRecord[field.appField]
   }
 
@@ -754,7 +793,11 @@ export async function patchLead(id: string, patch: Partial<Lead>): Promise<Lead 
     .eq("id", id)
     .select()
     .single()
-  if (error || !data) return undefined
+  if (error) {
+    if (disableLeadRatingColumn(error)) return patchLead(id, patch)
+    return undefined
+  }
+  if (!data) return undefined
   const [updatedRow] = await attachInstallatoreSopralluogoNames(supabase, [data as Record<string, unknown>])
   const updated = mapRow(updatedRow)
   if (hasCustom) {

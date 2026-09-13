@@ -6,6 +6,10 @@ const LEAD_APP_FIELD_TO_COLUMN = new Map<string, string>(
   LEAD_RECORD_FIELDS.map((field) => [field.appField, field.column]),
 )
 
+type LeadListColumnOptions = {
+  includeRating?: boolean
+}
+
 const TECHNICAL_COLUMNS = [
   "id",
   "created_at",
@@ -40,10 +44,11 @@ export const LEAD_RELATION_FIELDS = new Set<string>([
   "Tag",
 ])
 
-export function leadFieldColumns(field: string): string[] {
+export function leadFieldColumns(field: string, options: LeadListColumnOptions = {}): string[] {
+  const includeRating = options.includeRating ?? true
   const columns = new Set<string>()
   const directColumn = LEAD_APP_FIELD_TO_COLUMN.get(field)
-  if (directColumn) columns.add(directColumn)
+  if (directColumn && (includeRating || directColumn !== "rating")) columns.add(directColumn)
   for (const column of FIELD_EXTRA_COLUMNS[field] ?? []) columns.add(column)
   for (const column of FIELD_DEPENDENCY_COLUMNS[field] ?? []) columns.add(column)
   return [...columns]
@@ -59,12 +64,16 @@ function requestedListFields(fields: readonly string[]) {
 export function leadListColumnsForFields(
   fields: readonly string[],
   sortBy?: string | null,
+  options: LeadListColumnOptions = {},
 ) {
+  const includeRating = options.includeRating ?? true
   if (fields.includes("*")) {
     return [
       ...new Set([
         ...TECHNICAL_COLUMNS,
-        ...LEAD_RECORD_FIELDS.map((field) => field.column),
+        ...LEAD_RECORD_FIELDS
+          .map((field) => field.column)
+          .filter((column) => includeRating || column !== "rating"),
         "zoho_installatore_sopralluogo_id",
         "zoho_installatore_sopralluogo_nome",
         "ora_ultima_attivita",
@@ -74,10 +83,10 @@ export function leadListColumnsForFields(
 
   const columns = new Set<string>(TECHNICAL_COLUMNS)
   for (const field of requestedListFields(fields)) {
-    for (const column of leadFieldColumns(field)) columns.add(column)
+    for (const column of leadFieldColumns(field, options)) columns.add(column)
   }
   if (sortBy) {
-    for (const column of leadFieldColumns(sortBy)) columns.add(column)
+    for (const column of leadFieldColumns(sortBy, options)) columns.add(column)
   }
   return [...columns].join(",")
 }

@@ -1863,6 +1863,7 @@ function ClienteDaLayout({
     salvaOrdine({ blocchi: { [pageKey]: ordine } })
   const riordinaCampi = (blockKey: string, ordine: string[]) =>
     salvaOrdine({ campi: { [blockKey]: ordine } })
+  const riordinaPagine = (ordine: string[]) => salvaOrdine({ pagine: ordine })
 
   // Il proprietario e' salvato come id utente: senza questo la scheda
   // mostrerebbe l'UUID al posto del nome, come faceva gia' la versione
@@ -1979,6 +1980,7 @@ function ClienteDaLayout({
             valoriVisualizzati={valoriVisualizzati}
             renderCampo={renderCampo}
             appearance="clientiSalesforce"
+            onRiordinaPagine={riordinaPagine}
             onRiordinaBlocchi={riordinaBlocchi}
             onRiordinaCampi={riordinaCampi}
             onSalvato={() => router.refresh()}

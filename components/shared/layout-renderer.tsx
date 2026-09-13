@@ -87,6 +87,7 @@ export function LayoutRenderer({
   valoriVisualizzati,
   renderCampo,
   appearance = "default",
+  onRiordinaPagine,
   onRiordinaBlocchi,
   onRiordinaCampi,
   onSalvato,
@@ -113,6 +114,11 @@ export function LayoutRenderer({
   valoriVisualizzati?: Record<string, ReactNode>
   appearance?: LayoutAppearance
   /**
+   * Riordino personale delle macro sezioni della scheda: Anagrafica,
+   * Documenti, Sopralluogo, Note, ecc. Assente = trascinamento disattivato.
+   */
+  onRiordinaPagine?: (ordine: string[]) => void
+  /**
    * Riordino personale dei blocchi. Riceve la pagina e il nuovo ordine delle
    * sue chiavi di blocco; chi chiama lo salva come preferenza dell'utente.
    * Assente = trascinamento disattivato.
@@ -130,8 +136,16 @@ export function LayoutRenderer({
   // per tutta la durata del giro di rete: cambi il numero di batterie e il
   // totale si aggiorna un istante dopo.
   const [modificati, setModificati] = useState<Record<string, unknown>>({})
+  const [pagineLocali, setPagineLocali] = useState(pagine)
+  const sensoriPagine = useSensoriTrascinamento()
   const recordVivo = { ...record, ...modificati }
   const valori = mappaValori(recordVivo)
+
+  const chiaviPagine = pagine.map((pagina) => pagina.id).join("|")
+  const chiaviPagineLocali = pagineLocali.map((pagina) => pagina.id).join("|")
+  if (chiaviPagine !== chiaviPagineLocali) {
+    setPagineLocali(pagine)
+  }
 
   const salvato = useCallback(
     (fieldKey: string, nuovoValore: unknown) => {
@@ -141,52 +155,151 @@ export function LayoutRenderer({
     [onSalvato],
   )
 
+  function fineTrascinamentoPagine(evento: DragEndEvent) {
+    const { active, over } = evento
+    if (!over || active.id === over.id) return
+    const da = pagineLocali.findIndex((pagina) => pagina.id === active.id)
+    const a = pagineLocali.findIndex((pagina) => pagina.id === over.id)
+    if (da < 0 || a < 0) return
+
+    const nuove = arrayMove(pagineLocali, da, a)
+    setPagineLocali(nuove)
+    onRiordinaPagine?.(nuove.map((pagina) => pagina.pageKey))
+  }
+
+  const contenuto = pagineLocali.map((pagina) => (
+    <PaginaRenderer
+      key={pagina.id}
+      pagina={pagina}
+      record={recordVivo}
+      valori={valori}
+      risolviModifica={risolviModifica}
+      componenti={componenti}
+      valoriVisualizzati={valoriVisualizzati}
+      renderCampo={renderCampo}
+      appearance={appearance}
+      trascinabile={Boolean(onRiordinaPagine)}
+      onRiordinaBlocchi={onRiordinaBlocchi}
+      onRiordinaCampi={onRiordinaCampi}
+      onSalvato={salvato}
+    />
+  ))
+
+  if (!onRiordinaPagine) {
+    return (
+      <div className={cn("flex flex-col", appearance === "clientiSalesforce" ? "gap-5" : "gap-4")}>
+        {contenuto}
+      </div>
+    )
+  }
+
   return (
-    <div className={cn("flex flex-col", appearance === "clientiSalesforce" ? "gap-5" : "gap-4")}>
-      {pagine.map((pagina) => (
-        <section
-          key={pagina.id}
-          id={ancoraPagina(pagina.pageKey)}
-          className={cn(
-            "scroll-mt-[var(--detail-header-h,0px)]",
-            appearance === "clientiSalesforce" && "rounded-[1.35rem]",
-          )}
-        >
-          <h2
+    <DndContext
+      id="pagine-layout"
+      sensors={sensoriPagine}
+      collisionDetection={closestCenter}
+      onDragEnd={fineTrascinamentoPagine}
+    >
+      <SortableContext items={pagineLocali.map((pagina) => pagina.id)} strategy={verticalListSortingStrategy}>
+        <div className={cn("flex flex-col", appearance === "clientiSalesforce" ? "gap-5" : "gap-4")}>
+          {contenuto}
+        </div>
+      </SortableContext>
+    </DndContext>
+  )
+}
+
+function PaginaRenderer({
+  pagina,
+  record,
+  valori,
+  risolviModifica,
+  componenti,
+  valoriVisualizzati,
+  renderCampo,
+  appearance,
+  trascinabile,
+  onRiordinaBlocchi,
+  onRiordinaCampi,
+  onSalvato,
+}: {
+  pagina: LayoutPagina
+  record: Record<string, unknown>
+  valori: ReturnType<typeof mappaValori>
+  risolviModifica?: RisolviModifica
+  componenti?: Record<string, ReactNode>
+  valoriVisualizzati?: Record<string, ReactNode>
+  renderCampo?: RenderCampoLayout
+  appearance: LayoutAppearance
+  trascinabile?: boolean
+  onRiordinaBlocchi?: (pageKey: string, ordine: string[]) => void
+  onRiordinaCampi?: (blockKey: string, ordine: string[]) => void
+  onSalvato?: (fieldKey: string, nuovoValore: unknown) => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: pagina.id,
+    disabled: !trascinabile,
+  })
+
+  return (
+    <section
+      ref={setNodeRef}
+      id={ancoraPagina(pagina.pageKey)}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "scroll-mt-[var(--detail-header-h,0px)]",
+        appearance === "clientiSalesforce" && "rounded-[1.35rem]",
+        isDragging && "z-20 opacity-90",
+      )}
+    >
+      <h2
+        className={cn(
+          "mb-2 flex items-center gap-1.5 text-sm font-bold text-foreground",
+          appearance === "clientiSalesforce" &&
+            "mb-3 gap-2.5 text-lg font-extrabold tracking-tight text-slate-900",
+        )}
+      >
+        {trascinabile ? (
+          <button
+            type="button"
             className={cn(
-              "mb-2 text-sm font-bold text-foreground",
-              appearance === "clientiSalesforce" &&
-                "mb-3 flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-slate-900",
+              "cursor-grab touch-none p-0.5 text-muted-foreground/60 transition-colors hover:text-foreground active:cursor-grabbing",
+              appearance === "clientiSalesforce" && "text-slate-300 hover:text-teal",
             )}
+            aria-label={`Trascina per spostare la sezione ${pagina.label}`}
+            title="Trascina per spostare questa sezione"
+            {...attributes}
+            {...listeners}
           >
-            {appearance === "clientiSalesforce" ? (
-              <span
-                aria-hidden="true"
-                className="h-6 w-1.5 rounded-full bg-[linear-gradient(180deg,var(--teal),var(--info),var(--warning))] shadow-[0_0_0_4px_rgb(46_139_114/0.10)]"
-              />
-            ) : null}
-            <span>{pagina.label}</span>
-          </h2>
-
-          {pagina.componente ? (
-            <div className="mb-3">{componenti?.[pagina.componente] ?? null}</div>
-          ) : null}
-
-          <BlocchiTrascinabili
-            pagina={pagina}
-            record={recordVivo}
-            valori={valori}
-            risolviModifica={risolviModifica}
-            valoriVisualizzati={valoriVisualizzati}
-            renderCampo={renderCampo}
-            appearance={appearance}
-            onRiordinaBlocchi={onRiordinaBlocchi}
-            onRiordinaCampi={onRiordinaCampi}
-            onSalvato={salvato}
+            <GripVertical className="size-4" />
+          </button>
+        ) : null}
+        {appearance === "clientiSalesforce" ? (
+          <span
+            aria-hidden="true"
+            className="h-6 w-1.5 rounded-full bg-[linear-gradient(180deg,var(--teal),var(--info),var(--warning))] shadow-[0_0_0_4px_rgb(46_139_114/0.10)]"
           />
-        </section>
-      ))}
-    </div>
+        ) : null}
+        <span>{pagina.label}</span>
+      </h2>
+
+      {pagina.componente ? (
+        <div className="mb-3">{componenti?.[pagina.componente] ?? null}</div>
+      ) : null}
+
+      <BlocchiTrascinabili
+        pagina={pagina}
+        record={record}
+        valori={valori}
+        risolviModifica={risolviModifica}
+        valoriVisualizzati={valoriVisualizzati}
+        renderCampo={renderCampo}
+        appearance={appearance}
+        onRiordinaBlocchi={onRiordinaBlocchi}
+        onRiordinaCampi={onRiordinaCampi}
+        onSalvato={onSalvato}
+      />
+    </section>
   )
 }
 
@@ -199,6 +312,7 @@ function BloccoRenderer({
   renderCampo,
   appearance,
   trascinabile,
+  titoloRidondante,
   onRiordinaCampi,
   onSalvato,
 }: {
@@ -210,6 +324,7 @@ function BloccoRenderer({
   renderCampo?: RenderCampoLayout
   appearance: LayoutAppearance
   trascinabile?: boolean
+  titoloRidondante?: boolean
   onRiordinaCampi?: (blockKey: string, ordine: string[]) => void
   onSalvato?: (fieldKey: string, nuovoValore: unknown) => void
 }) {
@@ -230,6 +345,7 @@ function BloccoRenderer({
   }
 
   if (blocco.campi.length === 0) return null
+  const mostraTitoloBlocco = blocco.mostraTitolo && !titoloRidondante
 
   function fineTrascinaCampi(evento: DragEndEvent) {
     const { active, over } = evento
@@ -255,7 +371,23 @@ function BloccoRenderer({
         isDragging && "z-10 shadow-lg",
       )}
     >
-      {blocco.mostraTitolo || trascinabile ? (
+      {titoloRidondante && trascinabile ? (
+        <button
+          type="button"
+          className={cn(
+            "absolute left-2 top-3 cursor-grab touch-none p-0.5 text-muted-foreground/40 transition-colors hover:text-foreground active:cursor-grabbing",
+            appearance === "clientiSalesforce" && "text-slate-300 hover:text-teal",
+          )}
+          aria-label={`Trascina per spostare il riquadro ${blocco.label}`}
+          title="Trascina per spostare questo riquadro"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-3.5" />
+        </button>
+      ) : null}
+
+      {mostraTitoloBlocco || (trascinabile && !titoloRidondante) ? (
         <div
           className={cn(
             "mb-3 flex items-center gap-1.5",
@@ -279,7 +411,7 @@ function BloccoRenderer({
               <GripVertical className="size-3.5" />
             </button>
           ) : null}
-          {blocco.mostraTitolo ? (
+          {mostraTitoloBlocco ? (
             <div className="flex min-w-0 items-center gap-2">
               {appearance === "clientiSalesforce" ? (
                 <span
@@ -348,6 +480,21 @@ function useSensoriTrascinamento() {
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
   )
+}
+
+function labelsRidondanti(principale: string, secondaria: string) {
+  const a = normalizzaLabel(principale)
+  const b = normalizzaLabel(secondaria)
+  if (!a || !b) return false
+  return a === b || a.includes(b) || b.includes(a)
+}
+
+function normalizzaLabel(label: string) {
+  return label
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
 }
 
 /**
@@ -623,6 +770,7 @@ function BlocchiTrascinabili({
       renderCampo={renderCampo}
       appearance={appearance}
       trascinabile={Boolean(onRiordinaBlocchi)}
+      titoloRidondante={appearance === "clientiSalesforce" && labelsRidondanti(pagina.label, blocco.label)}
       onRiordinaCampi={onRiordinaCampi}
       onSalvato={onSalvato}
     />

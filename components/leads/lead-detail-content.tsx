@@ -1509,6 +1509,8 @@ function LeadDaLayout({
         risolviModifica={risolviModifica}
         componenti={componenti}
         valoriVisualizzati={valoriVisualizzati}
+        appearance="clientiSalesforce"
+        onRiordinaPagine={(ordine) => salvaOrdine({ pagine: ordine })}
         onRiordinaBlocchi={(pageKey, ordine) => salvaOrdine({ blocchi: { [pageKey]: ordine } })}
         onRiordinaCampi={(blockKey, ordine) => salvaOrdine({ campi: { [blockKey]: ordine } })}
         onSalvato={() => router.refresh()}

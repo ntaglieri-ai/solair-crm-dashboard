@@ -50,6 +50,7 @@ export type LeadEditValueOptions = {
   owners?: ClienteReferenceOption[]
   statoEmail?: string[]
   saluti?: string[]
+  rating?: string[]
   campagne?: string[]
   modalitaIscrizioneAnnullata?: string[]
   modelliPannello?: string[]
@@ -233,6 +234,7 @@ export function buildLeadEditFields(
       const picklistOptions: Partial<Record<keyof Lead, string[]>> = {
         Stato: options.statoEmail,
         Saluti: options.saluti,
+        Valutazione: options.rating,
         "campaign name": options.campagne,
         "Modalità iscrizione annullata": options.modalitaIscrizioneAnnullata,
         "Modello pannello": options.modelliPannello,

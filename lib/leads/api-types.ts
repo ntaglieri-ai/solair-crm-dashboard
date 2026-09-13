@@ -40,6 +40,7 @@ export const LIST_BASE_FIELDS: LeadColumnId[] = [
   "Sede",
   "campaign name",
   "Valutazione",
+  "Punteggio",
   "Descrizione",
 ]
 

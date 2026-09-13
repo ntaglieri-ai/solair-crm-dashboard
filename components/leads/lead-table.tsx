@@ -806,7 +806,7 @@ export function LeadTable({
               />
               {lead["campaign name"]}
             </span>
-            {lead.Valutazione > 80 ? (
+            {(lead.Punteggio ?? 0) > 80 ? (
               <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 text-xs font-medium text-destructive">
                 <IconFlame size={14} stroke={1.8} />
                 Lead caldo

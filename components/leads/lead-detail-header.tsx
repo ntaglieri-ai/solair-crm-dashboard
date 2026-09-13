@@ -163,7 +163,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
               nome: tornano visibili da 'sm' in su. */}
           <span className="hidden items-center gap-2 sm:inline-flex">
             <StatoLeadBadge stato={lead["Stato Lead"]} />
-            <ScoreBar score={lead.Valutazione} />
+            <ScoreBar score={lead.Punteggio ?? 0} />
           </span>
         </div>
 
@@ -451,6 +451,7 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
           sedi: leadOptions.optionsFor("sede", lead.Sede).map((item) => item.value),
           statoEmail: leadOptions.optionsFor("stato_email", lead.Stato).map((item) => item.value),
           saluti: leadOptions.optionsFor("saluti", lead.Saluti).map((item) => item.value),
+          rating: leadOptions.optionsFor("rating", lead.Valutazione).map((item) => item.value),
           campagne: leadOptions.optionsFor("campaign_name", lead["campaign name"]).map((item) => item.value),
           modalitaIscrizioneAnnullata: leadOptions
             .optionsFor("modalita_iscrizione_annullata", lead["Modalità iscrizione annullata"])

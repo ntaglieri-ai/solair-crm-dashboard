@@ -14,6 +14,7 @@ export const LEAD_OPTION_COLUMNS = [
   "origine_lead",
   "sede",
   "campaign_name",
+  "rating",
   "stato_email",
   "saluti",
   "modalita_iscrizione_annullata",
@@ -23,6 +24,14 @@ export const LEAD_OPTION_COLUMNS = [
 export type LeadOptionColumn = (typeof LEAD_OPTION_COLUMNS)[number]
 
 export const LEAD_STATO_EMAIL_OPTIONS = ["In corso", "negativo"] as const
+export const LEAD_RATING_OPTIONS = [
+  "-None-",
+  "Acquisiti",
+  "Attivo",
+  "Errore di mercato",
+  "Progetto cancellato",
+  "Arresta",
+] as const
 export const LEAD_SALUTI_OPTIONS = ["Sig.", "Sig.ra", "Dr.", "Prof."] as const
 export const LEAD_MODALITA_ISCRIZIONE_ANNULLATA_OPTIONS = [
   "Unsubscribe link",
@@ -37,6 +46,7 @@ export const LEAD_FIELD_OPTION_FALLBACKS: Record<LeadOptionColumn, ColumnValueOp
   origine_lead: ORIGINE_LEAD_VALUES.map((value) => option(value)),
   sede: SEDE_LABELS.map((value) => option(value)),
   campaign_name: [],
+  rating: LEAD_RATING_OPTIONS.map((value) => option(value)),
   stato_email: LEAD_STATO_EMAIL_OPTIONS.map((value) => option(value)),
   saluti: LEAD_SALUTI_OPTIONS.map((value) => option(value)),
   modalita_iscrizione_annullata: LEAD_MODALITA_ISCRIZIONE_ANNULLATA_OPTIONS.map((value) =>

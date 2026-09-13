@@ -16,7 +16,7 @@ const CATALOGO: CampoFiltrabile[] = [
     tipo: "elenco",
     opzioni: ["Contattato", "Perso", "Non contattato"],
   },
-  { chiave: "Valutazione", etichetta: "Valutazione", tipo: "numero" },
+  { chiave: "Punteggio", etichetta: "Punteggio", tipo: "numero" },
   { chiave: "Ora creazione", etichetta: "Creato", tipo: "data" },
   { chiave: "Residente in Sicilia", etichetta: "Sicilia", tipo: "booleano" },
   { chiave: "Attività aperte", etichetta: "Attività aperte", tipo: "collegato" },
@@ -25,7 +25,7 @@ const CATALOGO: CampoFiltrabile[] = [
 const COLONNE: Record<string, string> = {
   "Nome Lead": "nome_lead",
   "Stato Lead": "stato_lead",
-  Valutazione: "valutazione",
+  Punteggio: "valutazione",
   "Ora creazione": "created_at",
   "Residente in Sicilia": "residente_in_sicilia",
 }
@@ -52,7 +52,7 @@ describe("validaAlbero", () => {
   })
 
   it("rifiuta un operatore incompatibile col tipo del campo", () => {
-    const esito = validaAlbero(gruppo([cond("Valutazione", "contiene", ["x"])]), CATALOGO)
+    const esito = validaAlbero(gruppo([cond("Punteggio", "contiene", ["x"])]), CATALOGO)
     expect(esito.ok).toBe(false)
   })
 
@@ -70,8 +70,8 @@ describe("validaAlbero", () => {
   })
 
   it("pretende due valori per 'fra'", () => {
-    expect(validaAlbero(gruppo([cond("Valutazione", "fra", [10])]), CATALOGO).ok).toBe(false)
-    expect(validaAlbero(gruppo([cond("Valutazione", "fra", [10, 20])]), CATALOGO).ok).toBe(true)
+    expect(validaAlbero(gruppo([cond("Punteggio", "fra", [10])]), CATALOGO).ok).toBe(false)
+    expect(validaAlbero(gruppo([cond("Punteggio", "fra", [10, 20])]), CATALOGO).ok).toBe(true)
   })
 
   it("rifiuta un annidamento oltre il limite tecnico", () => {
@@ -85,7 +85,7 @@ describe("validaAlbero", () => {
   it("accetta gruppi annidati piu' volte entro il limite", () => {
     const albero = gruppo([
       gruppo([cond("Stato Lead", "uno_di", ["Perso"]), cond("Nome Lead", "contiene", ["a"])], "o"),
-      cond("Valutazione", "maggiore", [30]),
+      cond("Punteggio", "maggiore", [30]),
     ])
     expect(validaAlbero(albero, CATALOGO).ok).toBe(true)
   })
@@ -108,7 +108,7 @@ describe("traduciAlbero", () => {
 
   it("unisce con and le condizioni di un gruppo in E", () => {
     const espressione = traduci(
-      gruppo([cond("Stato Lead", "uno_di", ["Perso"]), cond("Valutazione", "maggiore", [30])]),
+      gruppo([cond("Stato Lead", "uno_di", ["Perso"]), cond("Punteggio", "maggiore", [30])]),
     )
     expect(espressione).toBe('and(stato_lead.in.("Perso"),valutazione.gt.30)')
   })
@@ -120,7 +120,7 @@ describe("traduciAlbero", () => {
           [cond("Stato Lead", "uno_di", ["Perso"]), cond("Stato Lead", "uno_di", ["Contattato"])],
           "o",
         ),
-        cond("Valutazione", "maggiore", [30]),
+        cond("Punteggio", "maggiore", [30]),
       ]),
     )
     expect(espressione).toBe(
@@ -149,7 +149,7 @@ describe("traduciAlbero", () => {
   })
 
   it("include gli estremi in 'fra'", () => {
-    expect(traduci(gruppo([cond("Valutazione", "fra", [10, 20])]))).toBe(
+    expect(traduci(gruppo([cond("Punteggio", "fra", [10, 20])]))).toBe(
       "and(valutazione.gte.10,valutazione.lte.20)",
     )
   })
@@ -161,7 +161,7 @@ describe("traduciAlbero", () => {
   it("lascia fuori dall'espressione le condizioni sui collegati", () => {
     // Non sono colonne del record: si risolvono con una lettura a parte.
     const espressione = traduci(
-      gruppo([cond("Attività aperte", "presente"), cond("Valutazione", "maggiore", [30])]),
+      gruppo([cond("Attività aperte", "presente"), cond("Punteggio", "maggiore", [30])]),
     )
     expect(espressione).toBe("valutazione.gt.30")
   })
@@ -170,7 +170,7 @@ describe("traduciAlbero", () => {
 describe("condizioniCollegate", () => {
   it("raccoglie le condizioni sui collegati a ogni livello", () => {
     const validato = validaAlbero(
-      gruppo([gruppo([cond("Attività aperte", "assente")], "o"), cond("Valutazione", "maggiore", [1])]),
+      gruppo([gruppo([cond("Attività aperte", "assente")], "o"), cond("Punteggio", "maggiore", [1])]),
       CATALOGO,
     )
     expect(validato.ok).toBe(true)

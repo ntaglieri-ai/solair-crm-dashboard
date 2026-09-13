@@ -24,7 +24,8 @@ const LEAD_COLUMN_MIN_WIDTHS: Partial<Record<LeadColumnId, number>> = {
   Telefono: 150,
   "Origine Lead": 154,
   "E-mail": 210,
-  Valutazione: 136,
+  Valutazione: 156,
+  Punteggio: 136,
   "Mobile/Fisso": 140,
   "Creato da": 156,
   "Codice postale": 150,
@@ -56,7 +57,7 @@ const LEAD_COLUMN_MAX_WIDTHS: Partial<Record<LeadColumnId, number>> = {
 
 function leadColumnGrowWeight(column: LeadColumnId) {
   if (column === "Badge dell'attività" || column === "Badge di nota") return 0
-  if (column === "Valutazione" || column === "kWp" || column === "kWh") return 0.45
+  if (column === "Punteggio" || column === "kWp" || column === "kWh") return 0.45
   if (
     column === "Nome Lead" ||
     column === "E-mail" ||

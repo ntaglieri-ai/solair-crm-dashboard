@@ -126,16 +126,16 @@ function ScoreBreakdownCard({ lead }: { lead: Lead }) {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex items-center gap-4">
-          <ScoreCircle score={lead.Valutazione} />
+          <ScoreCircle score={lead.Punteggio ?? 0} />
           <div className="flex flex-col">
             <span className="text-2xl font-bold tabular-nums text-foreground">
-              {lead.Valutazione}
+              {lead.Punteggio ?? 0}
               <span className="text-sm font-normal text-muted-foreground">
                 /100
               </span>
             </span>
             <span className="text-xs text-muted-foreground">
-              Valutazione complessiva
+              Punteggio complessivo
             </span>
           </div>
         </div>

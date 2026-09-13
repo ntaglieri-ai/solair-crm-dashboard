@@ -1364,6 +1364,7 @@ function LeadDaLayout({
   const origineOptions = leadOptions.optionsFor("origine_lead", lead["Origine Lead"])
   const sedeOptions = leadOptions.optionsFor("sede", lead.Sede)
   const campaignOptions = leadOptions.optionsFor("campaign_name", lead["campaign name"])
+  const ratingOptions = leadOptions.optionsFor("rating", lead.Valutazione)
   const statoEmailOptions = leadOptions.optionsFor("stato_email", lead.Stato)
   const salutiOptions = leadOptions.optionsFor("saluti", lead.Saluti)
   const modalitaAnnullamentoOptions = leadOptions.optionsFor(
@@ -1525,6 +1526,7 @@ function LeadDaLayout({
       "Origine Lead": origineOptions,
       Sede: sedeOptions,
       "campaign name": campaignOptions,
+      Valutazione: ratingOptions,
       Stato: statoEmailOptions,
       Saluti: salutiOptions,
       "Modalità iscrizione annullata": modalitaAnnullamentoOptions,

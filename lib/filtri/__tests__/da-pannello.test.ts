@@ -6,7 +6,7 @@ import type { AdvancedFilterState } from "@/lib/leads/advanced-filter-logic"
 const CATALOGO: CampoFiltrabile[] = [
   { chiave: "Nome Lead", etichetta: "Nome", tipo: "testo" },
   { chiave: "Stato Lead", etichetta: "Stato", tipo: "elenco" },
-  { chiave: "Valutazione", etichetta: "Valutazione", tipo: "numero" },
+  { chiave: "Punteggio", etichetta: "Punteggio", tipo: "numero" },
   { chiave: "Ora creazione", etichetta: "Creato", tipo: "data" },
   { chiave: "Wallbox richiesto", etichetta: "Wallbox", tipo: "booleano" },
 ]
@@ -55,7 +55,7 @@ describe("alberoDaPannello", () => {
 
   it("usa 'fra' quando ci sono entrambi gli estremi", () => {
     const albero = alberoDaPannello(
-      stato({ Valutazione: { type: "number", min: "10", max: "40" } }),
+      stato({ Punteggio: { type: "number", min: "10", max: "40" } }),
       CATALOGO,
     )
     expect(albero.nodi[0]).toMatchObject({ operatore: "fra", valori: ["10", "40"] })
@@ -63,12 +63,12 @@ describe("alberoDaPannello", () => {
 
   it("un solo estremo diventa 'maggiore' o 'minore', non un intervallo scartato", () => {
     expect(
-      alberoDaPannello(stato({ Valutazione: { type: "number", min: "10", max: "" } }), CATALOGO)
+      alberoDaPannello(stato({ Punteggio: { type: "number", min: "10", max: "" } }), CATALOGO)
         .nodi[0],
     ).toMatchObject({ operatore: "maggiore", valori: ["10"] })
 
     expect(
-      alberoDaPannello(stato({ Valutazione: { type: "number", min: "", max: "40" } }), CATALOGO)
+      alberoDaPannello(stato({ Punteggio: { type: "number", min: "", max: "40" } }), CATALOGO)
         .nodi[0],
     ).toMatchObject({ operatore: "minore", valori: ["40"] })
   })

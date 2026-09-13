@@ -184,10 +184,10 @@ export function LeadQuickFilterFields({
           options={optionsByKey.tag}
         />
         <FilterSelect
-          label="Valutazione"
+          label="Punteggio"
           value={filters.score}
           onValueChange={(value) => set("score", value as ScoreFilterValue[])}
-          allLabel="Tutte le valutazioni"
+          allLabel="Tutti i punteggi"
           options={optionsByKey.score}
         />
       </div>

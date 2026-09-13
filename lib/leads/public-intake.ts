@@ -1300,7 +1300,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       : notaIngresso
 
     const changedFields = ["Descrizione", "Ora ultima attivita'"]
-    if (nextScore !== (existing.valutazione ?? 0)) addChangedField(changedFields, "Valutazione")
+    if (nextScore !== (existing.valutazione ?? 0)) addChangedField(changedFields, "Punteggio")
 
     const updateRow: Record<string, unknown> = {
       descrizione: descrizioneAggiornata,

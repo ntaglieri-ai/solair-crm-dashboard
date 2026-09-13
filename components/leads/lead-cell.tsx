@@ -33,7 +33,7 @@ import {
 import { fetchLeadSignalDetails, leadsKeys } from "@/lib/leads/hooks"
 
 // Colonne con allineamento a destra (valori numerici)
-export const NUMERIC_COLUMNS: LeadColumnId[] = ["Valutazione", "kWp", "kWh"]
+export const NUMERIC_COLUMNS: LeadColumnId[] = ["Punteggio", "kWp", "kWh"]
 
 const NOTE_COLORS = [
   { bg: "#dcfce7", fg: "#15803d", paper: "#f0fdf4" },
@@ -365,7 +365,10 @@ export function LeadCell({
       return <EmailStatoBadge stato={lead.Stato} />
 
     case "Valutazione":
-      return <ScoreBar score={lead.Valutazione} />
+      return <span className="text-foreground">{lead.Valutazione || "—"}</span>
+
+    case "Punteggio":
+      return <ScoreBar score={lead.Punteggio ?? 0} />
 
     case "Residente in Sicilia":
       return <BoolDot value={lead["Residente in Sicilia"]} />

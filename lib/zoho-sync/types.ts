@@ -30,6 +30,7 @@ export type LeadColumn =
   | "codice_postale"
   | "paese"
   | "descrizione"
+  | "rating"
   | "valutazione"
   | "zoho_account_convertito_id"
   | "zoho_contatto_convertito_id"

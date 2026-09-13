@@ -55,6 +55,7 @@ export function gruppiCampiLead(opzioni: {
   creatori?: readonly string[]
   statoEmail?: readonly string[]
   saluti?: readonly string[]
+  rating?: readonly string[]
   campagne?: readonly string[]
   modalitaIscrizioneAnnullata?: readonly string[]
   modelliPannello?: readonly string[]
@@ -77,7 +78,8 @@ export function gruppiCampiLead(opzioni: {
         campo("Lead Proprietario", "Proprietario", "elenco", opzioni.proprietari),
         campo("Sede", "Sede", "elenco", opzioni.sedi),
         campo("Tag", "Tag", "elenco", opzioni.tag),
-        campo("Valutazione", "Valutazione", "numero"),
+        campo("Valutazione", "Valutazione", "elenco", opzioni.rating ?? []),
+        campo("Punteggio", "Punteggio", "numero"),
         campo("Residente in Sicilia", "Residente in Sicilia", "booleano"),
         campo("Wallbox richiesto", "Wallbox richiesto", "booleano"),
         campo("Creato da", "Creato da", "elenco", opzioni.creatori ?? []),

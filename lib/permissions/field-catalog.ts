@@ -66,7 +66,7 @@ const MODULE_FIELDS: Record<FieldModuleKey, string[]> = {
   lead: [
     "id", "nome", "cognome", "nome_lead", "email", "telefono", "mobile_fisso",
     "social_lead_id", "residente_in_sicilia", "citta", "provincia",
-    "codice_postale", "paese", "stato_lead", "stato_email", "valutazione",
+    "codice_postale", "paese", "stato_lead", "stato_email", "rating", "valutazione",
     "lead_proprietario_id", "origine_lead", "sede", "campaign_name", "kwp",
     "kwh", "modello_pannello", "wallbox_richiesto", "data_sopralluogo",
     "installatore_sopralluogo_id", "tempo_conversione_lead",
@@ -196,7 +196,7 @@ const MARKETING = new Set([
   "numero_di_chat", "tempo_medio_impiegato_minuti", "punteggio_visitatore",
   "giorni_visitati", "prima_pagina_visitata", "prima_visita",
   "visita_piu_recente", "relatore", "social_lead_id", "campaign_name",
-  "valutazione", "origine_lead", "modalita_iscrizione_annullata",
+  "rating", "valutazione", "origine_lead", "modalita_iscrizione_annullata",
   "ora_iscrizione_annullata", "tempo_conversione_lead",
 ])
 

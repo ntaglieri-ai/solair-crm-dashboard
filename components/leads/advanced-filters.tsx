@@ -76,6 +76,7 @@ interface LeadAdvancedValueOptions {
   sedi: Array<{ value: string; label: string }>
   statoEmail: Array<{ value: string; label: string }>
   saluti: Array<{ value: string; label: string }>
+  rating: Array<{ value: string; label: string }>
   campagne: Array<{ value: string; label: string }>
   modalitaIscrizioneAnnullata: Array<{ value: string; label: string }>
   modelliPannello: Array<{ value: string; label: string }>
@@ -191,7 +192,13 @@ function buildFields(
       label: "Tempo di conversione Lead",
       type: "text",
     },
-    { id: "Valutazione", label: "Valutazione", type: "number" },
+    {
+      id: "Valutazione",
+      label: "Valutazione",
+      type: "enum",
+      options: leadValueOptions.rating,
+    },
+    { id: "Punteggio", label: "Punteggio", type: "number" },
     { id: "Wallbox richiesto", label: "Wallbox richiesto", type: "boolean" },
   ]
 }
@@ -308,6 +315,7 @@ export function AdvancedFilters({
         sedi: leadOptions.optionsFor("sede"),
         statoEmail: leadOptions.optionsFor("stato_email"),
         saluti: leadOptions.optionsFor("saluti"),
+        rating: leadOptions.optionsFor("rating"),
         campagne: leadOptions.optionsFor("campaign_name"),
         modalitaIscrizioneAnnullata: leadOptions.optionsFor("modalita_iscrizione_annullata"),
         modelliPannello: leadOptions.optionsFor("modello_pannello"),
@@ -434,6 +442,7 @@ export function AdvancedFilters({
     sedi: leadOptions.optionsFor("sede").map((opzione) => opzione.value),
     statoEmail: leadOptions.optionsFor("stato_email").map((opzione) => opzione.value),
     saluti: leadOptions.optionsFor("saluti").map((opzione) => opzione.value),
+    rating: leadOptions.optionsFor("rating").map((opzione) => opzione.value),
     campagne: leadOptions.optionsFor("campaign_name").map((opzione) => opzione.value),
     modalitaIscrizioneAnnullata: leadOptions
       .optionsFor("modalita_iscrizione_annullata")

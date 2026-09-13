@@ -250,7 +250,7 @@ const NAV_ITEMS = [
   { id: "section-info", label: "Informazioni principali" },
   { id: "section-indirizzo", label: "Indirizzo" },
   { id: "section-descrizione", label: "Descrizione" },
-  { id: "section-sopralluogo", label: "Sopralluogo" },
+  { id: "section-sopralluogo", label: "Sopralluogo precontrattuale" },
   { id: "section-note", label: "Note" },
   { id: "section-documenti-obbligatori", label: "Documenti obbligatori" },
   { id: "section-allegati", label: "Allegati" },
@@ -1195,7 +1195,7 @@ export function LeadDetailContent({
         <Descrizione lead={lead} />
       </Section>
 
-      <Section id="section-sopralluogo" title="Sopralluogo" icon={IconClipboardCheck}>
+      <Section id="section-sopralluogo" title="Sopralluogo precontrattuale" icon={IconClipboardCheck}>
         <Sopralluogo lead={lead} />
       </Section>
 

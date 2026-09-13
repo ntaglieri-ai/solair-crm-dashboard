@@ -47,6 +47,12 @@ export type LeadEditValueOptions = {
   origineLead?: string[]
   sedi?: string[]
   installers?: ClienteReferenceOption[]
+  owners?: ClienteReferenceOption[]
+  statoEmail?: string[]
+  saluti?: string[]
+  campagne?: string[]
+  modalitaIscrizioneAnnullata?: string[]
+  modelliPannello?: string[]
 }
 
 type EditValue = string | boolean
@@ -183,6 +189,26 @@ export function buildLeadEditFields(
           options: withCurrentOption(options.sedi ?? [], lead[field.appField]),
         }
       }
+      if (field.appField === "Lead Proprietario") {
+        const ownerOptions = [...(options.owners ?? []).map((owner) => owner.id)]
+        const ownerLabels = Object.fromEntries(
+          (options.owners ?? []).map((owner) => [owner.id, owner.nome]),
+        )
+        const currentId = lead["Lead Proprietario"] || ""
+        if (currentId && !ownerOptions.includes(currentId)) {
+          ownerOptions.push(currentId)
+          ownerLabels[currentId] = "Utente storico"
+        }
+        return {
+          key: String(field.appField),
+          label: String(field.appField),
+          value: currentId,
+          type: "select" as const,
+          options: ownerOptions,
+          optionLabels: ownerLabels,
+          nullWhenEmpty: true,
+        }
+      }
       if (field.appField === "Installatore - Incaricato sopralluogo") {
         const currentId = lead.InstallatoreSopralluogoId || ""
         const installerOptions = [...(options.installers ?? []).map((installer) => installer.id)]
@@ -202,6 +228,43 @@ export function buildLeadEditFields(
           options: installerOptions,
           optionLabels: installerLabels,
           nullWhenEmpty: true,
+        }
+      }
+      const picklistOptions: Partial<Record<keyof Lead, string[]>> = {
+        Stato: options.statoEmail,
+        Saluti: options.saluti,
+        "campaign name": options.campagne,
+        "Modalità iscrizione annullata": options.modalitaIscrizioneAnnullata,
+        "Modello pannello": options.modelliPannello,
+      }
+      const fieldOptions = picklistOptions[field.appField]
+      if (fieldOptions) {
+        return {
+          key: String(field.appField),
+          label: String(field.appField),
+          value: lead[field.appField],
+          type: "select" as const,
+          options: withCurrentOption(fieldOptions, lead[field.appField]),
+          nullWhenEmpty: true,
+        }
+      }
+      if (field.appField === "Creato da") {
+        const creators = (options.owners ?? []).map((owner) => owner.nome)
+        return {
+          key: String(field.appField),
+          label: String(field.appField),
+          value: lead[field.appField],
+          type: "select" as const,
+          options: withCurrentOption(creators, lead[field.appField]),
+          nullWhenEmpty: true,
+        }
+      }
+      if (field.appField === "Tempo di conversione Lead") {
+        return {
+          key: String(field.appField),
+          label: String(field.appField),
+          value: lead[field.appField],
+          type: "number" as const,
         }
       }
       return {

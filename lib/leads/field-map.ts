@@ -23,6 +23,7 @@ export const LEAD_RECORD_FIELDS = [
   { column: "paese", type: "text", appField: "Paese" },
   { column: "stato_lead", type: "text", appField: "Stato Lead" },
   { column: "stato_email", type: "text", appField: "Stato" },
+  { column: "saluti", type: "text", appField: "Saluti" },
   { column: "valutazione", type: "numeric", appField: "Valutazione" },
   { column: "lead_proprietario_id", type: "text", appField: "Lead Proprietario" },
   { column: "origine_lead", type: "text", appField: "Origine Lead" },

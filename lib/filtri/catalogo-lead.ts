@@ -52,6 +52,13 @@ export function gruppiCampiLead(opzioni: {
   origini: readonly string[]
   sedi: readonly string[]
   proprietari: readonly string[]
+  creatori?: readonly string[]
+  statoEmail?: readonly string[]
+  saluti?: readonly string[]
+  campagne?: readonly string[]
+  modalitaIscrizioneAnnullata?: readonly string[]
+  modelliPannello?: readonly string[]
+  installatori?: readonly string[]
   tag: readonly string[]
 }): GruppoCampi[] {
   return [
@@ -73,8 +80,9 @@ export function gruppiCampiLead(opzioni: {
         campo("Valutazione", "Valutazione", "numero"),
         campo("Residente in Sicilia", "Residente in Sicilia", "booleano"),
         campo("Wallbox richiesto", "Wallbox richiesto", "booleano"),
-        campo("Creato da", "Creato da", "testo"),
-        campo("campaign name", "Campagna", "testo"),
+        campo("Creato da", "Creato da", "elenco", opzioni.creatori ?? []),
+        campo("Saluti", "Saluti", "elenco", opzioni.saluti ?? []),
+        campo("campaign name", "Campagna", "elenco", opzioni.campagne ?? []),
         campo("Social Lead ID", "Social Lead ID", "testo"),
       ],
     },
@@ -111,7 +119,13 @@ export function gruppiCampiLead(opzioni: {
       chiave: "sopralluogo",
       etichetta: "Sopralluogo",
       campi: [
-        campo("Installatore - Incaricato sopralluogo", "Installatore incaricato", "testo"),
+        campo(
+          "Installatore - Incaricato sopralluogo",
+          "Installatore incaricato",
+          "elenco",
+          opzioni.installatori ?? [],
+        ),
+        campo("Data sopralluogo", "Data sopralluogo", "data"),
         campo("Descrizione", "Descrizione", "testo"),
       ],
     },
@@ -121,6 +135,14 @@ export function gruppiCampiLead(opzioni: {
       campi: [
         campo("Account convertito", "Account convertito", "testo"),
         campo("Contatto convertito", "Contatto convertito", "testo"),
+        campo(
+          "Modalità iscrizione annullata",
+          "Modalità iscrizione annullata",
+          "elenco",
+          opzioni.modalitaIscrizioneAnnullata ?? [],
+        ),
+        campo("Modello pannello", "Modello pannello", "elenco", opzioni.modelliPannello ?? []),
+        campo("Stato", "Stato", "elenco", opzioni.statoEmail ?? []),
         campo("Tempo di conversione Lead", "Tempo di conversione", "numero"),
       ],
     },

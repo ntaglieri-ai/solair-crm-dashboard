@@ -24,17 +24,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  STATO_LEAD_ORDER,
-  ORIGINE_LEAD_VALUES,
-  SEDE_LABELS,
   type Lead,
   type StatoLead,
   type OrigineLead,
   type SedeLabel,
 } from "@/lib/mock-data"
 import { useTags } from "@/lib/tag-store"
-import { option } from "@/lib/crm-settings/column-values"
-import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
+import { useLeadFieldOptions } from "@/lib/leads/use-lead-field-options"
 
 interface NewLeadDialogProps {
   open: boolean
@@ -73,6 +69,7 @@ export function NewLeadDialog({
 }: NewLeadDialogProps) {
   const { owners } = useTags()
   const permissions = usePermissions()
+  const leadOptions = useLeadFieldOptions()
   const currentUserId = permissions.snapshot.subject.userId ?? ""
   // Un Agente/Standard puo' inserire solo lead assegnati a se' stesso o non
   // assegnati (regola di sicurezza a livello di database) — mostrargli
@@ -86,24 +83,9 @@ export function NewLeadDialog({
     () => Object.fromEntries(owners.map((owner) => [owner.id, owner.nome])),
     [owners],
   )
-  const statoOptions = useColumnValueOptions(
-    "Lead",
-    "stato_lead",
-    STATO_LEAD_ORDER.map((s) => option(s)),
-    { includeFallback: true },
-  ).options
-  const origineOptions = useColumnValueOptions(
-    "Lead",
-    "origine_lead",
-    ORIGINE_LEAD_VALUES.map((o) => option(o)),
-    { includeFallback: true },
-  ).options
-  const sedeOptions = useColumnValueOptions(
-    "Lead",
-    "sede",
-    SEDE_LABELS.map((s) => option(s)),
-    { includeFallback: true },
-  ).options
+  const statoOptions = leadOptions.optionsFor("stato_lead")
+  const origineOptions = leadOptions.optionsFor("origine_lead")
+  const sedeOptions = leadOptions.optionsFor("sede")
   const statoItems = useMemo(
     () => Object.fromEntries(statoOptions.map((s) => [s.value, s.label])),
     [statoOptions],
@@ -129,7 +111,7 @@ export function NewLeadDialog({
         origineOptions.find((item) => item.value === "Manuale")?.value ??
         origineOptions[0]?.value ??
         "Manuale",
-      sede: sedeOptions[0]?.value ?? SEDE_LABELS[0],
+      sede: sedeOptions[0]?.value ?? "",
       proprietario: "",
       descrizione: "",
     }),

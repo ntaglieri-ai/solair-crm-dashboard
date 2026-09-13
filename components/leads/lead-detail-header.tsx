@@ -41,6 +41,7 @@ import { type Lead } from "@/lib/mock-data"
 import { LeadAvatar, StatoLeadBadge, ScoreBar } from "./lead-utils"
 import { LeadTagBadges, TagAssignPopover } from "./tag-controls"
 import { useTags } from "@/lib/tag-store"
+import { useLeadFieldOptions } from "@/lib/leads/use-lead-field-options"
 import {
   DOCUMENTI_OBBLIGATORI_CHANGED,
   useDocumentiObbligatori,
@@ -96,7 +97,8 @@ function GateDocumentiLabel({
 }
 
 export function LeadDetailHeader({ lead }: { lead: Lead }) {
-  const { installers } = useTags()
+  const { owners, installers } = useTags()
+  const leadOptions = useLeadFieldOptions()
   const router = useRouter()
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -441,7 +443,22 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
         onOpenChange={setEditOpen}
         title="Modifica lead"
         endpoint={`/api/leads/${lead.id}`}
-        fields={buildLeadEditFields(lead, permissions, { installers })}
+        fields={buildLeadEditFields(lead, permissions, {
+          owners,
+          installers,
+          statoLead: leadOptions.optionsFor("stato_lead", lead["Stato Lead"]).map((item) => item.value),
+          origineLead: leadOptions.optionsFor("origine_lead", lead["Origine Lead"]).map((item) => item.value),
+          sedi: leadOptions.optionsFor("sede", lead.Sede).map((item) => item.value),
+          statoEmail: leadOptions.optionsFor("stato_email", lead.Stato).map((item) => item.value),
+          saluti: leadOptions.optionsFor("saluti", lead.Saluti).map((item) => item.value),
+          campagne: leadOptions.optionsFor("campaign_name", lead["campaign name"]).map((item) => item.value),
+          modalitaIscrizioneAnnullata: leadOptions
+            .optionsFor("modalita_iscrizione_annullata", lead["Modalità iscrizione annullata"])
+            .map((item) => item.value),
+          modelliPannello: leadOptions
+            .optionsFor("modello_pannello", lead["Modello pannello"])
+            .map((item) => item.value),
+        })}
       />
     </div>
   )

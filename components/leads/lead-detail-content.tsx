@@ -65,10 +65,9 @@ import {
   type Lead,
   type Compito,
   type CustomFieldValue,
-  STATO_LEAD_ORDER,
 } from "@/lib/mock-data"
-import { option, withCurrentColumnOption } from "@/lib/crm-settings/column-values"
-import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
+import { option, withCurrentColumnOption, type ColumnValueOption } from "@/lib/crm-settings/column-values"
+import { useLeadFieldOptions } from "@/lib/leads/use-lead-field-options"
 import type { EmailLogEntry } from "@/lib/email/email-log"
 import { LeadAvatar } from "./lead-utils"
 import { CUSTOM_FIELD_PREFIX } from "@/lib/crm-settings/custom-fields"
@@ -76,6 +75,14 @@ import { QuickCompitoDialog } from "@/components/compiti/quick-compito-dialog"
 import { AllegatiSection } from "@/components/shared/allegati-section"
 import { DOCUMENTI_OBBLIGATORI_FOLDER } from "@/lib/allegati/paths"
 import { notificaDocumentiObbligatoriCambiati } from "@/lib/allegati/hooks"
+
+function optionValues(options: ColumnValueOption[]) {
+  return options.map((item) => item.value)
+}
+
+function optionLabels(options: ColumnValueOption[]) {
+  return Object.fromEntries(options.map((item) => [item.value, item.label]))
+}
 
 /* ---------- Sezione collassabile ---------- */
 
@@ -325,19 +332,30 @@ const PRIORITY_TONE: Record<string, string> = {
 function InfoPrincipali({ lead }: { lead: Lead }) {
   const [showMore, setShowMore] = useState(false)
   const endpoint = `/api/leads/${lead.id}`
-  const { ownerNames: leadOwnerNames } = useTags()
+  const { ownerNames: leadOwnerNames, owners } = useTags()
+  const leadOptions = useLeadFieldOptions()
   const leadOwnerName = lead["Lead Proprietario"]
     ? leadOwnerNames[lead["Lead Proprietario"]] ?? "Utente non disponibile"
     : "Non assegnato"
-  const configuredStatoOptions = useColumnValueOptions(
-    "Lead",
-    "stato_lead",
-    STATO_LEAD_ORDER.map((value) => option(value)),
-    { includeFallback: true },
-  ).options
-  const statoOptions = withCurrentColumnOption(configuredStatoOptions, lead["Stato Lead"])
-  const statoValues = statoOptions.map((item) => item.value)
-  const statoLabels = Object.fromEntries(statoOptions.map((item) => [item.value, item.label]))
+  const statoOptions = leadOptions.optionsFor("stato_lead", lead["Stato Lead"])
+  const origineOptions = leadOptions.optionsFor("origine_lead", lead["Origine Lead"])
+  const sedeOptions = leadOptions.optionsFor("sede", lead.Sede)
+  const campaignOptions = leadOptions.optionsFor("campaign_name", lead["campaign name"])
+  const statoEmailOptions = leadOptions.optionsFor("stato_email", lead.Stato)
+  const modalitaAnnullamentoOptions = leadOptions.optionsFor(
+    "modalita_iscrizione_annullata",
+    lead["Modalità iscrizione annullata"],
+  )
+  const creatorOptions = withCurrentColumnOption(
+    owners.map((owner) => option(owner.nome)),
+    lead["Creato da"],
+  )
+  const ownerOptions = owners.map((owner) => owner.id)
+  const ownerLabels = Object.fromEntries(owners.map((owner) => [owner.id, owner.nome]))
+  if (lead["Lead Proprietario"] && !ownerOptions.includes(lead["Lead Proprietario"])) {
+    ownerOptions.push(lead["Lead Proprietario"])
+    ownerLabels[lead["Lead Proprietario"]] = leadOwnerName
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -370,14 +388,14 @@ function InfoPrincipali({ lead }: { lead: Lead }) {
           <DataField label="Consenso e-mail" edit={{ module: "lead", field: "consenso_contatto_email", endpoint, patchKey: "Consenso e-mail", value: lead["Consenso e-mail"] === true, type: "boolean" }}>
             {lead["Consenso e-mail"] ? "Sì" : "No"}
           </DataField>
-          <DataField label="Stato Lead" edit={{ module: "lead", field: "stato_lead", endpoint, patchKey: "Stato Lead", value: lead["Stato Lead"], type: "select", options: statoValues, optionLabels: statoLabels }}>
+          <DataField label="Stato Lead" edit={{ module: "lead", field: "stato_lead", endpoint, patchKey: "Stato Lead", value: lead["Stato Lead"], type: "select", options: optionValues(statoOptions), optionLabels: optionLabels(statoOptions) }}>
             {val(lead["Stato Lead"])}
           </DataField>
         </div>
 
         {/* Colonna destra */}
         <div className="flex flex-col gap-4">
-          <DataField label="campaign name" edit={{ module: "lead", field: "campaign_name", endpoint, patchKey: "campaign name", value: lead["campaign name"] }}>
+          <DataField label="campaign name" edit={{ module: "lead", field: "campaign_name", endpoint, patchKey: "campaign name", value: lead["campaign name"], type: "select", options: optionValues(campaignOptions), optionLabels: optionLabels(campaignOptions), allowEmptyOption: true, emptyLabel: "Nessuna", nullWhenEmpty: true }}>
             <span className="break-words">{val(lead["campaign name"])}</span>
           </DataField>
           <DataField label="kWp" edit={{ module: "lead", field: "kwp", endpoint, patchKey: "kWp", value: lead.kWp, type: "number" }}>
@@ -419,13 +437,19 @@ function InfoPrincipali({ lead }: { lead: Lead }) {
           <div className="mt-4 grid grid-cols-1 gap-x-8 gap-y-4 border-t border-border pt-4 sm:grid-cols-2 animate-in fade-in duration-200">
             {/* Sede, Proprietario e Origine Lead: prima erano pillole
                 nell'header, tolte per alleggerirlo (report Nando). */}
-            <DataField label="Sede">{val(lead.Sede)}</DataField>
-            <DataField label="Lead Proprietario">{val(leadOwnerName)}</DataField>
-            <DataField label="Origine Lead">{val(lead["Origine Lead"])}</DataField>
-            <DataField label="Stato email" edit={{ module: "lead", field: "stato_email", endpoint, patchKey: "Stato", value: lead.Stato }}>
+            <DataField label="Sede" edit={{ module: "lead", field: "sede", endpoint, patchKey: "Sede", value: lead.Sede, type: "select", options: optionValues(sedeOptions), optionLabels: optionLabels(sedeOptions), allowEmptyOption: true, emptyLabel: "Nessuna", nullWhenEmpty: true }}>
+              {val(lead.Sede)}
+            </DataField>
+            <DataField label="Lead Proprietario" edit={{ module: "lead", field: "lead_proprietario_id", endpoint, patchKey: "Lead Proprietario", value: lead["Lead Proprietario"], type: "select", options: ownerOptions, optionLabels: ownerLabels, allowEmptyOption: true, emptyLabel: "Non assegnato", nullWhenEmpty: true }}>
+              {val(leadOwnerName)}
+            </DataField>
+            <DataField label="Origine Lead" edit={{ module: "lead", field: "origine_lead", endpoint, patchKey: "Origine Lead", value: lead["Origine Lead"], type: "select", options: optionValues(origineOptions), optionLabels: optionLabels(origineOptions), allowEmptyOption: true, emptyLabel: "Nessuna", nullWhenEmpty: true }}>
+              {val(lead["Origine Lead"])}
+            </DataField>
+            <DataField label="Stato email" edit={{ module: "lead", field: "stato_email", endpoint, patchKey: "Stato", value: lead.Stato, type: "select", options: optionValues(statoEmailOptions), optionLabels: optionLabels(statoEmailOptions), allowEmptyOption: true, emptyLabel: "Nessuno", nullWhenEmpty: true }}>
               {val(lead.Stato)}
             </DataField>
-            <DataField label="Tempo conversione" edit={{ module: "lead", field: "tempo_conversione_lead", endpoint, patchKey: "Tempo di conversione Lead", value: lead["Tempo di conversione Lead"] }}>
+            <DataField label="Tempo conversione" edit={{ module: "lead", field: "tempo_conversione_lead", endpoint, patchKey: "Tempo di conversione Lead", value: lead["Tempo di conversione Lead"], type: "number" }}>
               {val(lead["Tempo di conversione Lead"])}
             </DataField>
             <DataField label="Connesso a" edit={{ module: "lead", field: "connesso_a", endpoint, patchKey: "Connesso a", value: lead["Connesso a"] }}>
@@ -440,10 +464,12 @@ function InfoPrincipali({ lead }: { lead: Lead }) {
             <DataField label="Contatto convertito" edit={{ module: "lead", field: "contatto_convertito", endpoint, patchKey: "Contatto convertito", value: lead["Contatto convertito"] }}>
               {val(lead["Contatto convertito"])}
             </DataField>
-            <DataField label="Modalità iscrizione annullata" edit={{ module: "lead", field: "modalita_iscrizione_annullata", endpoint, patchKey: "Modalità iscrizione annullata", value: lead["Modalità iscrizione annullata"] }}>
+            <DataField label="Modalità iscrizione annullata" edit={{ module: "lead", field: "modalita_iscrizione_annullata", endpoint, patchKey: "Modalità iscrizione annullata", value: lead["Modalità iscrizione annullata"], type: "select", options: optionValues(modalitaAnnullamentoOptions), optionLabels: optionLabels(modalitaAnnullamentoOptions), allowEmptyOption: true, emptyLabel: "Nessuna", nullWhenEmpty: true }}>
               {val(lead["Modalità iscrizione annullata"])}
             </DataField>
-            <DataField label="Creato da">{val(lead["Creato da"])}</DataField>
+            <DataField label="Creato da" edit={{ module: "lead", field: "creato_da", endpoint, patchKey: "Creato da", value: lead["Creato da"], type: "select", options: optionValues(creatorOptions), optionLabels: optionLabels(creatorOptions), allowEmptyOption: true, emptyLabel: "Nessuno", nullWhenEmpty: true }}>
+              {val(lead["Creato da"])}
+            </DataField>
           </div>
         ) : null}
       </div>
@@ -1332,16 +1358,28 @@ function LeadDaLayout({
   onTaskCreated: (compito: Compito) => void
 }) {
   const router = useRouter()
-  const { ownerNames, installers } = useTags()
-  const configuredStatoOptions = useColumnValueOptions(
-    "Lead",
-    "stato_lead",
-    STATO_LEAD_ORDER.map((value) => option(value)),
-    { includeFallback: true },
-  ).options
-  const statoOptions = withCurrentColumnOption(configuredStatoOptions, lead["Stato Lead"])
-  const statoValues = statoOptions.map((item) => item.value)
-  const statoLabels = Object.fromEntries(statoOptions.map((item) => [item.value, item.label]))
+  const { ownerNames, owners, installers } = useTags()
+  const leadOptions = useLeadFieldOptions()
+  const statoOptions = leadOptions.optionsFor("stato_lead", lead["Stato Lead"])
+  const origineOptions = leadOptions.optionsFor("origine_lead", lead["Origine Lead"])
+  const sedeOptions = leadOptions.optionsFor("sede", lead.Sede)
+  const campaignOptions = leadOptions.optionsFor("campaign_name", lead["campaign name"])
+  const statoEmailOptions = leadOptions.optionsFor("stato_email", lead.Stato)
+  const salutiOptions = leadOptions.optionsFor("saluti", lead.Saluti)
+  const modalitaAnnullamentoOptions = leadOptions.optionsFor(
+    "modalita_iscrizione_annullata",
+    lead["Modalità iscrizione annullata"],
+  )
+  const modelloPannelloOptions = leadOptions.optionsFor(
+    "modello_pannello",
+    lead["Modello pannello"],
+  )
+  const ownerOptions = owners.map((owner) => owner.id)
+  const ownerLabels = Object.fromEntries(owners.map((owner) => [owner.id, owner.nome]))
+  const creatorOptions = withCurrentColumnOption(
+    owners.map((owner) => option(owner.nome)),
+    lead["Creato da"],
+  )
   const installerOptions = installers.map((installer) => installer.id)
   const installerLabels = Object.fromEntries(installers.map((installer) => [installer.id, installer.nome]))
   const currentInstaller = lead.InstallatoreSopralluogoId ?? ""
@@ -1358,6 +1396,10 @@ function LeadDaLayout({
     "Lead Proprietario": lead["Lead Proprietario"]
       ? (ownerNames[lead["Lead Proprietario"]] ?? "Utente non disponibile")
       : "Non assegnato",
+  }
+  if (lead["Lead Proprietario"] && !ownerOptions.includes(lead["Lead Proprietario"])) {
+    ownerOptions.push(lead["Lead Proprietario"])
+    ownerLabels[lead["Lead Proprietario"]] = String(valoriVisualizzati["Lead Proprietario"])
   }
 
   const salvaOrdine = (corpo: Record<string, unknown>) => {
@@ -1442,8 +1484,24 @@ function LeadDaLayout({
         patchKey: fieldKey,
         value,
         type: "select",
-        options: statoValues,
-        optionLabels: statoLabels,
+        options: optionValues(statoOptions),
+        optionLabels: optionLabels(statoOptions),
+      }
+    }
+
+    if (fieldKey === "Lead Proprietario") {
+      return {
+        module: "lead",
+        field: campo.column,
+        endpoint: `/api/leads/${lead.id}`,
+        patchKey: fieldKey,
+        value,
+        type: "select",
+        options: ownerOptions,
+        optionLabels: ownerLabels,
+        allowEmptyOption: true,
+        emptyLabel: "Non assegnato",
+        nullWhenEmpty: true,
       }
     }
 
@@ -1463,6 +1521,33 @@ function LeadDaLayout({
       }
     }
 
+    const picklistOptions: Partial<Record<string, ColumnValueOption[]>> = {
+      "Origine Lead": origineOptions,
+      Sede: sedeOptions,
+      "campaign name": campaignOptions,
+      Stato: statoEmailOptions,
+      Saluti: salutiOptions,
+      "Modalità iscrizione annullata": modalitaAnnullamentoOptions,
+      "Modello pannello": modelloPannelloOptions,
+      "Creato da": creatorOptions,
+    }
+    const optionsForField = picklistOptions[fieldKey]
+    if (optionsForField) {
+      return {
+        module: "lead",
+        field: campo.column,
+        endpoint: `/api/leads/${lead.id}`,
+        patchKey: fieldKey,
+        value,
+        type: "select",
+        options: optionValues(optionsForField),
+        optionLabels: optionLabels(optionsForField),
+        allowEmptyOption: fieldKey !== "Stato Lead",
+        emptyLabel: fieldKey === "Creato da" || fieldKey === "Stato" ? "Nessuno" : "Nessuna",
+        nullWhenEmpty: true,
+      }
+    }
+
     return {
       module: "lead",
       field: campo.column,
@@ -1478,6 +1563,8 @@ function LeadDaLayout({
               ? "date"
               : fieldKey === "E-mail"
                 ? "email"
+                : fieldKey === "Descrizione"
+                  ? "textarea"
                 : /telefono|mobile/i.test(fieldKey)
                   ? "tel"
                   : "text",

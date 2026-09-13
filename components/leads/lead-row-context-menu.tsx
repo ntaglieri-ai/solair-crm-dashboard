@@ -46,9 +46,6 @@ import { Label } from "@/components/ui/label"
 import {
   type Lead,
   type StatoLead,
-  STATO_LEAD_ORDER,
-  ORIGINE_LEAD_VALUES,
-  SEDE_LABELS,
 } from "@/lib/mock-data"
 import { TagPicker } from "./tag-controls"
 import { useTags } from "@/lib/tag-store"
@@ -56,8 +53,7 @@ import { usePermissions } from "@/lib/permissions/provider"
 import { formatDMY } from "@/components/compiti/new-compito-dialog"
 import { telHref } from "@/components/shared/quick-contact-icons"
 import { EditRecordDialog, buildLeadEditFields } from "@/components/shared/edit-record-dialog"
-import { option } from "@/lib/crm-settings/column-values"
-import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
+import { useLeadFieldOptions } from "@/lib/leads/use-lead-field-options"
 
 export function LeadRowContextMenu({
   lead,
@@ -92,24 +88,7 @@ export function LeadRowContextMenu({
   const [taskDueDate, setTaskDueDate] = useState("")
   const [taskPriority, setTaskPriority] = useState("Medio")
   const [saving, setSaving] = useState(false)
-  const statoLeadValues = useColumnValueOptions(
-    "Lead",
-    "stato_lead",
-    STATO_LEAD_ORDER.map((s) => option(s)),
-    { includeFallback: true },
-  ).options
-  const origineLeadValues = useColumnValueOptions(
-    "Lead",
-    "origine_lead",
-    ORIGINE_LEAD_VALUES.map((o) => option(o)),
-    { includeFallback: true },
-  ).options
-  const sedeValues = useColumnValueOptions(
-    "Lead",
-    "sede",
-    SEDE_LABELS.map((s) => option(s)),
-    { includeFallback: true },
-  ).options
+  const leadOptions = useLeadFieldOptions()
 
   const exportRow = () => {
     const payload = Object.fromEntries(
@@ -293,7 +272,7 @@ export function LeadRowContextMenu({
                 Cambia stato
               </ContextMenuSubTrigger>
               <ContextMenuSubContent>
-                {statoLeadValues.map(({ value: s, label }) => (
+                {leadOptions.optionsFor("stato_lead", stato).map(({ value: s, label }) => (
                   <ContextMenuItem
                     key={s}
                     onClick={() => {
@@ -416,10 +395,20 @@ export function LeadRowContextMenu({
         title="Modifica lead"
         endpoint={`/api/leads/${lead.id}`}
         fields={buildLeadEditFields(lead, permissions, {
-          statoLead: statoLeadValues.map((item) => item.value),
-          origineLead: origineLeadValues.map((item) => item.value),
-          sedi: sedeValues.map((item) => item.value),
+          owners,
           installers,
+          statoLead: leadOptions.optionsFor("stato_lead", lead["Stato Lead"]).map((item) => item.value),
+          origineLead: leadOptions.optionsFor("origine_lead", lead["Origine Lead"]).map((item) => item.value),
+          sedi: leadOptions.optionsFor("sede", lead.Sede).map((item) => item.value),
+          statoEmail: leadOptions.optionsFor("stato_email", lead.Stato).map((item) => item.value),
+          saluti: leadOptions.optionsFor("saluti", lead.Saluti).map((item) => item.value),
+          campagne: leadOptions.optionsFor("campaign_name", lead["campaign name"]).map((item) => item.value),
+          modalitaIscrizioneAnnullata: leadOptions
+            .optionsFor("modalita_iscrizione_annullata", lead["Modalità iscrizione annullata"])
+            .map((item) => item.value),
+          modelliPannello: leadOptions
+            .optionsFor("modello_pannello", lead["Modello pannello"])
+            .map((item) => item.value),
         })}
         onSaved={onRefresh}
       />

@@ -4,15 +4,11 @@ import { Search, X } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {
-  STATO_LEAD_ORDER,
-  ORIGINE_LEAD_VALUES,
-  SEDE_LABELS,
 } from "@/lib/mock-data"
 import { useTags } from "@/lib/tag-store"
 import { MultiFilterSelect, type MultiFilterOption } from "@/components/shared/multi-filter-select"
 import { hasFilterValues } from "@/lib/shared/filter-values"
-import { option } from "@/lib/crm-settings/column-values"
-import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
+import { useLeadFieldOptions } from "@/lib/leads/use-lead-field-options"
 
 export type ScoreFilter = "all" | "caldo" | "medio" | "freddo"
 type ScoreFilterValue = Exclude<ScoreFilter, "all">
@@ -112,24 +108,10 @@ export function LeadQuickFilterFields({
   onReset: () => void
 }) {
   const { owners, tags } = useTags()
-  const statoOptions = useColumnValueOptions(
-    "Lead",
-    "stato_lead",
-    STATO_LEAD_ORDER.map((value) => option(value)),
-    { includeFallback: true },
-  ).options
-  const sedeOptions = useColumnValueOptions(
-    "Lead",
-    "sede",
-    SEDE_LABELS.map((value) => option(value)),
-    { includeFallback: true },
-  ).options
-  const origineOptions = useColumnValueOptions(
-    "Lead",
-    "origine_lead",
-    ORIGINE_LEAD_VALUES.map((value) => option(value)),
-    { includeFallback: true },
-  ).options
+  const leadOptions = useLeadFieldOptions()
+  const statoOptions = leadOptions.optionsFor("stato_lead")
+  const sedeOptions = leadOptions.optionsFor("sede")
+  const origineOptions = leadOptions.optionsFor("origine_lead")
   const set = <K extends keyof LeadFilterState>(
     key: K,
     value: LeadFilterState[K],

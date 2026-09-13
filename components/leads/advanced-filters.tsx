@@ -33,9 +33,6 @@ import {
 } from "@/components/ui/accordion"
 import {
   type Lead,
-  STATO_LEAD_ORDER,
-  ORIGINE_LEAD_VALUES,
-  SEDE_LABELS,
 } from "@/lib/mock-data"
 import { useTags } from "@/lib/tag-store"
 import {
@@ -43,8 +40,7 @@ import {
   countActiveLeadFilters,
   type LeadFilterState,
 } from "@/components/leads/lead-filters"
-import { option } from "@/lib/crm-settings/column-values"
-import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
+import { useLeadFieldOptions } from "@/lib/leads/use-lead-field-options"
 
 // ----------------------------------------------------------------------------
 // Tipi filtro — logica pura condivisa con il repository server-side
@@ -78,9 +74,13 @@ interface LeadAdvancedValueOptions {
   statoLead: Array<{ value: string; label: string }>
   origineLead: Array<{ value: string; label: string }>
   sedi: Array<{ value: string; label: string }>
+  statoEmail: Array<{ value: string; label: string }>
+  saluti: Array<{ value: string; label: string }>
+  campagne: Array<{ value: string; label: string }>
+  modalitaIscrizioneAnnullata: Array<{ value: string; label: string }>
+  modelliPannello: Array<{ value: string; label: string }>
 }
 
-const STATO_EMAIL_VALUES = ["Recapitata", "Aperta", "Non recapitata", "—"]
 // Definizione dei campi del modello Lead in ordine alfabetico (italiano)
 const options = (values: readonly string[]) =>
   values.map((value) => ({ value, label: value }))
@@ -93,7 +93,12 @@ function buildFields(
 ): FieldDef[] {
   return [
     { id: "Account convertito", label: "Account convertito", type: "text" },
-    { id: "campaign name", label: "campaign name", type: "text" },
+    {
+      id: "campaign name",
+      label: "campaign name",
+      type: "enum",
+      options: leadValueOptions.campagne,
+    },
     { id: "Città", label: "Città", type: "text" },
     { id: "Codice postale", label: "Codice postale", type: "text" },
     { id: "Cognome", label: "Cognome", type: "text" },
@@ -104,7 +109,12 @@ function buildFields(
     { id: "Consenso e-mail", label: "Consenso e-mail", type: "boolean" },
     { id: "Consenso WhatsApp", label: "Consenso WhatsApp", type: "boolean" },
     { id: "Contatto convertito", label: "Contatto convertito", type: "text" },
-    { id: "Creato da", label: "Creato da", type: "text" },
+    {
+      id: "Creato da",
+      label: "Creato da",
+      type: "enum",
+      options: owners.map((item) => ({ value: item.nome, label: item.nome })),
+    },
     { id: "Data Click", label: "Data Click", type: "date" },
     { id: "Data sopralluogo", label: "Data sopralluogo", type: "date" },
     { id: "Data/Ora", label: "Data/Ora", type: "date" },
@@ -128,9 +138,15 @@ function buildFields(
     {
       id: "Modalità iscrizione annullata",
       label: "Modalità iscrizione annullata",
-      type: "text",
+      type: "enum",
+      options: leadValueOptions.modalitaIscrizioneAnnullata,
     },
-    { id: "Modello pannello", label: "Modello pannello", type: "text" },
+    {
+      id: "Modello pannello",
+      label: "Modello pannello",
+      type: "enum",
+      options: leadValueOptions.modelliPannello,
+    },
     { id: "Nome", label: "Nome", type: "text" },
     { id: "Nome Lead", label: "Nome Lead", type: "text" },
     {
@@ -159,7 +175,7 @@ function buildFields(
       id: "Stato",
       label: "Stato",
       type: "enum",
-      options: options(STATO_EMAIL_VALUES),
+      options: leadValueOptions.statoEmail,
     },
     {
       id: "Stato Lead",
@@ -168,6 +184,7 @@ function buildFields(
       options: leadValueOptions.statoLead,
     },
     { id: "Tag", label: "Tag", type: "enum", options: options(tags) },
+    { id: "Saluti", label: "Saluti", type: "enum", options: leadValueOptions.saluti },
     { id: "Telefono", label: "Telefono", type: "text" },
     {
       id: "Tempo di conversione Lead",
@@ -277,24 +294,7 @@ export function AdvancedFilters({
   alberoApplicato?: Gruppo
 }) {
   const { owners, installers } = useTags()
-  const statoLeadOptions = useColumnValueOptions(
-    "Lead",
-    "stato_lead",
-    STATO_LEAD_ORDER.map((value) => option(value)),
-    { includeFallback: true },
-  ).options
-  const origineLeadOptions = useColumnValueOptions(
-    "Lead",
-    "origine_lead",
-    ORIGINE_LEAD_VALUES.map((value) => option(value)),
-    { includeFallback: true },
-  ).options
-  const sedeOptions = useColumnValueOptions(
-    "Lead",
-    "sede",
-    SEDE_LABELS.map((value) => option(value)),
-    { includeFallback: true },
-  ).options
+  const leadOptions = useLeadFieldOptions()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<AdvancedFilterState>(applied)
   const [fieldQuery, setFieldQuery] = useState("")
@@ -303,11 +303,16 @@ export function AdvancedFilters({
   const allFields = useMemo(
     () =>
       buildFields(tags, owners, installers, {
-        statoLead: statoLeadOptions,
-        origineLead: origineLeadOptions,
-        sedi: sedeOptions,
+        statoLead: leadOptions.optionsFor("stato_lead"),
+        origineLead: leadOptions.optionsFor("origine_lead"),
+        sedi: leadOptions.optionsFor("sede"),
+        statoEmail: leadOptions.optionsFor("stato_email"),
+        saluti: leadOptions.optionsFor("saluti"),
+        campagne: leadOptions.optionsFor("campaign_name"),
+        modalitaIscrizioneAnnullata: leadOptions.optionsFor("modalita_iscrizione_annullata"),
+        modelliPannello: leadOptions.optionsFor("modello_pannello"),
       }),
-    [installers, origineLeadOptions, owners, sedeOptions, statoLeadOptions, tags],
+    [installers, leadOptions, owners, tags],
   )
   const fieldsById = useMemo(
     () => new Map(allFields.map((f) => [f.id as string, f])),
@@ -424,9 +429,18 @@ export function AdvancedFilters({
   // scritto qui: uno stato aggiunto in configurazione deve comparire nel
   // costruttore senza toccare il codice.
   const opzioniCatalogo = {
-    stati: statoLeadOptions.map((opzione) => opzione.value),
-    origini: origineLeadOptions.map((opzione) => opzione.value),
-    sedi: sedeOptions.map((opzione) => opzione.value),
+    stati: leadOptions.optionsFor("stato_lead").map((opzione) => opzione.value),
+    origini: leadOptions.optionsFor("origine_lead").map((opzione) => opzione.value),
+    sedi: leadOptions.optionsFor("sede").map((opzione) => opzione.value),
+    statoEmail: leadOptions.optionsFor("stato_email").map((opzione) => opzione.value),
+    saluti: leadOptions.optionsFor("saluti").map((opzione) => opzione.value),
+    campagne: leadOptions.optionsFor("campaign_name").map((opzione) => opzione.value),
+    modalitaIscrizioneAnnullata: leadOptions
+      .optionsFor("modalita_iscrizione_annullata")
+      .map((opzione) => opzione.value),
+    modelliPannello: leadOptions.optionsFor("modello_pannello").map((opzione) => opzione.value),
+    installatori: installers.map((installer) => installer.nome),
+    creatori: owners.map((owner) => owner.nome),
     proprietari: owners.map((owner) => owner.id),
     tag: tags,
   }

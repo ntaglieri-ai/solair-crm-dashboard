@@ -23,11 +23,9 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { BulkEmailBarButton } from "@/components/shared/bulk-email-triggers"
-import { STATO_LEAD_ORDER } from "@/lib/mock-data"
 import { useTags } from "@/lib/tag-store"
 import { usePermissions } from "@/lib/permissions/provider"
-import { option } from "@/lib/crm-settings/column-values"
-import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
+import { useLeadFieldOptions } from "@/lib/leads/use-lead-field-options"
 
 const ICON_BTN =
   "flex size-9 items-center justify-center rounded-lg text-navy transition-transform duration-150 hover:scale-110 hover:bg-secondary"
@@ -51,12 +49,8 @@ export function BulkToolbar({
 }) {
   const { owners } = useTags()
   const permissions = usePermissions()
-  const statoOptions = useColumnValueOptions(
-    "Lead",
-    "stato_lead",
-    STATO_LEAD_ORDER.map((value) => option(value)),
-    { includeFallback: true },
-  ).options
+  const leadOptions = useLeadFieldOptions()
+  const statoOptions = leadOptions.optionsFor("stato_lead")
   const canDelete = permissions.canRecord("lead", "delete")
   if (count === 0) return null
 

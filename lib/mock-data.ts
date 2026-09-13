@@ -496,7 +496,7 @@ export type OrigineLead = string
 
 export type SedeLabel = string
 
-export type StatoEmail = "Recapitata" | "Aperta" | "Non recapitata" | "—"
+export type StatoEmail = string
 
 export interface LeadActivity {
   id: string
@@ -560,6 +560,7 @@ export interface Lead {
   "Origine Lead": OrigineLead
   "E-mail": string
   Stato: StatoEmail
+  Saluti?: string
   Nome: string
   Cognome: string
   "Creato da": string

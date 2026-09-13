@@ -55,12 +55,9 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
   type Lead,
-  STATO_LEAD_ORDER,
-  SEDE_LABELS,
 } from "@/lib/mock-data"
 import { useTags } from "@/lib/tag-store"
-import { option } from "@/lib/crm-settings/column-values"
-import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
+import { useLeadFieldOptions } from "@/lib/leads/use-lead-field-options"
 import { BulkEmailMenuItem } from "@/components/shared/bulk-email-triggers"
 import type { SettingsSectionId } from "./lead-settings-sheet"
 import { LeadTagSection } from "./lead-tag-section"
@@ -120,18 +117,9 @@ export function LeadActionsMenu({
 }) {
   const { owners } = useTags()
   const permissions = usePermissions()
-  const statoLeadOptions = useColumnValueOptions(
-    "Lead",
-    "stato_lead",
-    STATO_LEAD_ORDER.map((value) => option(value)),
-    { includeFallback: true },
-  ).options
-  const sedeOptions = useColumnValueOptions(
-    "Lead",
-    "sede",
-    SEDE_LABELS.map((value) => option(value)),
-    { includeFallback: true },
-  ).options
+  const leadOptions = useLeadFieldOptions()
+  const statoLeadOptions = leadOptions.optionsFor("stato_lead")
+  const sedeOptions = leadOptions.optionsFor("sede")
   const [dialog, setDialog] = useState<Dialogs>("none")
   const hasSelection = selectedCount > 0
 

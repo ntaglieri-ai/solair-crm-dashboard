@@ -87,6 +87,8 @@ import {
 import { option } from "@/lib/crm-settings/column-values"
 import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
+import { CLIENTI_FIELD_OPTION_DEFINITIONS } from "@/lib/clienti/picklist-options"
+import { useClienteFieldOptions } from "@/lib/clienti/use-cliente-field-options"
 
 const ROWS_ITEMS: Record<string, string> = {
   "10": "10 righe",
@@ -151,6 +153,7 @@ export function ClientiClient({
   const [pannelloFiltri, setPannelloFiltri] = useState<HTMLDivElement | null>(null)
   const { hydrateClienteTagIds, installerNames, owners, tags: clienteTags } = useClienteTags()
   const { data: statoClienteOptions } = useStatoClienteQuery()
+  const clienteOptions = useClienteFieldOptions()
   const sedeOptions = useColumnValueOptions(
     "Clienti",
     "sede",
@@ -171,8 +174,14 @@ export function ClientiClient({
         Stato: (statoClienteOptions ?? []).map((stato) => stato.valore),
         Sede: sedeOptions.map((sede) => sede.value),
         Tag: clienteTags.map((tag) => tag.name),
+        ...Object.fromEntries(
+          CLIENTI_FIELD_OPTION_DEFINITIONS.map((definition) => [
+            definition.appField,
+            clienteOptions.optionsFor(definition.column).map((option) => option.value),
+          ]),
+        ),
       }),
-    [clienteTags, installerNames, layout, owners, sedeOptions, statoClienteOptions],
+    [clienteOptions, clienteTags, installerNames, layout, owners, sedeOptions, statoClienteOptions],
   )
   const [sortBy, setSortBy] = useState<ClienteColumnId | null>("Ora modifica")
   const [sortDir, setSortDir] = useState<SortDir>("desc")

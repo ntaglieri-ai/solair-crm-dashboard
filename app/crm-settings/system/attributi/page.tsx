@@ -49,6 +49,7 @@ import {
 } from "@/lib/system-settings-data"
 import { usePermissions } from "@/lib/permissions/provider"
 import { CRM_FIELD_TARGETS, tableForCrmModule } from "@/lib/crm-settings/schema-admin"
+import { ValoriManager } from "../valori/page"
 
 const ACCESSO_OPZIONI: CampoAccesso[] = ["no_access", "r", "rw"]
 
@@ -462,6 +463,16 @@ export default function AttributiPage() {
           <Plus className="size-4" />
           Aggiungi campo
         </Button>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">Valori dei campi</h2>
+          <p className="text-sm text-muted-foreground">
+            Opzioni usate dai menu a tendina e dai filtri del modulo {modulo}.
+          </p>
+        </div>
+        <ValoriManager modulo={modulo} showHeader={false} showTabs={false} />
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

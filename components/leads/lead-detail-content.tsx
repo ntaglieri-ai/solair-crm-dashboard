@@ -1366,6 +1366,10 @@ function LeadDaLayout({
   const campaignOptions = leadOptions.optionsFor("campaign_name", lead["campaign name"])
   const ratingOptions = leadOptions.optionsFor("rating", lead.Valutazione)
   const statoEmailOptions = leadOptions.optionsFor("stato_email", lead.Stato)
+  const statoArricchitoOptions = leadOptions.optionsFor(
+    "stato_arricchito",
+    lead["Stato arricchito"],
+  )
   const salutiOptions = leadOptions.optionsFor("saluti", lead.Saluti)
   const modalitaAnnullamentoOptions = leadOptions.optionsFor(
     "modalita_iscrizione_annullata",
@@ -1528,6 +1532,7 @@ function LeadDaLayout({
       "campaign name": campaignOptions,
       Valutazione: ratingOptions,
       Stato: statoEmailOptions,
+      "Stato arricchito": statoArricchitoOptions,
       Saluti: salutiOptions,
       "Modalità iscrizione annullata": modalitaAnnullamentoOptions,
       "Modello pannello": modelloPannelloOptions,

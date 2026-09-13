@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { MultiFilterSelect } from "@/components/shared/multi-filter-select"
 import { CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
 import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
 import type { Lead, ClienteRecord } from "@/lib/mock-data"
@@ -34,8 +35,8 @@ export type EditField = {
   key: string
   label: string
   value: unknown
-  type?: "text" | "email" | "tel" | "number" | "boolean" | "textarea" | "date" | "datetime-local" | "select"
-  /** Solo per type "select": valori ammessi nella tendina. */
+  type?: "text" | "email" | "tel" | "number" | "boolean" | "textarea" | "date" | "datetime-local" | "select" | "multiselect"
+  /** Solo per type "select"/"multiselect": valori ammessi nella tendina. */
   options?: string[]
   optionLabels?: Record<string, string>
   nullWhenEmpty?: boolean
@@ -51,12 +52,13 @@ export type LeadEditValueOptions = {
   statoEmail?: string[]
   saluti?: string[]
   rating?: string[]
+  statoArricchito?: string[]
   campagne?: string[]
   modalitaIscrizioneAnnullata?: string[]
   modelliPannello?: string[]
 }
 
-type EditValue = string | boolean
+type EditValue = string | string[] | boolean
 
 function fieldType(type: "text" | "numeric" | "boolean" | "timestamp") {
   if (type === "boolean") return "boolean"
@@ -73,6 +75,7 @@ function fieldType(type: "text" | "numeric" | "boolean" | "timestamp") {
 export function initialEditValue(field: EditField): EditValue {
   if (field.type === "boolean") return field.value === true
   if (field.value === null || field.value === undefined) return ""
+  if (field.type === "multiselect") return splitMultiValue(field.value)
   if (field.custom?.tipo === "multiselect") return Array.isArray(field.value) ? field.value.join("\n") : ""
   if (field.type === "datetime-local") {
     const date = new Date(String(field.value))
@@ -113,7 +116,19 @@ export function outgoingEditValue(field: EditField, value: EditValue): unknown {
     // formato: e' esattamente cio' che Postgres si aspetta per un timestamp.
     return text ? text : null
   }
+  if (field.type === "multiselect") {
+    const values = Array.isArray(value) ? value : splitMultiValue(value)
+    return values.length ? values.join("; ") : null
+  }
   return String(value)
+}
+
+function splitMultiValue(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean)
+  return String(value ?? "")
+    .split(/[;\n,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
 }
 
 function isLongField(label: string) {
@@ -134,6 +149,14 @@ function withCurrentOption(options: string[], current: unknown) {
   const value = typeof current === "string" ? current.trim() : ""
   if (!value || options.includes(value)) return options
   return [value, ...options]
+}
+
+function withCurrentOptions(options: string[], current: unknown) {
+  const values = [...options]
+  for (const item of splitMultiValue(current)) {
+    if (!values.includes(item)) values.unshift(item)
+  }
+  return values
 }
 
 const CUSTOM_EDIT_TYPES: Record<string, EditField["type"]> = {
@@ -235,6 +258,7 @@ export function buildLeadEditFields(
         Stato: options.statoEmail,
         Saluti: options.saluti,
         Valutazione: options.rating,
+        "Stato arricchito": options.statoArricchito,
         "campaign name": options.campagne,
         "Modalità iscrizione annullata": options.modalitaIscrizioneAnnullata,
         "Modello pannello": options.modelliPannello,
@@ -301,7 +325,11 @@ export function buildClienteEditFields(
   // Lista configurabile (crm_stato_cliente), non piu' STATO_CLIENTE_VALUES
   // fisso nel codice — vedi lib/clienti/stato-cliente-store.tsx.
   statoOptions: string[],
-  options: { sedi?: string[]; picklists?: Record<string, string[]> } = {},
+  options: {
+    sedi?: string[]
+    picklists?: Record<string, string[]>
+    picklistTypes?: Record<string, "select" | "multiselect">
+  } = {},
 ): EditField[] {
   const fields: EditField[] = CLIENTI_RECORD_FIELDS
     .filter((field) => !["Ora modifica", "Ora creazione"].includes(field.appField))
@@ -313,8 +341,8 @@ export function buildClienteEditFields(
           key: field.appField,
           label: field.appField,
           value: cliente[field.appField as keyof ClienteRecord],
-          type: "select" as const,
-          options: withCurrentOption(statoOptions, cliente[field.appField as keyof ClienteRecord]),
+          type: "multiselect" as const,
+          options: withCurrentOptions(statoOptions, cliente[field.appField as keyof ClienteRecord]),
         }
       }
       if (field.appField === "Sede") {
@@ -327,13 +355,13 @@ export function buildClienteEditFields(
         }
       }
       const picklistOptions = options.picklists?.[field.appField]
-      if (picklistOptions) {
+      if (picklistOptions && field.type === "text") {
         return {
           key: field.appField,
           label: field.appField,
           value: cliente[field.appField as keyof ClienteRecord],
-          type: "select" as const,
-          options: withCurrentOption(
+          type: options.picklistTypes?.[field.appField] ?? ("select" as const),
+          options: withCurrentOptions(
             picklistOptions,
             cliente[field.appField as keyof ClienteRecord],
           ),
@@ -531,6 +559,20 @@ function EditRecordDialogBody({
                         ))}
                       </SelectContent>
                     </Select>
+                  ) : field.type === "multiselect" ? (
+                    <MultiFilterSelect
+                      ariaLabel={`Modifica ${field.label}`}
+                      allLabel="Nessuno"
+                      value={Array.isArray(values[field.key]) ? values[field.key] as string[] : splitMultiValue(values[field.key])}
+                      onValueChange={(v) =>
+                        setValues((prev) => ({ ...prev, [field.key]: v }))
+                      }
+                      options={(field.options ?? []).map((option) => ({
+                        value: option,
+                        label: field.optionLabels?.[option] ?? option,
+                      }))}
+                      className="h-10 bg-card"
+                    />
                   ) : (
                     <Input
                       id={`edit-${field.key}`}

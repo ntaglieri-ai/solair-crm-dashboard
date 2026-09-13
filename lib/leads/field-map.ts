@@ -43,6 +43,7 @@ export const LEAD_RECORD_FIELDS = [
   { column: "account_convertito_id", type: "text", appField: "Account convertito" },
   { column: "contatto_convertito", type: "text", appField: "Contatto convertito" },
   { column: "modalita_iscrizione_annullata", type: "text", appField: "Modalità iscrizione annullata" },
+  { column: "stato_arricchito", type: "text", appField: "Stato arricchito" },
   { column: "ora_iscrizione_annullata", type: "timestamp", appField: "Ora iscrizione annullata" },
   { column: "descrizione", type: "text", appField: "Descrizione" },
   { column: "connesso_a", type: "text", appField: "Connesso a" },

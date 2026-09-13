@@ -17,7 +17,6 @@ export const IGNORED_LEAD_HEADERS = [
   "Data/ora convertita",
   "Ora dell’ultimo arricchimento",
   "Ora dell'ultimo arricchimento",
-  "Stato arricchito",
 ] as const
 
 export const LEAD_ZOHO_MAPPINGS = [
@@ -41,6 +40,7 @@ export const LEAD_ZOHO_MAPPINGS = [
   { csvHeader: "Paese", column: "paese", type: "text", updateExisting: true },
   { csvHeader: "Descrizione", column: "descrizione", type: "text", updateExisting: true },
   { csvHeader: "Valutazione", column: "rating", type: "text", updateExisting: true },
+  { csvHeader: "Stato arricchito", column: "stato_arricchito", type: "text", updateExisting: true },
   { csvHeader: "Punteggio visitatore", column: "valutazione", type: "number", updateExisting: true },
   { csvHeader: "Account convertito.id", column: "zoho_account_convertito_id", type: "zoho_id", updateExisting: true },
   { csvHeader: "Contatto convertito.id", column: "zoho_contatto_convertito_id", type: "zoho_id", updateExisting: true },

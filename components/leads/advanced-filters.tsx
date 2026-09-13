@@ -77,6 +77,7 @@ interface LeadAdvancedValueOptions {
   statoEmail: Array<{ value: string; label: string }>
   saluti: Array<{ value: string; label: string }>
   rating: Array<{ value: string; label: string }>
+  statoArricchito: Array<{ value: string; label: string }>
   campagne: Array<{ value: string; label: string }>
   modalitaIscrizioneAnnullata: Array<{ value: string; label: string }>
   modelliPannello: Array<{ value: string; label: string }>
@@ -172,6 +173,12 @@ function buildFields(
     },
     { id: "Sede", label: "Sede", type: "enum", options: leadValueOptions.sedi },
     { id: "Social Lead ID", label: "Social Lead ID", type: "text" },
+    {
+      id: "Stato arricchito",
+      label: "Stato arricchito",
+      type: "enum",
+      options: leadValueOptions.statoArricchito,
+    },
     {
       id: "Stato",
       label: "Stato",
@@ -316,6 +323,7 @@ export function AdvancedFilters({
         statoEmail: leadOptions.optionsFor("stato_email"),
         saluti: leadOptions.optionsFor("saluti"),
         rating: leadOptions.optionsFor("rating"),
+        statoArricchito: leadOptions.optionsFor("stato_arricchito"),
         campagne: leadOptions.optionsFor("campaign_name"),
         modalitaIscrizioneAnnullata: leadOptions.optionsFor("modalita_iscrizione_annullata"),
         modelliPannello: leadOptions.optionsFor("modello_pannello"),
@@ -443,6 +451,7 @@ export function AdvancedFilters({
     statoEmail: leadOptions.optionsFor("stato_email").map((opzione) => opzione.value),
     saluti: leadOptions.optionsFor("saluti").map((opzione) => opzione.value),
     rating: leadOptions.optionsFor("rating").map((opzione) => opzione.value),
+    statoArricchito: leadOptions.optionsFor("stato_arricchito").map((opzione) => opzione.value),
     campagne: leadOptions.optionsFor("campaign_name").map((opzione) => opzione.value),
     modalitaIscrizioneAnnullata: leadOptions
       .optionsFor("modalita_iscrizione_annullata")

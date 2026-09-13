@@ -1,3 +1,11 @@
+import { CLIENTI_FIELD_OPTION_DEFINITIONS } from "@/lib/clienti/picklist-options"
+import type { ColumnValueOption } from "@/lib/crm-settings/column-values"
+import {
+  LEAD_FIELD_OPTION_FALLBACKS,
+  type LeadOptionColumn,
+} from "@/lib/leads/field-options"
+import { STATO_CLIENTE_VALUES } from "@/lib/mock-data"
+
 // --- Sezione 1: Sedi --------------------------------------------------------
 
 export interface SystemSede {
@@ -136,57 +144,73 @@ export interface CampoValori {
 export const MODULI_VALORI = ["Lead", "Clienti", "Compiti", "Scadenze", "Installatori"] as const
 export type ModuloValori = (typeof MODULI_VALORI)[number]
 
+const DEFAULT_VALUE_COLORS = ["#3b82f6", "#2e8b72", "#f59e0b", "#dc2626", "#8b5cf6", "#94a3b8"]
+
+function valoriDaOpzioni(prefix: string, opzioni: readonly ColumnValueOption[]) {
+  return opzioni.map((opzione, index) => ({
+    id: `${prefix}_${index + 1}`,
+    etichetta: opzione.label,
+    colore: opzione.color ?? DEFAULT_VALUE_COLORS[index % DEFAULT_VALUE_COLORS.length],
+  }))
+}
+
+function campoValori(
+  campo: string,
+  etichetta: string,
+  opzioni: readonly ColumnValueOption[],
+  prefix: string,
+): CampoValori {
+  return {
+    campo,
+    etichetta,
+    valori: valoriDaOpzioni(prefix, opzioni),
+  }
+}
+
+const LEAD_VALUE_LABELS: Record<LeadOptionColumn, string> = {
+  stato_lead: "Stato lead",
+  origine_lead: "Origine lead",
+  sede: "Sede",
+  campaign_name: "Campagna",
+  rating: "Valutazione",
+  stato_email: "Stato e-mail",
+  saluti: "Saluti",
+  modalita_iscrizione_annullata: "Modalità iscrizione annullata",
+  stato_arricchito: "Stato arricchito",
+  modello_pannello: "Modello pannello",
+}
+
+const leadValueFields = Object.entries(LEAD_FIELD_OPTION_FALLBACKS)
+  .filter(([, opzioni]) => opzioni.length > 0)
+  .map(([campo, opzioni]) =>
+    campoValori(
+      campo,
+      LEAD_VALUE_LABELS[campo as LeadOptionColumn],
+      opzioni,
+      `lead_${campo}`,
+    ),
+  )
+
+const clientiValueFields = CLIENTI_FIELD_OPTION_DEFINITIONS.map((definition) =>
+  campoValori(
+    definition.column,
+    definition.appField,
+    definition.options,
+    `clienti_${definition.column}`,
+  ),
+)
+
 export const valoriPerModulo: Record<ModuloValori, CampoValori[]> = {
-  Lead: [
-    {
-      campo: "stato_lead",
-      etichetta: "Stato lead",
-      valori: [
-        { id: "st_1", etichetta: "Non contattato", colore: "#94a3b8" },
-        { id: "st_2", etichetta: "Tentato di contattare", colore: "#f59e0b" },
-        { id: "st_3", etichetta: "Contattato", colore: "#16a34a" },
-        { id: "st_4", etichetta: "Inviato Preventivo", colore: "#3b82f6" },
-        { id: "st_5", etichetta: "Convertito", colore: "#2e8b72" },
-        { id: "st_6", etichetta: "Perso", colore: "#dc2626" },
-      ],
-    },
-    {
-      campo: "origine_lead",
-      etichetta: "Origine lead",
-      valori: [
-        { id: "fo_1", etichetta: "Facebook", colore: "#3b82f6" },
-        { id: "fo_2", etichetta: "Pubblicità", colore: "#f59e0b" },
-        { id: "fo_3", etichetta: "Sito web", colore: "#2e8b72" },
-        { id: "fo_4", etichetta: "Chat", colore: "#3b82f6" },
-        { id: "fo_5", etichetta: "Configuratore WebSite", colore: "#2e8b72" },
-        { id: "fo_6", etichetta: "Manuale", colore: "#94a3b8" },
-        { id: "fo_7", etichetta: "Utenza di servizio", colore: "#1e3a5f" },
-      ],
-    },
-    {
-      campo: "sede",
-      etichetta: "Sede",
-      valori: [
-        { id: "se_1", etichetta: "Catania", colore: "#3b82f6" },
-        { id: "se_2", etichetta: "Giarre (CT)", colore: "#2e8b72" },
-        { id: "se_3", etichetta: "Treviso", colore: "#8b5cf6" },
-        { id: "se_4", etichetta: "Torino", colore: "#f59e0b" },
-        { id: "se_5", etichetta: "Porto Sant'Elpidio", colore: "#94a3b8" },
-      ],
-    },
-  ],
+  Lead: leadValueFields,
   Clienti: [
-    {
-      campo: "sede",
-      etichetta: "Sede",
-      valori: [
-        { id: "cl_se_1", etichetta: "Catania", colore: "#3b82f6" },
-        { id: "cl_se_2", etichetta: "Giarre (CT)", colore: "#2e8b72" },
-        { id: "cl_se_3", etichetta: "Treviso", colore: "#8b5cf6" },
-        { id: "cl_se_4", etichetta: "Torino", colore: "#f59e0b" },
-        { id: "cl_se_5", etichetta: "Porto Sant'Elpidio", colore: "#94a3b8" },
-      ],
-    },
+    campoValori("sede", "Sede", LEAD_FIELD_OPTION_FALLBACKS.sede, "clienti_sede"),
+    campoValori(
+      "stato",
+      "Stato",
+      STATO_CLIENTE_VALUES.map((value) => ({ value, label: value })),
+      "clienti_stato",
+    ),
+    ...clientiValueFields,
   ],
   Compiti: [
     {

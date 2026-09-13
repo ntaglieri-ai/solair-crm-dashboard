@@ -26,13 +26,22 @@ import {
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
 
 let leadRatingColumnAvailable: boolean | null = null
+let leadStatoArricchitoColumnAvailable: boolean | null = null
 
 function canUseLeadRatingColumn() {
   return leadRatingColumnAvailable !== false
 }
 
+function canUseLeadStatoArricchitoColumn() {
+  return leadStatoArricchitoColumnAvailable !== false
+}
+
 function isMissingLeadRatingColumn(error: { message?: string } | null | undefined) {
   return /column leads\.rating does not exist/i.test(error?.message ?? "")
+}
+
+function isMissingLeadStatoArricchitoColumn(error: { message?: string } | null | undefined) {
+  return /column leads\.stato_arricchito does not exist/i.test(error?.message ?? "")
 }
 
 function disableLeadRatingColumn(error: { message?: string } | null | undefined) {
@@ -40,6 +49,15 @@ function disableLeadRatingColumn(error: { message?: string } | null | undefined)
   leadRatingColumnAvailable = false
   console.warn(
     "[server-store] colonna leads.rating assente: applicare la migration 20260913_leads_rating.sql. Uso fallback senza Valutazione.",
+  )
+  return true
+}
+
+function disableLeadStatoArricchitoColumn(error: { message?: string } | null | undefined) {
+  if (!isMissingLeadStatoArricchitoColumn(error)) return false
+  leadStatoArricchitoColumnAvailable = false
+  console.warn(
+    "[server-store] colonna leads.stato_arricchito assente: applicare la migration 20260913d_leads_stato_arricchito.sql. Uso fallback senza Stato arricchito.",
   )
   return true
 }
@@ -150,6 +168,7 @@ function mapRow(row: Record<string, unknown>): Lead {
     "Account convertito": (row.account_convertito_id as string) ?? null,
     "Contatto convertito": (row.contatto_convertito as string) ?? null,
     "Modalità iscrizione annullata": (row.modalita_iscrizione_annullata as string) ?? null,
+    "Stato arricchito": (row.stato_arricchito as string) ?? null,
     "Ora iscrizione annullata": (row.ora_iscrizione_annullata as string) ?? null,
     Descrizione: (row.descrizione as string) ?? "",
     "Connesso a": (row.connesso_a as string) ?? null,
@@ -248,6 +267,7 @@ const ADVANCED_DB_COLUMN: Record<string, string> = {
   "Social Lead ID": "social_lead_id",
   Saluti: "saluti",
   Stato: "stato_email",
+  "Stato arricchito": "stato_arricchito",
   "Stato Lead": "stato_lead",
   Telefono: "telefono",
   "Tempo di conversione Lead": "tempo_conversione_lead",
@@ -267,9 +287,13 @@ const ADVANCED_DB_COLUMN: Record<string, string> = {
  * far fallire la lettura: meglio una lista intera che una pagina in errore.
  */
 function advancedDbColumn() {
-  if (canUseLeadRatingColumn()) return ADVANCED_DB_COLUMN
-  const { Valutazione: _rating, ...fallback } = ADVANCED_DB_COLUMN
+  const fallback = { ...ADVANCED_DB_COLUMN }
+  if (!canUseLeadRatingColumn()) delete fallback.Valutazione
+  if (!canUseLeadStatoArricchitoColumn()) delete fallback["Stato arricchito"]
+  if (canUseLeadRatingColumn() && canUseLeadStatoArricchitoColumn()) return ADVANCED_DB_COLUMN
+  const { Valutazione: _rating, "Stato arricchito": _statoArricchito } = ADVANCED_DB_COLUMN
   void _rating
+  void _statoArricchito
   return fallback
 }
 
@@ -310,6 +334,7 @@ function applyAdvancedFilters<
   for (const [fid, fv] of Object.entries(advanced.fields)) {
     const col = ADVANCED_DB_COLUMN[fid]
     if (col === "rating" && !canUseLeadRatingColumn()) continue
+    if (col === "stato_arricchito" && !canUseLeadStatoArricchitoColumn()) continue
     if (!col) continue
     if (fv.type === "text") {
       const c = fv.contains.trim()
@@ -366,6 +391,7 @@ export async function getAllLeads(filters?: {
   const { column, ascending } = resolveSort(filters?.sortBy, filters?.sortDir)
   const fields = filters?.fields ?? ["*"]
   const includeRating = canUseLeadRatingColumn()
+  const includeStatoArricchito = canUseLeadStatoArricchitoColumn()
   const includeInstallatoreSopralluogo =
     filters?.includeInstallatoreSopralluogo ??
     leadListNeedsInstallatoreSopralluogo(fields)
@@ -376,7 +402,7 @@ export async function getAllLeads(filters?: {
 
   let query = supabase
     .from("leads")
-    .select(leadListColumnsForFields(fields, filters?.sortBy, { includeRating }))
+    .select(leadListColumnsForFields(fields, filters?.sortBy, { includeRating, includeStatoArricchito }))
     .order(column, { ascending, nullsFirst: false })
 
   if (filters?.visibleOwnerIds) {
@@ -455,6 +481,7 @@ export async function getAllLeads(filters?: {
   const { data, error } = await query
   if (error) {
     if (includeRating && disableLeadRatingColumn(error)) return getAllLeads(filters)
+    if (includeStatoArricchito && disableLeadStatoArricchitoColumn(error)) return getAllLeads(filters)
     // NON restituire una lista vuota: la pagina mostrerebbe "nessun lead",
     // indistinguibile da "non ne hai". Successo il 22/08/2026 durante il
     // riavvio del database per l'upgrade del piano: la lista risultava vuota
@@ -683,12 +710,14 @@ export async function getLeadsByIds(ids: Iterable<string>): Promise<Lead[]> {
   if (idArray.length === 0) return []
   const supabase = await createClient()
   const includeRating = canUseLeadRatingColumn()
+  const includeStatoArricchito = canUseLeadStatoArricchitoColumn()
   const { data, error } = await supabase
     .from("leads")
-    .select(leadListColumnsForFields(["*"], null, { includeRating }))
+    .select(leadListColumnsForFields(["*"], null, { includeRating, includeStatoArricchito }))
     .in("id", idArray)
   if (error) {
     if (includeRating && disableLeadRatingColumn(error)) return getLeadsByIds(idArray)
+    if (includeStatoArricchito && disableLeadStatoArricchitoColumn(error)) return getLeadsByIds(idArray)
     console.error("[server-store] getLeadsByIds error:", error.message)
     throw new Error(`Lettura lead non riuscita: ${error.message}`)
   }
@@ -711,6 +740,7 @@ export async function insertLead(lead: Lead): Promise<Lead> {
     stato_lead: lead["Stato Lead"],
     stato_email: lead.Stato || null,
     rating: lead.Valutazione || null,
+    stato_arricchito: lead["Stato arricchito"] || null,
     valutazione: lead.Punteggio ?? 0,
     lead_proprietario_id: lead["Lead Proprietario"] || null,
     origine_lead: lead["Origine Lead"] || null,
@@ -731,6 +761,7 @@ export async function insertLead(lead: Lead): Promise<Lead> {
     creato_da: lead["Creato da"] || null,
   }
   if (!canUseLeadRatingColumn()) delete row.rating
+  if (!canUseLeadStatoArricchitoColumn()) delete row.stato_arricchito
   const { data, error } = await supabase
     .from("leads")
     .insert(row)
@@ -738,6 +769,7 @@ export async function insertLead(lead: Lead): Promise<Lead> {
     .single()
   if (error) {
     if (disableLeadRatingColumn(error)) return insertLead(lead)
+    if (disableLeadStatoArricchitoColumn(error)) return insertLead(lead)
     throw new Error(`insertLead: ${error.message}`)
   }
   const [insertedRow] = await attachInstallatoreSopralluogoNames(supabase, [data as Record<string, unknown>])
@@ -766,6 +798,7 @@ export async function patchLead(id: string, patch: Partial<Lead>): Promise<Lead 
   const patchRecord = patch as Record<string, unknown>
   for (const field of LEAD_RECORD_FIELDS) {
     if (field.column === "rating" && !canUseLeadRatingColumn()) continue
+    if (field.column === "stato_arricchito" && !canUseLeadStatoArricchitoColumn()) continue
     if (field.appField in patchRecord) row[field.column] = patchRecord[field.appField]
   }
 
@@ -795,6 +828,7 @@ export async function patchLead(id: string, patch: Partial<Lead>): Promise<Lead 
     .single()
   if (error) {
     if (disableLeadRatingColumn(error)) return patchLead(id, patch)
+    if (disableLeadStatoArricchitoColumn(error)) return patchLead(id, patch)
     return undefined
   }
   if (!data) return undefined

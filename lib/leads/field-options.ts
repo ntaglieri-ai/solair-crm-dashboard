@@ -18,6 +18,7 @@ export const LEAD_OPTION_COLUMNS = [
   "stato_email",
   "saluti",
   "modalita_iscrizione_annullata",
+  "stato_arricchito",
   "modello_pannello",
 ] as const
 
@@ -40,6 +41,11 @@ export const LEAD_MODALITA_ISCRIZIONE_ANNULLATA_OPTIONS = [
   "Modulo di consenso",
   "Zoho Campaigns",
 ] as const
+export const LEAD_STATO_ARRICCHITO_OPTIONS = [
+  "Disponibile",
+  "Enriched",
+  "Data not found",
+] as const
 
 export const LEAD_FIELD_OPTION_FALLBACKS: Record<LeadOptionColumn, ColumnValueOption[]> = {
   stato_lead: STATO_LEAD_ORDER.map((value) => option(value)),
@@ -52,6 +58,7 @@ export const LEAD_FIELD_OPTION_FALLBACKS: Record<LeadOptionColumn, ColumnValueOp
   modalita_iscrizione_annullata: LEAD_MODALITA_ISCRIZIONE_ANNULLATA_OPTIONS.map((value) =>
     option(value),
   ),
+  stato_arricchito: LEAD_STATO_ARRICCHITO_OPTIONS.map((value) => option(value)),
   modello_pannello: [],
 }
 

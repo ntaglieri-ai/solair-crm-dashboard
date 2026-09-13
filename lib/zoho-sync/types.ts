@@ -31,6 +31,7 @@ export type LeadColumn =
   | "paese"
   | "descrizione"
   | "rating"
+  | "stato_arricchito"
   | "valutazione"
   | "zoho_account_convertito_id"
   | "zoho_contatto_convertito_id"

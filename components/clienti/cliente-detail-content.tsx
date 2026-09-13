@@ -69,7 +69,11 @@ import { QuickCompitoDialog } from "@/components/compiti/quick-compito-dialog"
 import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { displayClienteOwner } from "@/lib/clienti/owner-display"
-import { CLIENTI_PICKLIST_FALLBACKS } from "@/lib/clienti/picklist-options"
+import {
+  CLIENTI_FIELD_OPTION_DEFINITIONS,
+  type ClienteOptionKind,
+} from "@/lib/clienti/picklist-options"
+import { useClienteFieldOptions } from "@/lib/clienti/use-cliente-field-options"
 import { CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
 import { option, withCurrentColumnOption, type ColumnValueOption } from "@/lib/crm-settings/column-values"
 import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
@@ -190,9 +194,10 @@ function useClienteColumnSelectOptions(
 
 function picklistOverride(
   options: { values: string[]; labels: Record<string, string> },
+  kind: ClienteOptionKind = "select",
 ): ClienteInlineSelectOverride {
   return {
-    type: "select",
+    type: kind,
     options: options.values,
     optionLabels: options.labels,
     allowEmptyOption: true,
@@ -203,6 +208,7 @@ function picklistOverride(
 
 function useClienteSelectOverrides(cliente: ClienteRecord) {
   const { data: statoCliente } = useStatoClienteQuery()
+  const clienteOptions = useClienteFieldOptions()
   const statoOptions = withCurrentColumnOption(
     (statoCliente?.length ? statoCliente.map((item) => option(item.valore)) : STATO_CLIENTE_VALUES.map((value) => option(value))),
     cliente.Stato,
@@ -212,25 +218,21 @@ function useClienteSelectOverrides(cliente: ClienteRecord) {
     SEDE_LABELS.map((value) => option(value)),
     cliente.Sede,
   )
-  const statoSopralluogo = useClienteColumnSelectOptions(
-    CLIENTI_PICKLIST_FALLBACKS["Stato sopralluogo"].column,
-    CLIENTI_PICKLIST_FALLBACKS["Stato sopralluogo"].options,
-    cliente["Stato sopralluogo"],
-  )
-  const tipoCtr = useClienteColumnSelectOptions(
-    CLIENTI_PICKLIST_FALLBACKS["TIPO CTR"].column,
-    CLIENTI_PICKLIST_FALLBACKS["TIPO CTR"].options,
-    cliente["TIPO CTR"],
-  )
-  const tipologiaProprietario = useClienteColumnSelectOptions(
-    CLIENTI_PICKLIST_FALLBACKS["TIPOLOGIA PROPRIETARIO"].column,
-    CLIENTI_PICKLIST_FALLBACKS["TIPOLOGIA PROPRIETARIO"].options,
-    cliente["TIPOLOGIA PROPRIETARIO"],
-  )
-  const richiestaSaldo = useClienteColumnSelectOptions(
-    CLIENTI_PICKLIST_FALLBACKS["Richiesta Saldo"].column,
-    CLIENTI_PICKLIST_FALLBACKS["Richiesta Saldo"].options,
-    cliente["Richiesta Saldo"],
+  const picklistOverrides = Object.fromEntries(
+    CLIENTI_FIELD_OPTION_DEFINITIONS.map((definition) => {
+      const current = (cliente as unknown as Record<string, unknown>)[definition.appField]
+      const options = clienteOptions.optionsFor(definition.column, current)
+      return [
+        definition.appField,
+        picklistOverride(
+          {
+            values: options.map((item) => item.value),
+            labels: Object.fromEntries(options.map((item) => [item.value, item.label])),
+          },
+          definition.kind,
+        ),
+      ]
+    }),
   )
 
   return useMemo<Record<string, ClienteInlineSelectOverride>>(
@@ -238,14 +240,11 @@ function useClienteSelectOverrides(cliente: ClienteRecord) {
       Stato: picklistOverride({
         values: statoOptions.map((item) => item.value),
         labels: Object.fromEntries(statoOptions.map((item) => [item.value, item.label])),
-      }),
+      }, "multiselect"),
       Sede: picklistOverride(sede),
-      "Stato sopralluogo": picklistOverride(statoSopralluogo),
-      "TIPO CTR": picklistOverride(tipoCtr),
-      "TIPOLOGIA PROPRIETARIO": picklistOverride(tipologiaProprietario),
-      "Richiesta Saldo": picklistOverride(richiestaSaldo),
+      ...picklistOverrides,
     }),
-    [richiestaSaldo, sede, statoOptions, statoSopralluogo, tipoCtr, tipologiaProprietario],
+    [picklistOverrides, sede, statoOptions],
   )
 }
 
@@ -446,18 +445,24 @@ function CopyField({
   )
 }
 
-function BoolChip({ label, on }: { label: string; on: boolean | undefined }) {
+function booleanLike(value: boolean | string | undefined) {
+  if (typeof value === "boolean") return value
+  return ["si", "sì", "true", "1"].includes(String(value ?? "").trim().toLowerCase())
+}
+
+function BoolChip({ label, on }: { label: string; on: boolean | string | undefined }) {
+  const active = booleanLike(on)
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium",
-        on ? "bg-success/10 text-success" : "bg-muted text-muted-foreground",
+        active ? "bg-success/10 text-success" : "bg-muted text-muted-foreground",
       )}
     >
       <span
         className={cn(
           "size-1.5 rounded-full",
-          on ? "bg-success" : "bg-muted-foreground/50",
+          active ? "bg-success" : "bg-muted-foreground/50",
         )}
       />
       {label}

@@ -48,7 +48,8 @@ import { SEDE_LABELS, type ClienteRecord } from "@/lib/mock-data"
 import { ClienteTagPicker } from "./cliente-tag-controls"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
-import { CLIENTI_PICKLIST_FALLBACKS } from "@/lib/clienti/picklist-options"
+import { CLIENTI_FIELD_OPTION_DEFINITIONS } from "@/lib/clienti/picklist-options"
+import { useClienteFieldOptions } from "@/lib/clienti/use-cliente-field-options"
 import { usePermissions } from "@/lib/permissions/provider"
 import { EditRecordDialog, buildClienteEditFields } from "@/components/shared/edit-record-dialog"
 import { telHref } from "@/components/shared/quick-contact-icons"
@@ -79,36 +80,25 @@ export function ClienteRowContextMenu({
 }) {
   const { owners, installers } = useClienteTags()
   const { data: statoOptions } = useStatoClienteQuery()
+  const clienteOptions = useClienteFieldOptions()
   const sedeOptions = useColumnValueOptions(
     "Clienti",
     "sede",
     SEDE_LABELS.map((value) => option(value)),
     { includeFallback: true },
   ).options
-  const statoSopralluogoOptions = useColumnValueOptions(
-    "Clienti",
-    CLIENTI_PICKLIST_FALLBACKS["Stato sopralluogo"].column,
-    CLIENTI_PICKLIST_FALLBACKS["Stato sopralluogo"].options,
-    { includeFallback: true },
-  ).options
-  const tipoCtrOptions = useColumnValueOptions(
-    "Clienti",
-    CLIENTI_PICKLIST_FALLBACKS["TIPO CTR"].column,
-    CLIENTI_PICKLIST_FALLBACKS["TIPO CTR"].options,
-    { includeFallback: true },
-  ).options
-  const tipologiaProprietarioOptions = useColumnValueOptions(
-    "Clienti",
-    CLIENTI_PICKLIST_FALLBACKS["TIPOLOGIA PROPRIETARIO"].column,
-    CLIENTI_PICKLIST_FALLBACKS["TIPOLOGIA PROPRIETARIO"].options,
-    { includeFallback: true },
-  ).options
-  const richiestaSaldoOptions = useColumnValueOptions(
-    "Clienti",
-    CLIENTI_PICKLIST_FALLBACKS["Richiesta Saldo"].column,
-    CLIENTI_PICKLIST_FALLBACKS["Richiesta Saldo"].options,
-    { includeFallback: true },
-  ).options
+  const picklists = Object.fromEntries(
+    CLIENTI_FIELD_OPTION_DEFINITIONS.map((definition) => [
+      definition.appField,
+      clienteOptions.optionsFor(
+        definition.column,
+        (cliente as unknown as Record<string, unknown>)[definition.appField],
+      ).map((option) => option.value),
+    ]),
+  )
+  const picklistTypes = Object.fromEntries(
+    CLIENTI_FIELD_OPTION_DEFINITIONS.map((definition) => [definition.appField, definition.kind]),
+  )
   const permissions = usePermissions()
   const router = useRouter()
   const [tagOpen, setTagOpen] = useState(false)
@@ -390,12 +380,8 @@ export function ClienteRowContextMenu({
           (statoOptions ?? []).map((s) => s.valore),
           {
             sedi: sedeOptions.map((s) => s.value),
-            picklists: {
-              "Stato sopralluogo": statoSopralluogoOptions.map((s) => s.value),
-              "TIPO CTR": tipoCtrOptions.map((s) => s.value),
-              "TIPOLOGIA PROPRIETARIO": tipologiaProprietarioOptions.map((s) => s.value),
-              "Richiesta Saldo": richiestaSaldoOptions.map((s) => s.value),
-            },
+            picklists,
+            picklistTypes,
           },
         )}
         onSaved={onRefresh}

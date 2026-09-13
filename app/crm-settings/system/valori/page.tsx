@@ -189,9 +189,41 @@ function CampoAccordion({
 
 const PALETTE = ["#3b82f6", "#2e8b72", "#f59e0b", "#dc2626", "#8b5cf6", "#94a3b8"]
 
-export default function ValoriPage() {
+function mergeCampiValori(saved: CampoValori[] | undefined, fallback: CampoValori[] | undefined) {
+  const byCampo = new Map<string, CampoValori>()
+  for (const campo of fallback ?? []) {
+    byCampo.set(campo.campo, campo)
+  }
+  for (const campo of saved ?? []) {
+    const base = byCampo.get(campo.campo)
+    if (!base) {
+      byCampo.set(campo.campo, campo)
+      continue
+    }
+    const seen = new Set(campo.valori.map((value) => value.etichetta))
+    byCampo.set(campo.campo, {
+      ...base,
+      ...campo,
+      valori: [
+        ...campo.valori,
+        ...base.valori.filter((value) => !seen.has(value.etichetta)),
+      ],
+    })
+  }
+  return [...byCampo.values()]
+}
+
+export function ValoriManager({
+  modulo: controlledModulo,
+  showHeader = true,
+  showTabs = true,
+}: {
+  modulo?: ModuloValori
+  showHeader?: boolean
+  showTabs?: boolean
+}) {
   const permissions = usePermissions()
-  const [modulo, setModulo] = useState<ModuloValori>("Lead")
+  const [localModulo, setLocalModulo] = useState<ModuloValori>("Lead")
   const [tutti, setTutti, store] = usePersistentSystemSetting<
     Record<ModuloValori, CampoValori[]>
   >(
@@ -203,16 +235,18 @@ export default function ValoriPage() {
   const [newValueColor, setNewValueColor] = useState(PALETTE[0])
   const [apiError, setApiError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const modulo = controlledModulo ?? localModulo
 
   useEffect(() => {
+    if (controlledModulo) return
     const requested = new URLSearchParams(window.location.search).get("module")
     const selected = MODULI_VALORI.find(
       (module) => module.toLowerCase() === requested?.toLowerCase(),
     )
-    if (selected) queueMicrotask(() => setModulo(selected))
-  }, [])
+    if (selected) queueMicrotask(() => setLocalModulo(selected))
+  }, [controlledModulo])
 
-  const campi = tutti[modulo] ?? valoriPerModulo[modulo] ?? []
+  const campi = mergeCampiValori(tutti[modulo], valoriPerModulo[modulo])
   const selectedField = campi.find((campo) => campo.campo === newValueField)
   const canManageDefaultValues = permissions.canAction(
     "crm_settings.system.default_values.manage",
@@ -221,7 +255,7 @@ export default function ValoriPage() {
   async function reorder(campoNome: string, ids: string[]) {
     setTutti((prev) => ({
       ...prev,
-      [modulo]: prev[modulo].map((c) =>
+      [modulo]: mergeCampiValori(prev[modulo], valoriPerModulo[modulo]).map((c) =>
         c.campo === campoNome
           ? {
               ...c,
@@ -274,7 +308,7 @@ export default function ValoriPage() {
     }
     setTutti((prev) => ({
       ...prev,
-      [modulo]: prev[modulo].map((c) =>
+      [modulo]: mergeCampiValori(prev[modulo], valoriPerModulo[modulo]).map((c) =>
         c.campo === newValueField
           ? {
               ...c,
@@ -319,7 +353,7 @@ export default function ValoriPage() {
     }
     setTutti((prev) => ({
       ...prev,
-      [modulo]: prev[modulo].map((c) =>
+      [modulo]: mergeCampiValori(prev[modulo], valoriPerModulo[modulo]).map((c) =>
         c.campo === campoNome
           ? { ...c, valori: c.valori.filter((v) => v.id !== id) }
           : c,
@@ -329,14 +363,16 @@ export default function ValoriPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <SectionHeader
-        title="Valori predefiniti"
-        description={
-          pending || store.saving
-            ? "Salvataggio valori CRM..."
-            : `Gestisci opzioni reali per le colonne configurabili di ${tableForCrmModule(modulo) ?? modulo}.`
-        }
-      />
+      {showHeader ? (
+        <SectionHeader
+          title="Valori predefiniti"
+          description={
+            pending || store.saving
+              ? "Salvataggio valori CRM..."
+              : `Gestisci opzioni reali per le colonne configurabili di ${tableForCrmModule(modulo) ?? modulo}.`
+          }
+        />
+      ) : null}
 
       {apiError || store.error ? (
         <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
@@ -344,23 +380,25 @@ export default function ValoriPage() {
         </p>
       ) : null}
 
-      <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
-        {MODULI_VALORI.map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => setModulo(m)}
-            className={cn(
-              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-              modulo === m
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {m}
-          </button>
-        ))}
-      </div>
+      {showTabs ? (
+        <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
+          {MODULI_VALORI.map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setLocalModulo(m)}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                modulo === m
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <div className="rounded-xl border border-border bg-card px-4">
         {campi.length > 0 ? (
@@ -445,4 +483,8 @@ export default function ValoriPage() {
       </Dialog>
     </div>
   )
+}
+
+export default function ValoriPage() {
+  return <ValoriManager />
 }

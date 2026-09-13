@@ -40,7 +40,8 @@ import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
 import { ClienteTagBadges, ClienteTagAssignPopover } from "./cliente-tag-controls"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
-import { CLIENTI_PICKLIST_FALLBACKS } from "@/lib/clienti/picklist-options"
+import { CLIENTI_FIELD_OPTION_DEFINITIONS } from "@/lib/clienti/picklist-options"
+import { useClienteFieldOptions } from "@/lib/clienti/use-cliente-field-options"
 import { option } from "@/lib/crm-settings/column-values"
 import { useColumnValueOptions } from "@/lib/crm-settings/use-column-values"
 
@@ -54,36 +55,25 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
   const nome = cliente["Nome Clienti"]
   const { installers } = useClienteTags()
   const { data: statoOptions } = useStatoClienteQuery()
+  const clienteOptions = useClienteFieldOptions()
   const sedeOptions = useColumnValueOptions(
     "Clienti",
     "sede",
     SEDE_LABELS.map((value) => option(value)),
     { includeFallback: true },
   ).options
-  const statoSopralluogoOptions = useColumnValueOptions(
-    "Clienti",
-    CLIENTI_PICKLIST_FALLBACKS["Stato sopralluogo"].column,
-    CLIENTI_PICKLIST_FALLBACKS["Stato sopralluogo"].options,
-    { includeFallback: true },
-  ).options
-  const tipoCtrOptions = useColumnValueOptions(
-    "Clienti",
-    CLIENTI_PICKLIST_FALLBACKS["TIPO CTR"].column,
-    CLIENTI_PICKLIST_FALLBACKS["TIPO CTR"].options,
-    { includeFallback: true },
-  ).options
-  const tipologiaProprietarioOptions = useColumnValueOptions(
-    "Clienti",
-    CLIENTI_PICKLIST_FALLBACKS["TIPOLOGIA PROPRIETARIO"].column,
-    CLIENTI_PICKLIST_FALLBACKS["TIPOLOGIA PROPRIETARIO"].options,
-    { includeFallback: true },
-  ).options
-  const richiestaSaldoOptions = useColumnValueOptions(
-    "Clienti",
-    CLIENTI_PICKLIST_FALLBACKS["Richiesta Saldo"].column,
-    CLIENTI_PICKLIST_FALLBACKS["Richiesta Saldo"].options,
-    { includeFallback: true },
-  ).options
+  const picklists = Object.fromEntries(
+    CLIENTI_FIELD_OPTION_DEFINITIONS.map((definition) => [
+      definition.appField,
+      clienteOptions.optionsFor(
+        definition.column,
+        (cliente as unknown as Record<string, unknown>)[definition.appField],
+      ).map((option) => option.value),
+    ]),
+  )
+  const picklistTypes = Object.fromEntries(
+    CLIENTI_FIELD_OPTION_DEFINITIONS.map((definition) => [definition.appField, definition.kind]),
+  )
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card px-4 py-3 shadow-[0_18px_45px_-32px_rgb(15_23_42/0.55)]">
@@ -270,12 +260,8 @@ export function ClienteDetailHeader({ cliente }: { cliente: ClienteRecord }) {
           (statoOptions ?? []).map((s) => s.valore),
           {
             sedi: sedeOptions.map((s) => s.value),
-            picklists: {
-              "Stato sopralluogo": statoSopralluogoOptions.map((s) => s.value),
-              "TIPO CTR": tipoCtrOptions.map((s) => s.value),
-              "TIPOLOGIA PROPRIETARIO": tipologiaProprietarioOptions.map((s) => s.value),
-              "Richiesta Saldo": richiestaSaldoOptions.map((s) => s.value),
-            },
+            picklists,
+            picklistTypes,
           },
         )}
       />

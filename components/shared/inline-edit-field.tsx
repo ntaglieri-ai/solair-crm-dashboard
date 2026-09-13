@@ -16,12 +16,13 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { initialEditValue, outgoingEditValue, type EditField } from "@/components/shared/edit-record-dialog"
+import { MultiFilterSelect } from "@/components/shared/multi-filter-select"
 import { usePermissions } from "@/lib/permissions/provider"
 import type { FieldModuleKey } from "@/lib/permissions/field-catalog"
 import { cn } from "@/lib/utils"
 
 type InlineEditType = NonNullable<EditField["type"]>
-type InlineEditValue = string | boolean
+type InlineEditValue = string | string[] | boolean
 
 export type InlineEditableValueProps = {
   module: FieldModuleKey
@@ -58,7 +59,22 @@ function displayText(
   if (value === null || value === undefined || value === "") return emptyLabel
   if (type === "boolean") return value === true ? "Sì" : "No"
   if (type === "select" && typeof value === "string") return optionLabels?.[value] ?? value
+  if (type === "multiselect") return formatMultiValue(value, optionLabels) || emptyLabel
   return String(value)
+}
+
+function splitMultiValue(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean)
+  return String(value ?? "")
+    .split(/[;\n,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function formatMultiValue(value: unknown, optionLabels?: Record<string, string>) {
+  return splitMultiValue(value)
+    .map((item) => optionLabels?.[item] ?? item)
+    .join(", ")
 }
 
 function fieldFromProps(props: InlineEditableValueProps): EditField {
@@ -79,8 +95,14 @@ function normalizedOptions(
   optionLabels: Record<string, string> | undefined,
 ) {
   const values = [...(options ?? [])]
-  const currentText = typeof current === "string" ? current : ""
-  if (currentText && !values.includes(currentText)) values.unshift(currentText)
+  const currentValues = Array.isArray(current)
+    ? current
+    : typeof current === "string"
+      ? splitMultiValue(current)
+      : []
+  for (const currentText of [...currentValues].reverse()) {
+    if (currentText && !values.includes(currentText)) values.unshift(currentText)
+  }
   return values.map((value) => ({ value, label: optionLabels?.[value] ?? value }))
 }
 
@@ -205,6 +227,15 @@ function InlineEditableValueInner(props: InlineEditableValueProps) {
                 ))}
               </SelectContent>
             </Select>
+          ) : type === "multiselect" ? (
+            <MultiFilterSelect
+              ariaLabel={`Modifica ${props.label}`}
+              allLabel={props.emptyLabel ?? "Nessuno"}
+              value={Array.isArray(draft) ? draft : splitMultiValue(draft)}
+              onValueChange={setDraft}
+              options={options}
+              className="h-10 bg-card"
+            />
           ) : (
             <Input
               autoFocus

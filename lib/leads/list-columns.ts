@@ -8,6 +8,7 @@ const LEAD_APP_FIELD_TO_COLUMN = new Map<string, string>(
 
 type LeadListColumnOptions = {
   includeRating?: boolean
+  includeStatoArricchito?: boolean
 }
 
 const TECHNICAL_COLUMNS = [
@@ -46,9 +47,13 @@ export const LEAD_RELATION_FIELDS = new Set<string>([
 
 export function leadFieldColumns(field: string, options: LeadListColumnOptions = {}): string[] {
   const includeRating = options.includeRating ?? true
+  const includeStatoArricchito = options.includeStatoArricchito ?? true
   const columns = new Set<string>()
   const directColumn = LEAD_APP_FIELD_TO_COLUMN.get(field)
   if (directColumn && (includeRating || directColumn !== "rating")) columns.add(directColumn)
+  if (directColumn === "stato_arricchito" && !includeStatoArricchito) {
+    columns.delete(directColumn)
+  }
   for (const column of FIELD_EXTRA_COLUMNS[field] ?? []) columns.add(column)
   for (const column of FIELD_DEPENDENCY_COLUMNS[field] ?? []) columns.add(column)
   return [...columns]
@@ -67,13 +72,15 @@ export function leadListColumnsForFields(
   options: LeadListColumnOptions = {},
 ) {
   const includeRating = options.includeRating ?? true
+  const includeStatoArricchito = options.includeStatoArricchito ?? true
   if (fields.includes("*")) {
     return [
       ...new Set([
         ...TECHNICAL_COLUMNS,
         ...LEAD_RECORD_FIELDS
           .map((field) => field.column)
-          .filter((column) => includeRating || column !== "rating"),
+          .filter((column) => includeRating || column !== "rating")
+          .filter((column) => includeStatoArricchito || column !== "stato_arricchito"),
         "zoho_installatore_sopralluogo_id",
         "zoho_installatore_sopralluogo_nome",
         "ora_ultima_attivita",

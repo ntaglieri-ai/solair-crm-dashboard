@@ -1,0 +1,39 @@
+-- Riallinea i tipi locali Clienti ai campi picklist dichiarati dal layout Zoho.
+-- Non modifica layout, formule o raggruppamenti: cambia solo il tipo fisico
+-- delle colonne che erano state importate come numeric/boolean ma in Zoho sono
+-- liste testuali.
+
+begin;
+
+drop view if exists public.clienti_report_list;
+
+alter table public.clienti
+  alter column iva type text using nullif(iva::text, ''),
+  alter column impianto_in_edilizia_libera type text using case
+    when impianto_in_edilizia_libera is true then 'Si'
+    when impianto_in_edilizia_libera is false then 'No'
+    else null
+  end,
+  alter column area_vincolata type text using case
+    when area_vincolata is true then 'Si'
+    when area_vincolata is false then 'No'
+    else null
+  end,
+  alter column messaggio_fattura type text using null::text;
+
+create view public.clienti_report_list
+with (security_invoker = true) as
+select
+  c.*,
+  coalesce(c.ora_modifica, c.updated_at, c.created_at) as modifica_visualizzata,
+  coalesce(c.ora_creazione, c.created_at) as creazione_visualizzata,
+  lower(coalesce(nullif(btrim(u.nome), ''), nullif(btrim(c.clienti_proprietario), ''),
+    case when c.clienti_proprietario_id is not null then 'Utente non disponibile' else 'Non assegnato' end)) as proprietario_ordinamento
+from public.clienti c
+left join public.utenti u on u.id = c.clienti_proprietario_id;
+
+revoke all on public.clienti_report_list from public, anon, authenticated;
+grant select on public.clienti_report_list to authenticated, service_role;
+notify pgrst, 'reload schema';
+
+commit;

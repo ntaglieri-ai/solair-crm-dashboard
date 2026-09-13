@@ -56,6 +56,7 @@ export function gruppiCampiLead(opzioni: {
   statoEmail?: readonly string[]
   saluti?: readonly string[]
   rating?: readonly string[]
+  statoArricchito?: readonly string[]
   campagne?: readonly string[]
   modalitaIscrizioneAnnullata?: readonly string[]
   modelliPannello?: readonly string[]
@@ -145,6 +146,7 @@ export function gruppiCampiLead(opzioni: {
         ),
         campo("Modello pannello", "Modello pannello", "elenco", opzioni.modelliPannello ?? []),
         campo("Stato", "Stato", "elenco", opzioni.statoEmail ?? []),
+        campo("Stato arricchito", "Stato arricchito", "elenco", opzioni.statoArricchito ?? []),
         campo("Tempo di conversione Lead", "Tempo di conversione", "numero"),
       ],
     },

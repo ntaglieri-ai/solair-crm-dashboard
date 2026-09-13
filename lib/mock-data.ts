@@ -572,6 +572,7 @@ export interface Lead {
   Punteggio?: number
   "Tempo di conversione Lead": string
   "Modalità iscrizione annullata": string | null
+  "Stato arricchito"?: string | null
   "Ora iscrizione annullata": string | null
   "Account convertito": string | null
   "Contatto convertito": string | null
@@ -661,6 +662,7 @@ export const LEAD_COLUMNS: LeadColumn[] = [
   { id: "Descrizione", label: "Descrizione", defaultVisible: false },
   { id: "Tempo di conversione Lead", label: "Tempo di conversione Lead", defaultVisible: false },
   { id: "Modalità iscrizione annullata", label: "Modalità iscrizione annullata", defaultVisible: false },
+  { id: "Stato arricchito", label: "Stato arricchito", defaultVisible: false },
   { id: "Ora iscrizione annullata", label: "Ora iscrizione annullata", defaultVisible: false },
   { id: "Account convertito", label: "Account convertito", defaultVisible: false },
   { id: "Contatto convertito", label: "Contatto convertito", defaultVisible: false },
@@ -1768,9 +1770,9 @@ export interface ClienteRecord {
    */
   "EPS previsto"?: boolean
   "Adesione CER prevista"?: boolean
-  "Impianto in edilizia libera"?: boolean
-  "Area vincolata"?: boolean
-  ">20kW Pot. Nom."?: boolean
+  "Impianto in edilizia libera"?: string
+  "Area vincolata"?: string
+  ">20kW Pot. Nom."?: string
   "Impianto Attivo"?: boolean
   ST300?: string
   "Scaldacqua PDC"?: string
@@ -1804,7 +1806,7 @@ export interface ClienteRecord {
   FatturaPDC?: string
   IncentivoAtteso?: number
   "Iva Reverse charge"?: boolean
-  IVA?: number
+  IVA?: string
   "Importo da Listino"?: number
   "Importo TICA"?: number
   "MOD. PAGAMENTO CT3.0"?: string
@@ -1883,7 +1885,7 @@ export interface ClienteRecord {
   "Messaggio ordine merce"?: boolean
   "Messaggio in esecuzione"?: boolean
   "Telefonata post installazione"?: boolean
-  "Messaggio Fattura"?: boolean
+  "Messaggio Fattura"?: string
   "Corrispettivo pagato"?: boolean
   "Data Click"?: string
   Assistenza?: string

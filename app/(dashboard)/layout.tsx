@@ -3,7 +3,9 @@ import { Sidebar } from "@/components/dashboard/sidebar"
 import { CrmSettingsSidebar } from "@/components/dashboard/crm-settings-sidebar"
 import { CrmSettingsLauncherProvider } from "@/lib/crm-settings-launcher"
 import { SolairAiLauncherProvider } from "@/lib/solair-ai-launcher"
+import { SolairAiChatLauncherProvider } from "@/lib/solair-ai-chat-launcher"
 import { SolairAiDrawer } from "@/components/dashboard/solair-ai-drawer"
+import { SolairAiChatPopup } from "@/components/dashboard/solair-ai-chat-popup"
 import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permissions"
 import { PermissionProvider } from "@/lib/permissions/provider"
 import { PageTransition } from "@/components/motion/page-transition"
@@ -18,19 +20,22 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     <PermissionProvider snapshot={permissions}>
       <CrmSettingsLauncherProvider>
         <SolairAiLauncherProvider>
-          <div className="min-h-screen bg-background">
-            <SessionTimeoutGuard />
-            <CrmRouteWarmer />
-            <Sidebar />
-            <NavigationFeedback />
-            <div className="flex min-h-screen min-w-0 flex-col pt-20 lg:pl-[248px] lg:pt-0">
-              <main className="min-w-0 flex-1 overflow-x-clip px-4 py-5 sm:px-5 sm:py-6 lg:px-8 lg:py-7">
-                <PageTransition>{children}</PageTransition>
-              </main>
+          <SolairAiChatLauncherProvider>
+            <div className="min-h-screen bg-background">
+              <SessionTimeoutGuard />
+              <CrmRouteWarmer />
+              <Sidebar />
+              <NavigationFeedback />
+              <div className="flex min-h-screen min-w-0 flex-col pt-20 lg:pl-[248px] lg:pt-0">
+                <main className="min-w-0 flex-1 overflow-x-clip px-4 py-5 sm:px-5 sm:py-6 lg:px-8 lg:py-7">
+                  <PageTransition>{children}</PageTransition>
+                </main>
+              </div>
             </div>
-          </div>
-          <CrmSettingsSidebar />
-          <SolairAiDrawer />
+            <CrmSettingsSidebar />
+            <SolairAiDrawer />
+            <SolairAiChatPopup />
+          </SolairAiChatLauncherProvider>
         </SolairAiLauncherProvider>
       </CrmSettingsLauncherProvider>
     </PermissionProvider>

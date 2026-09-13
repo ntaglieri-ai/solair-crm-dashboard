@@ -6,6 +6,7 @@ import { X, ChevronRight, Sparkles } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { useSolairAiLauncher } from "@/lib/solair-ai-launcher"
+import { useSolairAiChatLauncher } from "@/lib/solair-ai-chat-launcher"
 import { useCrmSettingsNavigation } from "@/components/dashboard/crm-settings-navigation"
 import { SOLAIR_AI_APPS } from "@/app/(dashboard)/solair-ai/apps"
 
@@ -69,6 +70,7 @@ function useIsMobile() {
 
 export function SolairAiDrawer() {
   const { open, closeSolairAi } = useSolairAiLauncher()
+  const { openChat } = useSolairAiChatLauncher()
   const { navigate, markNavigating } = useCrmSettingsNavigation()
   const isMobile = useIsMobile()
   const panelRef = useRef<HTMLDivElement>(null)
@@ -112,6 +114,15 @@ export function SolairAiDrawer() {
     markNavigating(href)
     closeSolairAi()
     navigate(href)
+  }
+
+  function handleAppClick(app: (typeof SOLAIR_AI_APPS)[number]) {
+    if (app.kind === "popup") {
+      closeSolairAi()
+      openChat()
+      return
+    }
+    handleNavigate(`/solair-ai/${app.slug}`)
   }
 
   const panelInitial = isMobile ? { y: "100%" } : { x: "100%" }
@@ -177,7 +188,7 @@ export function SolairAiDrawer() {
                   <AppCard
                     key={app.slug}
                     app={app}
-                    onClick={() => handleNavigate(`/solair-ai/${app.slug}`)}
+                    onClick={() => handleAppClick(app)}
                   />
                 ))}
               </div>

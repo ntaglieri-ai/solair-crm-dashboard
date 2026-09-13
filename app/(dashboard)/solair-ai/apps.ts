@@ -18,6 +18,9 @@ export type SolairAiAppDef = {
   tone: string
   /** Ombra del badge icona. */
   glow: string
+  /** "popup": si apre come finestra flottante senza cambiare pagina.
+   *  "page": naviga sulla sua route in app/(dashboard)/solair-ai/<slug>/. */
+  kind: "popup" | "page"
   /** Chiave permessi da requirePage/canAction, se diversa da "solair_ai". */
   pageKey?: string
 }
@@ -31,5 +34,6 @@ export const SOLAIR_AI_APPS: SolairAiAppDef[] = [
     meta: "Assistente AI",
     tone: "from-[#6f42c1] to-[#9f7aea]",
     glow: "shadow-[0_8px_18px_rgb(111_66_193/22%)]",
+    kind: "popup",
   },
 ]

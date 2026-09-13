@@ -267,10 +267,13 @@ export function SolairAiClient({
   canRun,
   canReview,
   cartelleConfigurate,
+  compact = false,
 }: {
   canRun: boolean
   canReview: boolean
   cartelleConfigurate: number
+  /** true dentro il popup: la' l'header (icona+titolo) lo mette gia' il popup. */
+  compact?: boolean
 }) {
   const [messaggi, setMessaggi] = useState<MessaggioChat[]>([
     { id: nuovoId(), ruolo: "bot", testo: BENVENUTO },
@@ -394,19 +397,21 @@ export function SolairAiClient({
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-xl bg-[#6f42c1]/10 text-[#6f42c1]">
-            <Sparkles className="size-5" />
-          </span>
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">SolairAI</h1>
-            <p className="text-sm text-muted-foreground">
-              Conosce le fonti Nextcloud autorizzate e propone modifiche CRM solo su conferma.
-            </p>
+      {!compact ? (
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-[#6f42c1]/10 text-[#6f42c1]">
+              <Sparkles className="size-5" />
+            </span>
+            <div>
+              <h1 className="text-xl font-semibold text-foreground">SolairAI</h1>
+              <p className="text-sm text-muted-foreground">
+                Conosce le fonti Nextcloud autorizzate e propone modifiche CRM solo su conferma.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
       {cartelleConfigurate === 0 ? (
         <div className="flex items-start gap-2 rounded-xl border border-amber-300/60 bg-amber-50 p-4 text-sm text-amber-800">

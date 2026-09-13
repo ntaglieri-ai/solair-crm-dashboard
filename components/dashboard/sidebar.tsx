@@ -21,6 +21,7 @@ import {
   type NavItem,
 } from "@/lib/navigation"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
+import { useSolairAiLauncher } from "@/lib/solair-ai-launcher"
 import { pageKeyFromPath } from "@/lib/permissions/constants"
 import { usePermissions } from "@/lib/permissions/provider"
 import { NAV_ICONS } from "./icons"
@@ -127,6 +128,32 @@ function NavLauncherButton({ item, onOpen }: { item: NavItem; onOpen?: () => voi
   )
 }
 
+function SolairAiNavButton({ item, onOpen }: { item: NavItem; onOpen?: () => void }) {
+  const Icon = NAV_ICONS[item.icon]
+  const { open, openSolairAi } = useSolairAiLauncher()
+  return (
+    <motion.div whileHover={{ x: 3 }} transition={{ duration: 0.18 }}>
+      <button
+        type="button"
+        onClick={() => {
+          onOpen?.()
+          openSolairAi()
+        }}
+        aria-current={open ? "true" : undefined}
+        className={cn(
+          "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[15px] font-semibold transition-colors",
+          open
+            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+            : "text-sidebar-foreground hover:bg-muted hover:text-foreground",
+        )}
+      >
+        <Icon className="size-[18px] shrink-0" />
+        <span className="flex-1 truncate">{item.label}</span>
+      </button>
+    </motion.div>
+  )
+}
+
 function ProfileMenu({ compact = false }: { compact?: boolean }) {
   const router = useRouter()
   const permissions = usePermissions()
@@ -211,9 +238,13 @@ function NavSection({
       <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         {title}
       </p>
-      {items.map((item) => (
-        <NavLink key={item.label} item={item} onNavigate={onNavigate} />
-      ))}
+      {items.map((item) =>
+        item.href === "/solair-ai" ? (
+          <SolairAiNavButton key={item.label} item={item} onOpen={onNavigate} />
+        ) : (
+          <NavLink key={item.label} item={item} onNavigate={onNavigate} />
+        ),
+      )}
     </div>
   )
 }

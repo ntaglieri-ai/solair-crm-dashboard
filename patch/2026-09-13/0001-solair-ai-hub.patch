@@ -1,0 +1,132 @@
+From 903131756afd9673017d7adaf7fca33057cd20b8 Mon Sep 17 00:00:00 2001
+From: Nando Taglieri <n.taglieri@gmail.com>
+Date: Sun, 13 Sep 2026 17:45:42 +0000
+Subject: [PATCH] solair-ai: hub con catalogo appAI, assistente spostato in
+ sotto-rotta
+
+---
+ app/(dashboard)/solair-ai/apps.ts             | 22 ++++++++++
+ app/(dashboard)/solair-ai/assistente/page.tsx | 20 +++++++++
+ .../{ => assistente}/solair-ai-client.tsx     |  0
+ app/(dashboard)/solair-ai/page.tsx            | 42 +++++++++++++------
+ 4 files changed, 72 insertions(+), 12 deletions(-)
+ create mode 100644 app/(dashboard)/solair-ai/apps.ts
+ create mode 100644 app/(dashboard)/solair-ai/assistente/page.tsx
+ rename app/(dashboard)/solair-ai/{ => assistente}/solair-ai-client.tsx (100%)
+
+diff --git a/app/(dashboard)/solair-ai/apps.ts b/app/(dashboard)/solair-ai/apps.ts
+new file mode 100644
+index 0000000..d610ce6
+--- /dev/null
++++ b/app/(dashboard)/solair-ai/apps.ts
+@@ -0,0 +1,22 @@
++/**
++ * Catalogo delle app AI dentro SolairAI.
++ *
++ * Aggiungere una app nuova = aggiungere una voce qui + la sua route in
++ * app/(dashboard)/solair-ai/<slug>/. La hub page si aggiorna da sola.
++ */
++export type SolairAiAppDef = {
++  slug: string
++  nome: string
++  descrizione: string
++  /** Chiave permessi da requirePage/canAction, se diversa da "solair_ai". */
++  pageKey?: string
++}
++
++export const SOLAIR_AI_APPS: SolairAiAppDef[] = [
++  {
++    slug: "assistente",
++    nome: "Assistente Documenti",
++    descrizione:
++      "Legge i documenti su Nextcloud, li abbina a Lead/Cliente/Installatore e propone i campi da compilare o aggiornare.",
++  },
++]
+diff --git a/app/(dashboard)/solair-ai/assistente/page.tsx b/app/(dashboard)/solair-ai/assistente/page.tsx
+new file mode 100644
+index 0000000..74327ad
+--- /dev/null
++++ b/app/(dashboard)/solair-ai/assistente/page.tsx
+@@ -0,0 +1,20 @@
++import { requirePage } from "@/lib/permissions/server"
++import { leggiImpostazioniAI } from "@/lib/solair-ai/settings"
++import { SolairAiClient } from "../assistente/solair-ai-client"
++
++export const dynamic = "force-dynamic"
++
++export default async function SolairAiPage() {
++  const permissions = await requirePage("solair_ai")
++  const impostazioni = await leggiImpostazioniAI()
++
++  return (
++    <SolairAiClient
++      canRun={permissions.canAction("solair_ai.run")}
++      canReview={permissions.canAction("solair_ai.revisioni.view")}
++      // Serve solo a dire in chiaro che manca la configurazione, invece di
++      // farlo scoprire al primo messaggio.
++      cartelleConfigurate={impostazioni.filter((riga) => riga.nextcloudPath !== "").length}
++    />
++  )
++}
+diff --git a/app/(dashboard)/solair-ai/solair-ai-client.tsx b/app/(dashboard)/solair-ai/assistente/solair-ai-client.tsx
+similarity index 100%
+rename from app/(dashboard)/solair-ai/solair-ai-client.tsx
+rename to app/(dashboard)/solair-ai/assistente/solair-ai-client.tsx
+diff --git a/app/(dashboard)/solair-ai/page.tsx b/app/(dashboard)/solair-ai/page.tsx
+index ce0b6ec..9ef134a 100644
+--- a/app/(dashboard)/solair-ai/page.tsx
++++ b/app/(dashboard)/solair-ai/page.tsx
+@@ -1,20 +1,38 @@
++import Link from "next/link"
++import { Sparkles } from "lucide-react"
++
+ import { requirePage } from "@/lib/permissions/server"
+-import { leggiImpostazioniAI } from "@/lib/solair-ai/settings"
+-import { SolairAiClient } from "./solair-ai-client"
++import { SOLAIR_AI_APPS } from "./apps"
+ 
+ export const dynamic = "force-dynamic"
+ 
+-export default async function SolairAiPage() {
+-  const permissions = await requirePage("solair_ai")
+-  const impostazioni = await leggiImpostazioniAI()
++export default async function SolairAiHubPage() {
++  await requirePage("solair_ai")
+ 
+   return (
+-    <SolairAiClient
+-      canRun={permissions.canAction("solair_ai.run")}
+-      canReview={permissions.canAction("solair_ai.revisioni.view")}
+-      // Serve solo a dire in chiaro che manca la configurazione, invece di
+-      // farlo scoprire al primo messaggio.
+-      cartelleConfigurate={impostazioni.filter((riga) => riga.nextcloudPath !== "").length}
+-    />
++    <div className="space-y-6 p-6">
++      <div>
++        <h1 className="text-2xl font-bold text-foreground">SolairAI</h1>
++        <p className="text-sm text-muted-foreground">
++          Le app basate su AI attive nel CRM.
++        </p>
++      </div>
++
++      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
++        {SOLAIR_AI_APPS.map((app) => (
++          <Link
++            key={app.slug}
++            href={`/solair-ai/${app.slug}`}
++            className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5 transition-colors hover:border-teal hover:bg-muted/40"
++          >
++            <span className="flex size-9 items-center justify-center rounded-lg bg-navy/10 text-navy">
++              <Sparkles className="size-5" />
++            </span>
++            <span className="font-semibold text-foreground">{app.nome}</span>
++            <span className="text-sm text-muted-foreground">{app.descrizione}</span>
++          </Link>
++        ))}
++      </div>
++    </div>
+   )
+ }
+-- 
+2.43.0
+

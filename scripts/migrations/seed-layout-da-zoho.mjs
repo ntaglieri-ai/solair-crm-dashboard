@@ -79,7 +79,11 @@ const PAGINE_PER_MODULO = {
       label: "Descrizione",
       sezioni: ["Informazioni sulla descrizione"],
     },
-    { key: "sopralluogo", label: "Sopralluogo", sezioni: ["Sopralluogo precontrattuale"] },
+    {
+      key: "sopralluogo",
+      label: "Sopralluogo precontrattuale",
+      sezioni: ["Sopralluogo precontrattuale"],
+    },
     { key: "note", label: "Note", componente: "note", sezioni: [] },
     {
       key: "documenti-obbligatori",

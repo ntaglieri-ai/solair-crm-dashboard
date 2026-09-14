@@ -76,7 +76,7 @@ export function NavigationFeedback() {
     <div
       role="status"
       aria-label="Caricamento pagina"
-      className="pointer-events-none fixed inset-x-0 top-0 z-[100] h-1 overflow-hidden bg-primary/10 lg:left-[248px]"
+      className="pointer-events-none fixed inset-x-0 top-0 z-[100] h-1 overflow-hidden bg-primary/10 transition-[left] duration-200 lg:left-[var(--app-sidebar-width)]"
     >
       <div className="h-full w-2/5 animate-[navigation-progress_900ms_ease-in-out_infinite] bg-primary" />
     </div>

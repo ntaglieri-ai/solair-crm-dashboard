@@ -4,6 +4,7 @@ import { CrmSettingsSidebar } from "@/components/dashboard/crm-settings-sidebar"
 import { CrmSettingsLauncherProvider } from "@/lib/crm-settings-launcher"
 import { SolairAiLauncherProvider } from "@/lib/solair-ai-launcher"
 import { SolairAiChatLauncherProvider } from "@/lib/solair-ai-chat-launcher"
+import { SidebarCollapseProvider } from "@/lib/sidebar-collapse"
 import { SolairAiDrawer } from "@/components/dashboard/solair-ai-drawer"
 import { SolairAiChatPopup } from "@/components/dashboard/solair-ai-chat-popup"
 import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permissions"
@@ -18,6 +19,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
 
   return (
     <PermissionProvider snapshot={permissions}>
+      <SidebarCollapseProvider>
       <CrmSettingsLauncherProvider>
         <SolairAiLauncherProvider>
           <SolairAiChatLauncherProvider>
@@ -26,7 +28,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
               <CrmRouteWarmer />
               <Sidebar />
               <NavigationFeedback />
-              <div className="flex min-h-screen min-w-0 flex-col pt-20 lg:pl-[248px] lg:pt-0">
+              <div className="flex min-h-screen min-w-0 flex-col pt-20 transition-[padding-left] duration-200 lg:pl-[var(--app-sidebar-width)] lg:pt-0">
                 <main className="min-w-0 flex-1 overflow-x-clip px-4 py-5 sm:px-5 sm:py-6 lg:px-8 lg:py-7">
                   <PageTransition>{children}</PageTransition>
                 </main>
@@ -38,6 +40,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
           </SolairAiChatLauncherProvider>
         </SolairAiLauncherProvider>
       </CrmSettingsLauncherProvider>
+      </SidebarCollapseProvider>
     </PermissionProvider>
   )
 }

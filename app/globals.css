@@ -60,6 +60,10 @@
 
 :root {
   color-scheme: light;
+  /* Default SSR-safe: coincide con la sidebar espansa. Il provider in
+     lib/sidebar-collapse.tsx lo aggiorna via JS dopo l'idratazione se
+     l'utente ha scelto la versione compressa. */
+  --app-sidebar-width: 248px;
   --background: #f4f7fb;
   --foreground: #1f2937;
   --card: #ffffff;

@@ -197,7 +197,7 @@ export function CrmSettingsSidebar() {
             aria-label="Impostazioni CRM"
             className={cn(
               "absolute flex min-w-0 flex-col overflow-hidden border-t-2 border-t-[#2E8B72] bg-[#0B1620] shadow-[-24px_0_80px_rgba(0,0,0,0.55)] inset-x-0 bottom-0 h-[92vh] rounded-t-3xl md:inset-y-0 md:right-0 md:left-auto md:h-full md:rounded-none",
-              "md:w-[min(720px,calc(100vw-248px))]",
+              "md:w-[min(720px,calc(100vw-var(--app-sidebar-width)))]",
             )}
             initial={panelInitial}
             animate={panelAnimate}

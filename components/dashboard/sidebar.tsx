@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
-import { User, Settings, LogOut, ChevronsUpDown, Menu } from "lucide-react"
+import { User, Settings, LogOut, ChevronsUpDown, ChevronLeft, Menu } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
@@ -22,6 +22,7 @@ import {
 } from "@/lib/navigation"
 import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
 import { useSolairAiLauncher } from "@/lib/solair-ai-launcher"
+import { useSidebarCollapse } from "@/lib/sidebar-collapse"
 import { pageKeyFromPath } from "@/lib/permissions/constants"
 import { usePermissions } from "@/lib/permissions/provider"
 import { NAV_ICONS } from "./icons"
@@ -77,34 +78,52 @@ function isActive(href: string, pathname: string) {
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
-function NavLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
+function NavLink({
+  item,
+  onNavigate,
+  collapsed = false,
+}: {
+  item: NavItem
+  onNavigate?: () => void
+  collapsed?: boolean
+}) {
   const Icon = NAV_ICONS[item.icon]
   const pathname = usePathname()
   const router = useRouter()
   const active = isActive(item.href, pathname)
   return (
-    <motion.div whileHover={{ x: 3 }} transition={{ duration: 0.18 }}>
+    <motion.div whileHover={{ x: collapsed ? 0 : 3 }} transition={{ duration: 0.18 }}>
     <Link
       href={item.href}
       onMouseEnter={() => router.prefetch(item.href)}
       onFocus={() => router.prefetch(item.href)}
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
+      title={collapsed ? item.label : undefined}
       className={cn(
         "relative flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-[15px] font-semibold transition-colors",
+        collapsed && "justify-center px-0",
         active
           ? "bg-sidebar-accent text-sidebar-accent-foreground"
           : "text-sidebar-foreground hover:bg-muted hover:text-foreground",
       )}
     >
       <Icon className="size-[18px] shrink-0" />
-      <span className="flex-1 truncate">{item.label}</span>
+      {!collapsed ? <span className="flex-1 truncate">{item.label}</span> : null}
     </Link>
     </motion.div>
   )
 }
 
-function NavLauncherButton({ item, onOpen }: { item: NavItem; onOpen?: () => void }) {
+function NavLauncherButton({
+  item,
+  onOpen,
+  collapsed = false,
+}: {
+  item: NavItem
+  onOpen?: () => void
+  collapsed?: boolean
+}) {
   const Icon = NAV_ICONS[item.icon]
   const { openCrmSettings, open } = useCrmSettingsLauncher()
   return (
@@ -115,24 +134,34 @@ function NavLauncherButton({ item, onOpen }: { item: NavItem; onOpen?: () => voi
         openCrmSettings()
       }}
       aria-current={open ? "true" : undefined}
+      title={collapsed ? item.label : undefined}
       className={cn(
         "flex w-full items-center gap-3 rounded-lg border-l-2 px-3 py-2 text-sm font-medium transition-colors",
+        collapsed && "justify-center px-0",
         open
           ? "border-teal bg-navy/5 text-foreground"
           : "border-transparent text-sidebar-foreground hover:bg-muted hover:text-foreground",
       )}
     >
       <Icon className="size-[18px] shrink-0" />
-      <span className="flex-1 truncate text-left">{item.label}</span>
+      {!collapsed ? <span className="flex-1 truncate text-left">{item.label}</span> : null}
     </button>
   )
 }
 
-function SolairAiNavButton({ item, onOpen }: { item: NavItem; onOpen?: () => void }) {
+function SolairAiNavButton({
+  item,
+  onOpen,
+  collapsed = false,
+}: {
+  item: NavItem
+  onOpen?: () => void
+  collapsed?: boolean
+}) {
   const Icon = NAV_ICONS[item.icon]
   const { open, openSolairAi } = useSolairAiLauncher()
   return (
-    <motion.div whileHover={{ x: 3 }} transition={{ duration: 0.18 }}>
+    <motion.div whileHover={{ x: collapsed ? 0 : 3 }} transition={{ duration: 0.18 }}>
       <button
         type="button"
         onClick={() => {
@@ -140,21 +169,23 @@ function SolairAiNavButton({ item, onOpen }: { item: NavItem; onOpen?: () => voi
           openSolairAi()
         }}
         aria-current={open ? "true" : undefined}
+        title={collapsed ? item.label : undefined}
         className={cn(
           "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[15px] font-semibold transition-colors",
+          collapsed && "justify-center px-0",
           open
             ? "bg-sidebar-accent text-sidebar-accent-foreground"
             : "text-sidebar-foreground hover:bg-muted hover:text-foreground",
         )}
       >
         <Icon className="size-[18px] shrink-0" />
-        <span className="flex-1 truncate">{item.label}</span>
+        {!collapsed ? <span className="flex-1 truncate">{item.label}</span> : null}
       </button>
     </motion.div>
   )
 }
 
-function ProfileMenu({ compact = false }: { compact?: boolean }) {
+function ProfileMenu({ compact = false, collapsed = false }: { compact?: boolean; collapsed?: boolean }) {
   const router = useRouter()
   const permissions = usePermissions()
   const subject = permissions.snapshot.subject
@@ -181,25 +212,31 @@ function ProfileMenu({ compact = false }: { compact?: boolean }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
+        title={collapsed ? subject.nome : undefined}
         className={cn(
           "flex w-full items-center gap-3 border-t border-sidebar-border px-4 py-4 text-left outline-none transition-colors",
           "hover:bg-muted focus-visible:bg-muted",
           compact && "py-3",
+          collapsed && "justify-center px-0",
         )}
       >
         <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-semibold text-navy-foreground">
           {subject.iniziali}
         </div>
-        <div className="flex min-w-0 flex-col leading-tight">
-          <span className="truncate text-sm font-semibold text-foreground">
-            {subject.nome}
-          </span>
-          <span className="truncate text-xs text-muted-foreground">
-            {subject.ruoloNome}
-            {subject.sede ? ` · ${subject.sede}` : ""}
-          </span>
-        </div>
-        <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted-foreground" />
+        {!collapsed ? (
+          <>
+            <div className="flex min-w-0 flex-col leading-tight">
+              <span className="truncate text-sm font-semibold text-foreground">
+                {subject.nome}
+              </span>
+              <span className="truncate text-xs text-muted-foreground">
+                {subject.ruoloNome}
+                {subject.sede ? ` · ${subject.sede}` : ""}
+              </span>
+            </div>
+            <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted-foreground" />
+          </>
+        ) : null}
       </DropdownMenuTrigger>
       <DropdownMenuContent
         side="top"
@@ -228,21 +265,25 @@ function NavSection({
   title,
   items,
   onNavigate,
+  collapsed = false,
 }: {
   title: string
   items: NavItem[]
   onNavigate?: () => void
+  collapsed?: boolean
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        {title}
-      </p>
+      {!collapsed ? (
+        <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {title}
+        </p>
+      ) : null}
       {items.map((item) =>
         item.href === "/solair-ai" ? (
-          <SolairAiNavButton key={item.label} item={item} onOpen={onNavigate} />
+          <SolairAiNavButton key={item.label} item={item} onOpen={onNavigate} collapsed={collapsed} />
         ) : (
-          <NavLink key={item.label} item={item} onNavigate={onNavigate} />
+          <NavLink key={item.label} item={item} onNavigate={onNavigate} collapsed={collapsed} />
         ),
       )}
     </div>
@@ -255,6 +296,7 @@ function SidebarContent({
   visibleGestione,
   canOpenCrmSettings,
   mobile = false,
+  collapsed = false,
   onCrmSettingsOpen,
   onNavigate,
 }: {
@@ -263,13 +305,20 @@ function SidebarContent({
   visibleGestione: NavItem[]
   canOpenCrmSettings: boolean
   mobile?: boolean
+  collapsed?: boolean
   onCrmSettingsOpen?: () => void
   onNavigate?: () => void
 }) {
   const dataOggi = useOggi()
   return (
     <>
-      <div className={cn("border-b border-sidebar-border px-5 py-5", mobile && "py-4")}>
+      <div
+        className={cn(
+          "border-b border-sidebar-border px-5 py-5",
+          mobile && "py-4",
+          collapsed && "px-2",
+        )}
+      >
         <Link
           href="https://www.solairgroup.it"
           className="flex justify-center rounded-lg outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
@@ -277,36 +326,61 @@ function SidebarContent({
           target="_blank"
           rel="noopener noreferrer"
         >
-          <div className="flex h-20 w-40 items-center justify-start overflow-hidden">
+          <div
+            className={cn(
+              "flex h-20 w-40 items-center justify-start overflow-hidden",
+              collapsed && "h-11 w-11 justify-center",
+            )}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={companyLogo}
               alt="Solair CRM"
-              className="h-16 w-36 object-contain object-left"
+              className={cn(
+                "h-16 w-36 object-contain object-left",
+                collapsed && "h-10 w-10 object-center",
+              )}
             />
           </div>
         </Link>
-        <p className="mt-3 min-h-5 text-[15px] font-bold capitalize leading-5 text-primary">
-          {dataOggi}
-        </p>
+        {!collapsed ? (
+          <p className="mt-3 min-h-5 text-[15px] font-bold capitalize leading-5 text-primary">
+            {dataOggi}
+          </p>
+        ) : null}
       </div>
 
-      <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-5">
+      <nav
+        className={cn(
+          "flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-5",
+          collapsed && "px-2",
+        )}
+      >
         {visiblePrincipale.length > 0 ? (
-          <NavSection title="Principale" items={visiblePrincipale} onNavigate={onNavigate} />
+          <NavSection
+            title="Principale"
+            items={visiblePrincipale}
+            onNavigate={onNavigate}
+            collapsed={collapsed}
+          />
         ) : null}
         {visibleGestione.length > 0 ? (
-          <NavSection title="Gestione" items={visibleGestione} onNavigate={onNavigate} />
+          <NavSection
+            title="Gestione"
+            items={visibleGestione}
+            onNavigate={onNavigate}
+            collapsed={collapsed}
+          />
         ) : null}
 
         {canOpenCrmSettings ? (
           <div className="mt-auto border-t border-sidebar-border pt-4">
-            <NavLauncherButton item={NAV_ADMIN} onOpen={onCrmSettingsOpen} />
+            <NavLauncherButton item={NAV_ADMIN} onOpen={onCrmSettingsOpen} collapsed={collapsed} />
           </div>
         ) : null}
       </nav>
 
-      <ProfileMenu compact={mobile} />
+      <ProfileMenu compact={mobile} collapsed={collapsed} />
     </>
   )
 }
@@ -318,6 +392,7 @@ export function Sidebar() {
   const previousPathname = useRef(pathname)
   const [companyLogo, setCompanyLogo] = useState(DEFAULT_COMPANY_LOGO)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { collapsed, toggle } = useSidebarCollapse()
   const visiblePrincipale = NAV_PRINCIPALE.filter((item) => {
     const page = pageKeyFromPath(item.href)
     return page ? permissions.canPage(page) : true
@@ -404,12 +479,26 @@ export function Sidebar() {
         </SheetContent>
       </Sheet>
 
-      <aside className="app-sidebar fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-sidebar-border bg-sidebar lg:flex">
+      <aside
+        className={cn(
+          "app-sidebar fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 lg:flex",
+          collapsed ? "w-[76px]" : "w-[248px]",
+        )}
+      >
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={collapsed ? "Espandi menu" : "Comprimi menu"}
+          className="absolute -right-3 top-24 z-10 hidden size-6 items-center justify-center rounded-full border border-sidebar-border bg-card text-muted-foreground shadow-sm transition-colors hover:text-foreground lg:flex"
+        >
+          <ChevronLeft className={cn("size-3.5 transition-transform duration-200", collapsed && "rotate-180")} />
+        </button>
         <SidebarContent
           companyLogo={companyLogo}
           visiblePrincipale={visiblePrincipale}
           visibleGestione={visibleGestione}
           canOpenCrmSettings={canOpenCrmSettings}
+          collapsed={collapsed}
         />
       </aside>
     </>

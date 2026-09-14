@@ -184,6 +184,11 @@ export function LeadsClient({
   const pendingExport = useRef<(() => void) | null>(null)
   const [rowsPerPage, setRowsPerPage] = useState(INITIAL_PAGE_SIZE)
   const isMobile = useIsMobile()
+  // Tra il breakpoint mobile (1023px) e un desktop con margine (1440px) il
+  // pannello filtri inline da 340px fissi schiaccia la tabella su un laptop
+  // normale: in questa fascia il pannello diventa overlay (Sheet) invece di
+  // colonna, cosi' la tabella tiene tutta la larghezza disponibile.
+  const isCompactDesktop = useIsMobile(1439)
   // Su mobile una pagina da 20 lead scrolla molto meno di una da 50: applichiamo
   // il default più contenuto solo finché l'utente non ha scelto altro lui stesso.
   const mobileDefaultApplied = useRef(false)
@@ -827,7 +832,7 @@ export function LeadsClient({
           </Button>
 
           <AdvancedFilters
-            inline={!isMobile}
+            inline={!isMobile && !isCompactDesktop}
             openInline={filtriAperti}
             onOpenInlineChange={setFiltriAperti}
             inlineContainer={pannelloFiltri}
@@ -854,7 +859,9 @@ export function LeadsClient({
             }))}
             trigger={({ onClick, count }) => (
               <Button
-                onClick={() => (isMobile ? onClick() : setFiltriAperti((v) => !v))}
+                onClick={() =>
+                  isMobile || isCompactDesktop ? onClick() : setFiltriAperti((v) => !v)
+                }
                 className="relative h-11 w-full gap-1.5 bg-primary px-2 text-xs text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90 lg:h-10 lg:w-auto lg:gap-2 lg:px-3.5 lg:text-sm"
               >
                 <SlidersHorizontal className="size-[22px] lg:size-4" />

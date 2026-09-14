@@ -418,7 +418,7 @@ export function ClienteTable({
         <DataTableShell
           ariaLabel="Tabella clienti"
           minTableWidth={tableWidth}
-          className="rounded-[1.4rem] border-teal/20 bg-[linear-gradient(135deg,rgb(46_139_114/0.12),rgb(59_130_246/0.09),rgb(245_158_11/0.08),#fff_42%)] shadow-[0_24px_60px_-36px_rgb(15_23_42/0.78)] ring-1 ring-white/80"
+          className="rounded-[1.4rem] border-teal/20 bg-[linear-gradient(135deg,rgb(46_139_114/0.12),rgb(59_130_246/0.09),rgb(245_158_11/0.08),#fff_42%)] shadow-[0_24px_60px_-36px_rgb(15_23_42/0.78)] ring-1 ring-white/80 lg:h-[calc(100svh-17rem)] lg:max-h-none"
           alwaysShowVerticalScrollbar
           onScroll={(el) => setStuck(el.scrollTop > 0)}
         >

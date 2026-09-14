@@ -32,6 +32,12 @@ export interface LeadIntakePayload {
   residenteInSicilia?: boolean
   tipoProprieta?: "privata" | "commerciale"
   campaignName?: string
+  metaCampaignId?: string
+  metaAdsetId?: string
+  metaAdsetName?: string
+  metaAdId?: string
+  metaAdName?: string
+  metaFormId?: string
   socialLeadId?: string
   sourceCreatedAt?: string | number
   dataClick?: string | number
@@ -1288,6 +1294,12 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
   const sourceCreatedAt = leadSourceCreatedAtIso(payload)
   const dataClick = leadDataClickIso(payload)
   const campaignName = leadCampaignName(payload)
+  const metaCampaignId = normalizeText(payload.metaCampaignId)
+  const metaAdsetId = normalizeText(payload.metaAdsetId)
+  const metaAdsetName = normalizeText(payload.metaAdsetName)
+  const metaAdId = normalizeText(payload.metaAdId)
+  const metaAdName = normalizeText(payload.metaAdName)
+  const metaFormId = normalizeText(payload.metaFormId)
 
   const existing = await findExistingLead(telefonoNorm, emailNorm, socialLeadId)
 
@@ -1320,6 +1332,12 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
     assignTextField(updateRow, existing, changedFields, "codice_postale", "Codice postale", payload.codicePostale)
     assignTextField(updateRow, existing, changedFields, "social_lead_id", "Social Lead ID", socialLeadId)
     assignTextField(updateRow, existing, changedFields, "campaign_name", "campaign name", campaignName)
+    assignTextField(updateRow, existing, changedFields, "meta_campaign_id", "Meta Campaign ID", metaCampaignId)
+    assignTextField(updateRow, existing, changedFields, "meta_adset_id", "Meta Adset ID", metaAdsetId)
+    assignTextField(updateRow, existing, changedFields, "meta_adset_name", "Meta Adset", metaAdsetName)
+    assignTextField(updateRow, existing, changedFields, "meta_ad_id", "Meta Ad ID", metaAdId)
+    assignTextField(updateRow, existing, changedFields, "meta_ad_name", "Meta Ad", metaAdName)
+    assignTextField(updateRow, existing, changedFields, "meta_form_id", "Meta Form ID", metaFormId)
     assignTextField(updateRow, existing, changedFields, "creato_da", "Creato da", leadCreatedBy(payload, sourceInfo))
     if (dataClick && !sameTimestamp(existing.data_click, dataClick)) {
       updateRow.data_click = dataClick
@@ -1443,6 +1461,12 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       origine_lead: ORIGINE_LABELS[payload.origine],
       valutazione: calculatedScore,
       campaign_name: campaignName,
+      meta_campaign_id: metaCampaignId,
+      meta_adset_id: metaAdsetId,
+      meta_adset_name: metaAdsetName,
+      meta_ad_id: metaAdId,
+      meta_ad_name: metaAdName,
+      meta_form_id: metaFormId,
       creato_da: leadCreatedBy(payload, sourceInfo),
       data_click: dataClick,
       kwp,

@@ -14,7 +14,7 @@ export const LEAD_DEFAULT_MAX_COLUMN_WIDTH = 640
 const LEAD_COLUMN_MIN_WIDTHS: Partial<Record<LeadColumnId, number>> = {
   "Badge dell'attività": LEAD_COMPACT_ICON_COLUMN_WIDTH,
   "Badge di nota": LEAD_COMPACT_ICON_COLUMN_WIDTH,
-  Tag: 180,
+  Tag: 140,
   "Nome Lead": 190,
   "Lead Proprietario": 170,
   Città: 128,
@@ -46,7 +46,7 @@ const LEAD_COLUMN_MIN_WIDTHS: Partial<Record<LeadColumnId, number>> = {
 }
 
 const LEAD_COLUMN_MAX_WIDTHS: Partial<Record<LeadColumnId, number>> = {
-  Tag: 460,
+  Tag: 220,
   "Nome Lead": 520,
   "Lead Proprietario": 360,
   "campaign name": 460,
@@ -56,7 +56,10 @@ const LEAD_COLUMN_MAX_WIDTHS: Partial<Record<LeadColumnId, number>> = {
 }
 
 function leadColumnGrowWeight(column: LeadColumnId) {
-  if (column === "Badge dell'attività" || column === "Badge di nota") return 0
+  // Tag e' quasi sempre vuoto ("—"): non deve gonfiarsi a spese delle
+  // colonne che contano davvero (Nome, Telefono, Stato, ecc. — come in Zoho).
+  if (column === "Badge dell'attività" || column === "Badge di nota" || column === "Tag")
+    return 0
   if (column === "Punteggio" || column === "kWp" || column === "kWh") return 0.45
   if (
     column === "Nome Lead" ||

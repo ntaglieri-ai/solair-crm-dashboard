@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Plus, Trash2, FolderPlus, Save, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -58,8 +58,8 @@ const ETICHETTA_OPERATORE: Record<Operatore, string> = {
   uguale: "è",
   diverso: "non è",
   inizia_con: "inizia con",
-  uno_di: "è uno di",
-  nessuno_di: "non è nessuno di",
+  uno_di: "è",
+  nessuno_di: "non è",
   maggiore: "maggiore di",
   minore: "minore di",
   fra: "fra",
@@ -68,8 +68,8 @@ const ETICHETTA_OPERATORE: Record<Operatore, string> = {
   dopo: "dopo il",
   vero: "è sì",
   falso: "è no",
-  presente: "ne ha",
-  assente: "non ne ha",
+  presente: "è presente",
+  assente: "non è presente",
   vuoto: "è vuoto",
   non_vuoto: "non è vuoto",
 }
@@ -110,11 +110,53 @@ function aggiungi(gruppo: Gruppo, percorso: number[], nodo: Nodo): Gruppo {
   return { ...gruppo, nodi }
 }
 
+function gruppoONodo(connettore: Connettore, nodi: Nodo[]): Nodo | null {
+  if (nodi.length === 0) return null
+  if (nodi.length === 1) return nodi[0]
+  return { tipo: "gruppo", connettore, nodi }
+}
+
+function cambiaSeparatoreNelGruppo(
+  gruppo: Gruppo,
+  indice: number,
+  connettore: Connettore,
+): Gruppo {
+  if (indice <= 0 || indice >= gruppo.nodi.length) return gruppo
+  if (gruppo.connettore === connettore) return gruppo
+
+  const sinistra = gruppoONodo(gruppo.connettore, gruppo.nodi.slice(0, indice))
+  const destra = gruppoONodo(gruppo.connettore, gruppo.nodi.slice(indice))
+  return {
+    tipo: "gruppo",
+    connettore,
+    nodi: [sinistra, destra].filter((nodo): nodo is Nodo => nodo !== null),
+  }
+}
+
+function cambiaSeparatore(
+  gruppo: Gruppo,
+  percorso: number[],
+  indice: number,
+  connettore: Connettore,
+): Gruppo {
+  if (percorso.length === 0) return cambiaSeparatoreNelGruppo(gruppo, indice, connettore)
+  const [testa, ...resto] = percorso
+  const nodi = [...gruppo.nodi]
+  const figlio = nodi[testa]
+  if (!figlio || figlio.tipo !== "gruppo") return gruppo
+  nodi[testa] = cambiaSeparatore(figlio, resto, indice, connettore)
+  return { ...gruppo, nodi }
+}
+
 export function CostruttoreFiltro({
   aperto,
   onChiudi,
   gruppi,
   valoreIniziale,
+  nomeIniziale = "",
+  titolo = "Costruisci filtro",
+  descrizione = "Combina condizioni e gruppi: puoi dire che devono valere tutte, oppure che ne basta una.",
+  etichettaSalva = "Salva",
   onApplica,
   onSalva,
 }: {
@@ -122,11 +164,15 @@ export function CostruttoreFiltro({
   onChiudi: () => void
   gruppi: GruppoCampi[]
   valoreIniziale: Gruppo
+  nomeIniziale?: string
+  titolo?: string
+  descrizione?: string
+  etichettaSalva?: string
   onApplica: (gruppo: Gruppo) => void
   onSalva: (nome: string, gruppo: Gruppo) => Promise<void>
 }) {
   const [albero, setAlbero] = useState<Gruppo>(valoreIniziale)
-  const [nome, setNome] = useState("")
+  const [nome, setNome] = useState(nomeIniziale)
   const [salvataggio, setSalvataggio] = useState(false)
 
   const catalogo = gruppi.flatMap((gruppo) => gruppo.campi)
@@ -137,15 +183,25 @@ export function CostruttoreFiltro({
     setAlbero((corrente) => sostituisci(corrente, percorso, nodo))
   }
 
+  function modificaSeparatore(percorso: number[], indice: number, connettore: Connettore) {
+    setAlbero((corrente) => cambiaSeparatore(corrente, percorso, indice, connettore))
+  }
+
+  useEffect(() => {
+    if (!aperto) return
+    const timer = window.setTimeout(() => {
+      setAlbero(valoreIniziale)
+      setNome(nomeIniziale)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [aperto, nomeIniziale, valoreIniziale])
+
   return (
     <Dialog open={aperto} onOpenChange={(v) => (!v ? onChiudi() : undefined)}>
       <DialogContent className="flex max-h-[88vh] w-[min(1000px,94vw)] max-w-none flex-col gap-0 p-0 sm:max-w-none">
         <DialogHeader className="border-b border-border px-5 py-4">
-          <DialogTitle>Costruisci filtro</DialogTitle>
-          <DialogDescription>
-            Le condizioni di un gruppo valgono tutte insieme (E) oppure in alternativa (O).
-            Un gruppo può contenerne altri, per combinare le due cose.
-          </DialogDescription>
+          <DialogTitle>{titolo}</DialogTitle>
+          <DialogDescription>{descrizione}</DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
@@ -156,12 +212,13 @@ export function CostruttoreFiltro({
             perChiave={perChiave}
             radice
             onModifica={modifica}
+            onCambiaSeparatore={modificaSeparatore}
             onAggiungiCondizione={(percorso, campo) =>
               setAlbero((corrente) => aggiungi(corrente, percorso, condizioneVuota(campo)))
             }
             onAggiungiGruppo={(percorso) =>
               setAlbero((corrente) =>
-                aggiungi(corrente, percorso, { tipo: "gruppo", connettore: "o", nodi: [] }),
+                aggiungi(corrente, percorso, { tipo: "gruppo", connettore: "e", nodi: [] }),
               )
             }
           />
@@ -170,7 +227,7 @@ export function CostruttoreFiltro({
         <DialogFooter className="flex-col-reverse gap-4 border-t border-border bg-secondary/20 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex w-full flex-col gap-1.5 sm:max-w-sm">
             <Label htmlFor="filtro-nome" className="text-xs font-medium">
-              Salva come filtro
+              Nome filtro salvato
             </Label>
             <div className="flex gap-2">
               <Input
@@ -198,7 +255,7 @@ export function CostruttoreFiltro({
                 ) : (
                   <Save data-icon="inline-start" />
                 )}
-                Salva
+                {etichettaSalva}
               </Button>
             </div>
             <p className="text-[11px] text-muted-foreground">
@@ -239,6 +296,7 @@ function NodoGruppo({
   perChiave,
   radice = false,
   onModifica,
+  onCambiaSeparatore,
   onAggiungiCondizione,
   onAggiungiGruppo,
 }: {
@@ -248,6 +306,7 @@ function NodoGruppo({
   perChiave: Map<string, CampoFiltrabile>
   radice?: boolean
   onModifica: (percorso: number[], nodo: Nodo | null) => void
+  onCambiaSeparatore: (percorso: number[], indice: number, connettore: Connettore) => void
   onAggiungiCondizione: (percorso: number[], campo: CampoFiltrabile) => void
   onAggiungiGruppo: (percorso: number[]) => void
 }) {
@@ -260,15 +319,20 @@ function NodoGruppo({
           : "border border-border bg-secondary/40 p-3",
       )}
     >
-      <div className="flex items-center gap-2">
-        <SceltaConnettore
-          valore={gruppo.connettore}
-          onCambia={(connettore) => onModifica(percorso, { ...gruppo, connettore })}
-        />
-        <span className="text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Logica del gruppo
+          </p>
+          <SceltaConnettore
+            valore={gruppo.connettore}
+            onCambia={(connettore) => onModifica(percorso, { ...gruppo, connettore })}
+          />
+        </div>
+        <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground">
           {gruppo.connettore === "e"
-            ? "tutte le condizioni devono valere"
-            : "basta che ne valga una"}
+            ? "Devono valere tutte"
+            : "Ne basta una"}
         </span>
 
         {!radice ? (
@@ -297,30 +361,45 @@ function NodoGruppo({
 
       {gruppo.nodi.map((nodo, indice) => {
         const figlio = [...percorso, indice]
+        const separatore =
+          indice > 0 ? (
+            <div className="flex items-center gap-2 pl-3">
+              <span className="text-[11px] font-medium text-muted-foreground">poi</span>
+              <SceltaConnettoreCompatta
+                valore={gruppo.connettore}
+                onCambia={(connettore) => onCambiaSeparatore(percorso, indice, connettore)}
+              />
+            </div>
+          ) : null
         if (nodo.tipo === "gruppo") {
           return (
-            <NodoGruppo
-              key={indice}
-              gruppo={nodo}
-              percorso={figlio}
-              gruppiCampi={gruppiCampi}
-              perChiave={perChiave}
-              onModifica={onModifica}
-              onAggiungiCondizione={onAggiungiCondizione}
-              onAggiungiGruppo={onAggiungiGruppo}
-            />
+            <div key={indice} className="space-y-2">
+              {separatore}
+              <NodoGruppo
+                gruppo={nodo}
+                percorso={figlio}
+                gruppiCampi={gruppiCampi}
+                perChiave={perChiave}
+                onModifica={onModifica}
+                onCambiaSeparatore={onCambiaSeparatore}
+                onAggiungiCondizione={onAggiungiCondizione}
+                onAggiungiGruppo={onAggiungiGruppo}
+              />
+            </div>
           )
         }
         const campo = perChiave.get(nodo.campo)
         if (!campo) return null
         return (
-          <RigaCondizione
-            key={indice}
-            condizione={nodo}
-            campo={campo}
-            onCambia={(nuova) => onModifica(figlio, nuova)}
-            onElimina={() => onModifica(figlio, null)}
-          />
+          <div key={indice} className="space-y-2">
+            {separatore}
+            <RigaCondizione
+              condizione={nodo}
+              campo={campo}
+              onCambia={(nuova) => onModifica(figlio, nuova)}
+              onElimina={() => onModifica(figlio, null)}
+            />
+          </div>
         )
       })}
 
@@ -351,20 +430,48 @@ function SceltaConnettore({
   onCambia: (valore: Connettore) => void
 }) {
   return (
-    <div className="inline-flex overflow-hidden rounded-md border border-border">
+    <div className="mt-1 inline-flex overflow-hidden rounded-md border border-border bg-card">
       {(["e", "o"] as const).map((opzione) => (
         <button
           key={opzione}
           type="button"
           onClick={() => onCambia(opzione)}
           className={cn(
-            "px-3 py-1 text-xs font-semibold uppercase transition-colors",
+            "px-3 py-1.5 text-xs font-semibold transition-colors",
             valore === opzione
               ? "bg-primary text-primary-foreground"
               : "bg-card text-muted-foreground hover:bg-secondary",
           )}
         >
-          {opzione}
+          {opzione === "e" ? "Tutte (AND)" : "Almeno una (OR)"}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function SceltaConnettoreCompatta({
+  valore,
+  onCambia,
+}: {
+  valore: Connettore
+  onCambia: (valore: Connettore) => void
+}) {
+  return (
+    <div className="inline-flex overflow-hidden rounded-full border border-border bg-card shadow-sm">
+      {(["e", "o"] as const).map((opzione) => (
+        <button
+          key={opzione}
+          type="button"
+          onClick={() => onCambia(opzione)}
+          className={cn(
+            "px-3 py-1 text-[11px] font-bold uppercase transition-colors",
+            valore === opzione
+              ? "bg-primary text-primary-foreground"
+              : "bg-card text-muted-foreground hover:bg-secondary",
+          )}
+        >
+          {opzione === "e" ? "E" : "O"}
         </button>
       ))}
     </div>
@@ -435,7 +542,7 @@ function RigaCondizione({
         }
       >
         <SelectTrigger size="sm" className="w-48">
-          <SelectValue />
+          <span className="truncate">{ETICHETTA_OPERATORE[condizione.operatore]}</span>
         </SelectTrigger>
         <SelectContent>
           {operatori.map((operatore) => (
@@ -450,6 +557,7 @@ function RigaCondizione({
         <EditorValore
           tipo={campo.tipo}
           opzioni={campo.opzioni}
+          etichette={campo.etichette}
           operatore={condizione.operatore}
           valori={condizione.valori}
           onCambia={(valori) => onCambia({ ...condizione, valori })}
@@ -472,12 +580,14 @@ function RigaCondizione({
 function EditorValore({
   tipo,
   opzioni,
+  etichette,
   operatore,
   valori,
   onCambia,
 }: {
   tipo: TipoCampo
   opzioni?: readonly string[]
+  etichette?: Readonly<Record<string, string>>
   operatore: Operatore
   valori: (string | number | boolean)[]
   onCambia: (valori: (string | number | boolean)[]) => void
@@ -515,7 +625,7 @@ function EditorValore({
         value={scelti}
         onValueChange={onCambia}
         allLabel="Scegli valori"
-        options={opzioni.map((opzione) => ({ value: opzione, label: opzione }))}
+        options={opzioni.map((opzione) => ({ value: opzione, label: etichette?.[opzione] ?? opzione }))}
       />
     )
   }

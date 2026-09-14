@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { MultiFilterSelect } from "@/components/shared/multi-filter-select"
 import { cn } from "@/lib/utils"
-import { FiltriSalvati } from "@/components/filtri/filtri-salvati"
+import { FiltriSalvati, type FiltroSalvato } from "@/components/filtri/filtri-salvati"
 import { CostruttoreFiltro } from "@/components/filtri/costruttore-filtro"
 import {
   contaCondizioni,
@@ -69,6 +69,7 @@ export function PannelloFiltri({
 }) {
   const [costruttoreAperto, setCostruttoreAperto] = useState(false)
   const [filtroSalvatoAttivo, setFiltroSalvatoAttivo] = useState<string | null>(null)
+  const [filtroInModifica, setFiltroInModifica] = useState<FiltroSalvato | null>(null)
   const [versioneSalvati, setVersioneSalvati] = useState(0)
   const [ricerca, setRicerca] = useState("")
   const [gruppiAperti, setGruppiAperti] = useState<Set<string>>(new Set())
@@ -151,6 +152,30 @@ export function PannelloFiltri({
     setVersioneSalvati((v) => v + 1)
   }
 
+  async function aggiornaFiltroSalvato(nome: string, gruppo: Gruppo) {
+    if (!filtroInModifica) return
+    const risposta = await fetch("/api/filtri-salvati", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: filtroInModifica.id,
+        modulo,
+        nome,
+        definizione: gruppo,
+      }),
+    })
+    if (!risposta.ok) {
+      const dati = (await risposta.json().catch(() => ({}))) as { error?: string }
+      toast.error(dati.error ?? "Modifica non riuscita")
+      return
+    }
+    toast.success(`Filtro "${nome}" aggiornato`)
+    setFiltroSalvatoAttivo(filtroInModifica.id)
+    setFiltroInModifica(null)
+    setCostruttoreAperto(false)
+    setVersioneSalvati((v) => v + 1)
+  }
+
   const contenuto = (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between border-b border-border p-4">
@@ -161,7 +186,10 @@ export function PannelloFiltri({
             size="icon-sm"
             aria-label="Apri il costruttore"
             title="Costruisci un filtro con condizioni e gruppi"
-            onClick={() => setCostruttoreAperto(true)}
+            onClick={() => {
+              setFiltroInModifica(null)
+              setCostruttoreAperto(true)
+            }}
           >
             <Maximize2 />
           </Button>
@@ -182,6 +210,7 @@ export function PannelloFiltri({
           modulo={modulo}
           attivo={filtroSalvatoAttivo}
           ricarica={versioneSalvati}
+          campi={gruppi.flatMap((gruppo) => gruppo.campi)}
           azione={
             totale > 0 ? (
               <Button
@@ -201,6 +230,10 @@ export function PannelloFiltri({
           onApplica={(filtro) => {
             setFiltroSalvatoAttivo(filtro.id)
             setBozza(filtro.definizione)
+          }}
+          onModifica={(filtro) => {
+            setFiltroInModifica(filtro)
+            setCostruttoreAperto(true)
           }}
         />
         ) : null}
@@ -336,14 +369,21 @@ export function PannelloFiltri({
   const costruttore = (
     <CostruttoreFiltro
       aperto={costruttoreAperto}
-      onChiudi={() => setCostruttoreAperto(false)}
+      onChiudi={() => {
+        setCostruttoreAperto(false)
+        setFiltroInModifica(null)
+      }}
       gruppi={gruppi}
-      valoreIniziale={bozza}
+      valoreIniziale={filtroInModifica?.definizione ?? bozza}
+      nomeIniziale={filtroInModifica?.nome ?? ""}
+      titolo={filtroInModifica ? "Modifica filtro salvato" : "Costruisci filtro"}
+      etichettaSalva={filtroInModifica ? "Aggiorna filtro" : "Salva"}
       onApplica={(gruppo) => {
         setFiltroSalvatoAttivo(null)
+        setFiltroInModifica(null)
         setBozza(gruppo)
       }}
-      onSalva={salvaFiltro}
+      onSalva={filtroInModifica ? aggiornaFiltroSalvato : salvaFiltro}
     />
   )
 

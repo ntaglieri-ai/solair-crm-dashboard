@@ -325,9 +325,11 @@ function applyAdvancedFilters<
   Q extends {
     ilike(column: string, pattern: string): Q
     in(column: string, values: string[]): Q
+    or(expr: string): Q
+    not(column: string, operator: string, value: string | number | boolean): Q
     gte(column: string, value: string | number): Q
     lte(column: string, value: string | number): Q
-    eq(column: string, value: boolean): Q
+    eq(column: string, value: string | number | boolean): Q
   },
 >(query: Q, advanced?: AdvancedFilterState): Q {
   if (!advanced) return query
@@ -338,17 +340,37 @@ function applyAdvancedFilters<
     if (!col) continue
     if (fv.type === "text") {
       const c = fv.contains.trim()
-      if (c) query = query.ilike(col, `%${c}%`)
+      if (c) query = fv.negated ? query.not(col, "eq", c) : query.eq(col, c)
     } else if (fv.type === "enum") {
-      if (fv.selected.length > 0) query = query.in(col, fv.selected)
+      if (fv.selected.length > 0) {
+        query = fv.negated
+          ? query.not(col, "in", `(${postgrestInList(fv.selected)})`)
+          : query.in(col, fv.selected)
+      }
     } else if (fv.type === "number") {
-      if (fv.min !== "") query = query.gte(col, Number(fv.min))
-      if (fv.max !== "") query = query.lte(col, Number(fv.max))
+      if (fv.negated) {
+        if (fv.min !== "" && fv.max !== "") query = query.or(`${col}.lt.${Number(fv.min)},${col}.gt.${Number(fv.max)}`)
+        else if (fv.min !== "") query = query.not(col, "gte", Number(fv.min))
+        else if (fv.max !== "") query = query.not(col, "lte", Number(fv.max))
+      } else {
+        if (fv.min !== "") query = query.gte(col, Number(fv.min))
+        if (fv.max !== "") query = query.lte(col, Number(fv.max))
+      }
     } else if (fv.type === "date") {
-      if (fv.from !== "") query = query.gte(col, fv.from)
-      if (fv.to !== "") query = query.lte(col, fv.to)
+      if (fv.negated) {
+        if (fv.from !== "" && fv.to !== "") query = query.or(`${col}.lt.${fv.from},${col}.gt.${fv.to}`)
+        else if (fv.from !== "") query = query.not(col, "gte", fv.from)
+        else if (fv.to !== "") query = query.not(col, "lte", fv.to)
+      } else {
+        if (fv.from !== "") query = query.gte(col, fv.from)
+        if (fv.to !== "") query = query.lte(col, fv.to)
+      }
     } else if (fv.type === "boolean") {
-      if (fv.value !== "all") query = query.eq(col, fv.value === "yes")
+      if (fv.value !== "all") {
+        query = fv.negated
+          ? query.not(col, "eq", fv.value === "yes")
+          : query.eq(col, fv.value === "yes")
+      }
     }
   }
   return query

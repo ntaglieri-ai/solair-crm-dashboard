@@ -4,12 +4,14 @@ import type { Lead } from "@/lib/mock-data"
 
 export type FieldType = "text" | "enum" | "date" | "number" | "boolean"
 
+type VersoFiltro = { negated?: boolean }
+
 export type FieldValue =
-  | { type: "text"; contains: string }
-  | { type: "enum"; selected: string[] }
-  | { type: "date"; from: string; to: string }
-  | { type: "number"; min: string; max: string }
-  | { type: "boolean"; value: "all" | "yes" | "no" }
+  | ({ type: "text"; contains: string } & VersoFiltro)
+  | ({ type: "enum"; selected: string[] } & VersoFiltro)
+  | ({ type: "date"; from: string; to: string } & VersoFiltro)
+  | ({ type: "number"; min: string; max: string } & VersoFiltro)
+  | ({ type: "boolean"; value: "all" | "yes" | "no" } & VersoFiltro)
 
 export interface AdvancedFilterState {
   quick: {
@@ -93,31 +95,36 @@ export function matchesAdvanced(lead: Lead, state: AdvancedFilterState): boolean
   for (const [id, v] of Object.entries(fields)) {
     if (!isFieldActive(v)) continue
     const raw = lead[id as keyof Lead]
+    let matches = true
 
     if (v.type === "text") {
       const hay = String(raw ?? "").toLowerCase()
-      if (!hay.includes(v.contains.trim().toLowerCase())) return false
+      matches = hay === v.contains.trim().toLowerCase()
     } else if (v.type === "enum") {
       if (id === "Tag") {
         const leadTags = lead.Tag
-        if (!v.selected.some((s) => leadTags.includes(s))) return false
+        matches = v.selected.some((s) => leadTags.includes(s))
       } else {
-        if (!v.selected.includes(String(raw ?? ""))) return false
+        matches = v.selected.includes(String(raw ?? ""))
       }
     } else if (v.type === "number") {
       const num = typeof raw === "number" ? raw : Number(raw)
       if (Number.isNaN(num)) return false
-      if (v.min !== "" && num < Number(v.min)) return false
-      if (v.max !== "" && num > Number(v.max)) return false
+      matches = true
+      if (v.min !== "" && num < Number(v.min)) matches = false
+      if (v.max !== "" && num > Number(v.max)) matches = false
     } else if (v.type === "date") {
       const ts = parseLeadDate(raw)
       if (ts === null) return false
-      if (v.from !== "" && ts < new Date(v.from).getTime()) return false
-      if (v.to !== "" && ts > new Date(v.to).getTime()) return false
+      matches = true
+      if (v.from !== "" && ts < new Date(v.from).getTime()) matches = false
+      if (v.to !== "" && ts > new Date(v.to).getTime()) matches = false
     } else if (v.type === "boolean") {
       const wanted = v.value === "yes"
-      if (Boolean(raw) !== wanted) return false
+      matches = Boolean(raw) === wanted
     }
+
+    if (v.negated ? matches : !matches) return false
   }
 
   return true

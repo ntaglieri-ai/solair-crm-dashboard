@@ -59,7 +59,7 @@ export type Operatore =
 export type TipoCampo = "testo" | "elenco" | "numero" | "data" | "booleano" | "collegato"
 
 export const OPERATORI_PER_TIPO: Record<TipoCampo, readonly Operatore[]> = {
-  testo: ["contiene", "non_contiene", "uguale", "diverso", "inizia_con", "vuoto", "non_vuoto"],
+  testo: ["uguale", "diverso", "contiene", "non_contiene", "inizia_con", "vuoto", "non_vuoto"],
   elenco: ["uno_di", "nessuno_di", "vuoto", "non_vuoto"],
   numero: ["uguale", "diverso", "maggiore", "minore", "fra", "vuoto", "non_vuoto"],
   data: ["uguale", "prima", "dopo", "fra", "ultimi_giorni", "vuoto", "non_vuoto"],
@@ -108,6 +108,8 @@ export type CampoFiltrabile = {
   tipo: TipoCampo
   /** Valori ammessi, per i campi a elenco. */
   opzioni?: readonly string[]
+  /** Etichette leggibili per valori tecnici salvati, es. id utente -> nome. */
+  etichette?: Readonly<Record<string, string>>
 }
 
 export const GRUPPO_VUOTO: Gruppo = { tipo: "gruppo", connettore: "e", nodi: [] }

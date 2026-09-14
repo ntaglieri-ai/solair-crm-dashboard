@@ -53,7 +53,12 @@ export function InstallatoreDetailActions({
         <IconPencil size={15} stroke={1.8} data-icon="inline-start" />
         Modifica
       </Button>
-      <AiAllegatiButton size="sm" />
+      <AiAllegatiButton
+        entita="installatore"
+        recordId={installatore.id}
+        nome={installatore.nome}
+        size="sm"
+      />
       {permissions.canRecord("installatori", "delete") ? (
         <Button
           variant="outline"

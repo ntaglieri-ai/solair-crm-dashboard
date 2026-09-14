@@ -10,7 +10,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { FiltriSalvati } from "@/components/filtri/filtri-salvati"
+import { FiltriSalvati, type FiltroSalvato } from "@/components/filtri/filtri-salvati"
 import { CostruttoreFiltro } from "@/components/filtri/costruttore-filtro"
 import { GRUPPO_VUOTO, type Gruppo } from "@/lib/filtri/albero"
 import { gruppiCampiClienti } from "@/lib/filtri/catalogo-clienti"
@@ -47,10 +47,12 @@ export function ClienteFiltersDrawer({
   const [open, setOpen] = useState(false)
   const [costruttoreAperto, setCostruttoreAperto] = useState(false)
   const [filtroAttivo, setFiltroAttivo] = useState<string | null>(null)
+  const [filtroInModifica, setFiltroInModifica] = useState<FiltroSalvato | null>(null)
   const [versioneSalvati, setVersioneSalvati] = useState(0)
   const count = countActiveClienteFilters(filters)
 
   const disponibile = Boolean(layout?.length && onApplicaAlbero)
+  const gruppi = layout ? gruppiCampiClienti(layout) : []
 
   async function salvaFiltro(nome: string, gruppo: Gruppo) {
     const risposta = await fetch("/api/filtri-salvati", {
@@ -64,6 +66,30 @@ export function ClienteFiltersDrawer({
       return
     }
     toast.success(`Filtro "${nome}" salvato e condiviso`)
+    setVersioneSalvati((v) => v + 1)
+  }
+
+  async function aggiornaFiltroSalvato(nome: string, gruppo: Gruppo) {
+    if (!filtroInModifica) return
+    const risposta = await fetch("/api/filtri-salvati", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: filtroInModifica.id,
+        modulo: "clienti",
+        nome,
+        definizione: gruppo,
+      }),
+    })
+    if (!risposta.ok) {
+      const dati = (await risposta.json().catch(() => ({}))) as { error?: string }
+      toast.error(dati.error ?? "Modifica non riuscita")
+      return
+    }
+    toast.success(`Filtro "${nome}" aggiornato`)
+    setFiltroAttivo(filtroInModifica.id)
+    setFiltroInModifica(null)
+    setCostruttoreAperto(false)
     setVersioneSalvati((v) => v + 1)
   }
 
@@ -85,7 +111,10 @@ export function ClienteFiltersDrawer({
                 size="icon-sm"
                 aria-label="Apri il costruttore"
                 title="Costruisci un filtro con condizioni e gruppi"
-                onClick={() => setCostruttoreAperto(true)}
+                onClick={() => {
+                  setFiltroInModifica(null)
+                  setCostruttoreAperto(true)
+                }}
               >
                 <Maximize2 />
               </Button>
@@ -107,9 +136,14 @@ export function ClienteFiltersDrawer({
               modulo="clienti"
               attivo={filtroAttivo}
               ricarica={versioneSalvati}
+              campi={gruppi.flatMap((gruppo) => gruppo.campi)}
               onApplica={(filtro) => {
                 setFiltroAttivo(filtro.id)
                 onApplicaAlbero?.(filtro.definizione)
+              }}
+              onModifica={(filtro) => {
+                setFiltroInModifica(filtro)
+                setCostruttoreAperto(true)
               }}
             />
           ) : null}
@@ -123,14 +157,21 @@ export function ClienteFiltersDrawer({
       {disponibile ? (
         <CostruttoreFiltro
           aperto={costruttoreAperto}
-          onChiudi={() => setCostruttoreAperto(false)}
-          gruppi={gruppiCampiClienti(layout ?? [])}
-          valoreIniziale={alberoApplicato ?? GRUPPO_VUOTO}
+          onChiudi={() => {
+            setCostruttoreAperto(false)
+            setFiltroInModifica(null)
+          }}
+          gruppi={gruppi}
+          valoreIniziale={filtroInModifica?.definizione ?? alberoApplicato ?? GRUPPO_VUOTO}
+          nomeIniziale={filtroInModifica?.nome ?? ""}
+          titolo={filtroInModifica ? "Modifica filtro salvato" : "Costruisci filtro"}
+          etichettaSalva={filtroInModifica ? "Aggiorna filtro" : "Salva"}
           onApplica={(gruppo) => {
             setFiltroAttivo(null)
+            setFiltroInModifica(null)
             onApplicaAlbero?.(gruppo)
           }}
-          onSalva={salvaFiltro}
+          onSalva={filtroInModifica ? aggiornaFiltroSalvato : salvaFiltro}
         />
       ) : null}
     </Sheet>

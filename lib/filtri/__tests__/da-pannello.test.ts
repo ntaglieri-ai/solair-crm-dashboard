@@ -19,14 +19,27 @@ function stato(fields: AdvancedFilterState["fields"]): AdvancedFilterState {
 }
 
 describe("alberoDaPannello", () => {
-  it("converte il testo in 'contiene'", () => {
+  it("converte il testo in 'è'", () => {
     const albero = alberoDaPannello(
       stato({ "Nome Lead": { type: "text", contains: "rossi" } }),
       CATALOGO,
     )
     expect(albero.nodi).toEqual([
-      { tipo: "condizione", campo: "Nome Lead", operatore: "contiene", valori: ["rossi"] },
+      { tipo: "condizione", campo: "Nome Lead", operatore: "uguale", valori: ["rossi"] },
     ])
+  })
+
+  it("mantiene il 'non è' del pannello", () => {
+    const albero = alberoDaPannello(
+      stato({
+        "Nome Lead": { type: "text", contains: "rossi", negated: true },
+        "Stato Lead": { type: "enum", selected: ["Perso"], negated: true },
+      }),
+      CATALOGO,
+    )
+
+    expect(albero.nodi[0]).toMatchObject({ operatore: "diverso", valori: ["rossi"] })
+    expect(albero.nodi[1]).toMatchObject({ operatore: "nessuno_di", valori: ["Perso"] })
   })
 
   it("converte piu' valori selezionati in un 'uno di'", () => {

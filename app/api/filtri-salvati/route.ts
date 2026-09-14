@@ -4,6 +4,7 @@ import { getCurrentPermissions } from "@/lib/permissions/server"
 import { validaAlbero, type CampoFiltrabile } from "@/lib/filtri/albero"
 import { catalogoDaGruppi, gruppiCampiLead } from "@/lib/filtri/catalogo-lead"
 import { catalogoClientiCompleto } from "@/lib/filtri/catalogo-clienti"
+import { catalogoInstallatoriCompleto } from "@/lib/filtri/catalogo-installatori"
 
 /**
  * Filtri salvati, condivisi fra tutti.
@@ -34,6 +35,7 @@ function isModulo(valore: unknown): valore is Modulo {
  */
 function catalogoPerModulo(modulo: Modulo): CampoFiltrabile[] {
   if (modulo === "clienti") return catalogoClientiCompleto()
+  if (modulo === "installatori") return catalogoInstallatoriCompleto()
   if (modulo === "lead") {
     const gruppi = gruppiCampiLead({
       stati: [],
@@ -117,6 +119,69 @@ export async function POST(request: Request) {
   if (error) {
     // Il nome e' unico per modulo: due filtri omonimi renderebbero l'elenco
     // illeggibile, e il messaggio del database non lo spiegherebbe.
+    if (error.code === "23505") {
+      return NextResponse.json({ error: "Esiste gia' un filtro con questo nome" }, { status: 409 })
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json(data)
+}
+
+export async function PATCH(request: Request) {
+  let body: { id?: unknown; modulo?: unknown; nome?: unknown; definizione?: unknown }
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: "Corpo richiesta non valido" }, { status: 400 })
+  }
+
+  const id = typeof body.id === "string" ? body.id : ""
+  if (!id) return NextResponse.json({ error: "Id mancante" }, { status: 400 })
+
+  if (!isModulo(body.modulo)) {
+    return NextResponse.json({ error: "Modulo non valido" }, { status: 400 })
+  }
+
+  const permissions = await getCurrentPermissions()
+  if (!permissions.canPage(body.modulo)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
+
+  const nome = typeof body.nome === "string" ? body.nome.trim() : ""
+  if (!nome || nome.length > 80) {
+    return NextResponse.json({ error: "Nome non valido" }, { status: 400 })
+  }
+
+  const validato = validaAlbero(body.definizione, catalogoPerModulo(body.modulo))
+  if (!validato.ok) {
+    return NextResponse.json({ error: validato.errore }, { status: 400 })
+  }
+
+  const supabase = await createClient()
+  const { data: filtro } = await supabase
+    .from("crm_filtri_salvati")
+    .select("creato_da,modulo")
+    .eq("id", id)
+    .maybeSingle()
+
+  if (!filtro || filtro.modulo !== body.modulo) {
+    return NextResponse.json({ error: "Filtro non trovato" }, { status: 404 })
+  }
+
+  const proprio = filtro.creato_da === permissions.snapshot.subject.userId
+  if (!proprio && !permissions.canAction("note.gestione")) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
+
+  const { data, error } = await supabase
+    .from("crm_filtri_salvati")
+    .update({ nome, definizione: validato.gruppo })
+    .eq("id", id)
+    .select("id,nome,definizione,creato_da,creato_il")
+    .single()
+
+  if (error) {
     if (error.code === "23505") {
       return NextResponse.json({ error: "Esiste gia' un filtro con questo nome" }, { status: 409 })
     }

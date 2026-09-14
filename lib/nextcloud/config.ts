@@ -24,9 +24,24 @@ export function normalizeNextcloudBaseUrl(value: string | undefined): string | n
   }
 }
 
+function configuredNextcloudBaseUrl(): string | null {
+  const explicit = normalizeNextcloudBaseUrl(process.env.NEXTCLOUD_URL)
+  if (explicit) return explicit
+
+  // In alcuni ambienti resta configurato solo il login OIDC Nextcloud
+  // (/apps/user_oidc/login/...), ma per WebDAV serve soltanto l'origin.
+  const oidcLogin = normalizeNextcloudBaseUrl(process.env.NEXTCLOUD_OIDC_LOGIN_URL)
+  if (!oidcLogin) return null
+  try {
+    return new URL(oidcLogin).origin
+  } catch {
+    return null
+  }
+}
+
 /** URL base Nextcloud, senza slash finale. Lancia se assente. */
 export function nextcloudBaseUrl(): string {
-  const url = normalizeNextcloudBaseUrl(process.env.NEXTCLOUD_URL)
+  const url = configuredNextcloudBaseUrl()
   if (!url) throw new Error("NEXTCLOUD_URL non configurato o non valido")
   return url
 }
@@ -37,7 +52,7 @@ export function nextcloudBaseUrl(): string {
  * invece di crashare.
  */
 export function nextcloudAdminConfig(): NextcloudAdminConfig | null {
-  const baseUrl = normalizeNextcloudBaseUrl(process.env.NEXTCLOUD_URL)
+  const baseUrl = configuredNextcloudBaseUrl()
   const adminUser = process.env.NEXTCLOUD_ADMIN_USER
   const adminPassword = process.env.NEXTCLOUD_ADMIN_PASSWORD
   if (!baseUrl || !adminUser || !adminPassword) return null
@@ -54,7 +69,7 @@ export function nextcloudAdminConfig(): NextcloudAdminConfig | null {
  * account tecnico dedicato, senza riusare l'account umano amministratore.
  */
 export function nextcloudProvisioningConfig(): NextcloudAdminConfig | null {
-  const baseUrl = normalizeNextcloudBaseUrl(process.env.NEXTCLOUD_URL)
+  const baseUrl = configuredNextcloudBaseUrl()
   const adminUser = process.env.NEXTCLOUD_PROVISIONING_USER || process.env.NEXTCLOUD_ADMIN_USER
   const adminPassword =
     process.env.NEXTCLOUD_PROVISIONING_PASSWORD || process.env.NEXTCLOUD_ADMIN_PASSWORD

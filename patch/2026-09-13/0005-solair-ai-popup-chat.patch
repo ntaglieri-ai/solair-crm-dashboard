@@ -1,0 +1,361 @@
+From eedff050b612ddffe94975ae4160f4d7f0849a45 Mon Sep 17 00:00:00 2001
+From: Nando Taglieri <n.taglieri@gmail.com>
+Date: Sun, 13 Sep 2026 18:13:45 +0000
+Subject: [PATCH] solair-ai: assistente come popup flottante invece di pagina
+
+---
+ app/(dashboard)/layout.tsx                    |  29 ++---
+ app/(dashboard)/solair-ai/apps.ts             |   4 +
+ .../solair-ai/assistente/solair-ai-client.tsx |  27 +++--
+ app/api/solair-ai/stato/route.ts              |  22 ++++
+ components/dashboard/solair-ai-chat-popup.tsx | 101 ++++++++++++++++++
+ components/dashboard/solair-ai-drawer.tsx     |  13 ++-
+ lib/solair-ai-chat-launcher.tsx               |  34 ++++++
+ 7 files changed, 206 insertions(+), 24 deletions(-)
+ create mode 100644 app/api/solair-ai/stato/route.ts
+ create mode 100644 components/dashboard/solair-ai-chat-popup.tsx
+ create mode 100644 lib/solair-ai-chat-launcher.tsx
+
+diff --git a/app/(dashboard)/layout.tsx b/app/(dashboard)/layout.tsx
+index eaa8c04..1baa469 100644
+--- a/app/(dashboard)/layout.tsx
++++ b/app/(dashboard)/layout.tsx
+@@ -3,7 +3,9 @@ import { Sidebar } from "@/components/dashboard/sidebar"
+ import { CrmSettingsSidebar } from "@/components/dashboard/crm-settings-sidebar"
+ import { CrmSettingsLauncherProvider } from "@/lib/crm-settings-launcher"
+ import { SolairAiLauncherProvider } from "@/lib/solair-ai-launcher"
++import { SolairAiChatLauncherProvider } from "@/lib/solair-ai-chat-launcher"
+ import { SolairAiDrawer } from "@/components/dashboard/solair-ai-drawer"
++import { SolairAiChatPopup } from "@/components/dashboard/solair-ai-chat-popup"
+ import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permissions"
+ import { PermissionProvider } from "@/lib/permissions/provider"
+ import { PageTransition } from "@/components/motion/page-transition"
+@@ -18,19 +20,22 @@ export default async function DashboardLayout({ children }: { children: ReactNod
+     <PermissionProvider snapshot={permissions}>
+       <CrmSettingsLauncherProvider>
+         <SolairAiLauncherProvider>
+-          <div className="min-h-screen bg-background">
+-            <SessionTimeoutGuard />
+-            <CrmRouteWarmer />
+-            <Sidebar />
+-            <NavigationFeedback />
+-            <div className="flex min-h-screen min-w-0 flex-col pt-20 lg:pl-[248px] lg:pt-0">
+-              <main className="min-w-0 flex-1 overflow-x-clip px-4 py-5 sm:px-5 sm:py-6 lg:px-8 lg:py-7">
+-                <PageTransition>{children}</PageTransition>
+-              </main>
++          <SolairAiChatLauncherProvider>
++            <div className="min-h-screen bg-background">
++              <SessionTimeoutGuard />
++              <CrmRouteWarmer />
++              <Sidebar />
++              <NavigationFeedback />
++              <div className="flex min-h-screen min-w-0 flex-col pt-20 lg:pl-[248px] lg:pt-0">
++                <main className="min-w-0 flex-1 overflow-x-clip px-4 py-5 sm:px-5 sm:py-6 lg:px-8 lg:py-7">
++                  <PageTransition>{children}</PageTransition>
++                </main>
++              </div>
+             </div>
+-          </div>
+-          <CrmSettingsSidebar />
+-          <SolairAiDrawer />
++            <CrmSettingsSidebar />
++            <SolairAiDrawer />
++            <SolairAiChatPopup />
++          </SolairAiChatLauncherProvider>
+         </SolairAiLauncherProvider>
+       </CrmSettingsLauncherProvider>
+     </PermissionProvider>
+diff --git a/app/(dashboard)/solair-ai/apps.ts b/app/(dashboard)/solair-ai/apps.ts
+index 8784ef2..75ddd70 100644
+--- a/app/(dashboard)/solair-ai/apps.ts
++++ b/app/(dashboard)/solair-ai/apps.ts
+@@ -18,6 +18,9 @@ export type SolairAiAppDef = {
+   tone: string
+   /** Ombra del badge icona. */
+   glow: string
++  /** "popup": si apre come finestra flottante senza cambiare pagina.
++   *  "page": naviga sulla sua route in app/(dashboard)/solair-ai/<slug>/. */
++  kind: "popup" | "page"
+   /** Chiave permessi da requirePage/canAction, se diversa da "solair_ai". */
+   pageKey?: string
+ }
+@@ -31,5 +34,6 @@ export const SOLAIR_AI_APPS: SolairAiAppDef[] = [
+     meta: "Assistente AI",
+     tone: "from-[#6f42c1] to-[#9f7aea]",
+     glow: "shadow-[0_8px_18px_rgb(111_66_193/22%)]",
++    kind: "popup",
+   },
+ ]
+diff --git a/app/(dashboard)/solair-ai/assistente/solair-ai-client.tsx b/app/(dashboard)/solair-ai/assistente/solair-ai-client.tsx
+index 60c271a..87f92d0 100644
+--- a/app/(dashboard)/solair-ai/assistente/solair-ai-client.tsx
++++ b/app/(dashboard)/solair-ai/assistente/solair-ai-client.tsx
+@@ -267,10 +267,13 @@ export function SolairAiClient({
+   canRun,
+   canReview,
+   cartelleConfigurate,
++  compact = false,
+ }: {
+   canRun: boolean
+   canReview: boolean
+   cartelleConfigurate: number
++  /** true dentro il popup: la' l'header (icona+titolo) lo mette gia' il popup. */
++  compact?: boolean
+ }) {
+   const [messaggi, setMessaggi] = useState<MessaggioChat[]>([
+     { id: nuovoId(), ruolo: "bot", testo: BENVENUTO },
+@@ -394,19 +397,21 @@ export function SolairAiClient({
+
+   return (
+     <div className="flex flex-col gap-5">
+-      <div className="flex flex-wrap items-start justify-between gap-3">
+-        <div className="flex items-center gap-3">
+-          <span className="flex size-10 items-center justify-center rounded-xl bg-[#6f42c1]/10 text-[#6f42c1]">
+-            <Sparkles className="size-5" />
+-          </span>
+-          <div>
+-            <h1 className="text-xl font-semibold text-foreground">SolairAI</h1>
+-            <p className="text-sm text-muted-foreground">
+-              Conosce le fonti Nextcloud autorizzate e propone modifiche CRM solo su conferma.
+-            </p>
++      {!compact ? (
++        <div className="flex flex-wrap items-start justify-between gap-3">
++          <div className="flex items-center gap-3">
++            <span className="flex size-10 items-center justify-center rounded-xl bg-[#6f42c1]/10 text-[#6f42c1]">
++              <Sparkles className="size-5" />
++            </span>
++            <div>
++              <h1 className="text-xl font-semibold text-foreground">SolairAI</h1>
++              <p className="text-sm text-muted-foreground">
++                Conosce le fonti Nextcloud autorizzate e propone modifiche CRM solo su conferma.
++              </p>
++            </div>
+           </div>
+         </div>
+-      </div>
++      ) : null}
+
+       {cartelleConfigurate === 0 ? (
+         <div className="flex items-start gap-2 rounded-xl border border-amber-300/60 bg-amber-50 p-4 text-sm text-amber-800">
+diff --git a/app/api/solair-ai/stato/route.ts b/app/api/solair-ai/stato/route.ts
+new file mode 100644
+index 0000000..f625e00
+--- /dev/null
++++ b/app/api/solair-ai/stato/route.ts
+@@ -0,0 +1,22 @@
++import { NextResponse } from "next/server"
++
++import { requireApiPage } from "@/lib/permissions/server"
++import { leggiImpostazioniAI } from "@/lib/solair-ai/settings"
++
++/**
++ * Dati minimi che il popup della chat (montato nel layout, fuori dalla
++ * pagina /solair-ai/assistente) deve conoscere prima di renderizzare
++ * SolairAiClient: stessi tre valori che la pagina calcola server-side.
++ */
++export async function GET() {
++  const { permissions, response } = await requireApiPage("solair_ai")
++  if (response) return response
++
++  const impostazioni = await leggiImpostazioniAI()
++
++  return NextResponse.json({
++    canRun: permissions.canAction("solair_ai.run"),
++    canReview: permissions.canAction("solair_ai.revisioni.view"),
++    cartelleConfigurate: impostazioni.filter((riga) => riga.nextcloudPath !== "").length,
++  })
++}
+diff --git a/components/dashboard/solair-ai-chat-popup.tsx b/components/dashboard/solair-ai-chat-popup.tsx
+new file mode 100644
+index 0000000..bbc61ba
+--- /dev/null
++++ b/components/dashboard/solair-ai-chat-popup.tsx
+@@ -0,0 +1,101 @@
++"use client"
++
++import { useEffect, useRef, useState } from "react"
++import { AnimatePresence, motion } from "framer-motion"
++import { Loader2, Sparkles, TriangleAlert, X } from "lucide-react"
++
++import { useSolairAiChatLauncher } from "@/lib/solair-ai-chat-launcher"
++import { SolairAiClient } from "@/app/(dashboard)/solair-ai/assistente/solair-ai-client"
++
++type StatoAI = { canRun: boolean; canReview: boolean; cartelleConfigurate: number }
++
++export function SolairAiChatPopup() {
++  const { open, closeChat } = useSolairAiChatLauncher()
++  const [stato, setStato] = useState<StatoAI | null>(null)
++  const [errore, setErrore] = useState(false)
++  const panelRef = useRef<HTMLDivElement>(null)
++
++  // Carica canRun/canReview/cartelleConfigurate solo al primo open: la
++  // pagina /solair-ai/assistente li calcola server-side, il popup — montato
++  // nel layout, fuori da quella pagina — li chiede a /api/solair-ai/stato.
++  useEffect(() => {
++    if (!open || stato || errore) return
++    let annullato = false
++    fetch("/api/solair-ai/stato")
++      .then((r) => (r.ok ? r.json() : Promise.reject()))
++      .then((dati: StatoAI) => {
++        if (!annullato) setStato(dati)
++      })
++      .catch(() => {
++        if (!annullato) setErrore(true)
++      })
++    return () => {
++      annullato = true
++    }
++  }, [open, stato, errore])
++
++  useEffect(() => {
++    if (!open) return
++    const onKeyDown = (e: KeyboardEvent) => {
++      if (e.key === "Escape") closeChat()
++    }
++    document.addEventListener("keydown", onKeyDown)
++    return () => document.removeEventListener("keydown", onKeyDown)
++  }, [open, closeChat])
++
++  return (
++    <AnimatePresence>
++      {open ? (
++        <motion.div
++          ref={panelRef}
++          role="dialog"
++          aria-modal="true"
++          aria-label="SolairAI"
++          initial={{ opacity: 0, y: 16, scale: 0.98 }}
++          animate={{ opacity: 1, y: 0, scale: 1 }}
++          exit={{ opacity: 0, y: 16, scale: 0.98 }}
++          transition={{ type: "spring", damping: 28, stiffness: 320 }}
++          className="fixed bottom-5 right-5 z-50 flex h-[min(680px,calc(100vh-2.5rem))] w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-[0_20px_60px_rgba(0,0,0,0.25)]"
++        >
++          <div className="flex shrink-0 items-center gap-3 border-b border-border bg-[#6f42c1]/5 px-4 py-3">
++            <span className="flex size-9 items-center justify-center rounded-lg bg-[#6f42c1]/10 text-[#6f42c1]">
++              <Sparkles className="size-4" />
++            </span>
++            <div className="min-w-0 flex-1">
++              <p className="text-sm font-semibold text-foreground">SolairAI</p>
++              <p className="truncate text-xs text-muted-foreground">Assistente Documenti</p>
++            </div>
++            <button
++              type="button"
++              onClick={closeChat}
++              aria-label="Chiudi"
++              className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
++            >
++              <X className="size-4" />
++            </button>
++          </div>
++
++          <div className="flex-1 overflow-y-auto p-4">
++            {errore ? (
++              <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
++                <TriangleAlert className="mt-0.5 size-4 shrink-0" />
++                <span>Non riesco a caricare SolairAI. Riprova.</span>
++              </div>
++            ) : !stato ? (
++              <div className="flex h-full items-center justify-center text-muted-foreground">
++                <Loader2 className="size-5 animate-spin" />
++              </div>
++            ) : (
++              <SolairAiClient
++                compact
++                canRun={stato.canRun}
++                canReview={stato.canReview}
++                cartelleConfigurate={stato.cartelleConfigurate}
++              />
++            )}
++          </div>
++        </motion.div>
++      ) : null}
++    </AnimatePresence>
++  )
++}
+diff --git a/components/dashboard/solair-ai-drawer.tsx b/components/dashboard/solair-ai-drawer.tsx
+index 5b376b0..c0ccf33 100644
+--- a/components/dashboard/solair-ai-drawer.tsx
++++ b/components/dashboard/solair-ai-drawer.tsx
+@@ -6,6 +6,7 @@ import { X, ChevronRight, Sparkles } from "lucide-react"
+
+ import { cn } from "@/lib/utils"
+ import { useSolairAiLauncher } from "@/lib/solair-ai-launcher"
++import { useSolairAiChatLauncher } from "@/lib/solair-ai-chat-launcher"
+ import { useCrmSettingsNavigation } from "@/components/dashboard/crm-settings-navigation"
+ import { SOLAIR_AI_APPS } from "@/app/(dashboard)/solair-ai/apps"
+
+@@ -69,6 +70,7 @@ function useIsMobile() {
+
+ export function SolairAiDrawer() {
+   const { open, closeSolairAi } = useSolairAiLauncher()
++  const { openChat } = useSolairAiChatLauncher()
+   const { navigate, markNavigating } = useCrmSettingsNavigation()
+   const isMobile = useIsMobile()
+   const panelRef = useRef<HTMLDivElement>(null)
+@@ -114,6 +116,15 @@ export function SolairAiDrawer() {
+     navigate(href)
+   }
+
++  function handleAppClick(app: (typeof SOLAIR_AI_APPS)[number]) {
++    if (app.kind === "popup") {
++      closeSolairAi()
++      openChat()
++      return
++    }
++    handleNavigate(`/solair-ai/${app.slug}`)
++  }
++
+   const panelInitial = isMobile ? { y: "100%" } : { x: "100%" }
+   const panelAnimate = isMobile ? { y: 0 } : { x: 0 }
+
+@@ -177,7 +188,7 @@ export function SolairAiDrawer() {
+                   <AppCard
+                     key={app.slug}
+                     app={app}
+-                    onClick={() => handleNavigate(`/solair-ai/${app.slug}`)}
++                    onClick={() => handleAppClick(app)}
+                   />
+                 ))}
+               </div>
+diff --git a/lib/solair-ai-chat-launcher.tsx b/lib/solair-ai-chat-launcher.tsx
+new file mode 100644
+index 0000000..33ecb2e
+--- /dev/null
++++ b/lib/solair-ai-chat-launcher.tsx
+@@ -0,0 +1,34 @@
++"use client"
++
++import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react"
++
++interface SolairAiChatLauncherValue {
++  open: boolean
++  openChat: () => void
++  closeChat: () => void
++}
++
++const SolairAiChatLauncherContext = createContext<SolairAiChatLauncherValue | null>(null)
++
++export function SolairAiChatLauncherProvider({ children }: { children: ReactNode }) {
++  const [open, setOpen] = useState(false)
++
++  const openChat = useCallback(() => setOpen(true), [])
++  const closeChat = useCallback(() => setOpen(false), [])
++
++  const value = useMemo(() => ({ open, openChat, closeChat }), [open, openChat, closeChat])
++
++  return (
++    <SolairAiChatLauncherContext.Provider value={value}>
++      {children}
++    </SolairAiChatLauncherContext.Provider>
++  )
++}
++
++export function useSolairAiChatLauncher() {
++  const ctx = useContext(SolairAiChatLauncherContext)
++  if (!ctx) {
++    throw new Error("useSolairAiChatLauncher must be used within a SolairAiChatLauncherProvider")
++  }
++  return ctx
++}
+--
+2.43.0

@@ -1,0 +1,302 @@
+From 56986bbce43ebaa6181291de168b6009ebd1e1fe Mon Sep 17 00:00:00 2001
+From: Nando Taglieri <n.taglieri@gmail.com>
+Date: Sun, 13 Sep 2026 18:01:35 +0000
+Subject: [PATCH] solair-ai: drawer al posto della pagina, hero verde stile
+ Salesforce
+
+---
+ app/(dashboard)/layout.tsx                |  27 +++--
+ components/dashboard/sidebar.tsx          |  37 +++++-
+ components/dashboard/solair-ai-drawer.tsx | 130 ++++++++++++++++++++++
+ lib/solair-ai-launcher.tsx                |  35 ++++++
+ 4 files changed, 215 insertions(+), 14 deletions(-)
+ create mode 100644 components/dashboard/solair-ai-drawer.tsx
+ create mode 100644 lib/solair-ai-launcher.tsx
+
+diff --git a/app/(dashboard)/layout.tsx b/app/(dashboard)/layout.tsx
+index 8368825..eaa8c04 100644
+--- a/app/(dashboard)/layout.tsx
++++ b/app/(dashboard)/layout.tsx
+@@ -2,6 +2,8 @@ import type { ReactNode } from "react"
+ import { Sidebar } from "@/components/dashboard/sidebar"
+ import { CrmSettingsSidebar } from "@/components/dashboard/crm-settings-sidebar"
+ import { CrmSettingsLauncherProvider } from "@/lib/crm-settings-launcher"
++import { SolairAiLauncherProvider } from "@/lib/solair-ai-launcher"
++import { SolairAiDrawer } from "@/components/dashboard/solair-ai-drawer"
+ import { loadCurrentPermissionSnapshot } from "@/lib/permissions/load-permissions"
+ import { PermissionProvider } from "@/lib/permissions/provider"
+ import { PageTransition } from "@/components/motion/page-transition"
+@@ -15,18 +17,21 @@ export default async function DashboardLayout({ children }: { children: ReactNod
+   return (
+     <PermissionProvider snapshot={permissions}>
+       <CrmSettingsLauncherProvider>
+-        <div className="min-h-screen bg-background">
+-          <SessionTimeoutGuard />
+-          <CrmRouteWarmer />
+-          <Sidebar />
+-          <NavigationFeedback />
+-          <div className="flex min-h-screen min-w-0 flex-col pt-20 lg:pl-[248px] lg:pt-0">
+-            <main className="min-w-0 flex-1 overflow-x-clip px-4 py-5 sm:px-5 sm:py-6 lg:px-8 lg:py-7">
+-              <PageTransition>{children}</PageTransition>
+-            </main>
++        <SolairAiLauncherProvider>
++          <div className="min-h-screen bg-background">
++            <SessionTimeoutGuard />
++            <CrmRouteWarmer />
++            <Sidebar />
++            <NavigationFeedback />
++            <div className="flex min-h-screen min-w-0 flex-col pt-20 lg:pl-[248px] lg:pt-0">
++              <main className="min-w-0 flex-1 overflow-x-clip px-4 py-5 sm:px-5 sm:py-6 lg:px-8 lg:py-7">
++                <PageTransition>{children}</PageTransition>
++              </main>
++            </div>
+           </div>
+-        </div>
+-        <CrmSettingsSidebar />
++          <CrmSettingsSidebar />
++          <SolairAiDrawer />
++        </SolairAiLauncherProvider>
+       </CrmSettingsLauncherProvider>
+     </PermissionProvider>
+   )
+diff --git a/components/dashboard/sidebar.tsx b/components/dashboard/sidebar.tsx
+index 1d1188a..40511b4 100644
+--- a/components/dashboard/sidebar.tsx
++++ b/components/dashboard/sidebar.tsx
+@@ -21,6 +21,7 @@ import {
+   type NavItem,
+ } from "@/lib/navigation"
+ import { useCrmSettingsLauncher } from "@/lib/crm-settings-launcher"
++import { useSolairAiLauncher } from "@/lib/solair-ai-launcher"
+ import { pageKeyFromPath } from "@/lib/permissions/constants"
+ import { usePermissions } from "@/lib/permissions/provider"
+ import { NAV_ICONS } from "./icons"
+@@ -127,6 +128,32 @@ function NavLauncherButton({ item, onOpen }: { item: NavItem; onOpen?: () => voi
+   )
+ }
+
++function SolairAiNavButton({ item, onOpen }: { item: NavItem; onOpen?: () => void }) {
++  const Icon = NAV_ICONS[item.icon]
++  const { open, openSolairAi } = useSolairAiLauncher()
++  return (
++    <motion.div whileHover={{ x: 3 }} transition={{ duration: 0.18 }}>
++      <button
++        type="button"
++        onClick={() => {
++          onOpen?.()
++          openSolairAi()
++        }}
++        aria-current={open ? "true" : undefined}
++        className={cn(
++          "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[15px] font-semibold transition-colors",
++          open
++            ? "bg-sidebar-accent text-sidebar-accent-foreground"
++            : "text-sidebar-foreground hover:bg-muted hover:text-foreground",
++        )}
++      >
++        <Icon className="size-[18px] shrink-0" />
++        <span className="flex-1 truncate">{item.label}</span>
++      </button>
++    </motion.div>
++  )
++}
++
+ function ProfileMenu({ compact = false }: { compact?: boolean }) {
+   const router = useRouter()
+   const permissions = usePermissions()
+@@ -211,9 +238,13 @@ function NavSection({
+       <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+         {title}
+       </p>
+-      {items.map((item) => (
+-        <NavLink key={item.label} item={item} onNavigate={onNavigate} />
+-      ))}
++      {items.map((item) =>
++        item.href === "/solair-ai" ? (
++          <SolairAiNavButton key={item.label} item={item} onOpen={onNavigate} />
++        ) : (
++          <NavLink key={item.label} item={item} onNavigate={onNavigate} />
++        ),
++      )}
+     </div>
+   )
+ }
+diff --git a/components/dashboard/solair-ai-drawer.tsx b/components/dashboard/solair-ai-drawer.tsx
+new file mode 100644
+index 0000000..4d22516
+--- /dev/null
++++ b/components/dashboard/solair-ai-drawer.tsx
+@@ -0,0 +1,130 @@
++"use client"
++
++import Link from "next/link"
++import { Sparkles } from "lucide-react"
++
++import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet"
++import { useSolairAiLauncher } from "@/lib/solair-ai-launcher"
++import { SOLAIR_AI_APPS } from "@/app/(dashboard)/solair-ai/apps"
++
++const COLORI_TILE = ["bg-navy", "bg-teal", "bg-[#8a5cf6]", "bg-[#c2410c]"]
++
++/**
++ * Skyline stilizzata per l'hero del drawer: non e' una foto (niente
++ * questioni di diritti su un edificio reale), ma la stessa idea — grattacieli
++ * a vetri di sera, silhouette su un verde smeraldo profondo.
++ */
++function SkylineHero() {
++  const palazzi = [
++    { x: 0, w: 34, h: 90, o: 0.14 },
++    { x: 36, w: 46, h: 140, o: 0.22 },
++    { x: 86, w: 30, h: 100, o: 0.16 },
++    { x: 120, w: 58, h: 190, o: 0.3, torre: true },
++    { x: 182, w: 34, h: 120, o: 0.18 },
++    { x: 220, w: 44, h: 80, o: 0.13 },
++    { x: 268, w: 52, h: 150, o: 0.24 },
++    { x: 324, w: 30, h: 95, o: 0.15 },
++  ]
++  return (
++    <svg
++      viewBox="0 0 360 200"
++      preserveAspectRatio="xMidYMax slice"
++      aria-hidden="true"
++      className="pointer-events-none absolute inset-0 h-full w-full"
++    >
++      {palazzi.map((p, i) => (
++        <rect
++          key={i}
++          x={p.x}
++          y={200 - p.h}
++          width={p.w}
++          height={p.h}
++          fill="#eafff4"
++          fillOpacity={p.o}
++        />
++      ))}
++      {/* Griglia a vetri sulla torre piu' alta, quella "premium" */}
++      {Array.from({ length: 9 }).map((_, row) =>
++        Array.from({ length: 5 }).map((_, col) => (
++          <rect
++            key={`w-${row}-${col}`}
++            x={126 + col * 10}
++            y={16 + row * 17}
++            width={6}
++            height={10}
++            fill="#eafff4"
++            fillOpacity={(row + col) % 3 === 0 ? 0.5 : 0.2}
++          />
++        )),
++      )}
++    </svg>
++  )
++}
++
++export function SolairAiDrawer() {
++  const { open, closeSolairAi } = useSolairAiLauncher()
++
++  return (
++    <Sheet open={open} onOpenChange={(next) => !next && closeSolairAi()}>
++      <SheetContent
++        side="right"
++        showCloseButton={false}
++        className="w-full border-l-0 bg-[#f3f2f2] p-0 sm:max-w-none sm:w-[680px] lg:w-[800px]"
++      >
++        <button
++          type="button"
++          onClick={closeSolairAi}
++          aria-label="Chiudi"
++          className="absolute right-4 top-4 z-10 flex size-8 items-center justify-center rounded-full bg-black/15 text-white/90 backdrop-blur-sm transition-colors hover:bg-black/25 hover:text-white"
++        >
++          <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth={2}>
++            <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
++          </svg>
++        </button>
++
++        <div className="flex h-full flex-col overflow-y-auto">
++          <div className="relative overflow-hidden bg-gradient-to-br from-[#0c3b2e] via-[#145c46] to-[#1e3a5f] px-8 py-10">
++            <SkylineHero />
++            <div className="relative">
++              <span className="mb-3 inline-flex size-11 items-center justify-center rounded-lg bg-white/15 text-white backdrop-blur-sm">
++                <Sparkles className="size-5" />
++              </span>
++              <SheetTitle className="font-heading text-[28px] font-semibold text-white">
++                SolairAI
++              </SheetTitle>
++              <SheetDescription className="mt-1 max-w-sm text-[15px] text-[#c7ecdd]">
++                Le app basate su AI del CRM, in un unico posto.
++              </SheetDescription>
++            </div>
++          </div>
++
++          <div className="flex-1 px-6 py-6">
++            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
++              App disponibili
++            </p>
++            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
++              {SOLAIR_AI_APPS.map((app, i) => (
++                <Link
++                  key={app.slug}
++                  href={`/solair-ai/${app.slug}`}
++                  title={app.descrizione}
++                  onClick={closeSolairAi}
++                  className="group flex flex-col items-center gap-2 rounded-md border border-[#dddbda] bg-white px-3 py-5 text-center transition-shadow hover:shadow-[0_2px_8px_rgba(0,0,0,0.12)]"
++                >
++                  <span
++                    className={`flex size-11 items-center justify-center rounded-lg text-white ${COLORI_TILE[i % COLORI_TILE.length]}`}
++                  >
++                    <Sparkles className="size-5" />
++                  </span>
++                  <span className="text-[13px] font-medium leading-tight text-[#032d60] group-hover:underline">
++                    {app.nome}
++                  </span>
++                </Link>
++              ))}
++            </div>
++          </div>
++        </div>
++      </SheetContent>
++    </Sheet>
++  )
++}
+diff --git a/lib/solair-ai-launcher.tsx b/lib/solair-ai-launcher.tsx
+new file mode 100644
+index 0000000..8473045
+--- /dev/null
++++ b/lib/solair-ai-launcher.tsx
+@@ -0,0 +1,35 @@
++"use client"
++
++import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react"
++
++interface SolairAiLauncherValue {
++  open: boolean
++  openSolairAi: () => void
++  closeSolairAi: () => void
++}
++
++const SolairAiLauncherContext = createContext<SolairAiLauncherValue | null>(null)
++
++export function SolairAiLauncherProvider({ children }: { children: ReactNode }) {
++  const [open, setOpen] = useState(false)
++
++  const openSolairAi = useCallback(() => setOpen(true), [])
++  const closeSolairAi = useCallback(() => setOpen(false), [])
++
++  const value = useMemo(
++    () => ({ open, openSolairAi, closeSolairAi }),
++    [open, openSolairAi, closeSolairAi],
++  )
++
++  return (
++    <SolairAiLauncherContext.Provider value={value}>{children}</SolairAiLauncherContext.Provider>
++  )
++}
++
++export function useSolairAiLauncher() {
++  const ctx = useContext(SolairAiLauncherContext)
++  if (!ctx) {
++    throw new Error("useSolairAiLauncher must be used within a SolairAiLauncherProvider")
++  }
++  return ctx
++}
+--
+2.43.0

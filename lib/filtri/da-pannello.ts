@@ -1,5 +1,5 @@
 import type { AdvancedFilterState, FieldValue } from "@/lib/leads/advanced-filter-logic"
-import type { CampoFiltrabile, Condizione, Gruppo, Nodo } from "./albero"
+import type { CampoFiltrabile, Gruppo, Nodo } from "./albero"
 
 /**
  * Dal pannello all'albero.
@@ -17,12 +17,17 @@ import type { CampoFiltrabile, Condizione, Gruppo, Nodo } from "./albero"
 function condizioneDaValore(
   campo: CampoFiltrabile,
   valore: FieldValue,
-): Condizione | null {
+): Nodo | null {
   switch (valore.type) {
     case "text": {
       const testo = valore.contains.trim()
       if (!testo) return null
-      return { tipo: "condizione", campo: campo.chiave, operatore: "contiene", valori: [testo] }
+      return {
+        tipo: "condizione",
+        campo: campo.chiave,
+        operatore: valore.negated ? "diverso" : "uguale",
+        valori: [testo],
+      }
     }
     case "enum": {
       if (!valore.selected.length) return null
@@ -32,16 +37,17 @@ function condizioneDaValore(
       return {
         tipo: "condizione",
         campo: campo.chiave,
-        operatore: "uno_di",
+        operatore: valore.negated ? "nessuno_di" : "uno_di",
         valori: [...valore.selected],
       }
     }
     case "boolean": {
       if (valore.value === "all") return null
+      const si = valore.value === "yes"
       return {
         tipo: "condizione",
         campo: campo.chiave,
-        operatore: valore.value === "yes" ? "vero" : "falso",
+        operatore: si !== Boolean(valore.negated) ? "vero" : "falso",
         valori: [],
       }
     }
@@ -52,6 +58,26 @@ function condizioneDaValore(
       const daPieno = da.trim()
       const aPieno = a.trim()
 
+      if (daPieno && aPieno && valore.negated) {
+        return {
+          tipo: "gruppo",
+          connettore: "o",
+          nodi: [
+            {
+              tipo: "condizione",
+              campo: campo.chiave,
+              operatore: valore.type === "date" ? "prima" : "minore",
+              valori: [daPieno],
+            },
+            {
+              tipo: "condizione",
+              campo: campo.chiave,
+              operatore: valore.type === "date" ? "dopo" : "maggiore",
+              valori: [aPieno],
+            },
+          ],
+        }
+      }
       if (daPieno && aPieno) {
         return {
           tipo: "condizione",
@@ -66,7 +92,13 @@ function condizioneDaValore(
         return {
           tipo: "condizione",
           campo: campo.chiave,
-          operatore: valore.type === "date" ? "dopo" : "maggiore",
+          operatore: valore.negated
+            ? valore.type === "date"
+              ? "prima"
+              : "minore"
+            : valore.type === "date"
+              ? "dopo"
+              : "maggiore",
           valori: [daPieno],
         }
       }
@@ -74,7 +106,13 @@ function condizioneDaValore(
         return {
           tipo: "condizione",
           campo: campo.chiave,
-          operatore: valore.type === "date" ? "prima" : "minore",
+          operatore: valore.negated
+            ? valore.type === "date"
+              ? "dopo"
+              : "maggiore"
+            : valore.type === "date"
+              ? "prima"
+              : "minore",
           valori: [aPieno],
         }
       }

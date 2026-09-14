@@ -1,0 +1,59 @@
+From 720869538f5c4bb38f5963fda0352e607b99d84d Mon Sep 17 00:00:00 2001
+From: Nando Taglieri <n.taglieri@gmail.com>
+Date: Sun, 13 Sep 2026 19:05:02 +0000
+Subject: [PATCH] fix(db): aggiungo policy RLS UPDATE mancante su attivita
+ (note non si cancellavano/modificavano davvero)
+
+---
+ .../20260913_attivita_update_policy.sql       | 40 +++++++++++++++++++
+ 1 file changed, 40 insertions(+)
+ create mode 100644 supabase/migrations/20260913_attivita_update_policy.sql
+
+diff --git a/supabase/migrations/20260913_attivita_update_policy.sql b/supabase/migrations/20260913_attivita_update_policy.sql
+new file mode 100644
+index 0000000..bc979ae
+--- /dev/null
++++ b/supabase/migrations/20260913_attivita_update_policy.sql
+@@ -0,0 +1,40 @@
++-- Le note (attivita) avevano policy RLS per select/insert/delete ma non per
++-- update: quando e' arrivata la modifica/cancellazione recuperabile delle
++-- note (20260909e, che aggiunge eliminato/testo via UPDATE), e' rimasta
++-- senza una policy propria. Postgres nega di default cio' che nessuna
++-- policy concede: l'UPDATE veniva eseguito senza errore ma toccava zero
++-- righe, quindi "modifica" e "elimina" apparivano riuscite in UI e
++-- sparivano al primo reload.
++--
++-- Stessa forma di attivita_delete: solo SUPERADMIN/ADMIN, e solo se il
++-- record genitore esiste ancora.
++
++begin;
++
++drop policy if exists attivita_update on public.attivita;
++create policy attivita_update
++  on public.attivita for update to authenticated
++  using (
++    (select coalesce(public.current_ruolo_code(), '')) in ('SUPERADMIN', 'ADMIN')
++    and case attivita.record_tipo
++      when 'lead' then exists (select 1 from public.leads x where x.id = attivita.record_id)
++      when 'cliente' then exists (select 1 from public.clienti x where x.id = attivita.record_id)
++      when 'compito' then exists (select 1 from public.compiti x where x.id = attivita.record_id)
++      when 'installatore' then exists (select 1 from public.installatori x where x.id = attivita.record_id)
++      else false
++    end
++  )
++  with check (
++    (select coalesce(public.current_ruolo_code(), '')) in ('SUPERADMIN', 'ADMIN')
++    and case attivita.record_tipo
++      when 'lead' then exists (select 1 from public.leads x where x.id = attivita.record_id)
++      when 'cliente' then exists (select 1 from public.clienti x where x.id = attivita.record_id)
++      when 'compito' then exists (select 1 from public.compiti x where x.id = attivita.record_id)
++      when 'installatore' then exists (select 1 from public.installatori x where x.id = attivita.record_id)
++      else false
++    end
++  );
++
++notify pgrst, 'reload schema';
++
++commit;
+--
+2.43.0

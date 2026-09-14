@@ -190,7 +190,12 @@ export function LeadDetailHeader({ lead }: { lead: Lead }) {
             <Pencil data-icon="inline-start" />
             Modifica
           </Button>
-          <AiAllegatiButton className="h-9 px-3 text-sm font-semibold" />
+          <AiAllegatiButton
+            entita="lead"
+            recordId={lead.id}
+            nome={nome}
+            className="h-9 px-3 text-sm font-semibold"
+          />
           <QuickContactIcons
             kind="lead"
             recordId={lead.id}

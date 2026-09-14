@@ -4,21 +4,25 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   ChevronRight,
   Filter,
+  Maximize2,
   RotateCcw,
+  Save,
   Search,
   X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Checkbox } from "@/components/ui/checkbox"
 import { MultiFilterSelect } from "@/components/shared/multi-filter-select"
 import { createPortal } from "react-dom"
 import { toast } from "sonner"
-import { Maximize2, Save } from "lucide-react"
-import { FiltriSalvati } from "@/components/filtri/filtri-salvati"
+import {
+  FiltriSalvati,
+  FiltroPreview,
+  type FiltroSalvato,
+} from "@/components/filtri/filtri-salvati"
 import { CostruttoreFiltro } from "@/components/filtri/costruttore-filtro"
-import { GRUPPO_VUOTO, type Gruppo } from "@/lib/filtri/albero"
+import { contaCondizioni, GRUPPO_VUOTO, type Gruppo } from "@/lib/filtri/albero"
 import { gruppiCampiLead } from "@/lib/filtri/catalogo-lead"
 import { alberoDaPannello } from "@/lib/filtri/da-pannello"
 import {
@@ -32,11 +36,16 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select"
+import {
   type Lead,
 } from "@/lib/mock-data"
 import { useTags } from "@/lib/tag-store"
 import {
-  LeadQuickFilterFields,
   countActiveLeadFilters,
   type LeadFilterState,
 } from "@/components/leads/lead-filters"
@@ -210,43 +219,45 @@ function buildFields(
   ]
 }
 
-// ----------------------------------------------------------------------------
-// Pill riassuntiva di un filtro attivo
-// ----------------------------------------------------------------------------
-function fieldPillLabel(def: FieldDef, v: FieldValue): string {
-  switch (v.type) {
-    case "text":
-      return `${def.label}: "${v.contains.trim()}"`
-    case "enum":
-      return `${def.label}: ${v.selected
-        .map(
-          (selected) =>
-            def.options?.find((option) => option.value === selected)?.label ??
-            selected,
-        )
-        .join(", ")}`
-    case "number": {
-      if (v.min !== "" && v.max !== "")
-        return `${def.label}: ${v.min}–${v.max}`
-      if (v.min !== "") return `${def.label}: ≥${v.min}`
-      return `${def.label}: ≤${v.max}`
-    }
-    case "date": {
-      if (v.from !== "" && v.to !== "")
-        return `${def.label}: ${v.from} → ${v.to}`
-      if (v.from !== "") return `${def.label}: da ${v.from}`
-      return `${def.label}: fino a ${v.to}`
-    }
-    case "boolean":
-      return `${def.label}: ${v.value === "yes" ? "Sì" : "No"}`
-  }
-}
-
 const QUICK_LABELS: Record<keyof AdvancedFilterState["quick"], string> = {
   badgeAttivita: "Badge dell'attività",
   badgeNota: "Badge di nota",
   nonToccati: "Record non toccati",
   toccati: "Record toccati",
+}
+
+function formatFieldCondition(def: FieldDef, value: FieldValue): { operatore: string; valore: string } {
+  const operatoreBase = value.negated ? "non è" : "è"
+  switch (value.type) {
+    case "text":
+      return { operatore: operatoreBase, valore: value.contains.trim() }
+    case "enum":
+      return {
+        operatore: operatoreBase,
+        valore: value.selected
+          .map(
+            (selected) =>
+              def.options?.find((option) => option.value === selected)?.label ?? selected,
+          )
+          .join(", "),
+      }
+    case "number": {
+      if (value.min !== "" && value.max !== "") {
+        return { operatore: operatoreBase, valore: `fra ${value.min} e ${value.max}` }
+      }
+      if (value.min !== "") return { operatore: operatoreBase, valore: `da ${value.min}` }
+      return { operatore: operatoreBase, valore: `fino a ${value.max}` }
+    }
+    case "date": {
+      if (value.from !== "" && value.to !== "") {
+        return { operatore: operatoreBase, valore: `fra ${value.from} e ${value.to}` }
+      }
+      if (value.from !== "") return { operatore: operatoreBase, valore: `dal ${value.from}` }
+      return { operatore: operatoreBase, valore: `fino al ${value.to}` }
+    }
+    case "boolean":
+      return { operatore: operatoreBase, valore: value.value === "yes" ? "Sì" : "No" }
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -258,8 +269,6 @@ export function AdvancedFilters({
   tags,
   quickFilters,
   onQuickFiltersChange,
-  onQuickFiltersReset,
-  quickViews,
   trigger,
   inline = false,
   openInline = false,
@@ -275,7 +284,7 @@ export function AdvancedFilters({
   quickFilters?: LeadFilterState
   onQuickFiltersChange?: (next: LeadFilterState) => void
   onQuickFiltersReset?: () => void
-  /** Viste rapide (es. Tutti/Da contattare/…): pillole in cima al drawer. */
+  /** Viste rapide ricevute dalla pagina, non mostrate nel pannello laterale. */
   quickViews?: { label: string; active: boolean; onSelect: () => void }[]
   /** Trigger personalizzato (es. bottone header colorato). Se assente, resta l'icona compatta di default. */
   trigger?: (ctx: { onClick: () => void; count: number }) => ReactNode
@@ -307,7 +316,7 @@ export function AdvancedFilters({
   /** L'albero attualmente applicato, per riaprirlo nel costruttore. */
   alberoApplicato?: Gruppo
 }) {
-  const { owners, installers } = useTags()
+  const { owners, installers, tags: tagDefinitions } = useTags()
   const leadOptions = useLeadFieldOptions()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<AdvancedFilterState>(applied)
@@ -334,15 +343,19 @@ export function AdvancedFilters({
     () => new Map(allFields.map((f) => [f.id as string, f])),
     [allFields],
   )
+  const aperto = inline ? openInline : open
 
   // Sincronizza il draft con lo stato applicato all'apertura del pannello
   useEffect(() => {
-    if (open) {
-      setDraft(applied)
-      setFieldQuery("")
-      setExpanded(null)
+    if (aperto) {
+      const timeout = window.setTimeout(() => {
+        setDraft(applied)
+        setFieldQuery("")
+        setExpanded(null)
+      }, 0)
+      return () => window.clearTimeout(timeout)
     }
-  }, [open, applied])
+  }, [aperto, applied])
 
   const visibleFields = useMemo(() => {
     const q = fieldQuery.trim().toLowerCase()
@@ -353,7 +366,8 @@ export function AdvancedFilters({
   const appliedCount = countActiveAdvanced(applied)
   const draftCount = countActiveAdvanced(draft)
   const quickCount = quickFilters ? countActiveLeadFilters(quickFilters) : 0
-  const totalAppliedCount = appliedCount + quickCount
+  const treeCount = alberoApplicato ? contaCondizioni(alberoApplicato) : 0
+  const totalAppliedCount = appliedCount + quickCount + treeCount
 
   const setQuick = (key: keyof AdvancedFilterState["quick"], value: boolean) =>
     setDraft((d) => ({ ...d, quick: { ...d.quick, [key]: value } }))
@@ -385,30 +399,9 @@ export function AdvancedFilters({
     }
   }
 
-  // Pill dei filtri attivi nel draft
-  const activePills: { id: string; label: string }[] = []
-  for (const [key, on] of Object.entries(draft.quick)) {
-    if (on)
-      activePills.push({
-        id: `quick:${key}`,
-        label: QUICK_LABELS[key as keyof AdvancedFilterState["quick"]],
-      })
-  }
-  for (const [id, v] of Object.entries(draft.fields)) {
-    const def = fieldsById.get(id)
-    if (def && isFieldActive(v))
-      activePills.push({ id: `field:${id}`, label: fieldPillLabel(def, v) })
-  }
-
-  const removePill = (pillId: string) => {
-    const [kind, key] = pillId.split(":")
-    if (kind === "quick")
-      setQuick(key as keyof AdvancedFilterState["quick"], false)
-    else clearField(key)
-  }
-
   const [costruttoreAperto, setCostruttoreAperto] = useState(false)
   const [filtroSalvatoAttivo, setFiltroSalvatoAttivo] = useState<string | null>(null)
+  const [filtroInModifica, setFiltroInModifica] = useState<FiltroSalvato | null>(null)
   // Cambia a ogni salvataggio, per far rileggere l'elenco dei salvati.
   const [versioneSalvati, setVersioneSalvati] = useState(0)
 
@@ -438,7 +431,6 @@ export function AdvancedFilters({
 
   // Apertura: nella modalita' incastonata la governa la pagina, che deve
   // sapere quanto spazio lasciare alla lista.
-  const aperto = inline ? openInline : open
   const chiudi = () => (inline ? onOpenInlineChange?.(false) : setOpen(false))
 
   // Le opzioni dei campi a elenco vengono dai dati veri, non da un elenco
@@ -457,11 +449,113 @@ export function AdvancedFilters({
       .optionsFor("modalita_iscrizione_annullata")
       .map((opzione) => opzione.value),
     modelliPannello: leadOptions.optionsFor("modello_pannello").map((opzione) => opzione.value),
-    installatori: installers.map((installer) => installer.nome),
+    installatori: installers.map((installer) => installer.id),
     creatori: owners.map((owner) => owner.nome),
     proprietari: owners.map((owner) => owner.id),
-    tag: tags,
+    tag: tagDefinitions.map((tag) => tag.id),
   }
+  const etichetteValoriLead: Record<string, Record<string, string>> = {
+    "Lead Proprietario": Object.fromEntries(owners.map((owner) => [owner.id, owner.nome])),
+    "Installatore - Incaricato sopralluogo": Object.fromEntries(
+      installers.map((installer) => [installer.id, installer.nome]),
+    ),
+    Tag: Object.fromEntries(tagDefinitions.map((tag) => [tag.id, tag.name])),
+  }
+  const gruppiLeadFiltrabili = gruppiCampiLead(opzioniCatalogo).map((gruppo) => ({
+    ...gruppo,
+    campi: gruppo.campi.map((campo) => ({
+      ...campo,
+      etichette: etichetteValoriLead[campo.chiave],
+    })),
+  }))
+  const campiLeadFiltrabili = gruppiLeadFiltrabili.flatMap((gruppo) => gruppo.campi)
+  const campiLeadPerChiave = new Map(campiLeadFiltrabili.map((campo) => [campo.chiave, campo]))
+  const groupedVisibleFields = gruppiLeadFiltrabili
+    .map((gruppo) => ({
+      chiave: gruppo.chiave,
+      etichetta: gruppo.etichetta,
+      campi: gruppo.campi
+        .map((campo) => fieldsById.get(campo.chiave))
+        .filter((campo): campo is FieldDef => {
+          if (!campo) return false
+          return visibleFields.some((visibile) => visibile.id === campo.id)
+        }),
+    }))
+    .filter((gruppo) => gruppo.campi.length > 0)
+  const labelFor = (
+    selected: readonly string[],
+    options: readonly { value: string; label: string }[],
+  ) =>
+    selected
+      .map((value) => options.find((option) => option.value === value)?.label ?? value)
+      .join(", ")
+  const activeFilterRows: Array<{
+    id: string
+    campo: string
+    operatore: string
+    valore: string
+    onRemove: () => void
+  }> = []
+
+  if (quickFilters && onQuickFiltersChange) {
+    const quickOptions = {
+      stato: leadOptions.optionsFor("stato_lead"),
+      sede: leadOptions.optionsFor("sede"),
+      commerciale: owners.map((owner) => ({ value: owner.id, label: owner.nome })),
+      origine: leadOptions.optionsFor("origine_lead"),
+      tag: tagDefinitions.map((tag) => ({ value: tag.id, label: tag.name })),
+      score: [
+        { value: "caldo", label: "Caldo (>80)" },
+        { value: "medio", label: "Medio (50-80)" },
+        { value: "freddo", label: "Freddo (<50)" },
+      ],
+    } satisfies Record<Exclude<keyof LeadFilterState, "search">, Array<{ value: string; label: string }>>
+    const quickLabels: Record<Exclude<keyof LeadFilterState, "search">, string> = {
+      stato: "Stato lead",
+      sede: "Sede",
+      commerciale: "Proprietario",
+      origine: "Origine lead",
+      tag: "Tag",
+      score: "Punteggio",
+    }
+
+    ;(Object.keys(quickOptions) as Array<Exclude<keyof LeadFilterState, "search">>).forEach((key) => {
+      const values = quickFilters[key]
+      if (!values.length) return
+      activeFilterRows.push({
+        id: `main:${key}`,
+        campo: quickLabels[key],
+        operatore: "è",
+        valore: labelFor(values, quickOptions[key]),
+        onRemove: () => onQuickFiltersChange({ ...quickFilters, [key]: [] }),
+      })
+    })
+  }
+
+  ;(Object.keys(draft.quick) as Array<keyof AdvancedFilterState["quick"]>).forEach((key) => {
+    if (!draft.quick[key]) return
+    activeFilterRows.push({
+      id: `quick:${key}`,
+      campo: QUICK_LABELS[key],
+      operatore: "è",
+      valore: "attivo",
+      onRemove: () => setQuick(key, false),
+    })
+  })
+
+  for (const [id, value] of Object.entries(draft.fields)) {
+    const def = fieldsById.get(id)
+    if (!def || !isFieldActive(value)) continue
+    const formatted = formatFieldCondition(def, value)
+    activeFilterRows.push({
+      id: `field:${id}`,
+      campo: def.label,
+      operatore: formatted.operatore,
+      valore: formatted.valore,
+      onRemove: () => clearField(id),
+    })
+  }
+  const activeFilterTotal = activeFilterRows.length + treeCount
 
   async function salvaFiltro(nome: string, gruppo: Gruppo) {
     const risposta = await fetch("/api/filtri-salvati", {
@@ -478,11 +572,35 @@ export function AdvancedFilters({
     setVersioneSalvati((v) => v + 1)
   }
 
+  async function aggiornaFiltroSalvato(nome: string, gruppo: Gruppo) {
+    if (!filtroInModifica) return
+    const risposta = await fetch("/api/filtri-salvati", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: filtroInModifica.id,
+        modulo: "lead",
+        nome,
+        definizione: gruppo,
+      }),
+    })
+    if (!risposta.ok) {
+      const dati = (await risposta.json().catch(() => ({}))) as { error?: string }
+      toast.error(dati.error ?? "Modifica non riuscita")
+      return
+    }
+    toast.success(`Filtro "${nome}" aggiornato`)
+    setFiltroSalvatoAttivo(filtroInModifica.id)
+    setFiltroInModifica(null)
+    setCostruttoreAperto(false)
+    setVersioneSalvati((v) => v + 1)
+  }
+
   /** Salva quello che c'e' nel pannello, senza passare dal costruttore. */
   async function salvaDalPannello() {
     const nome = window.prompt("Nome del filtro (lo vedranno tutti):")?.trim()
     if (!nome) return
-    const gruppo = alberoDaPannello(draft, gruppiCampiLead(opzioniCatalogo).flatMap((g) => g.campi))
+    const gruppo = alberoDaPannello(draft, campiLeadFiltrabili)
     if (!gruppo.nodi.length) {
       toast.error("Nessuna condizione da salvare")
       return
@@ -493,16 +611,23 @@ export function AdvancedFilters({
   const costruttore = onApplicaAlbero ? (
     <CostruttoreFiltro
       aperto={costruttoreAperto}
-      onChiudi={() => setCostruttoreAperto(false)}
-      gruppi={gruppiCampiLead(opzioniCatalogo)}
-      valoreIniziale={alberoApplicato ?? GRUPPO_VUOTO}
+      onChiudi={() => {
+        setCostruttoreAperto(false)
+        setFiltroInModifica(null)
+      }}
+      gruppi={gruppiLeadFiltrabili}
+      valoreIniziale={filtroInModifica?.definizione ?? alberoApplicato ?? GRUPPO_VUOTO}
+      nomeIniziale={filtroInModifica?.nome ?? ""}
+      titolo={filtroInModifica ? "Modifica filtro salvato" : "Costruisci filtro"}
+      etichettaSalva={filtroInModifica ? "Aggiorna filtro" : "Salva"}
       onApplica={(gruppo) => {
         // Applicare un albero composto a mano stacca l'eventuale filtro
         // salvato: non e' piu' quello.
         setFiltroSalvatoAttivo(null)
+        setFiltroInModifica(null)
         onApplicaAlbero(gruppo)
       }}
-      onSalva={salvaFiltro}
+      onSalva={filtroInModifica ? aggiornaFiltroSalvato : salvaFiltro}
     />
   ) : null
 
@@ -513,13 +638,18 @@ export function AdvancedFilters({
           <div className="flex items-center gap-0.5">
             {onApplicaAlbero ? (
               <Button
-                variant="ghost"
-                size="icon-sm"
+                variant="outline"
+                size="sm"
+                className="h-8 bg-card px-2 text-xs"
                 aria-label="Apri il costruttore"
                 title="Costruisci un filtro con condizioni e gruppi"
-                onClick={() => setCostruttoreAperto(true)}
+                onClick={() => {
+                  setFiltroInModifica(null)
+                  setCostruttoreAperto(true)
+                }}
               >
-                <Maximize2 />
+                <Maximize2 data-icon="inline-start" />
+                AND/OR
               </Button>
             ) : null}
             <Button variant="ghost" size="icon-sm" aria-label="Chiudi" onClick={chiudi}>
@@ -534,6 +664,7 @@ export function AdvancedFilters({
             modulo="lead"
             attivo={filtroSalvatoAttivo}
             ricarica={versioneSalvati}
+            campi={campiLeadFiltrabili}
             azione={
               draftCount > 0 ? (
                 <Button
@@ -551,33 +682,11 @@ export function AdvancedFilters({
               setFiltroSalvatoAttivo(filtro.id)
               onApplicaAlbero(filtro.definizione)
             }}
+            onModifica={(filtro) => {
+              setFiltroInModifica(filtro)
+              setCostruttoreAperto(true)
+            }}
           />
-          ) : null}
-
-          {/* Viste rapide */}
-          {quickViews && quickViews.length > 0 ? (
-            <div className="border-b border-border p-3">
-              <p className="px-1 pb-2 text-sm font-semibold text-foreground">
-                Viste rapide
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {quickViews.map((view) => (
-                  <button
-                    type="button"
-                    key={view.label}
-                    onClick={view.onSelect}
-                    className={cn(
-                      "h-10 shrink-0 rounded-lg px-4 text-sm font-bold transition-colors",
-                      view.active
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "border border-border bg-card text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {view.label}
-                  </button>
-                ))}
-              </div>
-            </div>
           ) : null}
 
           {/* Ricerca campo */}
@@ -594,123 +703,173 @@ export function AdvancedFilters({
             </div>
           </div>
 
-          {/* Pill filtri attivi */}
-          {activePills.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5 border-b border-border bg-muted/40 p-3">
-              {activePills.map((pill) => (
-                <span
-                  key={pill.id}
-                  className="inline-flex max-w-full items-center gap-1 rounded-full bg-teal/10 px-2 py-0.5 text-xs font-medium text-teal"
-                >
-                  <span className="truncate">{pill.label}</span>
-                  <button
-                    type="button"
-                    aria-label={`Rimuovi ${pill.label}`}
-                    onClick={() => removePill(pill.id)}
-                    className="shrink-0 rounded-full hover:text-foreground"
-                  >
-                    <X className="size-3" />
-                  </button>
+          {/* Filtri in uso */}
+          {activeFilterTotal > 0 ? (
+            <div className="border-b border-border bg-secondary/20 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-foreground">Filtri in uso</p>
+                <span className="rounded-full bg-card px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
+                  {activeFilterTotal}
                 </span>
-              ))}
+              </div>
+              <div className="space-y-2">
+                {activeFilterRows.length > 0 ? (
+                  <div className="rounded-lg border border-border bg-card p-2">
+                    <div className="mb-2 inline-flex rounded-full bg-secondary px-2 py-0.5 text-[11px] font-bold uppercase text-secondary-foreground">
+                      Devono valere tutte
+                    </div>
+                    <div className="space-y-2">
+                      {activeFilterRows.map((row, index) => (
+                        <div key={row.id} className="space-y-2">
+                          {index > 0 ? (
+                            <div className="flex items-center gap-2">
+                              <div className="h-px flex-1 bg-border" />
+                              <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
+                                E
+                              </span>
+                              <div className="h-px flex-1 bg-border" />
+                            </div>
+                          ) : null}
+                          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-md border border-border/70 bg-background p-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                                {row.campo}
+                              </p>
+                              <p className="mt-1 break-words text-sm font-semibold text-foreground">
+                                <span className="rounded-md bg-secondary px-1.5 py-0.5 text-xs font-bold text-secondary-foreground">
+                                  {row.operatore}
+                                </span>{" "}
+                                {row.valore}
+                              </p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Rimuovi ${row.campo}`}
+                              onClick={row.onRemove}
+                              className="text-muted-foreground hover:text-destructive"
+                            >
+                              <X className="size-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {alberoApplicato && treeCount > 0 ? (
+                  <div className="rounded-lg border border-border bg-card p-2">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-bold uppercase text-secondary-foreground">
+                        Filtro avanzato
+                      </span>
+                      <span className="text-[11px] font-medium text-muted-foreground">
+                        {treeCount} condizion{treeCount === 1 ? "e" : "i"}
+                      </span>
+                    </div>
+                    <FiltroPreview gruppo={alberoApplicato} campi={campiLeadPerChiave} />
+                    <div className="mt-2 grid grid-cols-[1fr_auto] gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="bg-card"
+                        onClick={() => {
+                          setFiltroInModifica(null)
+                          setCostruttoreAperto(true)
+                        }}
+                      >
+                        <Maximize2 data-icon="inline-start" />
+                        Modifica
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Rimuovi filtro avanzato"
+                        onClick={() => onApplicaAlbero?.(GRUPPO_VUOTO)}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <X className="size-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : null}
-
-          {/* Filtri principali (stato, sede, proprietario, origine, tag, valutazione) */}
-          {quickFilters && onQuickFiltersChange && onQuickFiltersReset ? (
-            <div className="border-b border-border p-3">
-              <p className="px-1 pb-2 text-sm font-semibold text-foreground">
-                Filtri principali
-              </p>
-              <LeadQuickFilterFields
-                filters={quickFilters}
-                onChange={onQuickFiltersChange}
-                onReset={onQuickFiltersReset}
-              />
-            </div>
-          ) : null}
-
-          {/* Filtri rapidi (collassati di default) */}
-          <Accordion className="border-b border-border px-3">
-            <AccordionItem value="quick" className="border-b-0">
-              <AccordionTrigger className="text-sm font-semibold">
-                Filtri rapidi
-              </AccordionTrigger>
-              <AccordionContent>
-                <div className="flex flex-col gap-2.5">
-                  {(
-                    Object.keys(draft.quick) as (keyof AdvancedFilterState["quick"])[]
-                  ).map((key) => (
-                    <label
-                      key={key}
-                      className="flex cursor-pointer items-center gap-2 text-sm text-foreground"
-                    >
-                      <Checkbox
-                        checked={draft.quick[key]}
-                        onCheckedChange={(c) => setQuick(key, c === true)}
-                      />
-                      {QUICK_LABELS[key]}
-                    </label>
-                  ))}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
 
           {/* Filtra per campo */}
           <div className="p-3">
             <p className="px-1 pb-2 text-sm font-semibold text-foreground">
               Filtra per campo
             </p>
-            <div className="flex flex-col">
-              {visibleFields.map((def) => {
-                const id = def.id as string
-                const isOpen = expanded === id
-                const v = getDraftField(def)
-                const active = draft.fields[id]
-                  ? isFieldActive(draft.fields[id])
-                  : false
-                return (
-                  <div
-                    key={id}
-                    className="border-b border-border/60 last:border-b-0"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setExpanded(isOpen ? null : id)}
-                      className={cn(
-                        "flex w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-muted",
-                        active && "font-medium text-foreground",
-                      )}
-                    >
-                      <span className="flex items-center gap-2 truncate">
-                        {active ? (
-                          <span className="size-1.5 shrink-0 rounded-full bg-teal" />
-                        ) : null}
-                        <span className="truncate">{def.label}</span>
+            <div className="flex flex-col gap-2">
+              {groupedVisibleFields.map((gruppo) => (
+                <Accordion key={gruppo.chiave} defaultValue={[gruppo.chiave]}>
+                  <AccordionItem value={gruppo.chiave} className="rounded-lg border border-border bg-card px-2">
+                    <AccordionTrigger className="py-2 text-sm font-semibold no-underline hover:no-underline">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate">{gruppo.etichetta}</span>
+                        <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                          {gruppo.campi.length}
+                        </span>
                       </span>
-                      <ChevronRight
-                        className={cn(
-                          "size-4 shrink-0 text-muted-foreground transition-transform",
-                          isOpen && "rotate-90",
-                        )}
-                      />
-                    </button>
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-2">
+                      <div className="flex flex-col">
+                        {gruppo.campi.map((def) => {
+                          const id = def.id as string
+                          const isOpen = expanded === id
+                          const v = getDraftField(def)
+                          const active = draft.fields[id]
+                            ? isFieldActive(draft.fields[id])
+                            : false
+                          return (
+                            <div
+                              key={id}
+                              className="border-b border-border/60 last:border-b-0"
+                            >
+                              <button
+                                type="button"
+                                onClick={() => setExpanded(isOpen ? null : id)}
+                                className={cn(
+                                  "flex w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-muted",
+                                  active && "font-medium text-foreground",
+                                )}
+                              >
+                                <span className="flex items-center gap-2 truncate">
+                                  {active ? (
+                                    <span className="size-1.5 shrink-0 rounded-full bg-teal" />
+                                  ) : null}
+                                  <span className="truncate">{def.label}</span>
+                                </span>
+                                <ChevronRight
+                                  className={cn(
+                                    "size-4 shrink-0 text-muted-foreground transition-transform",
+                                    isOpen && "rotate-90",
+                                  )}
+                                />
+                              </button>
 
-                    {isOpen ? (
-                      <div className="px-2 pb-3 pt-1">
-                        <FieldEditor
-                          def={def}
-                          value={v}
-                          onChange={(nv) => setField(id, nv)}
-                          onClear={() => clearField(id)}
-                        />
+                              {isOpen ? (
+                                <div className="px-2 pb-3 pt-1">
+                                  <FieldEditor
+                                    def={def}
+                                    value={v}
+                                    onChange={(nv) => setField(id, nv)}
+                                    onClear={() => clearField(id)}
+                                  />
+                                </div>
+                              ) : null}
+                            </div>
+                          )
+                        })}
                       </div>
-                    ) : null}
-                  </div>
-                )
-              })}
-              {visibleFields.length === 0 ? (
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              ))}
+              {groupedVisibleFields.length === 0 ? (
                 <p className="px-2 py-4 text-center text-sm text-muted-foreground">
                   Nessun campo trovato
                 </p>
@@ -827,16 +986,34 @@ function FieldEditor({
   onChange: (v: FieldValue) => void
   onClear: () => void
 }) {
+  const verso = (
+    <Select
+      value={value.negated ? "non" : "si"}
+      onValueChange={(next) => onChange({ ...value, negated: next === "non" })}
+    >
+      <SelectTrigger className="h-10 w-full bg-card text-sm" aria-label={`${def.label} operatore`}>
+        <span>{value.negated ? "non è" : "è"}</span>
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="si">è</SelectItem>
+        <SelectItem value="non">non è</SelectItem>
+      </SelectContent>
+    </Select>
+  )
+
   if (value.type === "text") {
     return (
-      <Input
-        autoFocus
-        value={value.contains}
-        onChange={(e) => onChange({ type: "text", contains: e.target.value })}
-        placeholder="contiene..."
-        className="bg-card"
-        aria-label={`${def.label} contiene`}
-      />
+      <div className="grid gap-2">
+        {verso}
+        <Input
+          autoFocus
+          value={value.contains}
+          onChange={(e) => onChange({ ...value, type: "text", contains: e.target.value })}
+          placeholder="Valore"
+          className="bg-card"
+          aria-label={`${def.label} valore`}
+        />
+      </div>
     )
   }
 
@@ -844,12 +1021,13 @@ function FieldEditor({
     const selected = value.selected
     return (
       <div className="flex flex-col gap-2">
+        {verso}
         {(def.options ?? []).length > 0 ? (
           <MultiFilterSelect
             ariaLabel={`Filtra per ${def.label}`}
             className="h-10 w-full bg-card text-sm"
             value={selected}
-            onValueChange={(next) => onChange({ type: "enum", selected: next })}
+            onValueChange={(next) => onChange({ ...value, type: "enum", selected: next })}
             allLabel="Tutti i valori"
             options={def.options ?? []}
           />
@@ -862,28 +1040,31 @@ function FieldEditor({
 
   if (value.type === "number") {
     return (
-      <div className="flex items-center gap-2">
-        <Input
-          type="number"
-          value={value.min}
-          onChange={(e) =>
-            onChange({ type: "number", min: e.target.value, max: value.max })
-          }
-          placeholder="Min"
-          className="bg-card"
-          aria-label={`${def.label} minimo`}
-        />
-        <span className="text-muted-foreground">–</span>
-        <Input
-          type="number"
-          value={value.max}
-          onChange={(e) =>
-            onChange({ type: "number", min: value.min, max: e.target.value })
-          }
-          placeholder="Max"
-          className="bg-card"
-          aria-label={`${def.label} massimo`}
-        />
+      <div className="grid gap-2">
+        {verso}
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            value={value.min}
+            onChange={(e) =>
+              onChange({ ...value, type: "number", min: e.target.value, max: value.max })
+            }
+            placeholder="Da"
+            className="bg-card"
+            aria-label={`${def.label} minimo`}
+          />
+          <span className="text-muted-foreground">–</span>
+          <Input
+            type="number"
+            value={value.max}
+            onChange={(e) =>
+              onChange({ ...value, type: "number", min: value.min, max: e.target.value })
+            }
+            placeholder="A"
+            className="bg-card"
+            aria-label={`${def.label} massimo`}
+          />
+        </div>
       </div>
     )
   }
@@ -891,13 +1072,14 @@ function FieldEditor({
   if (value.type === "date") {
     return (
       <div className="flex flex-col gap-2">
+        {verso}
         <label className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
           Da
           <Input
             type="date"
             value={value.from}
             onChange={(e) =>
-              onChange({ type: "date", from: e.target.value, to: value.to })
+              onChange({ ...value, type: "date", from: e.target.value, to: value.to })
             }
             className="w-[170px] bg-card"
             aria-label={`${def.label} da`}
@@ -909,7 +1091,7 @@ function FieldEditor({
             type="date"
             value={value.to}
             onChange={(e) =>
-              onChange({ type: "date", from: value.from, to: e.target.value })
+              onChange({ ...value, type: "date", from: value.from, to: e.target.value })
             }
             className="w-[170px] bg-card"
             aria-label={`${def.label} a`}
@@ -922,39 +1104,42 @@ function FieldEditor({
   // boolean
   const current = value.value
   return (
-    <div className="flex items-center gap-1.5">
-      {(
-        [
-          ["all", "Tutti"],
-          ["yes", "Sì"],
-          ["no", "No"],
-        ] as const
-      ).map(([val, label]) => (
+    <div className="grid gap-2">
+      {verso}
+      <div className="flex items-center gap-1.5">
+        {(
+          [
+            ["all", "Tutti"],
+            ["yes", "Sì"],
+            ["no", "No"],
+          ] as const
+        ).map(([val, label]) => (
+          <Button
+            key={val}
+            type="button"
+            size="sm"
+            variant={current === val ? "default" : "outline"}
+            className={cn(
+              "flex-1",
+              current === val
+                ? "bg-teal text-teal-foreground hover:bg-teal/90"
+                : "bg-card",
+            )}
+            onClick={() => onChange({ ...value, type: "boolean", value: val })}
+          >
+            {label}
+          </Button>
+        ))}
         <Button
-          key={val}
           type="button"
-          size="sm"
-          variant={current === val ? "default" : "outline"}
-          className={cn(
-            "flex-1",
-            current === val
-              ? "bg-teal text-teal-foreground hover:bg-teal/90"
-              : "bg-card",
-          )}
-          onClick={() => onChange({ type: "boolean", value: val })}
+          size="icon-sm"
+          variant="ghost"
+          aria-label="Azzera campo"
+          onClick={onClear}
         >
-          {label}
+          <X />
         </Button>
-      ))}
-      <Button
-        type="button"
-        size="icon-sm"
-        variant="ghost"
-        aria-label="Azzera campo"
-        onClick={onClear}
-      >
-        <X />
-      </Button>
+      </div>
     </div>
   )
 }

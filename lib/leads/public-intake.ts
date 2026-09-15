@@ -33,6 +33,7 @@ export interface LeadIntakePayload {
   tipoProprieta?: "privata" | "commerciale"
   campaignName?: string
   metaCampaignId?: string
+  metaCampaignName?: string
   metaAdsetId?: string
   metaAdsetName?: string
   metaAdId?: string
@@ -1295,6 +1296,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
   const dataClick = leadDataClickIso(payload)
   const campaignName = leadCampaignName(payload)
   const metaCampaignId = normalizeText(payload.metaCampaignId)
+  const metaCampaignName = normalizeText(payload.metaCampaignName)
   const metaAdsetId = normalizeText(payload.metaAdsetId)
   const metaAdsetName = normalizeText(payload.metaAdsetName)
   const metaAdId = normalizeText(payload.metaAdId)
@@ -1333,6 +1335,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
     assignTextField(updateRow, existing, changedFields, "social_lead_id", "Social Lead ID", socialLeadId)
     assignTextField(updateRow, existing, changedFields, "campaign_name", "campaign name", campaignName)
     assignTextField(updateRow, existing, changedFields, "meta_campaign_id", "Meta Campaign ID", metaCampaignId)
+    assignTextField(updateRow, existing, changedFields, "meta_campaign_name", "Meta Campaign", metaCampaignName)
     assignTextField(updateRow, existing, changedFields, "meta_adset_id", "Meta Adset ID", metaAdsetId)
     assignTextField(updateRow, existing, changedFields, "meta_adset_name", "Meta Adset", metaAdsetName)
     assignTextField(updateRow, existing, changedFields, "meta_ad_id", "Meta Ad ID", metaAdId)
@@ -1462,6 +1465,7 @@ export async function ingestLead(payload: LeadIntakePayload): Promise<LeadIntake
       valutazione: calculatedScore,
       campaign_name: campaignName,
       meta_campaign_id: metaCampaignId,
+      meta_campaign_name: metaCampaignName,
       meta_adset_id: metaAdsetId,
       meta_adset_name: metaAdsetName,
       meta_ad_id: metaAdId,

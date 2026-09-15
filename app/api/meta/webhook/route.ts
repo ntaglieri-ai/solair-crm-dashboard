@@ -415,6 +415,7 @@ function mapMetaLeadToIntakePayload(
     dataClick,
     campaignName,
     metaCampaignId: metaLead.campaign_id ?? adDetails?.campaign?.id,
+    metaCampaignName: campaignName,
     metaAdsetId: metaLead.adset_id ?? event.adgroupId ?? undefined,
     metaAdsetName: metaLead.adset_name,
     metaAdId: metaLead.ad_id ?? event.adId ?? undefined,

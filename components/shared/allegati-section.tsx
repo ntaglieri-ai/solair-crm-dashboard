@@ -122,9 +122,15 @@ export function AllegatiSection({
   const [cartellaOpen, setCartellaOpen] = useState(false)
   const [nomeCartella, setNomeCartella] = useState("")
   const [savingCartella, setSavingCartella] = useState(false)
-  // File scelto e in attesa che l'agente confermi il nome (solo quando la
-  // convenzione e' attiva); null quando non c'e' nessun dialog aperto.
-  const [fileDaNominare, setFileDaNominare] = useState<File | null>(null)
+  // I file scelti dal picker in attesa che l'agente ne confermi il nome (solo
+  // quando la convenzione e' attiva); vuota quando non c'e' nessun dialog
+  // aperto. E' una coda e non un file solo perche' dal picker se ne possono
+  // scegliere piu' d'uno: il dialog li chiede in fila.
+  const [codaDaNominare, setCodaDaNominare] = useState<File[]>([])
+  // I nomi gia' confermati per i file precedenti della stessa selezione.
+  // Quanti sono dice anche a che punto della coda siamo.
+  const [nomiConfermati, setNomiConfermati] = useState<string[]>([])
+  const fileDaNominare = codaDaNominare[nomiConfermati.length] ?? null
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Modalita' sottocartella: solo file, nessuna cartella annidata e nessun
@@ -170,53 +176,103 @@ export function AllegatiSection({
   }, [recordTipo, recordId, nomeRecord, sottocartella])
 
   /**
-   * Con la convenzione attiva il file non parte subito: si apre il dialog che
-   * propone il nome. Senza convenzione resta il comportamento di sempre,
-   * upload immediato col nome originale.
+   * Con la convenzione attiva i file non partono subito: si apre il dialog che
+   * propone il nome, uno alla volta. Senza convenzione resta il comportamento
+   * di sempre, upload immediato col nome originale — per tutti quelli scelti.
    */
-  function handleFileSelected(file: File) {
+  function handleFilesSelected(files: File[]) {
+    if (!files.length) return
     if (cognomeConvenzione === undefined) {
-      uploadFile(file)
+      void uploadFiles(files)
       return
     }
-    setFileDaNominare(file)
+    setCodaDaNominare(files)
   }
 
-  async function uploadFile(file: File, nomeFile?: string) {
+  /**
+   * Manda un file e restituisce il nome con cui e' finito su Nextcloud.
+   *
+   * Non tocca stato ne' notifiche: se ne occupa chi chiama, che e' l'unico a
+   * sapere se questo file e' solo o in mezzo a una sequenza.
+   */
+  async function inviaFile(file: File, nomeFile?: string): Promise<string> {
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("recordTipo", recordTipo)
+    formData.append("recordId", recordId)
+    formData.append("nomeRecord", nomeRecord)
+    if (sottocartella) formData.append("sottocartella", sottocartella)
+    // Il nome scelto nel dialog viaggia a parte: il File originale resta
+    // intatto, cosi' il nome di partenza e' ancora leggibile lato server se
+    // dovesse servire per un errore.
+    if (nomeFile) formData.append("nomeFile", nomeFile)
+    const res = await fetch("/api/allegati", { method: "POST", body: formData })
+    const result = (await res.json().catch(() => null)) as {
+      path?: string
+      error?: string
+    } | null
+    if (!res.ok) throw new Error(result?.error ?? "Caricamento non riuscito")
+    // Il nome definitivo lo decide il server sul contenuto reale della
+    // cartella: se qualcun altro ha caricato lo stesso nome dopo l'ultimo
+    // refresh, il progressivo che vede l'utente non e' quello finito su
+    // Nextcloud, e va detto invece di lasciarlo scoprire dalla lista.
+    return result?.path?.split("/").pop() || nomeFile || file.name
+  }
+
+  /**
+   * Carica N file in fila, una richiesta per volta.
+   *
+   * Sequenziale e non in parallelo di proposito: il nome definitivo lo decide
+   * il server leggendo la cartella, quindi due upload insieme leggerebbero la
+   * stessa cartella e sceglierebbero lo stesso nome — il secondo file
+   * sovrascriverebbe il primo.
+   *
+   * Un file che fallisce non ferma gli altri: interrompersi a meta' lascia una
+   * selezione caricata per un pezzo, senza dire quale.
+   */
+  async function uploadFiles(files: File[], nomiScelti?: (string | undefined)[]) {
     setUploading(true)
+    const caricati: string[] = []
+    const falliti: string[] = []
     try {
-      const formData = new FormData()
-      formData.append("file", file)
-      formData.append("recordTipo", recordTipo)
-      formData.append("recordId", recordId)
-      formData.append("nomeRecord", nomeRecord)
-      if (sottocartella) formData.append("sottocartella", sottocartella)
-      // Il nome scelto nel dialog viaggia a parte: il File originale resta
-      // intatto, cosi' il nome di partenza e' ancora leggibile lato server se
-      // dovesse servire per un errore.
-      if (nomeFile) formData.append("nomeFile", nomeFile)
-      const res = await fetch("/api/allegati", { method: "POST", body: formData })
-      const result = (await res.json().catch(() => null)) as {
-        path?: string
-        error?: string
-      } | null
-      if (!res.ok) throw new Error(result?.error ?? "Caricamento non riuscito")
-      // Il nome definitivo lo decide il server sul contenuto reale della
-      // cartella: se qualcun altro ha caricato lo stesso nome dopo l'ultimo
-      // refresh, il progressivo che vede l'utente non e' quello finito su
-      // Nextcloud, e va detto invece di lasciarlo scoprire dalla lista.
-      const nomeCaricato = result?.path?.split("/").pop()
-      toast.success(
-        "File caricato",
-        nomeFile && nomeCaricato && nomeCaricato !== nomeFile
-          ? { description: `Salvato come ${nomeCaricato}` }
-          : undefined,
-      )
-      setFileDaNominare(null)
-      await refresh()
-      onChanged?.()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Caricamento non riuscito")
+      for (const [indice, file] of files.entries()) {
+        const nomeFile = nomiScelti?.[indice]
+        try {
+          const nomeCaricato = await inviaFile(file, nomeFile)
+          caricati.push(nomeCaricato)
+          // Il progressivo scattato lato server va detto: un file che si
+          // chiama diversamente da come l'hai chiamato tu, scoperto dopo, e'
+          // il modo migliore per non fidarsi piu' della cartella.
+          if (nomeFile && nomeCaricato !== nomeFile) {
+            toast.info(`"${nomeFile}" salvato come ${nomeCaricato}`)
+          }
+        } catch (error) {
+          falliti.push(
+            `${file.name}: ${error instanceof Error ? error.message : "non riuscito"}`,
+          )
+        }
+      }
+
+      if (caricati.length) {
+        toast.success(
+          caricati.length === 1 ? "File caricato" : `${caricati.length} file caricati`,
+          caricati.length > 1 ? { description: caricati.join(", ") } : undefined,
+        )
+      }
+      if (falliti.length) {
+        toast.error(
+          falliti.length === 1 ? "Caricamento non riuscito" : `${falliti.length} file non caricati`,
+          { description: falliti.join(" · ") },
+        )
+      }
+
+      // Una sola rilettura della cartella a fine sequenza: rileggerla dopo
+      // ogni file moltiplicherebbe le chiamate a Nextcloud senza che nessuno
+      // veda gli stati intermedi.
+      if (caricati.length) {
+        await refresh()
+        onChanged?.()
+      }
     } finally {
       setUploading(false)
     }
@@ -364,10 +420,10 @@ export function AllegatiSection({
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           className="hidden"
           onChange={(event) => {
-            const file = event.target.files?.[0]
-            if (file) handleFileSelected(file)
+            handleFilesSelected(Array.from(event.target.files ?? []))
             event.target.value = ""
           }}
         />
@@ -548,13 +604,33 @@ export function AllegatiSection({
         file={fileDaNominare}
         cognome={cognomeConvenzione ?? ""}
         // Anche le cartelle: un PUT sul path di una cartella esistente non
-        // crea un file, fallisce.
-        nomiEsistenti={documenti.map((doc) => doc.nome)}
+        // crea un file, fallisce. Ai nomi gia' in cartella si aggiungono
+        // quelli appena confermati per i file precedenti della stessa
+        // selezione, che su Nextcloud non ci sono ancora ma ci arriveranno:
+        // senza, due file della stessa infornata si prenderebbero lo stesso
+        // nome e il progressivo verrebbe mostrato solo al secondo giro.
+        nomiEsistenti={[...documenti.map((doc) => doc.nome), ...nomiConfermati]}
         uploading={uploading}
+        posizione={{ indice: nomiConfermati.length, totale: codaDaNominare.length }}
         onConfirm={(nomeFile) => {
-          if (fileDaNominare) uploadFile(fileDaNominare, nomeFile)
+          if (!fileDaNominare) return
+          const nomi = [...nomiConfermati, nomeFile]
+          if (nomi.length < codaDaNominare.length) {
+            // Ancora file da nominare: si passa al prossimo e si carica tutto
+            // insieme alla fine, cosi' si nomina senza aspettare la rete fra
+            // un file e l'altro.
+            setNomiConfermati(nomi)
+            return
+          }
+          const files = codaDaNominare
+          setCodaDaNominare([])
+          setNomiConfermati([])
+          void uploadFiles(files, nomi)
         }}
-        onCancel={() => setFileDaNominare(null)}
+        onCancel={() => {
+          setCodaDaNominare([])
+          setNomiConfermati([])
+        }}
       />
     </div>
   )

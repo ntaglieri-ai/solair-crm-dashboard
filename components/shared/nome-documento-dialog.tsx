@@ -96,6 +96,7 @@ export function NomeDocumentoDialog({
   cognome,
   nomiEsistenti,
   uploading,
+  posizione,
   onConfirm,
   onCancel,
 }: {
@@ -105,6 +106,11 @@ export function NomeDocumentoDialog({
   /** Nomi gia' presenti nella cartella, per l'anteprima del suffisso progressivo. */
   nomiEsistenti: readonly string[]
   uploading: boolean
+  /**
+   * A che punto siamo, quando i file scelti sono piu' d'uno. Assente per un
+   * file solo, che e' il caso in cui non c'e' niente da contare.
+   */
+  posizione?: { indice: number; totale: number }
   /** Riceve il nome completo di estensione, pronto per l'upload. */
   onConfirm: (nomeFile: string) => void
   onCancel: () => void
@@ -145,6 +151,7 @@ export function NomeDocumentoDialog({
   // modo migliore per non fidarsi piu' della cartella.
   const nomeFinale = nomeSenzaCollisioni(nomeRichiesto, nomiEsistenti)
   const conSuffisso = nomeFinale !== nomeRichiesto
+  const altriInCoda = posizione ? posizione.indice < posizione.totale - 1 : false
 
   return (
     <Dialog
@@ -155,7 +162,12 @@ export function NomeDocumentoDialog({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Nome del documento</DialogTitle>
+          <DialogTitle>
+            Nome del documento
+            {posizione && posizione.totale > 1
+              ? ` (${posizione.indice + 1} di ${posizione.totale})`
+              : ""}
+          </DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3 py-1">
           <div className="flex flex-col gap-1.5">
@@ -241,7 +253,10 @@ export function NomeDocumentoDialog({
             Annulla
           </Button>
           <Button onClick={() => onConfirm(nomeFinale)} disabled={uploading || !nome.trim()}>
-            {uploading ? "Caricamento..." : "Carica"}
+            {/* Con altri file in coda questo pulsante non carica: passa al
+                prossimo nome, e il caricamento parte quando sono tutti
+                nominati. Dirgli "Carica" sarebbe una bugia. */}
+            {uploading ? "Caricamento..." : altriInCoda ? "Avanti" : "Carica"}
           </Button>
         </DialogFooter>
       </DialogContent>

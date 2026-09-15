@@ -147,6 +147,8 @@ export function NewLeadDialog({
       "Data Click": stamp,
       "Ora creazione": stamp,
       "campaign name": "—",
+      "Ad Meta": null,
+      "Adset Meta": null,
       Telefono: form.telefono || "—",
       "Mobile/Fisso": "",
       "Origine Lead": form.origine,

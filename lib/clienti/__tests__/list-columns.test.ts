@@ -6,6 +6,13 @@ function colonne(select: string): Set<string> {
 }
 
 describe("listColumnsForFields", () => {
+  it("carica i nomi Meta quando richiesti dalle colonne cliente", () => {
+    const select = colonne(listColumnsForFields(["Ad Meta", "Adset Meta"], "meta_ad_name"))
+    expect(select.has("meta_ad_name")).toBe(true)
+    expect(select.has("meta_adset_name")).toBe(true)
+    expect(select.has("meta_ad_id")).toBe(false)
+  })
+
   it("legge sempre e-mail e cellulare, anche se le colonne non sono visibili", () => {
     // Le icone di contatto rapido stanno nella cella del nome e si disegnano
     // sempre: senza queste due colonne restavano spente su tutta la lista, e

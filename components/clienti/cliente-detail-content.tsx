@@ -567,6 +567,8 @@ function Anagrafica({ cliente }: { cliente: ClienteRecord }) {
           </DataField>
           <DataField label="Installatore">{val(cliente.Installatore)}</DataField>
           <DataField label="Origine Lead">{val(cliente["Origine Lead"])}</DataField>
+          <DataField label="Ad Meta">{val(cliente["Ad Meta"])}</DataField>
+          <DataField label="Adset Meta">{val(cliente["Adset Meta"])}</DataField>
           <DataField label="Creato da">
             {val(cliente["Creato da"])}
             {cliente["Ora creazione"] ? (

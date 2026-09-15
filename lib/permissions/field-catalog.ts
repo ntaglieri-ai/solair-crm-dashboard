@@ -135,6 +135,7 @@ const MODULE_FIELDS: Record<FieldModuleKey, string[]> = {
     "tipologia_proprietario", "potenza_sistema_di_accumulo",
     "data_fatt_pagamento", "richiesta_saldo", "configurazione_cer",
     "flag_eps", "flag_cer", "costi_extra_sopralluogo",
+    "meta_ad_name", "meta_adset_name",
     "consenso_contatto_email",
   ],
   compiti: [

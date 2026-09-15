@@ -192,6 +192,8 @@ export interface ClienteCrmField {
 }
 
 export const CLIENTI_CRM_FIELDS = [
+  { column: "meta_ad_name", type: "text", appField: "Ad Meta" },
+  { column: "meta_adset_name", type: "text", appField: "Adset Meta" },
   // Flag booleani della procedura Vito (Fase 2.5). Volutamente distinti dalle
   // colonne testuali storiche `eps` / `cer` importate da Zoho, che restano di
   // sola lettura — vedi 20260808_clienti_flag_eps_cer.sql.

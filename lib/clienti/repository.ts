@@ -138,6 +138,8 @@ const DETAIL_COLUMNS = [
 
 // Whitelist ordinamento: campo UI → colonna DB. Fallback su updated_at.
 const SORT_COLUMN: Record<string, string> = {
+  "Ad Meta": "meta_ad_name",
+  "Adset Meta": "meta_adset_name",
   "Nome Clienti": "nome_clienti",
   Nome: "nome",
   Cognome: "cognome",

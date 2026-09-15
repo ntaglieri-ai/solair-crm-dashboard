@@ -30,6 +30,8 @@ export const LEAD_RECORD_FIELDS = [
   { column: "origine_lead", type: "text", appField: "Origine Lead" },
   { column: "sede", type: "text", appField: "Sede" },
   { column: "campaign_name", type: "text", appField: "campaign name" },
+  { column: "meta_ad_name", type: "text", appField: "Ad Meta" },
+  { column: "meta_adset_name", type: "text", appField: "Adset Meta" },
   { column: "kwp", type: "numeric", appField: "kWp" },
   { column: "kwh", type: "numeric", appField: "kWh" },
   { column: "modello_pannello", type: "text", appField: "Modello pannello" },

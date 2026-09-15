@@ -555,6 +555,8 @@ export interface Lead {
   "Data Click": string
   "Ora creazione": string
   "campaign name": string
+  "Ad Meta": string | null
+  "Adset Meta": string | null
   Telefono: string
   "Mobile/Fisso": string
   "Origine Lead": OrigineLead
@@ -646,6 +648,8 @@ export const LEAD_COLUMNS: LeadColumn[] = [
   { id: "Data Click", label: "Data Click", defaultVisible: true },
   { id: "Ora creazione", label: "Ora creazione", defaultVisible: true },
   { id: "campaign name", label: "campaign name", defaultVisible: true },
+  { id: "Ad Meta", label: "Ad Meta", defaultVisible: false },
+  { id: "Adset Meta", label: "Adset Meta", defaultVisible: false },
   { id: "Telefono", label: "Telefono", defaultVisible: true },
   { id: "Origine Lead", label: "Origine Lead", defaultVisible: true },
   { id: "E-mail", label: "E-mail", defaultVisible: true },

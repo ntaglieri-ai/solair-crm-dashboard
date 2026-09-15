@@ -153,6 +153,8 @@ function mapRow(row: Record<string, unknown>): Lead {
     "Origine Lead": (row.origine_lead as Lead["Origine Lead"]) ?? "",
     Sede: (row.sede as Lead["Sede"]) ?? "",
     "campaign name": (row.campaign_name as string) ?? "",
+    "Ad Meta": (row.meta_ad_name as string) ?? null,
+    "Adset Meta": (row.meta_adset_name as string) ?? null,
     Saluti: (row.saluti as string) ?? "",
     kWp: (row.kwp as number) ?? 0,
     kWh: (row.kwh as number) ?? 0,

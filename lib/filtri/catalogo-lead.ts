@@ -86,6 +86,8 @@ export function gruppiCampiLead(opzioni: {
         campo("Creato da", "Creato da", "elenco", opzioni.creatori ?? []),
         campo("Saluti", "Saluti", "elenco", opzioni.saluti ?? []),
         campo("campaign name", "Campagna", "elenco", opzioni.campagne ?? []),
+        campo("Ad Meta", "Ad Meta", "testo"),
+        campo("Adset Meta", "Adset Meta", "testo"),
         campo("Social Lead ID", "Social Lead ID", "testo"),
       ],
     },

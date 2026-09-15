@@ -172,6 +172,8 @@ const LEAD_VALUE_LABELS: Record<LeadOptionColumn, string> = {
   origine_lead: "Origine lead",
   sede: "Sede",
   campaign_name: "Campagna",
+  meta_ad_name: "Ad Meta",
+  meta_adset_name: "Adset Meta",
   rating: "Valutazione",
   stato_email: "Stato e-mail",
   saluti: "Saluti",

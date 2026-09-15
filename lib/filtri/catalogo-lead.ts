@@ -58,6 +58,8 @@ export function gruppiCampiLead(opzioni: {
   rating?: readonly string[]
   statoArricchito?: readonly string[]
   campagne?: readonly string[]
+  adMeta?: readonly string[]
+  adsetMeta?: readonly string[]
   modalitaIscrizioneAnnullata?: readonly string[]
   modelliPannello?: readonly string[]
   installatori?: readonly string[]
@@ -86,8 +88,8 @@ export function gruppiCampiLead(opzioni: {
         campo("Creato da", "Creato da", "elenco", opzioni.creatori ?? []),
         campo("Saluti", "Saluti", "elenco", opzioni.saluti ?? []),
         campo("campaign name", "Campagna", "elenco", opzioni.campagne ?? []),
-        campo("Ad Meta", "Ad Meta", "testo"),
-        campo("Adset Meta", "Adset Meta", "testo"),
+        campo("Ad Meta", "Ad Meta", "elenco", opzioni.adMeta ?? []),
+        campo("Adset Meta", "Adset Meta", "elenco", opzioni.adsetMeta ?? []),
         campo("Social Lead ID", "Social Lead ID", "testo"),
       ],
     },

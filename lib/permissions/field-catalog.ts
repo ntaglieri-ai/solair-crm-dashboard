@@ -67,7 +67,7 @@ const MODULE_FIELDS: Record<FieldModuleKey, string[]> = {
     "id", "nome", "cognome", "nome_lead", "email", "telefono", "mobile_fisso",
     "social_lead_id", "residente_in_sicilia", "citta", "provincia",
     "codice_postale", "paese", "stato_lead", "stato_email", "rating", "valutazione",
-    "lead_proprietario_id", "origine_lead", "sede", "campaign_name", "kwp",
+    "lead_proprietario_id", "origine_lead", "sede", "campaign_name", "meta_ad_name", "meta_adset_name", "kwp",
     "kwh", "modello_pannello", "wallbox_richiesto", "data_sopralluogo",
     "installatore_sopralluogo_id", "tempo_conversione_lead",
     "account_convertito_id", "contatto_convertito",

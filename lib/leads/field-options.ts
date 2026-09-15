@@ -14,6 +14,8 @@ export const LEAD_OPTION_COLUMNS = [
   "origine_lead",
   "sede",
   "campaign_name",
+  "meta_ad_name",
+  "meta_adset_name",
   "rating",
   "stato_email",
   "saluti",
@@ -52,6 +54,8 @@ export const LEAD_FIELD_OPTION_FALLBACKS: Record<LeadOptionColumn, ColumnValueOp
   origine_lead: ORIGINE_LEAD_VALUES.map((value) => option(value)),
   sede: SEDE_LABELS.map((value) => option(value)),
   campaign_name: [],
+  meta_ad_name: [],
+  meta_adset_name: [],
   rating: LEAD_RATING_OPTIONS.map((value) => option(value)),
   stato_email: LEAD_STATO_EMAIL_OPTIONS.map((value) => option(value)),
   saluti: LEAD_SALUTI_OPTIONS.map((value) => option(value)),
@@ -67,7 +71,7 @@ export function isLeadOptionColumn(column: string): column is LeadOptionColumn {
 }
 
 function looksLikeImportedGarbage(column: LeadOptionColumn, value: string) {
-  if (column === "campaign_name" || column === "modello_pannello") return false
+  if (column === "campaign_name" || column === "meta_ad_name" || column === "meta_adset_name" || column === "modello_pannello") return false
   if (/^\d{8,}$/.test(value)) return true
   if (/^\d{4}-\d{2}-\d{2}/.test(value)) return true
   if (/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(value)) return true

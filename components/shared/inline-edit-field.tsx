@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, type ReactNode } from "react"
+import { useId, useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { Check, ChevronDown, Loader2, Pencil, X } from "lucide-react"
 import { toast } from "sonner"
@@ -35,6 +35,7 @@ export type InlineEditableValueProps = {
   options?: string[]
   optionLabels?: Record<string, string>
   custom?: EditField["custom"]
+  allowCustomOption?: boolean
   allowEmptyOption?: boolean
   emptyLabel?: string
   nullWhenEmpty?: boolean
@@ -118,6 +119,7 @@ export function InlineEditableValue(props: InlineEditableValueProps) {
 }
 
 function InlineEditableValueInner(props: InlineEditableValueProps) {
+  const optionsId = useId()
   const permissions = usePermissions()
   const router = useRouter()
   const type = props.type ?? "text"
@@ -207,6 +209,17 @@ function InlineEditableValueInner(props: InlineEditableValueProps) {
               onChange={(event) => setDraft(event.target.value)}
               className="min-h-24"
             />
+          ) : type === "select" && props.allowCustomOption ? (
+            <>
+              <Input autoFocus aria-label={props.label} list={optionsId}
+                value={String(draft ?? "")}
+                placeholder="Seleziona o scrivi un valore"
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Enter") void saveValue(); if (event.key === "Escape") cancelEdit() }} disabled={saving} />
+              <datalist id={optionsId}>
+                {options.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </datalist>
+            </>
           ) : type === "select" ? (
             <Select
               items={Object.fromEntries(options.map((option) => [option.value, option.label]))}

@@ -216,6 +216,8 @@ const SORT_COLUMN: Record<string, string> = {
   "Origine Lead": "origine_lead",
   Sede: "sede",
   "campaign name": "campaign_name",
+  "Ad Meta": "meta_ad_name",
+  "Adset Meta": "meta_adset_name",
 }
 
 // Risolve la colonna DB di ordinamento e la direzione, con fallback su
@@ -234,6 +236,8 @@ function resolveSort(sortBy?: string | null, sortDir?: "asc" | "desc") {
 const ADVANCED_DB_COLUMN: Record<string, string> = {
   "Account convertito": "account_convertito_id",
   "campaign name": "campaign_name",
+  "Ad Meta": "meta_ad_name",
+  "Adset Meta": "meta_adset_name",
   Città: "citta",
   "Codice postale": "codice_postale",
   Cognome: "cognome",

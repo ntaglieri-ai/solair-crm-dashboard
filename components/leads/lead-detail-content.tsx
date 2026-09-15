@@ -341,6 +341,8 @@ function InfoPrincipali({ lead }: { lead: Lead }) {
   const origineOptions = leadOptions.optionsFor("origine_lead", lead["Origine Lead"])
   const sedeOptions = leadOptions.optionsFor("sede", lead.Sede)
   const campaignOptions = leadOptions.optionsFor("campaign_name", lead["campaign name"])
+  const adOptions = leadOptions.optionsFor("meta_ad_name", lead["Ad Meta"])
+  const adsetOptions = leadOptions.optionsFor("meta_adset_name", lead["Adset Meta"])
   const statoEmailOptions = leadOptions.optionsFor("stato_email", lead.Stato)
   const modalitaAnnullamentoOptions = leadOptions.optionsFor(
     "modalita_iscrizione_annullata",
@@ -395,8 +397,14 @@ function InfoPrincipali({ lead }: { lead: Lead }) {
 
         {/* Colonna destra */}
         <div className="flex flex-col gap-4">
-          <DataField label="campaign name" edit={{ module: "lead", field: "campaign_name", endpoint, patchKey: "campaign name", value: lead["campaign name"], type: "select", options: optionValues(campaignOptions), optionLabels: optionLabels(campaignOptions), allowEmptyOption: true, emptyLabel: "Nessuna", nullWhenEmpty: true }}>
+          <DataField label="campaign name" edit={{ module: "lead", field: "campaign_name", endpoint, patchKey: "campaign name", value: lead["campaign name"], type: "select", allowCustomOption: true, options: optionValues(campaignOptions), optionLabels: optionLabels(campaignOptions), allowEmptyOption: true, emptyLabel: "Nessuna", nullWhenEmpty: true }}>
             <span className="break-words">{val(lead["campaign name"])}</span>
+          </DataField>
+          <DataField label="Ad Meta" edit={{ module: "lead", field: "meta_ad_name", endpoint, patchKey: "Ad Meta", value: lead["Ad Meta"], type: "select", allowCustomOption: true, options: optionValues(adOptions), optionLabels: optionLabels(adOptions), allowEmptyOption: true, nullWhenEmpty: true }}>
+            <span className="break-words">{val(lead["Ad Meta"])}</span>
+          </DataField>
+          <DataField label="Adset Meta" edit={{ module: "lead", field: "meta_adset_name", endpoint, patchKey: "Adset Meta", value: lead["Adset Meta"], type: "select", allowCustomOption: true, options: optionValues(adsetOptions), optionLabels: optionLabels(adsetOptions), allowEmptyOption: true, nullWhenEmpty: true }}>
+            <span className="break-words">{val(lead["Adset Meta"])}</span>
           </DataField>
           <DataField label="kWp" edit={{ module: "lead", field: "kwp", endpoint, patchKey: "kWp", value: lead.kWp, type: "number" }}>
             {val(lead.kWp)}
@@ -1364,6 +1372,8 @@ function LeadDaLayout({
   const origineOptions = leadOptions.optionsFor("origine_lead", lead["Origine Lead"])
   const sedeOptions = leadOptions.optionsFor("sede", lead.Sede)
   const campaignOptions = leadOptions.optionsFor("campaign_name", lead["campaign name"])
+  const adOptions = leadOptions.optionsFor("meta_ad_name", lead["Ad Meta"])
+  const adsetOptions = leadOptions.optionsFor("meta_adset_name", lead["Adset Meta"])
   const ratingOptions = leadOptions.optionsFor("rating", lead.Valutazione)
   const statoEmailOptions = leadOptions.optionsFor("stato_email", lead.Stato)
   const statoArricchitoOptions = leadOptions.optionsFor(
@@ -1530,6 +1540,8 @@ function LeadDaLayout({
       "Origine Lead": origineOptions,
       Sede: sedeOptions,
       "campaign name": campaignOptions,
+      "Ad Meta": adOptions,
+      "Adset Meta": adsetOptions,
       Valutazione: ratingOptions,
       Stato: statoEmailOptions,
       "Stato arricchito": statoArricchitoOptions,
@@ -1547,6 +1559,7 @@ function LeadDaLayout({
         patchKey: fieldKey,
         value,
         type: "select",
+        allowCustomOption: ["campaign name", "Ad Meta", "Adset Meta"].includes(fieldKey),
         options: optionValues(optionsForField),
         optionLabels: optionLabels(optionsForField),
         allowEmptyOption: fieldKey !== "Stato Lead",

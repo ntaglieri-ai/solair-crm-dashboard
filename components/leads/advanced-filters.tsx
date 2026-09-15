@@ -445,6 +445,8 @@ export function AdvancedFilters({
     rating: leadOptions.optionsFor("rating").map((opzione) => opzione.value),
     statoArricchito: leadOptions.optionsFor("stato_arricchito").map((opzione) => opzione.value),
     campagne: leadOptions.optionsFor("campaign_name").map((opzione) => opzione.value),
+    adMeta: leadOptions.optionsFor("meta_ad_name").map((opzione) => opzione.value),
+    adsetMeta: leadOptions.optionsFor("meta_adset_name").map((opzione) => opzione.value),
     modalitaIscrizioneAnnullata: leadOptions
       .optionsFor("modalita_iscrizione_annullata")
       .map((opzione) => opzione.value),

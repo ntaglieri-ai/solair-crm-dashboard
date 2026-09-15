@@ -93,6 +93,6 @@ export function mergeLeadOptions(
   return uniqueOptions([
     ...configured,
     ...importedValues.map((value) => option(value)),
-    ...LEAD_FIELD_OPTION_FALLBACKS[column],
+    ...(LEAD_FIELD_OPTION_FALLBACKS[column] ?? []),
   ])
 }

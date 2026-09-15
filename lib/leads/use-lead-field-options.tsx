@@ -18,7 +18,7 @@ type LeadFieldOptionsResponse = {
 
 export function useLeadFieldOptions() {
   const query = useQuery({
-    queryKey: ["lead-field-options"],
+    queryKey: ["lead-field-options", LEAD_OPTION_COLUMNS.join(",")],
     queryFn: async ({ signal }) => {
       const fields = LEAD_OPTION_COLUMNS.join(",")
       const response = await fetch(`/api/leads/field-options?fields=${fields}`, { signal })
@@ -32,7 +32,7 @@ export function useLeadFieldOptions() {
   function optionsFor(column: LeadOptionColumn, current?: unknown) {
     const options = uniqueOptions([
       ...(query.data?.options[column] ?? []),
-      ...LEAD_FIELD_OPTION_FALLBACKS[column],
+      ...(LEAD_FIELD_OPTION_FALLBACKS[column] ?? []),
     ])
     return withCurrentColumnOption(options, current)
   }

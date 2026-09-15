@@ -56,6 +56,20 @@ describe("validaAlbero", () => {
     expect(esito.ok).toBe(false)
   })
 
+  it("accetta gli operatori da elenco su un campo testo", () => {
+    // Quali campi abbiano una tendina dipende dai dati del momento, che il
+    // server non ha: lo stesso campo e' "elenco" nel browser e "testo" qui.
+    // Rifiutare "uno di" faceva cadere l'intero filtro, e la lista tornava
+    // completa come se non fosse stato impostato nulla.
+    expect(validaAlbero(gruppo([cond("Nome Lead", "uno_di", ["rossi"])]), CATALOGO).ok).toBe(true)
+    expect(validaAlbero(gruppo([cond("Nome Lead", "nessuno_di", ["rossi"])]), CATALOGO).ok).toBe(true)
+  })
+
+  it("non allarga gli operatori agli altri tipi", () => {
+    expect(validaAlbero(gruppo([cond("Punteggio", "uno_di", [1])]), CATALOGO).ok).toBe(false)
+    expect(validaAlbero(gruppo([cond("Ora creazione", "uno_di", ["x"])]), CATALOGO).ok).toBe(false)
+  })
+
   it("rifiuta un valore fuori dalle opzioni di un elenco", () => {
     const esito = validaAlbero(
       gruppo([cond("Stato Lead", "uno_di", ["Inventato"])]),

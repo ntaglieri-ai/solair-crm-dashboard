@@ -70,6 +70,26 @@ export const OPERATORI_PER_TIPO: Record<TipoCampo, readonly Operatore[]> = {
   collegato: ["presente", "assente"],
 }
 
+/**
+ * Gli operatori accettati in validazione: un soprainsieme di quelli che
+ * l'interfaccia offre.
+ *
+ * Un campo a elenco e' un campo testo di cui si conoscono le scelte, e quali
+ * campi abbiano una tendina lo decidono i dati del momento — gli stati
+ * configurati, gli installatori che esistono — che chi valida non ha davanti.
+ * Lo stesso campo e' quindi "elenco" nel browser e "testo" sul server, e
+ * rifiutare li' "uno di" buttava via il filtro intero: la lista tornava
+ * completa, come se nessun filtro fosse stato impostato.
+ *
+ * Accettarli e' sicuro: la colonna non arriva mai da fuori (deve stare nel
+ * catalogo del modulo e avere una colonna dichiarata) e i valori finiscono
+ * fra virgolette, dove virgole e parentesi non sono piu' sintassi.
+ */
+const OPERATORI_ACCETTATI: Record<TipoCampo, readonly Operatore[]> = {
+  ...OPERATORI_PER_TIPO,
+  testo: [...OPERATORI_PER_TIPO.testo, "uno_di", "nessuno_di"],
+}
+
 /** Operatori che non vogliono valori: chiederli sarebbe un errore. */
 const SENZA_VALORE: ReadonlySet<Operatore> = new Set([
   "vuoto",
@@ -180,7 +200,7 @@ export function validaAlbero(
     if (!campo) return `Campo non filtrabile: ${String(oggetto.campo)}`
 
     const operatore = oggetto.operatore as Operatore
-    if (!OPERATORI_PER_TIPO[campo.tipo].includes(operatore)) {
+    if (!OPERATORI_ACCETTATI[campo.tipo].includes(operatore)) {
       return `Operatore non valido per ${campo.etichetta}`
     }
 

@@ -261,7 +261,15 @@ export async function queryClienti(
       if (tradotto.ok && tradotto.espressione) {
         listQ = listQ.or(tradotto.espressione)
         countQ = countQ.or(tradotto.espressione)
+      } else if (!tradotto.ok) {
+        console.error("[clienti/repository] filtro non traducibile:", tradotto.errore)
       }
+    } else {
+      // Scartare il filtro senza dirlo restituisce la lista intera, che e'
+      // indistinguibile da "nessun filtro impostato": e' cosi' che un
+      // disallineamento fra il catalogo del browser e quello del server e'
+      // rimasto invisibile. La lettura continua comunque.
+      console.error("[clienti/repository] filtro scartato:", validato.errore)
     }
   }
 

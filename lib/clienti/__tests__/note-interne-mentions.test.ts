@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 const { admin, notify } = vi.hoisted(() => ({ admin: vi.fn(), notify: vi.fn() }))
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: admin }))
-vi.mock("@/lib/email/mailer", () => ({ sendDirectEmail: notify }))
+vi.mock("@/lib/email/mailer", () => ({
+  sendMentionNotificationEmail: notify,
+  crmRecordUrl: (pathname: string) => `https://crm.example.test${pathname}`,
+}))
 import { canMentionInternalUser, internalMentionUsers, resolveInternalMentions, notifyInternalMentions } from "../note-interne-mentions-server"
 import { notaInternaInput } from "../note-interne-input"
 
@@ -10,7 +13,7 @@ const user = { id, nome: "Mario Rossi", email: "mario@example.test", attivo: tru
 const base = { user, ui: [], actions: [], pages: [], records: [], ownerId: "other", teamOwner: false }
 const mention = { userId: id, start: 2, end: 14, name: "Mario Rossi" }
 function database(overrides: Record<string, unknown> = {}) {
-  const tables: Record<string, unknown> = { clienti: { clienti_proprietario_id: "other" }, utenti: [user], ruoli: [], permessi_ui: [], permessi_azione: [], permessi_pagina: [], permessi_record: [], team_direttori: [], team_agenti: [], ...overrides }
+  const tables: Record<string, unknown> = { clienti: { clienti_proprietario_id: "other", nome_clienti: "Antonino Molino", nome: null, cognome: null }, utenti: [user], ruoli: [], permessi_ui: [], permessi_azione: [], permessi_pagina: [], permessi_record: [], team_direttori: [], team_agenti: [], ...overrides }
   admin.mockReturnValue({ from: (table: string) => {
     const result = { data: tables[table], error: null }
     const query = { select: () => query, eq: () => query, or: () => query, maybeSingle: () => Promise.resolve(result), then: (cb: (value: unknown) => unknown) => Promise.resolve(result).then(cb) }
@@ -78,13 +81,20 @@ describe("internal mention validation and notifications", () => {
     expect(await resolveInternalMentions("cliente", "nota", [])).toEqual([])
   })
   const notification = { text: "  @Mario Rossi\nControlla il pagamento <riservato>.", clienteId: "cliente", mentions: [mention], authorId: "author", authorName: "Autore" }
-  it("sends exactly the written text without automatic links and deduplicates mentions", async () => {
+  it("sends the written text with the record name and a link, deduplicating mentions", async () => {
     expect(await notifyInternalMentions({ ...notification, mentions: [mention, mention] })).toBe(0)
     expect(notify).toHaveBeenCalledTimes(1)
+    // Il nome del cliente e il link mancavano: la notifica arrivava senza
+    // dire su chi fosse la nota (report menzioni, punto 2).
     expect(notify).toHaveBeenCalledWith({
       to: user.email,
-      subject: "Autore ti ha menzionato in una nota interna",
-      body: notification.text,
+      recipientName: user.nome,
+      authorName: "Autore",
+      noteText: notification.text,
+      recordLabel: "Cliente",
+      recordName: "Antonino Molino",
+      recordUrl: "https://crm.example.test/clienti/cliente",
+      noteKind: "una nota interna",
     })
   })
   it("does not re-notify who was already mentioned before an edit", async () => {

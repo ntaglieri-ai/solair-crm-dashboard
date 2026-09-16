@@ -36,7 +36,10 @@ export async function notifyMentionedUsers(params: {
   recipients: Array<{ id: string; nome: string; email: string }>
   authorName: string
   text: string
+  /** Tipo di scheda ("Cliente", "Lead", ...). */
   recordLabel: string
+  /** Nome della scheda: e' il contesto che la mail deve dare. */
+  recordName?: string | null
   recordUrl: string
 }) {
   // L'autore non viene escluso: menzionare se stessi e' un modo di
@@ -49,6 +52,7 @@ export async function notifyMentionedUsers(params: {
         authorName: params.authorName,
         noteText: params.text,
         recordLabel: params.recordLabel,
+        recordName: params.recordName,
         recordUrl: params.recordUrl,
       }),
     ),

@@ -5,7 +5,7 @@ import { applyUiPermission } from "@/lib/permissions/load-permissions"
 import { NOTE_INTERNE_ROLES } from "@/lib/clienti/note-interne"
 import type { NoteInterneConfig } from "./note-interne-config"
 import { sanitizeNoteMentions, type NoteMention, type NoteMentionDraft } from "@/lib/notes/mentions"
-import { sendDirectEmail } from "@/lib/email/mailer"
+import { crmRecordUrl, sendMentionNotificationEmail } from "@/lib/email/mailer"
 
 type UiPermission = { chiave: string; abilitato: boolean | null }
 type Candidate = {
@@ -144,6 +144,30 @@ export function destinatariMenzioni(
   return new Set(mentions.map((mention) => mention.userId).filter((id) => !gia.has(id)))
 }
 
+/**
+ * Il nome del record a cui la nota appartiene.
+ *
+ * Lettura privilegiata come quelle di internalMentionUsers, e per lo stesso
+ * motivo: serve a comporre l'avviso DOPO che i destinatari sono gia' stati
+ * autorizzati, non ad allargare il perimetro di nessuno. Il nome finisce solo
+ * nella mail di chi puo' gia' leggere la nota.
+ */
+async function nomeRecord(config: NoteInterneConfig, recordId: string): Promise<string> {
+  const admin = createAdminClient()
+  if (!admin) return ""
+  const { data } = await admin
+    .from(config.tabellaRecord)
+    .select(config.colonneNome.join(","))
+    .eq("id", recordId)
+    .maybeSingle()
+  if (!data) return ""
+  const row = data as unknown as Record<string, unknown>
+  const valore = (colonna: string) =>
+    typeof row[colonna] === "string" ? (row[colonna] as string).trim() : ""
+  const [principale, ...resto] = config.colonneNome
+  return valore(principale) || resto.map(valore).filter(Boolean).join(" ")
+}
+
 export async function notifyInternalMentions(params: {
   config: NoteInterneConfig
   text: string; recordId: string; mentions: NoteMention[]; previous?: NoteMention[]
@@ -153,13 +177,24 @@ export async function notifyInternalMentions(params: {
   if (!ids.size) return 0
   try {
     // Il testo scritto viene inviato solo dopo il salvataggio e un nuovo
-    // controllo dei destinatari. Nessun avviso sostitutivo o link automatico.
+    // controllo dei destinatari. Nessun avviso sostitutivo.
     const users = await internalMentionUsers(params.config, params.recordId)
     const recipients = users.flatMap((user) => ids.has(user.id) && user.email ? [{ ...user, email: user.email }] : [])
-    const results = await Promise.allSettled(recipients.map((recipient) => sendDirectEmail({
+    if (!recipients.length) return ids.size
+    // Senza nome del record e anteprima la notifica diceva solo "ti hanno
+    // menzionato": il destinatario non sapeva su chi, ne' cosa fosse stato
+    // scritto. Il link porta direttamente alla scheda.
+    const record = await nomeRecord(params.config, params.recordId)
+    const recordUrl = crmRecordUrl(`/${params.config.modulo}/${params.recordId}`)
+    const results = await Promise.allSettled(recipients.map((recipient) => sendMentionNotificationEmail({
       to: recipient.email,
-      subject: `${params.authorName} ti ha menzionato in una nota interna`,
-      body: params.text,
+      recipientName: recipient.nome,
+      authorName: params.authorName,
+      noteText: params.text,
+      recordLabel: params.config.etichetta,
+      recordName: record,
+      recordUrl,
+      noteKind: "una nota interna",
     })))
     const failures = results.filter((result) => result.status === "rejected" || !result.value.ok).length
     return failures + ids.size - recipients.length

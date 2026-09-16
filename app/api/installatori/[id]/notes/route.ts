@@ -93,7 +93,8 @@ export async function POST(
     recipients: resolved.recipients,
     authorName: guard.permissions.snapshot.subject.nome ?? "Un utente CRM",
     text,
-    recordLabel: "un installatore",
+    recordLabel: "Installatore",
+    recordName: (installatore?.nome as string | null) ?? "",
     recordUrl: absoluteCrmUrl(request, `/installatori/${id}`),
   })
   return NextResponse.json({

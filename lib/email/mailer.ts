@@ -46,8 +46,34 @@ function getTransport(cfg: SmtpConfig): Transporter {
 }
 
 function loginUrl(): string {
-  const base = process.env.NEXT_PUBLIC_SITE_URL || "https://solair-crm-dashboard.vercel.app"
-  return `${base}/login`
+  return crmRecordUrl("/login")
+}
+
+/** Il CRM in assoluto, per le email che partono fuori da una richiesta HTTP. */
+function siteUrl(): string {
+  return (
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+    "https://solair-crm-dashboard.vercel.app"
+  )
+}
+
+export function crmRecordUrl(pathname: string): string {
+  return `${siteUrl()}${pathname}`
+}
+
+/**
+ * L'anteprima della nota dentro l'email.
+ *
+ * La mail di notifica deve dire di cosa si parla senza costringere ad aprire
+ * il CRM, ma non e' il posto per una nota lunga: viene troncata all'ultimo
+ * spazio utile, cosi' non si spezza una parola a meta'.
+ */
+export function notePreview(text: string, maxLength = 400): string {
+  const normalized = text.replace(/\r\n|\r/g, "\n").trim()
+  if (normalized.length <= maxLength) return normalized
+  const cut = normalized.slice(0, maxLength)
+  const lastSpace = cut.lastIndexOf(" ")
+  return `${(lastSpace > maxLength * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd()}...`
 }
 
 export async function sendMentionNotificationEmail(params: {
@@ -55,35 +81,54 @@ export async function sendMentionNotificationEmail(params: {
   recipientName: string
   authorName: string
   noteText: string
+  /** Tipo di scheda: "Cliente", "Lead", "Compito", "Installatore". */
   recordLabel: string
+  /** Nome della scheda — senza, la mail non dice su CHI e' la nota. */
+  recordName?: string | null
   recordUrl: string
+  /** "una nota" (timeline) oppure "una nota interna". */
+  noteKind?: string
 }): Promise<{ ok: boolean; error: string | null }> {
   const cfg = smtpConfig()
   if (!cfg) return { ok: false, error: "SMTP non configurato" }
 
   try {
     const transport = getTransport(cfg)
+    const kind = params.noteKind || "una nota"
+    const name = params.recordName?.trim() || ""
+    // "Cliente Antonino Molino" quando il nome c'e', "Cliente" quando manca:
+    // meglio la sola etichetta che un "Cliente —" con il posto vuoto.
+    const record = name ? `${params.recordLabel} ${name}` : params.recordLabel
+    const preview = notePreview(params.noteText)
     const safeRecipient = escapeHtml(params.recipientName)
     const safeAuthor = escapeHtml(params.authorName)
-    const safeText = escapeHtml(params.noteText).replace(/\n/g, "<br/>")
+    const safeText = escapeHtml(preview).replace(/\n/g, "<br/>")
     const safeLabel = escapeHtml(params.recordLabel)
+    const safeName = escapeHtml(name)
+    const safeRecord = escapeHtml(record)
     const safeUrl = escapeHtml(params.recordUrl)
     await transport.sendMail({
       from: cfg.from,
       to: params.to,
-      subject: `${params.authorName} ti ha menzionato in una nota`,
+      // Il nome della scheda sta nell'oggetto: la notifica si riconosce
+      // dall'elenco della posta, senza aprirla.
+      subject: `${params.authorName} ti ha menzionato in ${kind} — ${record}`,
       text: [
         `Ciao ${params.recipientName},`,
         "",
-        `${params.authorName} ti ha menzionato in una nota su ${params.recordLabel}.`,
+        `${params.authorName} ti ha menzionato in ${kind} su ${record}.`,
         "",
-        params.noteText,
+        `${params.recordLabel}: ${name || "non disponibile"}`,
+        "",
+        "Nota:",
+        preview,
         "",
         `Apri la scheda: ${params.recordUrl}`,
       ].join("\n"),
       html: `
         <p>Ciao ${safeRecipient},</p>
-        <p><strong>${safeAuthor}</strong> ti ha menzionato in una nota su ${safeLabel}.</p>
+        <p><strong>${safeAuthor}</strong> ti ha menzionato in ${escapeHtml(kind)} su <strong>${safeRecord}</strong>.</p>
+        <p style="margin:16px 0;color:#525252">${safeLabel}: <strong>${safeName || "non disponibile"}</strong></p>
         <blockquote style="margin:16px 0;padding:12px 16px;border-left:3px solid #0f766e;background:#f5f5f5">${safeText}</blockquote>
         <p><a href="${safeUrl}">Apri la scheda nel CRM</a></p>
       `,

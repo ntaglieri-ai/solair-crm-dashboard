@@ -64,6 +64,13 @@ export async function POST(
   if (!text) return NextResponse.json({ error: "Nota vuota" }, { status: 400 })
 
   const supabase = await createClient()
+  // L'oggetto del compito e' il contesto della mail di menzione: senza, il
+  // destinatario riceve un avviso che non dice su cosa.
+  const { data: compito } = await supabase
+    .from("compiti")
+    .select("oggetto")
+    .eq("id", id)
+    .maybeSingle()
   const resolved = await resolveNoteMentions(supabase, text, Array.isArray(body?.mentions) ? body.mentions : [])
   const { data, error } = await supabase
     .from("attivita")
@@ -82,7 +89,8 @@ export async function POST(
     recipients: resolved.recipients,
     authorName: guard.permissions.snapshot.subject.nome ?? "Un utente CRM",
     text,
-    recordLabel: "un compito",
+    recordLabel: "Compito",
+    recordName: (compito?.oggetto as string | null) ?? "",
     recordUrl: absoluteCrmUrl(request, `/compiti/${id}`),
   })
   return NextResponse.json(

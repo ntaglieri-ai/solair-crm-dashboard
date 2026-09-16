@@ -189,10 +189,18 @@ export async function middleware(request: NextRequest) {
   // Se non autenticato e non su route pubblica → redirect a /login
   if (!isAuthenticated && !isPublicRoute) {
     const url = request.nextUrl.clone()
+    const returnPath = requestedPath(request)
     url.pathname = loginPathForRequest(request)
     url.search = ""
+    // La destinazione va conservata anche sul login normale, non solo su
+    // quello Nextcloud: senza, chi apre il link di una mail di menzione senza
+    // sessione finisce sulla dashboard dopo il login e la nota che l'aveva
+    // fatto arrivare fin li' non la vede. /login legge gia' "redirect" e ne
+    // riverifica il valore, come il ramo della sessione scaduta qui sopra.
     if (url.pathname === NEXTCLOUD_LOGIN_PATH) {
-      url.searchParams.set("redirect", requestedPath(request))
+      url.searchParams.set("redirect", returnPath)
+    } else if (request.method === "GET" && returnPath !== "/" && !request.nextUrl.pathname.startsWith("/api/")) {
+      url.searchParams.set("redirect", returnPath)
     }
     return withAuthCookies(NextResponse.redirect(url))
   }

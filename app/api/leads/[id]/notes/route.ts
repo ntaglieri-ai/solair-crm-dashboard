@@ -58,7 +58,8 @@ export async function POST(
     recipients: resolved.recipients,
     authorName: guard.permissions.snapshot.subject.nome ?? "Un utente CRM",
     text,
-    recordLabel: "un lead",
+    recordLabel: "Lead",
+    recordName: (lead?.nome_lead as string | null) ?? "",
     recordUrl: absoluteCrmUrl(request, `/leads/${id}`),
   })
   return NextResponse.json({

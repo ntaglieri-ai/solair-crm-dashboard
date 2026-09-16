@@ -27,6 +27,13 @@ export type NoteInterneConfig = {
   recordTipo: "cliente" | "installatore"
   /** Etichetta usata quando il nome del record non e' recuperabile. */
   etichetta: string
+  /**
+   * Colonne da cui ricavare il nome del record, in ordine di preferenza: la
+   * prima valorizzata vince, le restanti vengono unite con uno spazio quando
+   * la prima e' vuota (Cliente: nome_clienti, altrimenti nome + cognome).
+   * Serve alla mail di menzione, che senza il nome non dice su chi e' la nota.
+   */
+  colonneNome: string[]
 }
 
 export const NOTE_INTERNE_CLIENTI: NoteInterneConfig = {
@@ -38,6 +45,7 @@ export const NOTE_INTERNE_CLIENTI: NoteInterneConfig = {
   azione: "clienti.note_interne.view",
   recordTipo: "cliente",
   etichetta: "Cliente",
+  colonneNome: ["nome_clienti", "nome", "cognome"],
 }
 
 export const NOTE_INTERNE_INSTALLATORI: NoteInterneConfig = {
@@ -49,4 +57,5 @@ export const NOTE_INTERNE_INSTALLATORI: NoteInterneConfig = {
   azione: "installatori.note_interne.view",
   recordTipo: "installatore",
   etichetta: "Installatore",
+  colonneNome: ["nome"],
 }

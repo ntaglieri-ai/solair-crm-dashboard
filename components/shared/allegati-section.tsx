@@ -14,6 +14,7 @@ import {
   IconPlus,
   IconExternalLink,
   IconAlertTriangle,
+  IconRefresh,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { NextcloudOpenLink } from "@/components/nextcloud/nextcloud-open-link"
@@ -32,8 +33,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { NomeDocumentoDialog } from "@/components/shared/nome-documento-dialog"
 import type { AllegatoRecordTipo } from "@/lib/allegati/paths"
+import { isAllegatoTooLarge, MAX_ALLEGATO_UPLOAD_LABEL } from "@/lib/allegati/upload-limits"
 // Stessa route deep-link (OIDC) usata dal modulo Documenti: il path viene
 // validato server-side contro path-permissions.ts.
 import { openNextcloudUrl } from "@/lib/documenti-data"
@@ -84,7 +85,6 @@ export function AllegatiSection({
   sottocartella,
   titolo = "Documenti",
   onChanged,
-  cognomeConvenzione,
 }: {
   recordTipo: AllegatoRecordTipo
   recordId: string
@@ -100,14 +100,6 @@ export function AllegatiSection({
   titolo?: string
   /** Notifica il chiamante dopo ogni modifica reale (upload/eliminazione). */
   onChanged?: () => void
-  /**
-   * Attiva il dialog che propone il nome secondo la convenzione della spec
-   * 5.3 ({TipoDocumento}_{Cognome}_{AAAAMMGG}) prima di caricare. Opt-in per
-   * decisione esplicita: vale solo per gli allegati generici del Cliente —
-   * i Lead e la sottocartella "Documenti obbligatori" (1.3) hanno regole
-   * proprie e continuano a caricare col nome originale del file.
-   */
-  cognomeConvenzione?: string
 }) {
   const [documenti, setDocumenti] = useState<DocumentoRow[]>([])
   const [collegamenti, setCollegamenti] = useState<CollegamentoRow[]>([])
@@ -122,15 +114,7 @@ export function AllegatiSection({
   const [cartellaOpen, setCartellaOpen] = useState(false)
   const [nomeCartella, setNomeCartella] = useState("")
   const [savingCartella, setSavingCartella] = useState(false)
-  // I file scelti dal picker in attesa che l'agente ne confermi il nome (solo
-  // quando la convenzione e' attiva); vuota quando non c'e' nessun dialog
-  // aperto. E' una coda e non un file solo perche' dal picker se ne possono
-  // scegliere piu' d'uno: il dialog li chiede in fila.
-  const [codaDaNominare, setCodaDaNominare] = useState<File[]>([])
-  // I nomi gia' confermati per i file precedenti della stessa selezione.
-  // Quanti sono dice anche a che punto della coda siamo.
-  const [nomiConfermati, setNomiConfermati] = useState<string[]>([])
-  const fileDaNominare = codaDaNominare[nomiConfermati.length] ?? null
+  const [largeUploadNotice, setLargeUploadNotice] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Modalita' sottocartella: solo file, nessuna cartella annidata e nessun
@@ -143,7 +127,7 @@ export function AllegatiSection({
     `&nomeRecord=${encodeURIComponent(nomeRecord)}` +
     (sottocartella ? `&sottocartella=${encodeURIComponent(sottocartella)}` : "")
 
-  async function refresh() {
+  async function refresh({ notifyChanged = false }: { notifyChanged?: boolean } = {}) {
     setLoading(true)
     try {
       const res = await fetch(`/api/allegati?${recordQuery}`, { cache: "no-store" })
@@ -161,6 +145,7 @@ export function AllegatiSection({
       setFolderPath(data.folderPath)
       setDocumenti(data.documenti)
       setCollegamenti(data.collegamenti)
+      if (notifyChanged) onChanged?.()
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Impossibile caricare gli allegati")
       setDocumenti([])
@@ -175,18 +160,40 @@ export function AllegatiSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordTipo, recordId, nomeRecord, sottocartella])
 
-  /**
-   * Con la convenzione attiva i file non partono subito: si apre il dialog che
-   * propone il nome, uno alla volta. Senza convenzione resta il comportamento
-   * di sempre, upload immediato col nome originale — per tutti quelli scelti.
-   */
+  useEffect(() => {
+    function refreshOnReturn() {
+      void refresh({ notifyChanged: true })
+    }
+
+    function refreshOnVisible() {
+      if (document.visibilityState === "visible") refreshOnReturn()
+    }
+
+    window.addEventListener("focus", refreshOnReturn)
+    document.addEventListener("visibilitychange", refreshOnVisible)
+    return () => {
+      window.removeEventListener("focus", refreshOnReturn)
+      document.removeEventListener("visibilitychange", refreshOnVisible)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordTipo, recordId, nomeRecord, sottocartella])
+
   function handleFilesSelected(files: File[]) {
     if (!files.length) return
-    if (cognomeConvenzione === undefined) {
-      void uploadFiles(files)
-      return
+    const troppoGrandi = files.filter((file) => isAllegatoTooLarge(file.size))
+    if (troppoGrandi.length) {
+      setLargeUploadNotice(
+        troppoGrandi.length === 1
+          ? `Il file "${troppoGrandi[0].name}" supera il limite del CRM (${MAX_ALLEGATO_UPLOAD_LABEL}). Caricalo direttamente nella cartella Nextcloud.`
+          : `${troppoGrandi.length} file superano il limite del CRM (${MAX_ALLEGATO_UPLOAD_LABEL}). Caricali direttamente nella cartella Nextcloud.`,
+      )
+    } else {
+      setLargeUploadNotice(null)
     }
-    setCodaDaNominare(files)
+
+    const caricabili = files.filter((file) => !isAllegatoTooLarge(file.size))
+    if (!caricabili.length) return
+    void uploadFiles(caricabili)
   }
 
   /**
@@ -195,28 +202,20 @@ export function AllegatiSection({
    * Non tocca stato ne' notifiche: se ne occupa chi chiama, che e' l'unico a
    * sapere se questo file e' solo o in mezzo a una sequenza.
    */
-  async function inviaFile(file: File, nomeFile?: string): Promise<string> {
+  async function inviaFile(file: File): Promise<string> {
     const formData = new FormData()
     formData.append("file", file)
     formData.append("recordTipo", recordTipo)
     formData.append("recordId", recordId)
     formData.append("nomeRecord", nomeRecord)
     if (sottocartella) formData.append("sottocartella", sottocartella)
-    // Il nome scelto nel dialog viaggia a parte: il File originale resta
-    // intatto, cosi' il nome di partenza e' ancora leggibile lato server se
-    // dovesse servire per un errore.
-    if (nomeFile) formData.append("nomeFile", nomeFile)
     const res = await fetch("/api/allegati", { method: "POST", body: formData })
     const result = (await res.json().catch(() => null)) as {
       path?: string
       error?: string
     } | null
     if (!res.ok) throw new Error(result?.error ?? "Caricamento non riuscito")
-    // Il nome definitivo lo decide il server sul contenuto reale della
-    // cartella: se qualcun altro ha caricato lo stesso nome dopo l'ultimo
-    // refresh, il progressivo che vede l'utente non e' quello finito su
-    // Nextcloud, e va detto invece di lasciarlo scoprire dalla lista.
-    return result?.path?.split("/").pop() || nomeFile || file.name
+    return result?.path?.split("/").pop() || file.name
   }
 
   /**
@@ -230,22 +229,15 @@ export function AllegatiSection({
    * Un file che fallisce non ferma gli altri: interrompersi a meta' lascia una
    * selezione caricata per un pezzo, senza dire quale.
    */
-  async function uploadFiles(files: File[], nomiScelti?: (string | undefined)[]) {
+  async function uploadFiles(files: File[]) {
     setUploading(true)
     const caricati: string[] = []
     const falliti: string[] = []
     try {
-      for (const [indice, file] of files.entries()) {
-        const nomeFile = nomiScelti?.[indice]
+      for (const file of files) {
         try {
-          const nomeCaricato = await inviaFile(file, nomeFile)
+          const nomeCaricato = await inviaFile(file)
           caricati.push(nomeCaricato)
-          // Il progressivo scattato lato server va detto: un file che si
-          // chiama diversamente da come l'hai chiamato tu, scoperto dopo, e'
-          // il modo migliore per non fidarsi piu' della cartella.
-          if (nomeFile && nomeCaricato !== nomeFile) {
-            toast.info(`"${nomeFile}" salvato come ${nomeCaricato}`)
-          }
         } catch (error) {
           falliti.push(
             `${file.name}: ${error instanceof Error ? error.message : "non riuscito"}`,
@@ -356,6 +348,16 @@ export function AllegatiSection({
           {titolo}
         </span>
         <div className="flex items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-navy"
+            disabled={loading}
+            onClick={() => void refresh({ notifyChanged: true })}
+          >
+            <IconRefresh size={15} stroke={1.8} data-icon="inline-start" />
+            {loading ? "Aggiorno..." : "Aggiorna"}
+          </Button>
           {folderPath ? (
             <Button
               size="sm"
@@ -428,6 +430,26 @@ export function AllegatiSection({
           }}
         />
       </div>
+
+      {largeUploadNotice ? (
+        <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-3 text-sm text-destructive">
+          <IconAlertTriangle className="mt-0.5 size-4 shrink-0" stroke={2} />
+          <div className="min-w-0">
+            <p className="font-semibold">Caricamento diretto richiesto</p>
+            <p className="mt-0.5 break-words text-xs text-destructive/85">
+              {largeUploadNotice}{" "}
+              {folderPath ? (
+                <NextcloudOpenLink
+                  href={openNextcloudUrl(folderPath)}
+                  className="font-semibold underline underline-offset-2"
+                >
+                  Apri in Nextcloud
+                </NextcloudOpenLink>
+              ) : null}
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       {loading ? (
         <p className="py-4 text-center text-sm text-muted-foreground">Caricamento...</p>
@@ -600,38 +622,6 @@ export function AllegatiSection({
         </DialogContent>
       </Dialog>
 
-      <NomeDocumentoDialog
-        file={fileDaNominare}
-        cognome={cognomeConvenzione ?? ""}
-        // Anche le cartelle: un PUT sul path di una cartella esistente non
-        // crea un file, fallisce. Ai nomi gia' in cartella si aggiungono
-        // quelli appena confermati per i file precedenti della stessa
-        // selezione, che su Nextcloud non ci sono ancora ma ci arriveranno:
-        // senza, due file della stessa infornata si prenderebbero lo stesso
-        // nome e il progressivo verrebbe mostrato solo al secondo giro.
-        nomiEsistenti={[...documenti.map((doc) => doc.nome), ...nomiConfermati]}
-        uploading={uploading}
-        posizione={{ indice: nomiConfermati.length, totale: codaDaNominare.length }}
-        onConfirm={(nomeFile) => {
-          if (!fileDaNominare) return
-          const nomi = [...nomiConfermati, nomeFile]
-          if (nomi.length < codaDaNominare.length) {
-            // Ancora file da nominare: si passa al prossimo e si carica tutto
-            // insieme alla fine, cosi' si nomina senza aspettare la rete fra
-            // un file e l'altro.
-            setNomiConfermati(nomi)
-            return
-          }
-          const files = codaDaNominare
-          setCodaDaNominare([])
-          setNomiConfermati([])
-          void uploadFiles(files, nomi)
-        }}
-        onCancel={() => {
-          setCodaDaNominare([])
-          setNomiConfermati([])
-        }}
-      />
     </div>
   )
 }

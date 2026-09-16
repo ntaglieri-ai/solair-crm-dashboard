@@ -3,10 +3,10 @@ import { requireApiRecord } from "@/lib/permissions/server"
 import { ensureFolder, listFolder, uploadFile } from "@/lib/nextcloud/admin-webdav"
 import {
   folderPathForRecord,
-  nomeSenzaCollisioni,
   sanitizeName,
   type AllegatoRecordTipo,
 } from "@/lib/allegati/paths"
+import { isAllegatoTooLarge, MAX_ALLEGATO_UPLOAD_LABEL } from "@/lib/allegati/upload-limits"
 import { listCollegamenti } from "@/lib/allegati/repository"
 import { canAccessCrmRecord } from "@/lib/permissions/data-scope"
 
@@ -145,38 +145,6 @@ async function creaSottocartella(request: Request) {
   return NextResponse.json({ ok: true, path: fullPath }, { status: 201 })
 }
 
-/**
- * Nome libero nella cartella di destinazione, verificato sul contenuto reale
- * subito prima del PUT (l'anteprima nel dialog gira su una lista caricata
- * prima, che nel frattempo puo' essere invecchiata).
- *
- * Solo per il flusso della convenzione 5.3 (`convenzione = true`, cioe' nome
- * scelto nel dialog). Gli altri upload conservano di proposito il vecchio
- * comportamento "stesso nome = sostituisci": i "Documenti obbligatori" del
- * Lead hanno un gate che pretende ESATTAMENTE tre file, e ricaricare la
- * versione corretta di un documento diventerebbe un quarto file che blocca la
- * conversione invece di sostituire il precedente.
- *
- * Se la lettura della cartella fallisce si procede col nome richiesto invece
- * di bloccare: e' una protezione, non una precondizione, e in quel caso il PUT
- * successivo fallirebbe comunque per lo stesso motivo.
- */
-async function nomeDisponibile(
-  cartella: string,
-  nomeFile: string,
-  convenzione: boolean,
-): Promise<string> {
-  if (!convenzione) return nomeFile
-  const listing = await listFolder(cartella)
-  if (!listing.ok) {
-    console.warn(
-      `[allegati] lettura cartella per anti-collisione fallita (${listing.status}): ${cartella}`,
-    )
-    return nomeFile
-  }
-  return nomeSenzaCollisioni(nomeFile, listing.items.map((item) => item.nome))
-}
-
 export async function POST(request: Request) {
   if (request.headers.get("content-type")?.includes("application/json")) {
     return creaSottocartella(request)
@@ -191,6 +159,14 @@ export async function POST(request: Request) {
   if (!(file instanceof File) || !isValidTipo(recordTipo) || !recordId || !nomeRecord) {
     return NextResponse.json({ error: "Parametri mancanti" }, { status: 400 })
   }
+  if (isAllegatoTooLarge(file.size)) {
+    return NextResponse.json(
+      {
+        error: `File troppo grande. Limite ${MAX_ALLEGATO_UPLOAD_LABEL}; per file più grandi usa "Apri in Nextcloud".`,
+      },
+      { status: 413 },
+    )
+  }
 
   const sottocartella = sottocartellaValida(formData.get("sottocartella") as string | null)
   if (sottocartella === null) {
@@ -203,20 +179,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Non trovato" }, { status: 404 })
   }
 
-  // Nome scelto nel dialog della convenzione 5.3 ({Tipo}_{Cognome}_{AAAAMMGG},
-  // estensione inclusa). Il fallback sul nome originale non e' teorico: e' il
-  // caso di tutti gli upload che la convenzione non copre (Lead, documenti
-  // obbligatori, installatori), che continuano a passare da qui.
-  const nomeScelto = sanitizeName((formData.get("nomeFile") as string | null) ?? "")
-  const nomeFile = nomeScelto && !/^\.+$/.test(nomeScelto) ? nomeScelto : file.name
-
   try {
     const buffer = Buffer.from(await file.arrayBuffer())
     // Senza sottocartella si carica nella cartella del record; con
     // sottocartella il file va un livello piu' in basso — e' quello che rende
     // contabile il gate dei documenti obbligatori.
     const cartella = pathConSottocartella(recordTipo, recordId, nomeRecord, sottocartella)
-    const fullPath = `${cartella}/${await nomeDisponibile(cartella, sanitizeName(nomeFile), Boolean(nomeScelto))}`
+    const nomeFile = sanitizeName(file.name)
+    const fullPath = `${cartella}/${nomeFile && !/^\.+$/.test(nomeFile) ? nomeFile : "allegato"}`
 
     // Nessuna riga su `documenti`: il file compare perche' la GET rilegge
     // sempre il contenuto reale della cartella Nextcloud.

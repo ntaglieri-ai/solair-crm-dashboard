@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { requireApiPage } from "@/lib/permissions/server"
 import { loadLayout } from "@/lib/crm-settings/layout-server"
 import { campiDuplicati } from "@/lib/crm-settings/layout"
@@ -48,6 +49,45 @@ async function guardScrittura() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
   return null
+}
+
+/**
+ * Client per le SCRITTURE di layout.
+ *
+ * Le tabelle crm_layout_* hanno RLS attiva con la sola policy di SELECT: per
+ * disegno (vedi 20260909_crm_layout_config.sql) la scrittura non passa dalla
+ * sessione utente ma dal backend con service_role, dopo il controllo del
+ * ruolo che guardScrittura() ha gia' fatto qui sopra.
+ *
+ * Usare il client di sessione — com'era — significava mandare UPDATE e DELETE
+ * che PostgREST accetta con 200 e zero righe toccate, senza alcun errore: il
+ * riordino dei campi tornava indietro al primo ricaricamento e nessuna
+ * modifica di layout e' mai stata salvata.
+ */
+function clientScrittura() {
+  const admin = createAdminClient()
+  if (!admin) {
+    return {
+      admin: null,
+      response: NextResponse.json(
+        { error: "SUPABASE_SERVICE_ROLE_KEY non configurata: le modifiche al layout non sono possibili." },
+        { status: 503 },
+      ),
+    } as const
+  }
+  return { admin, response: null } as const
+}
+
+/**
+ * Una scrittura che non tocca nessuna riga e' un fallimento, non un successo.
+ *
+ * PostgREST non segnala errore quando UPDATE/DELETE non corrispondono a
+ * niente — id inesistente o riga negata a monte. Senza questo controllo la
+ * risposta direbbe ok e l'interfaccia mostrerebbe un salvataggio mai
+ * avvenuto.
+ */
+function nessunaRigaToccata(data: unknown) {
+  return !Array.isArray(data) || data.length === 0
 }
 
 export async function GET(request: Request) {
@@ -108,7 +148,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Modulo non valido" }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const scrittura = clientScrittura()
+  if (scrittura.response) return scrittura.response
+  const supabase = scrittura.admin
 
   if (tipo === "pagina") {
     if (!isEtichettaValida(label)) {
@@ -338,7 +380,9 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Tipo non riconosciuto" }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const scrittura = clientScrittura()
+  if (scrittura.response) return scrittura.response
+  const supabase = scrittura.admin
   const tabella = TABELLE[tipo]
   let avvisoFormula: string | null = null
 
@@ -349,12 +393,19 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Ordine vuoto" }, { status: 400 })
     }
     for (const [indice, id] of ids.entries()) {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from(tabella)
         .update({ ordinamento: indice, updated_at: new Date().toISOString() })
         .eq("id", id)
+        .select("id")
       if (error) {
         return NextResponse.json({ error: erroreSchema(error) }, { status: 500 })
+      }
+      if (nessunaRigaToccata(data)) {
+        return NextResponse.json(
+          { error: "Riordino non applicato: elemento non trovato. Ricarica la pagina e riprova." },
+          { status: 409 },
+        )
       }
     }
     return NextResponse.json({ ok: true })
@@ -412,9 +463,19 @@ export async function PATCH(request: Request) {
     }
   }
 
-  const { error } = await supabase.from(tabella).update(patch).eq("id", body.id)
+  const { data: aggiornate, error } = await supabase
+    .from(tabella)
+    .update(patch)
+    .eq("id", body.id)
+    .select("id")
   if (error) {
     return NextResponse.json({ error: erroreSchema(error) }, { status: 500 })
+  }
+  if (nessunaRigaToccata(aggiornate)) {
+    return NextResponse.json(
+      { error: "Modifica non applicata: elemento non trovato. Ricarica la pagina e riprova." },
+      { status: 409 },
+    )
   }
 
   // Rete di sicurezza: se una modifica avesse comunque prodotto un campo
@@ -442,14 +503,26 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Elemento non indicato" }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const scrittura = clientScrittura()
+  if (scrittura.response) return scrittura.response
+  const supabase = scrittura.admin
 
   // Le FK sono on delete cascade: eliminando una pagina spariscono i suoi
   // blocchi e i loro campi. E' voluto — un blocco senza pagina non avrebbe
   // dove comparire — ma vale la pena che l'interfaccia lo dica prima.
-  const { error } = await supabase.from(TABELLE[tipo]).delete().eq("id", id)
+  const { data, error } = await supabase
+    .from(TABELLE[tipo])
+    .delete()
+    .eq("id", id)
+    .select("id")
   if (error) {
     return NextResponse.json({ error: erroreSchema(error) }, { status: 500 })
+  }
+  if (nessunaRigaToccata(data)) {
+    return NextResponse.json(
+      { error: "Eliminazione non applicata: elemento non trovato. Ricarica la pagina e riprova." },
+      { status: 409 },
+    )
   }
   return NextResponse.json({ ok: true })
 }

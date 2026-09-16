@@ -26,10 +26,16 @@ import {
 } from "@/lib/mock-data"
 import type { Density } from "./lead-table"
 import { ModuleGovernanceSection } from "@/components/crm-settings/module-governance-section"
+import { VisibleColumnsReorder } from "@/components/shared/visible-columns-reorder"
 
 /* -------------------------------------------------------------------------- */
 /*                           Sezione: Vista colonne                           */
 /* -------------------------------------------------------------------------- */
+
+/** Etichette per l'elenco riordinabile; il registro Lead e' statico. */
+const LEAD_COLUMN_LABELS = Object.fromEntries(
+  LEAD_COLUMNS.map((col) => [col.id, col.label]),
+) as Record<LeadColumnId, string>
 
 function ColumnsSection({
   visible,
@@ -92,6 +98,22 @@ function ColumnsSection({
           </label>
         ))}
       </div>
+
+      <div className="flex flex-col gap-2 border-t border-border pt-4">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-sm font-medium text-foreground">
+            Ordine di visualizzazione
+          </span>
+          <span className="text-xs text-muted-foreground">
+            Trascina per decidere la sequenza delle colonne nella tabella.
+          </span>
+        </div>
+        <VisibleColumnsReorder
+          visible={visible}
+          labels={LEAD_COLUMN_LABELS}
+          onChange={onChange}
+        />
+      </div>
     </div>
   )
 }
@@ -110,6 +132,7 @@ const DENSITY_OPTIONS: {
   { value: "densa", label: "Densa", icon: IconListDetails },
 ]
 
+/** Scelte di default; l'elenco Clienti ne passa una piu' lunga (arriva a 100). */
 const ROWS_OPTIONS = [10, 30, 50]
 
 function SettingRow({
@@ -138,12 +161,15 @@ export function GeneralSection({
   rowsPerPage,
   onRowsPerPageChange,
   entityLabel = "lead",
+  rowsOptions = ROWS_OPTIONS,
 }: {
   density: Density
   onDensityChange: (d: Density) => void
   rowsPerPage: number
   onRowsPerPageChange: (n: number) => void
   entityLabel?: string
+  /** Deve contenere il default del modulo, o nessun pulsante risulta attivo. */
+  rowsOptions?: readonly number[]
 }) {
   return (
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -181,7 +207,7 @@ export function GeneralSection({
         description={`Numero di ${entityLabel} mostrati per pagina.`}
       >
         <div className="flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5">
-          {ROWS_OPTIONS.map((n) => {
+          {rowsOptions.map((n) => {
             const active = rowsPerPage === n
             return (
               <button

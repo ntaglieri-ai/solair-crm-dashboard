@@ -6,13 +6,28 @@ import { cn } from "@/lib/utils"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useClienteTags, CLIENTE_TAG_PALETTE, type ClienteTag } from "@/lib/cliente-tag-store"
 
+/**
+ * Forma a freccia dei tag cliente.
+ *
+ * Incavo a sinistra e punta a destra: affiancati si leggono come una
+ * sequenza a step, non come pastiglie slegate. La punta e' 9px, quindi il
+ * padding orizzontale deve restare piu' largo (pl-3.5/pr-4) o il testo
+ * finisce sotto il taglio.
+ *
+ * Il taglio ritaglia via bordo e ombra — con `clip-path` non sopravvivono —
+ * quindi il contorno qui non c'e' e la forma la disegna il solo fondo: per
+ * questo e' un filo piu' carico (38 invece di 30) rispetto alla pastiglia
+ * che aveva anche il bordo a reggere il perimetro.
+ */
+const TAG_CHEVRON_CLIP =
+  "polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%, 9px 50%)"
+
 function tagStyle(color: string): React.CSSProperties {
   const resolved = color || "#64748B"
   return {
-    backgroundColor: `${resolved}30`,
-    borderColor: `${resolved}80`,
+    clipPath: TAG_CHEVRON_CLIP,
+    backgroundColor: `${resolved}38`,
     color: resolved,
-    boxShadow: `inset 0 0 0 1px ${resolved}24`,
   }
 }
 
@@ -30,7 +45,7 @@ export function ClienteTagBadge({ tag, className }: { tag: ClienteTag; className
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2.5 py-0.5 text-xs font-bold shadow-sm",
+        "inline-flex items-center gap-1 whitespace-nowrap py-0.5 pl-3.5 pr-4 text-xs font-bold",
         className,
       )}
       style={tagStyle(tag.color)}

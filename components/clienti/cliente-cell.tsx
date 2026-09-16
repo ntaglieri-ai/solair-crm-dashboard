@@ -14,7 +14,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-const CLIENTE_DATE_COLUMNS = new Set<ClienteColumnId>([
+export const CLIENTE_DATE_COLUMNS = new Set<ClienteColumnId>([
   "Ora modifica",
   "Ora creazione",
   "Ora ultima attività",
@@ -104,7 +104,9 @@ function parseClienteDate(value: string) {
   }
 }
 
-function formatClienteMoment(value: string) {
+/** Esportata per la stima delle larghezze: la colonna va misurata sul
+ * testo che si vede, non sulla stringa ISO grezza del record. */
+export function formatClienteMoment(value: string) {
   const parsed = parseClienteDate(value)
   if (!parsed) return value
 
@@ -213,10 +215,16 @@ export function ClienteCell({
     case "Tag":
       return (
         <span
-          className="flex max-w-[460px] flex-wrap items-center justify-center gap-1.5"
+          // Nessun `max` qui: nella tabella clienti i tag si vedono tutti.
+          // Il troncamento "+N" resta dov'e' utile (scheda mobile), ma in
+          // questa vista nascondeva proprio l'informazione che si viene a
+          // cercare. La cella manda a capo e la riga cresce di conseguenza:
+          // la tabella non e' virtualizzata, quindi righe di altezza diversa
+          // non disallineano niente.
+          className="flex w-full flex-wrap items-center gap-1.5"
           onClick={(event) => event.stopPropagation()}
         >
-          <ClienteTagBadges clienteId={cliente.id} max={3} />
+          <ClienteTagBadges clienteId={cliente.id} />
           <ClienteTagAssignPopover
             clienteId={cliente.id}
             trigger={

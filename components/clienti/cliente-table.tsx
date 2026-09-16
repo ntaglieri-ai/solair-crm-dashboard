@@ -53,7 +53,11 @@ import {
   type ClienteColumn,
   type ClienteColumnId,
 } from "@/lib/mock-data"
-import { ClienteCell } from "./cliente-cell"
+import {
+  ClienteCell,
+  CLIENTE_DATE_COLUMNS,
+  formatClienteMoment,
+} from "./cliente-cell"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { ClienteAvatar, StatoClienteBadge } from "./cliente-utils"
 import { ClienteTagBadges, ClienteTagAssignPopover } from "./cliente-tag-controls"
@@ -92,19 +96,31 @@ function columnWidth(id: ClienteColumnId) {
   return 170
 }
 
+/**
+ * Pavimento della colonna, non la sua larghezza.
+ *
+ * Erano valori larghi (240 per il nome, 220 per l'email, 180 per date e
+ * riferimenti) e siccome la stima non puo' scendere sotto il minimo, di
+ * fatto erano LORO la larghezza: una colonna di valori corti occupava
+ * comunque 240px e la tabella scrollava in orizzontale senza motivo. Ora
+ * restano solo a garantire che l'intestazione e un valore breve stiano
+ * dentro; a decidere e' il contenuto reale (vedi autoWidths).
+ */
 function minimumColumnWidth(id: ClienteColumnId) {
   if (isCompactIconColumn(id)) return CLIENTE_COMPACT_ICON_COLUMN_WIDTH
-  if (id === "Tag") return 220
-  if (id === "Nome Clienti") return 240
-  if (id === "E-mail") return 220
-  if (id === "Clienti Proprietario" || id === "Installatore") return 180
-  if (id === "Ora modifica" || id === "Ora creazione") return 180
-  return 120
+  if (id === "Tag") return 200
+  if (id === "Nome Clienti") return 160
+  if (id === "E-mail") return 150
+  if (id === "Clienti Proprietario" || id === "Installatore") return 130
+  if (id === "Ora modifica" || id === "Ora creazione") return 140
+  return 96
 }
 
 function maximumColumnWidth(id: ClienteColumnId) {
   if (isCompactIconColumn(id)) return CLIENTE_COMPACT_ICON_COLUMN_WIDTH
-  if (id === "Tag") return 520
+  // Piu' bassa di prima (era 520): da quando i tag si vedono tutti e vanno
+  // a capo, la colonna non deve piu' contenerli in una riga sola.
+  if (id === "Tag") return 400
   if (id === "Nome Clienti") return 560
   if (id === "E-mail") return 420
   if (id === "Clienti Proprietario" || id === "Installatore") return 380
@@ -113,6 +129,31 @@ function maximumColumnWidth(id: ClienteColumnId) {
 
 function clampColumnWidth(id: ClienteColumnId, width: number) {
   return Math.min(maximumColumnWidth(id), Math.max(minimumColumnWidth(id), width))
+}
+
+/**
+ * Il testo che la cella mostra davvero, per la stima della larghezza.
+ *
+ * Misurare il valore grezzo del record sbagliava di molto proprio sulle
+ * colonne piu' larghe: una data era l'ISO completo ("2026-09-15T09:56:15.693+00:00",
+ * 29 caratteri) contro i 18 che si vedono, e il proprietario era un UUID da
+ * 36 caratteri al posto del nome. Da qui le colonne larghe il doppio del
+ * necessario.
+ */
+export function measuredCellText(
+  id: ClienteColumnId,
+  cliente: ClienteRecord,
+  ownerNames: Record<string, string>,
+): unknown {
+  if (isCompactIconColumn(id)) return ""
+  if (id === "Clienti Proprietario") {
+    return displayClienteOwner(cliente, ownerNames, "Non assegnato")
+  }
+  const value = cliente[id]
+  if (CLIENTE_DATE_COLUMNS.has(id)) {
+    return typeof value === "string" && value.trim() ? formatClienteMoment(value) : ""
+  }
+  return value
 }
 
 function ClienteHeaderLabel({ column }: { column: ClienteColumn }) {
@@ -347,6 +388,9 @@ export function ClienteTable({
   onOpenSettings: () => void
 }) {
   const router = useRouter()
+  // Serve alla stima delle larghezze: la colonna Proprietario mostra il nome
+  // risolto, non l'uuid che sta nel record.
+  const { ownerNames } = useClienteTags()
   const [stuck, setStuck] = useState(false)
   const [draggingColumn, setDraggingColumn] = useState<ClienteColumnId | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<ClienteColumnId | null>(null)
@@ -359,14 +403,24 @@ export function ClienteTable({
     for (const column of columns) {
       widths[column.id] = estimateColumnWidth({
         label: column.label,
-        values: clienti.map((cliente) => cliente[column.id]),
+        values:
+          // I tag vanno a capo dentro la cella, quindi la colonna deve
+          // contenere il tag PIU' LARGO, non tutti in fila: misurarli uniti
+          // ("a, b, c") la mandava sempre al massimo consentito.
+          column.id === "Tag"
+            ? clienti.flatMap((cliente) =>
+                Array.isArray(cliente.Tag) ? cliente.Tag : [],
+              )
+            : clienti.map((cliente) =>
+                measuredCellText(column.id, cliente, ownerNames),
+              ),
         min: minimumColumnWidth(column.id),
         max: maximumColumnWidth(column.id),
         padding: column.id === "Tag" ? 82 : 48,
       })
     }
     return widths
-  }, [clienti, columns])
+  }, [clienti, columns, ownerNames])
   const resolvedWidths = useMemo(() => {
     const widths = { ...autoWidths }
     for (const column of columns) {

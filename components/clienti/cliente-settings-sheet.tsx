@@ -32,6 +32,10 @@ import type { Density } from "./cliente-table"
 import { GeneralSection } from "@/components/leads/lead-settings-sheet"
 import { ClienteTagSection } from "./cliente-tag-section"
 import { ModuleGovernanceSection } from "@/components/crm-settings/module-governance-section"
+import { VisibleColumnsReorder } from "@/components/shared/visible-columns-reorder"
+
+/** Include 100, che e' il default dell'elenco clienti (INITIAL_PAGE_SIZE). */
+const CLIENTI_ROWS_OPTIONS = [10, 30, 50, 100] as const
 
 /* -------------------------------------------------------------------------- */
 /*                  Sezione: Vista colonne (raggruppata)                      */
@@ -73,6 +77,18 @@ function ColumnsSection({
     ).map((c) => c.id)
     onChange([...kept, ...added])
   }
+
+  // L'elenco riordinabile mostra le etichette, non gli id: qui sotto la
+  // mappa, costruita sulle sole colonne concesse (una colonna ristretta non
+  // e' visibile e quindi non compare nemmeno nella sequenza).
+  const etichette = useMemo(
+    () =>
+      Object.fromEntries(colonneConcesse.map((c) => [c.id, c.label])) as Record<
+        ClienteColumnId,
+        string
+      >,
+    [colonneConcesse],
+  )
 
   const groups = useMemo(
     () =>
@@ -140,6 +156,22 @@ function ColumnsSection({
           ))}
         </div>
       )}
+
+      <div className="flex flex-col gap-2 border-t border-border pt-4">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-sm font-medium text-foreground">
+            Ordine di visualizzazione
+          </span>
+          <span className="text-xs text-muted-foreground">
+            Trascina per decidere la sequenza delle colonne nella tabella.
+          </span>
+        </div>
+        <VisibleColumnsReorder
+          visible={visible}
+          labels={etichette}
+          onChange={onChange}
+        />
+      </div>
     </div>
   )
 }
@@ -284,6 +316,7 @@ export function ClienteSettingsSheet({
                   rowsPerPage={rowsPerPage}
                   onRowsPerPageChange={onRowsPerPageChange}
                   entityLabel="clienti"
+                  rowsOptions={CLIENTI_ROWS_OPTIONS}
                 />
               )}
             </div>

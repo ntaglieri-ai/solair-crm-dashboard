@@ -95,6 +95,9 @@ const ROWS_ITEMS: Record<string, string> = {
   "20": "20 righe",
   "30": "30 righe",
   "50": "50 righe",
+  // Default dell'elenco clienti (INITIAL_PAGE_SIZE): senza questa voce il
+  // Select non avrebbe nulla da mostrare per il valore iniziale.
+  "100": "100 righe",
 }
 
 function norm(v: string | undefined): string {

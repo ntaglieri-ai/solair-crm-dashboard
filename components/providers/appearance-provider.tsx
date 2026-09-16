@@ -63,13 +63,31 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
 
     let active = true
     fetch("/api/crm-settings/appearance", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
+      .then((response) => {
+        // `ok` da solo non basta: senza sessione il middleware rimanda a
+        // /login, la fetch segue il redirect e riceve 200 con l'HTML della
+        // pagina di login. Senza questo controllo response.json() proverebbe
+        // a leggere "<!DOCTYPE html>" come JSON e fallirebbe.
+        const isJson = response.headers
+          .get("content-type")
+          ?.includes("application/json")
+        return response.ok && isJson ? response.json() : null
+      })
       .then((payload) => {
         if (!active || !payload?.value) return
         const next = normalizeAppearance(payload.value)
         setPreferences(next)
         applyAppearance(next)
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+      })
+      .catch(() => {
+        // Nessun avviso, di proposito: l'aspetto e' gia' stato applicato
+        // dalla cache locale qui sopra, quindi l'interfaccia e' corretta
+        // anche senza questa risposta. Prima non c'era alcun catch, e una
+        // richiesta caduta — rete assente, server di sviluppo che ricompila,
+        // pagina ricaricata mentre la fetch e' in volo — diventava un errore
+        // non gestito: in sviluppo l'overlay a tutto schermo di Next, in
+        // produzione rumore in console per una preferenza estetica.
       })
       .finally(() => {
         if (active) setLoading(false)

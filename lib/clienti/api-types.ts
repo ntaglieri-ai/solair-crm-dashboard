@@ -41,7 +41,11 @@ export interface ClientiListResponse {
   pageSize: number
 }
 
-export const INITIAL_PAGE_SIZE = 50
+// 100 righe di default: la richiesta e' vedere piu' clienti per schermata
+// senza toccare densita' e proporzioni della tabella. Resta per-modulo — gli
+// altri elenchi (Lead, Compiti, Installatori, Scadenze) hanno la loro
+// costante e restano a 50.
+export const INITIAL_PAGE_SIZE = 100
 
 export const DEFAULT_CLIENTI_PARAMS: ClientiListParams = {
   page: 1,

@@ -26,12 +26,20 @@ import { useSidebarCollapse } from "@/lib/sidebar-collapse"
 import { pageKeyFromPath } from "@/lib/permissions/constants"
 import { usePermissions } from "@/lib/permissions/provider"
 import { NAV_ICONS } from "./icons"
+import { SidebarSearch } from "./sidebar-search"
 import { motion } from "framer-motion"
 
+/**
+ * Formato compatto ("mer 16 set 2026", reso "Mer 16 Set 2026" dal
+ * `capitalize`). Per esteso "Mercoledi' 16 Settembre 2026" non entrava nei
+ * 248px della barra e andava a capo su due righe; abbreviando, la larghezza
+ * e' quasi costante tutto l'anno perche' giorni e mesi sono sempre di tre
+ * lettere.
+ */
 const FORMATO_DATA = new Intl.DateTimeFormat("it-IT", {
-  weekday: "long",
+  weekday: "short",
   day: "numeric",
-  month: "long",
+  month: "short",
   year: "numeric",
 })
 
@@ -344,10 +352,11 @@ function SidebarContent({
           </div>
         </Link>
         {!collapsed ? (
-          <p className="mt-3 min-h-5 text-[15px] font-bold capitalize leading-5 text-primary">
+          <p className="mt-3 min-h-5 whitespace-nowrap text-[15px] font-bold capitalize leading-5 text-primary">
             {dataOggi}
           </p>
         ) : null}
+        <SidebarSearch collapsed={collapsed} mobile={mobile} onNavigate={onNavigate} />
       </div>
 
       <nav

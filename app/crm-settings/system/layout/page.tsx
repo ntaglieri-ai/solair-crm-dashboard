@@ -1,10 +1,11 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   DndContext,
-  closestCenter,
+  closestCorners,
   PointerSensor,
+  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -12,7 +13,9 @@ import {
 import {
   SortableContext,
   useSortable,
-  arrayMove,
+  // I campi stanno in una griglia a 1-3 colonne: verticalList presume una
+  // colonna sola e sbaglierebbe i bersagli sulle righe affiancate.
+  rectSortingStrategy,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
@@ -55,6 +58,15 @@ import { CAMPO_TIPI, CAMPO_TIPO_LABEL, type CampoTipo } from "@/lib/system-setti
 import type { LayoutBlocco, LayoutCampo, LayoutPagina } from "@/lib/crm-settings/layout"
 import { LAYOUT_MODULI, type LayoutModulo } from "@/lib/crm-settings/layout-validate"
 import { valutaFormula } from "@/lib/crm-settings/formula-eval"
+import {
+  decidiTrascinamento,
+  type DatiTrascinamento,
+} from "@/lib/crm-settings/layout-dnd"
+import {
+  SpostaCampoDialog,
+  SpostaCampoIcona,
+  type PaginaDestinazione,
+} from "@/components/crm-settings/sposta-campo-dialog"
 
 const MODULO_LABEL: Record<LayoutModulo, string> = {
   clienti: "Clienti",
@@ -85,6 +97,20 @@ type Riordina = (
   tipo: "pagina" | "blocco" | "campo",
   ordine: string[],
   contenitoreId?: string,
+) => Promise<boolean>
+/**
+ * Sposta un campo in un ALTRO blocco della stessa pagina.
+ *
+ * Distinto da Riordina perche' non cambia solo la posizione fra fratelli: il
+ * campo cambia contenitore, quindi serve scrivere anche blocco_id. Il
+ * riordino da solo non poteva farlo, ed era questo a far tornare indietro il
+ * campo a ogni trascinamento fra blocchi.
+ */
+type Sposta = (
+  campoId: string,
+  bloccoOrigine: string,
+  bloccoDestinazione: string,
+  indice: number,
 ) => Promise<boolean>
 
 export default function LayoutSchedePage() {
@@ -174,6 +200,88 @@ export default function LayoutSchedePage() {
     [modulo, scrivi],
   )
 
+  /**
+   * Spostamento di un campo fra blocchi.
+   *
+   * Due scritture, in quest'ordine: prima il cambio di contenitore (la PATCH
+   * con bloccoId mette il campo in coda al blocco di destinazione), poi il
+   * riordino che lo porta nella posizione esatta del rilascio. Separarle
+   * tiene la regola "ordine = elenco di fratelli" del riordino intatta,
+   * invece di inventare un terzo formato di richiesta.
+   *
+   * Lo stato si anticipa qui in un colpo solo, altrimenti fra le due chiamate
+   * il campo comparirebbe per un istante in fondo al blocco sbagliato.
+   */
+  const sposta: Sposta = useCallback(
+    async (campoId, bloccoOrigine, bloccoDestinazione, indice) => {
+      let ordineDestinazione: string[] = []
+
+      setPagine((precedenti) =>
+        precedenti.map((pagina) => {
+          const origine = pagina.blocchi.find((b) => b.id === bloccoOrigine)
+          const destinazione = pagina.blocchi.find((b) => b.id === bloccoDestinazione)
+          if (!origine || !destinazione) return pagina
+
+          const campo = origine.campi.find((c) => c.id === campoId)
+          if (!campo) return pagina
+
+          const rimasti = origine.campi.filter((c) => c.id !== campoId)
+          const arrivati = [...destinazione.campi]
+          arrivati.splice(Math.max(0, Math.min(indice, arrivati.length)), 0, campo)
+          ordineDestinazione = arrivati.map((c) => c.id)
+
+          return {
+            ...pagina,
+            blocchi: pagina.blocchi.map((b) =>
+              b.id === bloccoOrigine
+                ? { ...b, campi: rimasti }
+                : b.id === bloccoDestinazione
+                  ? { ...b, campi: arrivati }
+                  : b,
+            ),
+          }
+        }),
+      )
+
+      const spostato = await scrivi({
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          modulo,
+          tipo: "campo",
+          id: campoId,
+          bloccoId: bloccoDestinazione,
+        }),
+      })
+      // Il riordino si tenta solo a spostamento riuscito: su un campo rimasto
+      // dov'era riscriverebbe l'ordine di un blocco che non lo contiene.
+      if (!spostato) return false
+      if (ordineDestinazione.length < 2) return true
+
+      return scrivi({
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          modulo,
+          tipo: "campo",
+          ordine: ordineDestinazione,
+        }),
+      })
+    },
+    [modulo, scrivi],
+  )
+
+  /** Pagine e blocchi del modulo, come li vede il comando "Sposta in". */
+  const destinazioni: PaginaDestinazione[] = useMemo(
+    () =>
+      pagine.map((pagina) => ({
+        id: pagina.id,
+        label: pagina.label,
+        blocchi: pagina.blocchi.map((blocco) => ({ id: blocco.id, label: blocco.label })),
+      })),
+    [pagine],
+  )
+
   const patch: Patch = useCallback(
     async (tipo, id, campi) => {
       await scrivi({
@@ -202,15 +310,42 @@ export default function LayoutSchedePage() {
     })
   }
 
-  function fineTrascinaPagine(evento: DragEndEvent) {
+  /**
+   * Un solo gestore per i tre livelli trascinabili.
+   *
+   * Prima ogni livello aveva il suo DndContext, annidati uno dentro l'altro:
+   * dnd-kit isola i contesti e non ne supporta l'annidamento, quindi un campo
+   * non "vedeva" i blocchi vicini e tornava sempre al suo posto. Ora il
+   * contesto e' uno solo e a decidere e' decidiTrascinamento(), che sta in
+   * lib/crm-settings/layout-dnd.ts ed e' coperta dai test.
+   */
+  function fineTrascina(evento: DragEndEvent) {
     const { active, over } = evento
-    if (readonly || !over || active.id === over.id) return
-    const da = pagine.findIndex((p) => p.id === active.id)
-    const a = pagine.findIndex((p) => p.id === over.id)
-    void riordina(
-      "pagina",
-      arrayMove(pagine, da, a).map((p) => p.id),
+    if (readonly || !over) return
+
+    const azione = decidiTrascinamento(
+      pagine,
+      String(active.id),
+      String(over.id),
+      active.data.current as DatiTrascinamento | undefined,
+      over.data.current as DatiTrascinamento | undefined,
     )
+    if (!azione) return
+
+    switch (azione.azione) {
+      case "riordina-pagine":
+        void riordina("pagina", azione.ordine)
+        return
+      case "riordina-blocchi":
+        void riordina("blocco", azione.ordine, azione.paginaId)
+        return
+      case "riordina-campi":
+        void riordina("campo", azione.ordine, azione.bloccoId)
+        return
+      case "sposta-campo":
+        void sposta(azione.campoId, azione.origine, azione.destinazione, azione.indice)
+        return
+    }
   }
 
   return (
@@ -263,10 +398,13 @@ export default function LayoutSchedePage() {
         </div>
       ) : (
         <DndContext
-          id={`layout-pagine-${modulo}`}
+          id={`layout-${modulo}`}
           sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={fineTrascinaPagine}
+          // closestCorners invece di closestCenter: con piu' contenitori nello
+          // stesso contesto il centro premia il blocco piu' grande e rende
+          // difficile centrare quello piccolo accanto.
+          collisionDetection={closestCorners}
+          onDragEnd={fineTrascina}
         >
           <SortableContext items={pagine.map((p) => p.id)} strategy={verticalListSortingStrategy}>
             <div className="flex flex-col gap-3">
@@ -275,12 +413,13 @@ export default function LayoutSchedePage() {
                   key={pagina.id}
                   pagina={pagina}
                   aperta={aperte.has(pagina.id)}
+                  modulo={modulo}
+                  destinazioni={destinazioni}
                   readonly={readonly}
-                  sensors={sensors}
                   onAlterna={() => alterna(pagina.id)}
                   onPatch={patch}
                   onElimina={elimina}
-                  onRiordina={riordina}
+                  onRicarica={carica}
                   onDialogo={setDialogo}
                 />
               ))}
@@ -319,44 +458,40 @@ function chiaveDialogo(dialogo: Dialogo): string {
 
 /* --------------------------------------------------------------- pagina */
 
+/**
+ * La pagina non gestisce piu' il trascinamento: sensori e gestore vivono nel
+ * DndContext unico alla radice, che e' cio' che permette a un campo di
+ * passare da un blocco all'altro.
+ */
 function RigaPagina({
   pagina,
   aperta,
+  modulo,
+  destinazioni,
   readonly,
-  sensors,
   onAlterna,
   onPatch,
   onElimina,
-  onRiordina,
+  onRicarica,
   onDialogo,
 }: {
   pagina: LayoutPagina
   aperta: boolean
+  modulo: string
+  destinazioni: PaginaDestinazione[]
   readonly: boolean
-  sensors: ReturnType<typeof useSensors>
   onAlterna: () => void
   onPatch: Patch
   onElimina: Elimina
-  onRiordina: Riordina
+  onRicarica: () => void | Promise<void>
   onDialogo: (d: Dialogo) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: pagina.id,
+    data: { tipo: "pagina", paginaId: pagina.id } satisfies DatiTrascinamento,
   })
   const blocchi = pagina.blocchi
   const conteggio = blocchi.reduce((somma, b) => somma + b.campi.length, 0)
-
-  function fineTrascinaBlocchi(evento: DragEndEvent) {
-    const { active, over } = evento
-    if (readonly || !over || active.id === over.id) return
-    const da = blocchi.findIndex((b) => b.id === active.id)
-    const a = blocchi.findIndex((b) => b.id === over.id)
-    void onRiordina(
-      "blocco",
-      arrayMove(blocchi, da, a).map((b) => b.id),
-      pagina.id,
-    )
-  }
 
   return (
     <div
@@ -460,32 +595,27 @@ function RigaPagina({
           {blocchi.length === 0 ? (
             <p className="text-xs text-muted-foreground">Nessun blocco in questa pagina.</p>
           ) : (
-            <DndContext
-              id={`layout-blocchi-${pagina.pageKey}`}
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={fineTrascinaBlocchi}
+            <SortableContext
+              items={blocchi.map((b) => b.id)}
+              strategy={verticalListSortingStrategy}
             >
-              <SortableContext
-                items={blocchi.map((b) => b.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="flex flex-col gap-2">
-                  {blocchi.map((blocco) => (
-                    <RigaBlocco
-                      key={blocco.id}
-                      blocco={blocco}
-                      readonly={readonly}
-                      sensors={sensors}
-                      onPatch={onPatch}
-                      onElimina={onElimina}
-                      onRiordina={onRiordina}
-                      onDialogo={onDialogo}
-                    />
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
+              <div className="flex flex-col gap-2">
+                {blocchi.map((blocco) => (
+                  <RigaBlocco
+                    key={blocco.id}
+                    blocco={blocco}
+                    paginaId={pagina.id}
+                    modulo={modulo}
+                    destinazioni={destinazioni}
+                    readonly={readonly}
+                    onPatch={onPatch}
+                    onElimina={onElimina}
+                    onRicarica={onRicarica}
+                    onDialogo={onDialogo}
+                  />
+                ))}
+              </div>
+            </SortableContext>
           )}
         </div>
       ) : null}
@@ -495,39 +625,45 @@ function RigaPagina({
 
 /* --------------------------------------------------------------- blocco */
 
+/**
+ * Il blocco non gestisce piu' il trascinamento dei suoi campi: sensori e
+ * gestori vivono nel DndContext unico della pagina (vedi PaginaCard), che e'
+ * cio' che permette a un campo di passare da un blocco all'altro.
+ */
 function RigaBlocco({
   blocco,
+  paginaId,
+  modulo,
+  destinazioni,
   readonly,
-  sensors,
   onPatch,
   onElimina,
-  onRiordina,
+  onRicarica,
   onDialogo,
 }: {
   blocco: LayoutBlocco
+  /** Pagina di appartenenza: il trascinamento non la attraversa mai. */
+  paginaId: string
+  modulo: string
+  destinazioni: PaginaDestinazione[]
   readonly: boolean
-  sensors: ReturnType<typeof useSensors>
   onPatch: Patch
   onElimina: Elimina
-  onRiordina: Riordina
+  onRicarica: () => void | Promise<void>
   onDialogo: (d: Dialogo) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: blocco.id,
+    data: { tipo: "blocco", paginaId, bloccoId: blocco.id } satisfies DatiTrascinamento,
+  })
+  // Bersaglio di rilascio per i campi in arrivo da un altro blocco. Serve
+  // anche — e soprattutto — quando il blocco e' vuoto: senza campi non
+  // esisterebbe nulla su cui lasciare cadere il trascinato.
+  const { setNodeRef: setAreaRef, isOver } = useDroppable({
+    id: `area-${blocco.id}`,
+    data: { tipo: "area-blocco", paginaId, bloccoId: blocco.id } satisfies DatiTrascinamento,
   })
   const campi = blocco.campi
-
-  function fineTrascinaCampi(evento: DragEndEvent) {
-    const { active, over } = evento
-    if (readonly || !over || active.id === over.id) return
-    const da = campi.findIndex((c) => c.id === active.id)
-    const a = campi.findIndex((c) => c.id === over.id)
-    void onRiordina(
-      "campo",
-      arrayMove(campi, da, a).map((c) => c.id),
-      blocco.id,
-    )
-  }
 
   return (
     <div
@@ -620,19 +756,22 @@ function RigaBlocco({
         ) : null}
       </div>
 
-      {campi.length === 0 ? (
-        <p className="px-1 py-2 text-xs text-muted-foreground">Nessun campo in questo blocco.</p>
-      ) : (
-        <DndContext
-          id={`layout-campi-${blocco.blockKey}`}
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={fineTrascinaCampi}
-        >
-          <SortableContext items={campi.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+      <div
+        ref={setAreaRef}
+        className={cn(
+          "mt-2 rounded-md transition-colors",
+          isOver && "bg-teal/10 ring-2 ring-teal/40",
+        )}
+      >
+        {campi.length === 0 ? (
+          <p className="px-1 py-3 text-center text-xs text-muted-foreground">
+            {isOver ? "Rilascia qui per spostare il campo" : "Nessun campo in questo blocco."}
+          </p>
+        ) : (
+          <SortableContext items={campi.map((c) => c.id)} strategy={rectSortingStrategy}>
             <div
               className={cn(
-                "mt-2 grid gap-1.5",
+                "grid gap-1.5",
                 blocco.colonne === 1 && "grid-cols-1",
                 blocco.colonne === 2 && "grid-cols-1 sm:grid-cols-2",
                 blocco.colonne >= 3 && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
@@ -642,16 +781,21 @@ function RigaBlocco({
                 <RigaCampo
                   key={campo.id}
                   campo={campo}
+                  paginaId={paginaId}
+                  bloccoId={blocco.id}
+                  modulo={modulo}
+                  destinazioni={destinazioni}
                   readonly={readonly}
                   onPatch={onPatch}
                   onElimina={onElimina}
+                  onRicarica={onRicarica}
                   onDialogo={onDialogo}
                 />
               ))}
             </div>
           </SortableContext>
-        </DndContext>
-      )}
+        )}
+      </div>
     </div>
   )
 }
@@ -660,19 +804,34 @@ function RigaBlocco({
 
 function RigaCampo({
   campo,
+  paginaId,
+  bloccoId,
+  modulo,
+  destinazioni,
   readonly,
   onPatch,
   onElimina,
+  onRicarica,
   onDialogo,
 }: {
   campo: LayoutCampo
+  /** Pagina di appartenenza: il trascinamento non la lascia mai. */
+  paginaId: string
+  /** Blocco di appartenenza: dice al rilascio se il campo cambia contenitore. */
+  bloccoId: string
+  modulo: string
+  /** Tutte le pagine/blocchi del modulo: destinazioni del comando "Sposta in". */
+  destinazioni: PaginaDestinazione[]
   readonly: boolean
   onPatch: Patch
   onElimina: Elimina
+  onRicarica: () => void | Promise<void>
   onDialogo: (d: Dialogo) => void
 }) {
+  const [spostaAperto, setSpostaAperto] = useState(false)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: campo.id,
+    data: { tipo: "campo", paginaId, bloccoId } satisfies DatiTrascinamento,
   })
   const etichetta = campo.labelOverride ?? campo.fieldKey
 
@@ -690,7 +849,7 @@ function RigaCampo({
         <button
           type="button"
           className="cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
-          aria-label="Trascina per riordinare il campo"
+          aria-label="Trascina per riordinare o spostare il campo"
           {...attributes}
           {...listeners}
         >
@@ -714,6 +873,17 @@ function RigaCampo({
 
       {!readonly ? (
         <div className="flex shrink-0 items-center">
+          {/* Il trascinamento sposta solo dentro la pagina: il cambio di
+              pagina passa da qui, quindi l'icona sta sempre in chiaro e non
+              compare al passaggio del mouse come un ripensamento. */}
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={`Sposta "${etichetta}" in un altro blocco`}
+            onClick={() => setSpostaAperto(true)}
+          >
+            <SpostaCampoIcona />
+          </Button>
           <Button
             size="icon"
             variant="ghost"
@@ -742,6 +912,17 @@ function RigaCampo({
           </Button>
         </div>
       ) : null}
+
+      <SpostaCampoDialog
+        open={spostaAperto}
+        onOpenChange={setSpostaAperto}
+        modulo={modulo}
+        campoId={campo.id}
+        campoEtichetta={etichetta}
+        bloccoCorrente={bloccoId}
+        pagine={destinazioni}
+        onSpostato={onRicarica}
+      />
     </div>
   )
 }

@@ -353,6 +353,8 @@ type CorpoPatch = {
   formula?: unknown
   /** Elenco ordinato di id: riordina fratelli dello stesso genitore. */
   ordine?: unknown
+  /** Solo per tipo "campo": blocco di destinazione, per spostarlo altrove. */
+  bloccoId?: unknown
 }
 
 const TABELLE = {
@@ -436,6 +438,50 @@ export async function PATCH(request: Request) {
   }
 
   if (tipo === "campo") {
+    // Spostamento in un altro blocco.
+    //
+    // Prima non esisteva: la PATCH sapeva cambiare solo l'ordinamento fra
+    // fratelli, quindi un campo non poteva lasciare il blocco in cui era
+    // nato e l'unica via era eliminarlo e ricrearlo altrove, perdendo
+    // etichetta, formato e formula.
+    if (typeof body.bloccoId === "string" && body.bloccoId) {
+      // Il blocco di destinazione deve stare in una pagina di QUESTO modulo.
+      //
+      // La pagina invece puo' essere un'altra: il comando "Sposta in..."
+      // esiste apposta per portare un campo su un'altra scheda, ed e' l'unica
+      // via per farlo (il trascinamento resta confinato alla pagina, vedi
+      // lib/crm-settings/layout-dnd.ts). Il vincolo di modulo resta: senza,
+      // un campo di Clienti potrebbe finire in una scheda Lead passando un id
+      // qualsiasi.
+      const { data: destinazione } = await supabase
+        .from("crm_layout_blocchi")
+        .select("id, crm_layout_pagine!inner(modulo)")
+        .eq("id", body.bloccoId)
+        .eq("crm_layout_pagine.modulo", body.modulo)
+        .maybeSingle()
+
+      if (!destinazione) {
+        return NextResponse.json(
+          { error: "Blocco di destinazione inesistente o di un altro modulo" },
+          { status: 404 },
+        )
+      }
+
+      // In coda ai campi che il blocco ha gia': il campo spostato non deve
+      // scavalcare quelli sistemati prima. Da li' si riordina col
+      // trascinamento come qualsiasi altro.
+      const { data: ultimo } = await supabase
+        .from("crm_layout_campi")
+        .select("ordinamento")
+        .eq("blocco_id", body.bloccoId)
+        .order("ordinamento", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      patch.blocco_id = body.bloccoId
+      patch.ordinamento = ((ultimo as { ordinamento: number } | null)?.ordinamento ?? -1) + 1
+    }
+
     const span = intInRange(body.span, 1, 4)
     if (span !== null) patch.span = span
     if (typeof body.solaLettura === "boolean") patch.sola_lettura = body.solaLettura

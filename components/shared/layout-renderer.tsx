@@ -1,6 +1,13 @@
 "use client"
 
-import { useCallback, useState, type ReactNode } from "react"
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react"
 import {
   DndContext,
   closestCenter,
@@ -27,6 +34,13 @@ import {
 } from "@/components/shared/inline-edit-field"
 import type { FieldModuleKey } from "@/lib/permissions/field-catalog"
 import type { LayoutBlocco, LayoutCampo, LayoutPagina } from "@/lib/crm-settings/layout"
+import { usePermissions } from "@/lib/permissions/provider"
+import { LAYOUT_PAGE_KEY } from "@/lib/crm-settings/sposta-campo"
+import {
+  SpostaCampoDialog,
+  SpostaCampoIcona,
+  type PaginaDestinazione,
+} from "@/components/crm-settings/sposta-campo-dialog"
 import {
   ancoraPagina,
   campoScrivibile,
@@ -79,6 +93,27 @@ export type RenderCampoLayout = (params: {
   testo: string
 }) => ReactNode | null
 
+/**
+ * Il comando "Sposta in..." dentro la scheda vera.
+ *
+ * Passa da un contesto e non da una prop perche' il campo viene disegnato in
+ * quattro modi diversi (errore di formula, modificabile, sola lettura,
+ * override del modulo) e tutti e quattro finiscono in ContenitoreCampo:
+ * infilare tre prop lungo quella catena, quattro volte, e' rumore.
+ *
+ * Il contesto e' assente — e il comando non esiste — per chi non amministra
+ * il layout: la disposizione e' condivisa, quindi cambiarla dalla propria
+ * scheda cambierebbe quella di tutti.
+ */
+type ContestoSpostamento = {
+  modulo: string
+  destinazioni: PaginaDestinazione[]
+  bloccoPerCampo: Record<string, string>
+  onSpostato: () => void | Promise<void>
+}
+
+const ContestoSposta = createContext<ContestoSpostamento | null>(null)
+
 export function LayoutRenderer({
   pagine,
   record,
@@ -91,6 +126,8 @@ export function LayoutRenderer({
   onRiordinaBlocchi,
   onRiordinaCampi,
   onSalvato,
+  moduloLayout,
+  onLayoutCambiato,
 }: {
   pagine: LayoutPagina[]
   record: Record<string, unknown>
@@ -130,6 +167,13 @@ export function LayoutRenderer({
    */
   onRiordinaCampi?: (blockKey: string, ordine: string[]) => void
   onSalvato?: () => void
+  /**
+   * Modulo del layout ("clienti", "lead"). Presente = un amministratore puo'
+   * spostare i campi da qui. Assente = comando non disponibile.
+   */
+  moduloLayout?: string
+  /** Richiamata dopo uno spostamento: ricarica il layout condiviso. */
+  onLayoutCambiato?: () => void
 }) {
   // Valori appena modificati, prima che il server rimandi il record
   // aggiornato. Senza, un campo calcolato resterebbe fermo al numero vecchio
@@ -138,6 +182,32 @@ export function LayoutRenderer({
   const [modificati, setModificati] = useState<Record<string, unknown>>({})
   const [pagineLocali, setPagineLocali] = useState(pagine)
   const sensoriPagine = useSensoriTrascinamento()
+  const { pageAccess } = usePermissions()
+
+  // Il layout e' condiviso: solo chi lo amministra puo' cambiarlo, anche
+  // dalla propria scheda. Stessa chiave che protegge la pagina Layout schede
+  // e la sua API, cosi' non esistono due definizioni di "chi puo'".
+  const puoSpostare = Boolean(moduloLayout) && pageAccess(LAYOUT_PAGE_KEY) === "rw"
+
+  const contestoSposta = useMemo<ContestoSpostamento | null>(() => {
+    if (!puoSpostare || !moduloLayout) return null
+    const bloccoPerCampo: Record<string, string> = {}
+    for (const pagina of pagine) {
+      for (const blocco of pagina.blocchi) {
+        for (const campo of blocco.campi) bloccoPerCampo[campo.id] = blocco.id
+      }
+    }
+    return {
+      modulo: moduloLayout,
+      destinazioni: pagine.map((pagina) => ({
+        id: pagina.id,
+        label: pagina.label,
+        blocchi: pagina.blocchi.map((blocco) => ({ id: blocco.id, label: blocco.label })),
+      })),
+      bloccoPerCampo,
+      onSpostato: () => onLayoutCambiato?.(),
+    }
+  }, [puoSpostare, moduloLayout, pagine, onLayoutCambiato])
   const recordVivo = { ...record, ...modificati }
   const valori = mappaValori(recordVivo)
 
@@ -194,18 +264,20 @@ export function LayoutRenderer({
   }
 
   return (
-    <DndContext
-      id="pagine-layout"
-      sensors={sensoriPagine}
-      collisionDetection={closestCenter}
-      onDragEnd={fineTrascinamentoPagine}
-    >
-      <SortableContext items={pagineLocali.map((pagina) => pagina.id)} strategy={verticalListSortingStrategy}>
-        <div className={cn("flex flex-col", appearance === "clientiSalesforce" ? "gap-5" : "gap-4")}>
-          {contenuto}
-        </div>
-      </SortableContext>
-    </DndContext>
+    <ContestoSposta.Provider value={contestoSposta}>
+      <DndContext
+        id="pagine-layout"
+        sensors={sensoriPagine}
+        collisionDetection={closestCenter}
+        onDragEnd={fineTrascinamentoPagine}
+      >
+        <SortableContext items={pagineLocali.map((pagina) => pagina.id)} strategy={verticalListSortingStrategy}>
+          <div className={cn("flex flex-col", appearance === "clientiSalesforce" ? "gap-5" : "gap-4")}>
+            {contenuto}
+          </div>
+        </SortableContext>
+      </DndContext>
+    </ContestoSposta.Provider>
   )
 }
 
@@ -525,6 +597,11 @@ function ContenitoreCampo({
     id: campo.id,
     disabled: !trascinabile,
   })
+  // Null per chiunque non amministri il layout: il comando non esiste, non e'
+  // disabilitato. Vedere un pulsante che non si puo' premere e' peggio che
+  // non vederlo.
+  const sposta = useContext(ContestoSposta)
+  const [spostaAperto, setSpostaAperto] = useState(false)
   const larghezza = cn(
     campo.span === 2 && "sm:col-span-2",
     campo.span === 3 && "sm:col-span-2 lg:col-span-3",
@@ -565,6 +642,29 @@ function ContenitoreCampo({
         >
           <GripVertical className="size-3.5" />
         </button>
+      ) : null}
+
+      {sposta ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setSpostaAperto(true)}
+            className="absolute right-0 top-0.5 rounded p-0.5 text-muted-foreground/0 transition-colors hover:bg-secondary hover:text-foreground focus-visible:text-foreground group-hover/campo:text-muted-foreground/70"
+            aria-label={`Sposta "${etichetta}" in un altro blocco`}
+          >
+            <SpostaCampoIcona />
+          </button>
+          <SpostaCampoDialog
+            open={spostaAperto}
+            onOpenChange={setSpostaAperto}
+            modulo={sposta.modulo}
+            campoId={campo.id}
+            campoEtichetta={etichetta}
+            bloccoCorrente={sposta.bloccoPerCampo[campo.id] ?? ""}
+            pagine={sposta.destinazioni}
+            onSpostato={sposta.onSpostato}
+          />
+        </>
       ) : null}
       {children}
     </div>

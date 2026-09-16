@@ -1991,6 +1991,8 @@ function ClienteDaLayout({
             onRiordinaBlocchi={riordinaBlocchi}
             onRiordinaCampi={riordinaCampi}
             onSalvato={() => router.refresh()}
+            moduloLayout="clienti"
+            onLayoutCambiato={() => router.refresh()}
           />
         </div>
       </ClienteInlineSelectContext.Provider>

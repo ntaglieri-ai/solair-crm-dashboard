@@ -1621,6 +1621,8 @@ function LeadDaLayout({
         onRiordinaBlocchi={(pageKey, ordine) => salvaOrdine({ blocchi: { [pageKey]: ordine } })}
         onRiordinaCampi={(blockKey, ordine) => salvaOrdine({ campi: { [blockKey]: ordine } })}
         onSalvato={() => router.refresh()}
+        moduloLayout="lead"
+        onLayoutCambiato={() => router.refresh()}
       />
 
       <QuickCompitoDialog

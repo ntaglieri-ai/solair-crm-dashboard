@@ -352,7 +352,7 @@ function SidebarContent({
           </div>
         </Link>
         {!collapsed ? (
-          <p className="mt-3 min-h-5 whitespace-nowrap text-[15px] font-bold capitalize leading-5 text-primary">
+          <p className="mt-3 min-h-5 whitespace-nowrap text-center text-[15px] font-bold capitalize leading-5 text-primary">
             {dataOggi}
           </p>
         ) : null}

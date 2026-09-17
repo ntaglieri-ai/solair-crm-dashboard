@@ -17,17 +17,13 @@ import {
   InitialsAvatar,
 } from "@/components/impostazioni/settings-ui"
 import { AccountProfileCard } from "@/components/crm-settings/account-profile-card"
+import {
+  CancellaDefinitivamenteDialog,
+  EliminaUtenteDialog,
+} from "./elimina-utente-dialogs"
 import type { CurrentAccountProfile } from "@/lib/crm-settings/current-account"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -84,6 +80,13 @@ type Utente = {
   welcome_email_status?: WelcomeEmailStatus
   welcome_email_error?: string | null
   teamNames?: string[]
+  /**
+   * Valorizzata dal passaggio 1 dell'eliminazione: i record sono stati
+   * riassegnati e l'accesso revocato, ma la riga esiste ancora. E' il
+   * prerequisito della cancellazione definitiva.
+   */
+  eliminato_il?: string | null
+  riassegnato_a?: string | null
 }
 
 type RuoloProfilo = {
@@ -299,7 +302,12 @@ export function AccountManagementClient({
   const [editForm, setEditForm] = useState<UserForm>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [syncingNextcloud, setSyncingNextcloud] = useState(false)
+  // Due bersagli distinti, perche' sono due azioni distinte: `deleteTarget` e'
+  // il passaggio 1 (riassegna + disattiva), `purgeTarget` il passaggio 2
+  // (cancellazione fisica), che la UI propone solo su chi e' gia' passato dal
+  // primo.
   const [deleteTarget, setDeleteTarget] = useState<Utente | null>(null)
+  const [purgeTarget, setPurgeTarget] = useState<Utente | null>(null)
 
   const roleLabel = useMemo(
     () => new Map(roles.map((role) => [role.code.toUpperCase(), role.nome])),
@@ -310,6 +318,17 @@ export function AccountManagementClient({
     const values = new Set([...DEFAULT_SEDI, ...users.map((user) => user.sede)])
     return Array.from(values).filter(Boolean).sort((a, b) => a.localeCompare(b))
   }, [users])
+
+  // Chi puo' ricevere i record: utenti attivi, mai quello che si sta
+  // eliminando e mai uno gia' eliminato (finirebbero a un secondo account
+  // morto). Stesso criterio applicato di nuovo lato server.
+  const destinatariPossibili = useMemo(
+    () =>
+      users
+        .filter((user) => user.attivo && !user.eliminato_il && user.id !== deleteTarget?.id)
+        .map(({ id, nome, email, ruolo }) => ({ id, nome, email, ruolo })),
+    [users, deleteTarget?.id],
+  )
 
   const stats = useMemo(
     () => ({
@@ -651,21 +670,72 @@ export function AccountManagementClient({
     }
   }
 
-  async function deleteUser() {
+  /**
+   * Passaggio 1: la proprieta' passa al destinatario scelto e l'account viene
+   * disattivato. La riga resta in elenco, marcata "Eliminato": e' il modo per
+   * vedere chi e' in attesa della cancellazione definitiva.
+   */
+  async function riassegnaEdElimina(destinatarioId: string) {
     if (!deleteTarget) return
     setSaving(true)
     setError(null)
     try {
-      const res = await fetch(`/api/crm-settings/utenti/${deleteTarget.id}`, {
+      const res = await fetch(`/api/crm-settings/utenti/${deleteTarget.id}/eliminazione`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ destinatarioId }),
+      })
+      const body = (await res.json().catch(() => null)) as {
+        esito?: { destinatario: { nome: string | null }; spostati: Record<string, number> }
+        error?: string
+      } | null
+      if (!res.ok || !body?.esito) {
+        throw new Error(body?.error ?? "Riassegnazione non riuscita")
+      }
+      const spostati = Object.values(body.esito.spostati).reduce((a, b) => a + b, 0)
+      setUsers((prev) =>
+        prev.map((user) =>
+          user.id === deleteTarget.id
+            ? {
+                ...user,
+                attivo: false,
+                eliminato_il: new Date().toISOString(),
+                riassegnato_a: destinatarioId,
+              }
+            : user,
+        ),
+      )
+      if (selected?.id === deleteTarget.id) setSelected(null)
+      setDeleteTarget(null)
+      toast.success("Account eliminato", {
+        description: `${spostati} record riassegnati a ${body.esito.destinatario.nome ?? "l'utente scelto"}. Accesso revocato.`,
+      })
+      router.refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Riassegnazione non riuscita")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /** Passaggio 2: cancellazione fisica, ammessa solo dopo il passaggio 1. */
+  async function cancellaDefinitivamente() {
+    if (!purgeTarget) return
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/crm-settings/utenti/${purgeTarget.id}`, {
         method: "DELETE",
       })
       const body = (await res.json().catch(() => null)) as { error?: string } | null
-      if (!res.ok) throw new Error(body?.error ?? "Eliminazione account non riuscita")
-      setUsers((prev) => prev.filter((user) => user.id !== deleteTarget.id))
-      if (selected?.id === deleteTarget.id) setSelected(null)
-      setDeleteTarget(null)
+      if (!res.ok) throw new Error(body?.error ?? "Cancellazione account non riuscita")
+      setUsers((prev) => prev.filter((user) => user.id !== purgeTarget.id))
+      if (selected?.id === purgeTarget.id) setSelected(null)
+      setPurgeTarget(null)
+      toast.success("Account cancellato definitivamente")
+      router.refresh()
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Eliminazione account non riuscita")
+      setError(e instanceof Error ? e.message : "Cancellazione account non riuscita")
     } finally {
       setSaving(false)
     }
@@ -849,7 +919,15 @@ export function AccountManagementClient({
                   {formatData(user.created_at)}
                 </TableCell>
                 <TableCell>
-                  {user.attivo ? (
+                  {user.eliminato_il ? (
+                    <Badge
+                      variant="outline"
+                      className="border-destructive/30 bg-destructive/10 text-destructive"
+                      title={`Record riassegnati e accesso revocato il ${formatData(user.eliminato_il)}. In attesa di cancellazione definitiva.`}
+                    >
+                      Eliminato
+                    </Badge>
+                  ) : user.attivo ? (
                     <Badge className="bg-teal/15 text-teal">Attivo</Badge>
                   ) : (
                     <Badge variant="outline" className="text-muted-foreground">
@@ -894,12 +972,21 @@ export function AccountManagementClient({
                         </DropdownMenuItem>
                       ) : null}
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onClick={() => setDeleteTarget(user)}
-                      >
-                        Elimina
-                      </DropdownMenuItem>
+                      {user.eliminato_il ? (
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => setPurgeTarget(user)}
+                        >
+                          Cancella definitivamente
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => setDeleteTarget(user)}
+                        >
+                          Elimina
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
@@ -942,7 +1029,7 @@ export function AccountManagementClient({
         sedi={sedi}
         saving={saving}
         submitLabel="Salva modifiche"
-        dangerLabel="Elimina account"
+        dangerLabel={selected?.eliminato_il ? "Cancella definitivamente" : "Elimina account"}
         onOpenChange={(open) => {
           if (!open) setSelected(null)
         }}
@@ -952,30 +1039,31 @@ export function AccountManagementClient({
           if (selected) saveUser(selected.id, editForm)
         }}
         onDanger={() => {
-          if (selected) setDeleteTarget(selected)
+          if (!selected) return
+          if (selected.eliminato_il) setPurgeTarget(selected)
+          else setDeleteTarget(selected)
         }}
       />
 
-      <Dialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Elimina account</DialogTitle>
-            <DialogDescription>
-              Questa azione rimuove l&apos;utente da CRM Settings. L&apos;account
-              Auth Supabase, se presente, va gestito dalla console Auth o da una
-              funzione service-role dedicata.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
-              Annulla
-            </Button>
-            <Button variant="destructive" onClick={deleteUser} disabled={saving}>
-              {saving ? "Eliminazione..." : "Elimina"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* key = bersaglio: rimonta il dialog a ogni utente diverso, cosi' la
+          selezione del destinatario e i conteggi non sopravvivono mai da un
+          account all'altro. */}
+      <EliminaUtenteDialog
+        key={`elimina-${deleteTarget?.id ?? "nessuno"}`}
+        utente={deleteTarget}
+        candidati={destinatariPossibili}
+        saving={saving}
+        onAnnulla={() => setDeleteTarget(null)}
+        onConferma={(destinatarioId) => void riassegnaEdElimina(destinatarioId)}
+      />
+
+      <CancellaDefinitivamenteDialog
+        key={`cancella-${purgeTarget?.id ?? "nessuno"}`}
+        utente={purgeTarget}
+        saving={saving}
+        onAnnulla={() => setPurgeTarget(null)}
+        onConferma={() => void cancellaDefinitivamente()}
+      />
     </div>
   )
 }

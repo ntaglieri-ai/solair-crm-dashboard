@@ -28,7 +28,7 @@ export async function GET() {
       supabase
         .from("utenti")
         .select(
-          "id, nome, email, ruolo, ruolo_id, sede, attivo, created_at, must_change_password, welcome_email_status, welcome_email_error",
+          "id, nome, email, ruolo, ruolo_id, sede, attivo, created_at, must_change_password, welcome_email_status, welcome_email_error, eliminato_il, riassegnato_a",
         )
         .order("nome"),
       supabase
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
       attivo: body.attivo ?? true,
     })
     .select(
-      "id, nome, email, ruolo, ruolo_id, sede, attivo, created_at, must_change_password, welcome_email_status, welcome_email_error",
+      "id, nome, email, ruolo, ruolo_id, sede, attivo, created_at, must_change_password, welcome_email_status, welcome_email_error, eliminato_il, riassegnato_a",
     )
     .single()
 

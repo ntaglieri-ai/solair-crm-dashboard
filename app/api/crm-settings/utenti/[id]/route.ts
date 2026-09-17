@@ -18,6 +18,7 @@ import {
   storeNextcloudCredential,
 } from "@/lib/nextcloud/credentials"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { purgaUtente } from "@/lib/crm-settings/eliminazione-utente"
 
 type PatchPayload = {
   nome?: string
@@ -45,7 +46,17 @@ export async function PATCH(
   if (body.nome !== undefined) patch.nome = body.nome.trim()
   if (body.email !== undefined) patch.email = body.email.trim().toLowerCase()
   if (body.sede !== undefined) patch.sede = body.sede
-  if (body.attivo !== undefined) patch.attivo = body.attivo
+  if (body.attivo !== undefined) {
+    patch.attivo = body.attivo
+    // Riattivare un account annulla l'eliminazione: torna un utente normale e
+    // smette di essere candidato alla cancellazione definitiva. I record gia'
+    // riassegnati restano dove sono — il trasferimento e' avvenuto davvero, non
+    // si "torna indietro" a colpi di flag.
+    if (body.attivo === true) {
+      patch.eliminato_il = null
+      patch.riassegnato_a = null
+    }
+  }
   if (body.ruolo !== undefined) {
     const ruolo = await resolveRole(supabase, body.ruolo).catch(() => null)
     if (!ruolo) {
@@ -62,7 +73,7 @@ export async function PATCH(
     .from("utenti")
     .update(patch)
     .eq("id", id)
-    .select("id, nome, email, ruolo, ruolo_id, sede, attivo, created_at")
+    .select("id, nome, email, ruolo, ruolo_id, sede, attivo, created_at, eliminato_il, riassegnato_a, auth_user_id")
     .single()
 
   if (error) {
@@ -95,6 +106,22 @@ export async function PATCH(
         if (!result.ok) {
           console.error(`[nextcloud] enable/disable fallito per ${username}:`, result.error)
           lastError = result.error
+        }
+
+        // Il passaggio 1 dell'eliminazione mette un ban lungo sull'account Auth:
+        // riattivando l'utente va tolto, altrimenti resterebbe "attivo" nel CRM
+        // ma incapace di fare login.
+        if (data.attivo === true && data.auth_user_id) {
+          const admin = createAdminClient()
+          const { error: unbanError } = admin
+            ? await admin.auth.admin.updateUserById(data.auth_user_id, { ban_duration: "none" })
+            : { error: { message: "SUPABASE_SERVICE_ROLE_KEY non configurata" } }
+          if (unbanError) {
+            console.error(
+              `[auth] sblocco account ${data.auth_user_id} (utente ${data.id}) fallito:`,
+              unbanError.message,
+            )
+          }
         }
       }
 
@@ -170,7 +197,7 @@ export async function DELETE(
   const { data: existing, error: existingError } = await admin
     .from("utenti")
     // nome ed email servono all'audit: dopo la delete non sono piu' leggibili.
-    .select("auth_user_id, nome, email")
+    .select("auth_user_id, nome, email, eliminato_il")
     .eq("id", id)
     .maybeSingle()
 
@@ -186,26 +213,27 @@ export async function DELETE(
     return NextResponse.json({ error: "Utente non trovato o già eliminato." }, { status: 404 })
   }
 
-  const authUserId = existing?.auth_user_id ?? null
-
-  const { data: deletedRows, error } = await admin
-    .from("utenti")
-    .delete()
-    .eq("id", id)
-    .select("id")
-
-  if (error) {
-    console.error(`[utenti] eliminazione utente ${id} fallita:`, error)
+  // Il passaggio 2 non esiste da solo. Senza la riassegnazione del passaggio 1
+  // la delete fallirebbe comunque contro le foreign key di leads/clienti/compiti
+  // /scadenze/installatori: meglio dirlo con una frase leggibile che con un
+  // 23503. Il controllo e' ripetuto dentro crm_purga_utente, sotto lock.
+  if (!existing.eliminato_il) {
     return NextResponse.json(
-      { error: accountUserErrorMessage(error) },
-      { status: 500 },
+      {
+        error:
+          "Prima riassegna i record e disattiva l'account (comando «Elimina utente»), poi la cancellazione definitiva diventa possibile.",
+      },
+      { status: 409 },
     )
   }
 
-  if (!deletedRows?.length) {
-    console.error(`[utenti] eliminazione utente ${id} non ha rimosso nessuna riga`)
+  const authUserId = existing?.auth_user_id ?? null
+
+  const { esito, error } = await purgaUtente(admin, id)
+
+  if (error || !esito) {
     return NextResponse.json(
-      { error: "Eliminazione account non confermata dal database." },
+      { error: error ?? "Eliminazione account non confermata dal database." },
       { status: 409 },
     )
   }
@@ -216,8 +244,11 @@ export async function DELETE(
       attore: attoreDaPermessi(guard.permissions),
       modulo: "utenti",
       record_id: id,
-      descrizione: `Account eliminato — ${existing.nome ?? "senza nome"} (${existing.email ?? "senza email"})`,
+      descrizione:
+        `Account cancellato definitivamente (passaggio 2) — ${existing.nome ?? "senza nome"} ` +
+        `(${existing.email ?? "senza email"})`,
       dati_prima: { nome: existing.nome, email: existing.email },
+      dati_dopo: { sganciati: esito.sganciati, eliminati: esito.eliminati },
       request,
     }),
   )
@@ -272,5 +303,5 @@ export async function DELETE(
 
   invalidatePermissionSnapshotCache()
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, esito })
 }

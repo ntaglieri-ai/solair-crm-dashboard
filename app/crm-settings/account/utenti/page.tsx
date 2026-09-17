@@ -16,6 +16,9 @@ type Utente = {
   must_change_password: boolean | null
   welcome_email_status: "pending" | "sent" | "failed" | null
   welcome_email_error: string | null
+  /** Valorizzata dal passaggio 1 dell'eliminazione (riassegnazione + disattivazione). */
+  eliminato_il: string | null
+  riassegnato_a: string | null
 }
 
 type RuoloProfilo = {
@@ -49,7 +52,7 @@ async function loadAccountManagementData() {
       supabase
         .from("utenti")
         .select(
-          "id, nome, email, ruolo, ruolo_id, sede, attivo, created_at, must_change_password, welcome_email_status, welcome_email_error",
+          "id, nome, email, ruolo, ruolo_id, sede, attivo, created_at, must_change_password, welcome_email_status, welcome_email_error, eliminato_il, riassegnato_a",
         )
         .order("nome"),
       supabase
@@ -119,6 +122,8 @@ async function loadAccountManagementData() {
       must_change_password: utente.must_change_password ?? false,
       welcome_email_status: utente.welcome_email_status ?? "pending",
       welcome_email_error: utente.welcome_email_error ?? null,
+      eliminato_il: utente.eliminato_il ?? null,
+      riassegnato_a: utente.riassegnato_a ?? null,
       teamNames: Array.from(teamNamesByUserId.get(utente.id) ?? []).sort((a, b) =>
         a.localeCompare(b),
       ),

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { Eye, Loader2, Mail, Pencil, Plus, RotateCcw, Trash2, Wand2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -25,8 +25,10 @@ import {
 } from "@/components/ui/dialog"
 import { SectionHeader } from "@/components/impostazioni/settings-ui"
 import { EmailTemplateEditor } from "@/components/shared/email-template-editor"
+import { FieldPlaceholderPicker } from "@/components/shared/field-placeholder-picker"
 import { usePermissions } from "@/lib/permissions/provider"
 import { BULK_PLACEHOLDERS } from "@/lib/email/bulk-template"
+import { campiSegnapostoPerModulo } from "@/lib/email/template-fields"
 import { modelloBase } from "@/lib/email/modello-base"
 
 /**
@@ -603,6 +605,32 @@ function DialogoModello({
 }) {
   const [bozza, setBozza] = useState(modello)
   const [inCorso, setInCorso] = useState(false)
+  const oggettoRef = useRef<HTMLInputElement>(null)
+
+  // Ricalcolato solo al cambio di modulo: su Clienti sono oltre cento campi,
+  // non ha senso rifare l'ordinamento a ogni tasto premuto nell'editor.
+  const campiModulo = useMemo(() => campiSegnapostoPerModulo(bozza.modulo), [bozza.modulo])
+
+  /**
+   * Inserisce il token nel punto esatto dove si trovava il cursore
+   * nell'Oggetto, non in coda: un {Campo} scelto a meta' frase deve finire
+   * li', non spostare tutto quello che viene dopo.
+   */
+  function inserisciInOggetto(token: string) {
+    const input = oggettoRef.current
+    const inizio = input?.selectionStart ?? bozza.oggetto.length
+    const fine = input?.selectionEnd ?? bozza.oggetto.length
+    setBozza((corrente) => ({
+      ...corrente,
+      oggetto: corrente.oggetto.slice(0, inizio) + token + corrente.oggetto.slice(fine),
+    }))
+
+    requestAnimationFrame(() => {
+      const posizione = inizio + token.length
+      input?.focus()
+      input?.setSelectionRange(posizione, posizione)
+    })
+  }
 
   return (
     <Dialog open onOpenChange={(aperto) => (!aperto ? onChiudi() : undefined)}>
@@ -610,8 +638,9 @@ function DialogoModello({
         <DialogHeader className="border-b border-border px-5 py-4">
           <DialogTitle>{bozza.id ? "Modifica modello" : "Nuovo modello"}</DialogTitle>
           <DialogDescription>
-            Nel testo puoi usare {BULK_PLACEHOLDERS.map((p) => `{${p}}`).join(", ")}: vengono
-            sostituiti con i dati del destinatario al momento dell&apos;invio.
+            Nel testo puoi usare {BULK_PLACEHOLDERS.map((p) => `{${p}}`).join(", ")}, oppure
+            qualunque campo del record con &quot;Inserisci campo&quot;: vengono sostituiti con i
+            dati del destinatario al momento dell&apos;invio.
           </DialogDescription>
         </DialogHeader>
 
@@ -677,9 +706,17 @@ function DialogoModello({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="modello-oggetto">Oggetto</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="modello-oggetto">Oggetto</Label>
+              <FieldPlaceholderPicker
+                fields={campiModulo}
+                disabled={inCorso}
+                onInsert={inserisciInOggetto}
+              />
+            </div>
             <Input
               id="modello-oggetto"
+              ref={oggettoRef}
               value={bozza.oggetto}
               onChange={(e) => setBozza({ ...bozza, oggetto: e.target.value })}
               placeholder="es. Sopralluogo confermato — {nome}"
@@ -694,6 +731,7 @@ function DialogoModello({
               onChange={(corpo) => setBozza((corrente) => ({ ...corrente, corpo }))}
               disabled={inCorso}
               variables={VARIABILI_EDITOR}
+              campiModulo={campiModulo}
               placeholder="Gentile {nome}, scrivi qui il corpo del modello..."
             />
           </div>

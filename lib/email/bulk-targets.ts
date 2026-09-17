@@ -13,7 +13,9 @@ import type { PermissionSnapshot } from "@/lib/permissions/types"
 import type { BulkRecipient } from "./bulk-mailer"
 import type { BulkPlaceholder } from "./bulk-template"
 import { CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
-import { EMAIL_CONSENT_COLUMN, type ConsentEntita, type DestinatarioConsenziente } from "./consent"
+import { LEAD_RECORD_FIELDS } from "@/lib/leads/field-map"
+import { INSTALLATORI_RECORD_FIELDS } from "@/lib/installatori/record-fields"
+import type { ConsentEntita, DestinatarioConsenziente } from "./consent"
 
 export const BULK_RECORD_TIPI = ["lead", "cliente", "installatore"] as const
 
@@ -87,7 +89,10 @@ const TARGETS: Record<BulkRecordTipo, TargetConfig> = {
   lead: {
     permissionModule: "lead",
     table: "leads",
-    columns: `id,nome_lead,nome,cognome,email,telefono,mobile_fisso,lead_proprietario_id,${EMAIL_CONSENT_COLUMN}`,
+    // Tutte le colonne, non solo quelle del destinatario: come su Clienti, i
+    // modelli possono referenziare qualunque campo del record (es. {kWp},
+    // {Origine Lead}) oltre ai quattro segnaposto di base.
+    columns: "*",
     ownerColumn: "lead_proprietario_id",
     consentEntita: "lead",
     label: { singolare: "lead", plurale: "lead" },
@@ -101,6 +106,7 @@ const TARGETS: Record<BulkRecordTipo, TargetConfig> = {
         email: text(row.email),
         telefono: text(row.telefono) || text(row.mobile_fisso),
       },
+      campi: campiDaRiga(row, LEAD_RECORD_FIELDS),
     }),
   },
   cliente: {
@@ -130,7 +136,9 @@ const TARGETS: Record<BulkRecordTipo, TargetConfig> = {
   installatore: {
     permissionModule: "installatori",
     table: "installatori",
-    columns: "id,nome,email,email_secondaria,telefono,proprietario_id",
+    // Tutte le colonne: come Clienti e Lead, serve l'intero record per
+    // risolvere i segnaposto sui campi (es. {Tag}, {Canale preferito}).
+    columns: "*",
     ownerColumn: "proprietario_id",
     consentEntita: null,
     label: { singolare: "installatore", plurale: "installatori" },
@@ -144,6 +152,7 @@ const TARGETS: Record<BulkRecordTipo, TargetConfig> = {
         email: text(row.email) || text(row.email_secondaria),
         telefono: text(row.telefono),
       },
+      campi: campiDaRiga(row, INSTALLATORI_RECORD_FIELDS),
     }),
   },
 }

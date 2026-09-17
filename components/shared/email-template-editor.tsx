@@ -21,6 +21,7 @@ import {
   Undo2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { FieldPlaceholderPicker } from "@/components/shared/field-placeholder-picker"
 import { cn } from "@/lib/utils"
 
 type EmailTemplateEditorProps = {
@@ -30,6 +31,8 @@ type EmailTemplateEditorProps = {
   disabled?: boolean
   placeholder?: string
   variables?: string[]
+  /** Campi del record (modulo attivo) proponibili come {Campo}, oltre a `variables`. */
+  campiModulo?: string[]
 }
 
 function escapeHtml(value: string): string {
@@ -115,6 +118,7 @@ export function EmailTemplateEditor({
   disabled,
   placeholder = "Scrivi il corpo del modello...",
   variables = [],
+  campiModulo = [],
 }: EmailTemplateEditorProps) {
   const [initialContent] = useState(() => editorContentFromValue(value))
   const lastEmitted = useRef(value)
@@ -291,6 +295,17 @@ export function EmailTemplateEditor({
                 </Button>
               ))}
             </div>
+          </>
+        ) : null}
+
+        {campiModulo.length > 0 ? (
+          <>
+            <span className="mx-1 h-6 w-px bg-border" />
+            <FieldPlaceholderPicker
+              fields={campiModulo}
+              disabled={editorDisabled}
+              onInsert={(token) => editor?.chain().focus().insertContent(token).run()}
+            />
           </>
         ) : null}
       </div>

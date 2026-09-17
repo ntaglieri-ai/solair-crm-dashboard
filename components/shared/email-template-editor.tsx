@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { EditorContent, useEditor } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import LinkExtension from "@tiptap/extension-link"
@@ -22,6 +22,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { FieldPlaceholderPicker } from "@/components/shared/field-placeholder-picker"
+import { CampoSuggestion } from "@/components/shared/campo-suggestion"
 import { cn } from "@/lib/utils"
 
 type EmailTemplateEditorProps = {
@@ -123,6 +124,15 @@ export function EmailTemplateEditor({
   const [initialContent] = useState(() => editorContentFromValue(value))
   const lastEmitted = useRef(value)
 
+  // Letto dall'estensione a ogni "{" digitata, non catturato all'avvio
+  // dell'editor: cosi' il menu resta aggiornato anche se il modulo del
+  // modello cambia mentre l'editor e' gia' montato.
+  const campiModuloRef = useRef(campiModulo)
+  useEffect(() => {
+    campiModuloRef.current = campiModulo
+  }, [campiModulo])
+  const getCampiModulo = useCallback(() => campiModuloRef.current, [])
+
   const editor = useEditor({
     immediatelyRender: false,
     editable: !disabled,
@@ -139,6 +149,12 @@ export function EmailTemplateEditor({
       }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Placeholder.configure({ placeholder }),
+      // getCampiModulo legge il ref solo quando Tiptap la richiama dentro
+      // items(), alla digitazione di "{" — mai durante questo render. E'
+      // il ponte verso un'estensione ProseMirror esterna a React, non un
+      // valore che finisce nell'output renderizzato.
+      // eslint-disable-next-line react-hooks/refs
+      CampoSuggestion.configure({ getCampi: getCampiModulo }),
     ],
     content: initialContent,
     editorProps: {

@@ -94,17 +94,25 @@ const CampoSuggestionList = forwardRef<CampoListHandle, CampoListProps>(
   },
 )
 
-function posizionaMenu(elemento: HTMLElement, clientRect: SuggestionProps["clientRect"]) {
-  const rect = clientRect?.()
-  if (!rect) return
-  const margine = 4
-  elemento.style.left = `${rect.left}px`
-  elemento.style.top = `${rect.bottom + margine}px`
-}
+/**
+ * `props.mount()` e' il modo raccomandato da @tiptap/suggestion per montare
+ * il popup: usa Floating UI per il posizionamento (con autoUpdate su scroll/
+ * resize) e gestisce da solo la chiusura al click fuori. Non imposta pero'
+ * uno z-index: il modello si apre dentro un Dialog, quindi va garantito
+ * esplicitamente che il popup resti sopra.
+ */
+const Z_INDEX_SOPRA_DIALOG = "1000"
 
 function renderSuggestion() {
   let renderer: ReactRenderer<CampoListHandle, CampoListProps> | null = null
-  let elemento: HTMLElement | null = null
+  let smonta: (() => void) | null = null
+
+  function chiudi() {
+    smonta?.()
+    renderer?.destroy()
+    smonta = null
+    renderer = null
+  }
 
   return {
     onStart(props: SuggestionProps) {
@@ -112,30 +120,20 @@ function renderSuggestion() {
         props: { items: props.items as string[], command: props.command },
         editor: props.editor,
       })
-      elemento = renderer.element as HTMLElement
-      elemento.style.position = "fixed"
-      elemento.style.zIndex = "80"
-      document.body.appendChild(elemento)
-      posizionaMenu(elemento, props.clientRect)
+      renderer.element.style.zIndex = Z_INDEX_SOPRA_DIALOG
+      smonta = props.mount(renderer.element)
     },
     onUpdate(props: SuggestionProps) {
       renderer?.updateProps({ items: props.items as string[], command: props.command })
-      if (elemento) posizionaMenu(elemento, props.clientRect)
     },
     onKeyDown(props: SuggestionKeyDownProps) {
       if (props.event.key === "Escape") {
-        renderer?.destroy()
-        elemento?.remove()
+        chiudi()
         return true
       }
       return renderer?.ref?.onKeyDown({ event: props.event }) ?? false
     },
-    onExit() {
-      renderer?.destroy()
-      elemento?.remove()
-      renderer = null
-      elemento = null
-    },
+    onExit: chiudi,
   }
 }
 

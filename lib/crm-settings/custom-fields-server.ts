@@ -29,6 +29,13 @@ export async function loadRecordCustomFieldValues(
     .select("field_key, label, tipo, column_name, required, options")
     .eq("table_name", table)
     .eq("visible", true)
+    // Stesso filtro di loadEditableCustomFieldMetadata, e per la stessa
+    // ragione: crm_custom_fields non contiene piu' soltanto i campi creati da
+    // un admin. Da quando le impostazioni registrano anche le colonne native
+    // per governarne tipo, valori e formule, senza questo filtro ogni colonna
+    // censita comparirebbe una seconda volta in scheda, nella sezione dei
+    // campi personalizzati, accanto al suo campo nativo.
+    .eq("system", false)
     .is("deleted_at", null)
     .order("ordinamento", { ascending: true })
 

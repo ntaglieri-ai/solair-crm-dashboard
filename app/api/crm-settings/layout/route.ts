@@ -6,13 +6,10 @@ import { loadLayout } from "@/lib/crm-settings/layout-server"
 import { campiDuplicati } from "@/lib/crm-settings/layout"
 import {
   chiaveDaEtichetta,
-  formulaAutoReferenziale,
   intInRange,
   isChiaveValida,
   isEtichettaValida,
   isLayoutModulo,
-  normalizzaFormato,
-  validaFormula,
 } from "@/lib/crm-settings/layout-validate"
 
 /**
@@ -272,20 +269,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Blocco inesistente" }, { status: 404 })
     }
 
-    let formula = null
-    let avviso: string | null = null
-    if (body.formula !== undefined && body.formula !== null) {
-      const esito = validaFormula(body.formula)
-      if (!esito.ok) {
-        return NextResponse.json({ error: esito.errore }, { status: 400 })
-      }
-      formula = esito.formula
-      // Una formula che dipende da se stessa non sara' calcolabile, ma il
-      // salvataggio non viene bloccato: se e' cosi' che arriva da Zoho, va
-      // importata comunque e sistemata dopo con il dato sotto gli occhi.
-      if (formulaAutoReferenziale(fieldKey, esito.riferimenti)) {
-        avviso = "La formula si riferisce al campo stesso: non sara' calcolabile."
-      }
+    // Un campo si aggiunge al layout indicando dove va, non cosa e'. La sua
+    // definizione — tipo, valori, formula, formato — sta gia' su
+    // crm_custom_fields e vale ovunque il campo compaia: ridefinirla al
+    // momento del piazzamento vorrebbe dire due verita' per lo stesso campo.
+    if (body.formula !== undefined || body.formato !== undefined) {
+      return NextResponse.json(
+        {
+          error:
+            "Formula e formato si impostano in Campi e attributi: qui si decide solo dove sta il campo.",
+        },
+        { status: 400 },
+      )
     }
 
     // Lo stesso campo in due blocchi mostrerebbe il dato due volte: il
@@ -320,8 +315,6 @@ export async function POST(request: Request) {
         field_key: fieldKey,
         label_override: isEtichettaValida(label) ? (label as string).trim() : null,
         span: intInRange(body.span, 1, 4) ?? 1,
-        formato: normalizzaFormato(body.formato),
-        formula,
         ordinamento: ((ultimo as { ordinamento: number } | null)?.ordinamento ?? -1) + 1,
       })
       .select("id")
@@ -333,7 +326,7 @@ export async function POST(request: Request) {
       }
       return NextResponse.json({ error: erroreSchema(error) }, { status: 500 })
     }
-    return NextResponse.json({ id: (data as { id: string }).id, ...(avviso ? { avviso } : {}) })
+    return NextResponse.json({ id: (data as { id: string }).id })
   }
 
   return NextResponse.json({ error: "Tipo non riconosciuto" }, { status: 400 })
@@ -386,7 +379,6 @@ export async function PATCH(request: Request) {
   if (scrittura.response) return scrittura.response
   const supabase = scrittura.admin
   const tabella = TABELLE[tipo]
-  let avvisoFormula: string | null = null
 
   // Riordino: un elenco di id nell'ordine voluto diventa l'ordinamento.
   if (Array.isArray(body.ordine)) {
@@ -484,28 +476,28 @@ export async function PATCH(request: Request) {
 
     const span = intInRange(body.span, 1, 4)
     if (span !== null) patch.span = span
-    if (typeof body.solaLettura === "boolean") patch.sola_lettura = body.solaLettura
-    if (body.formato !== undefined) patch.formato = normalizzaFormato(body.formato)
 
-    if (body.formula !== undefined) {
-      if (body.formula === null) {
-        patch.formula = null
-      } else {
-        const esito = validaFormula(body.formula)
-        if (!esito.ok) {
-          return NextResponse.json({ error: esito.errore }, { status: 400 })
-        }
-        const { data: corrente } = await supabase
-          .from("crm_layout_campi")
-          .select("field_key")
-          .eq("id", body.id)
-          .maybeSingle()
-        const fieldKey = (corrente as { field_key: string } | null)?.field_key ?? ""
-        if (fieldKey && formulaAutoReferenziale(fieldKey, esito.riferimenti)) {
-          avvisoFormula = "La formula si riferisce al campo stesso: non sara' calcolabile."
-        }
-        patch.formula = esito.formula
-      }
+    // Formula, sola lettura e formato NON si scrivono piu' da qui: sono la
+    // definizione del campo e vivono su crm_custom_fields, gestite dalla pagina
+    // Campi e attributi. Il layout governa la posizione — pagina, blocco,
+    // ordine, span — e basta.
+    //
+    // Si rifiuta invece di ignorare in silenzio, perche' loadLayout sovrascrive
+    // questi tre valori con quelli del campo: una scrittura qui riuscirebbe,
+    // non avrebbe alcun effetto visibile, e chi l'ha fatta non avrebbe modo di
+    // accorgersene.
+    if (
+      body.formula !== undefined ||
+      body.formato !== undefined ||
+      typeof body.solaLettura === "boolean"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Formula, sola lettura e formato si impostano in Campi e attributi: qui si decide solo dove sta il campo.",
+        },
+        { status: 400 },
+      )
     }
   }
 
@@ -530,7 +522,6 @@ export async function PATCH(request: Request) {
   return NextResponse.json({
     ok: true,
     ...(duplicati.length ? { duplicati } : {}),
-    ...(avvisoFormula ? { avviso: avvisoFormula } : {}),
   })
 }
 

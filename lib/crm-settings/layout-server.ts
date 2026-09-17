@@ -1,4 +1,6 @@
 import type { createClient } from "@/lib/supabase/server"
+import { colonnaPerChiaveLayout, TABELLA_PER_LAYOUT_MODULO } from "./chiavi-campo"
+import { isLayoutModulo } from "./layout-validate"
 import {
   applicaOrdineBlocchi,
   applicaOrdineCampi,
@@ -144,6 +146,13 @@ export async function loadLayout(
     campiPerBlocco.set(riga.blocco_id, lista)
   }
 
+  // La definizione del campo (formula, sola lettura, formato) vive su
+  // crm_custom_fields, perche' e' una proprieta' del campo e non della sua
+  // posizione: non cambia se lo si sposta in un altro blocco. Qui si sovrappone
+  // a quella del piazzamento, che resta come valore di partenza finche' il
+  // travaso non e' completo su tutti gli ambienti.
+  await applicaDefinizioneCampi(supabase, modulo, campiPerBlocco)
+
   const blocchiPerPagina = new Map<string, LayoutBlocco[]>()
   for (const riga of ((blocchi ?? []) as RigaBlocco[])) {
     const lista = blocchiPerPagina.get(riga.pagina_id) ?? []
@@ -170,6 +179,57 @@ export async function loadLayout(
     componente: riga.componente,
     blocchi: blocchiPerPagina.get(riga.id) ?? [],
   }))
+}
+
+type RigaDefinizione = {
+  column_name: string
+  sola_lettura: boolean | null
+  formato: unknown
+  formula: unknown
+}
+
+/**
+ * Sovrascrive formula, sola lettura e formato con quelli definiti sul campo.
+ *
+ * Silenziosa per scelta: se la colonna non esiste ancora (migrazione non
+ * applicata) o la query fallisce, i campi restano com'erano e la scheda
+ * continua a funzionare. Vale la stessa regola del resto del file — una
+ * configurazione mancante non deve far sparire una scheda.
+ */
+async function applicaDefinizioneCampi(
+  supabase: SupabaseClient,
+  modulo: string,
+  campiPerBlocco: Map<string, LayoutCampo[]>,
+) {
+  if (!isLayoutModulo(modulo)) return
+  const tabella = TABELLA_PER_LAYOUT_MODULO[modulo]
+
+  const { data, error } = await supabase
+    .from("crm_custom_fields")
+    .select("column_name, sola_lettura, formato, formula")
+    .eq("table_name", tabella)
+    .is("deleted_at", null)
+
+  if (error || !data) return
+
+  const perColonna = new Map(
+    (data as RigaDefinizione[]).map((riga) => [riga.column_name, riga]),
+  )
+
+  for (const campi of campiPerBlocco.values()) {
+    for (const campo of campi) {
+      const colonna = colonnaPerChiaveLayout(campo.fieldKey, campo.origine, modulo)
+      if (!colonna) continue
+      const definizione = perColonna.get(colonna)
+      if (!definizione) continue
+
+      campo.formula = leggiFormula(definizione.formula)
+      campo.formato = leggiFormato(definizione.formato)
+      // Un campo calcolato non e' scrivibile a prescindere da come e' marcato:
+      // il valore arriva dalla formula, non da chi compila la scheda.
+      campo.solaLettura = definizione.sola_lettura === true || campo.formula !== null
+    }
+  }
 }
 
 /**

@@ -22,7 +22,9 @@ const ITEMS = [
     id: "values",
     label: "Valori e stati",
     description: "Opzioni ammesse per stati e campi configurabili",
-    route: "/crm-settings/system/valori",
+    // Stessa pagina dei campi: i valori si governano accanto al campo a cui
+    // appartengono, non in un elenco separato che mostrava una copia diversa.
+    route: "/crm-settings/system/attributi",
     action: "default_values.manage",
     icon: ListFilter,
   },

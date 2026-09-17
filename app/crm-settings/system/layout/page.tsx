@@ -34,8 +34,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectTrigger,
@@ -54,10 +52,8 @@ import {
 import { SectionHeader } from "@/components/impostazioni/settings-ui"
 import { cn } from "@/lib/utils"
 import { usePermissions } from "@/lib/permissions/provider"
-import { CAMPO_TIPI, CAMPO_TIPO_LABEL, type CampoTipo } from "@/lib/system-settings-data"
 import type { LayoutBlocco, LayoutCampo, LayoutPagina } from "@/lib/crm-settings/layout"
 import { LAYOUT_MODULI, type LayoutModulo } from "@/lib/crm-settings/layout-validate"
-import { valutaFormula } from "@/lib/crm-settings/formula-eval"
 import {
   decidiTrascinamento,
   type DatiTrascinamento,
@@ -81,7 +77,6 @@ type Dialogo =
   | { tipo: "pagina" }
   | { tipo: "blocco"; paginaId: string; paginaLabel: string }
   | { tipo: "campo"; bloccoId: string; bloccoLabel: string }
-  | { tipo: "modifica-campo"; campo: LayoutCampo }
   | { tipo: "rinomina"; livello: "pagina" | "blocco"; id: string; label: string }
   | null
 
@@ -452,7 +447,6 @@ function chiaveDialogo(dialogo: Dialogo): string {
   if (dialogo.tipo === "pagina") return "pagina"
   if (dialogo.tipo === "blocco") return `blocco:${dialogo.paginaId}`
   if (dialogo.tipo === "campo") return `campo:${dialogo.bloccoId}`
-  if (dialogo.tipo === "modifica-campo") return `modifica:${dialogo.campo.id}`
   return `rinomina:${dialogo.id}`
 }
 
@@ -789,7 +783,6 @@ function RigaBlocco({
                   onPatch={onPatch}
                   onElimina={onElimina}
                   onRicarica={onRicarica}
-                  onDialogo={onDialogo}
                 />
               ))}
             </div>
@@ -812,7 +805,6 @@ function RigaCampo({
   onPatch,
   onElimina,
   onRicarica,
-  onDialogo,
 }: {
   campo: LayoutCampo
   /** Pagina di appartenenza: il trascinamento non la lascia mai. */
@@ -826,7 +818,6 @@ function RigaCampo({
   onPatch: Patch
   onElimina: Elimina
   onRicarica: () => void | Promise<void>
-  onDialogo: (d: Dialogo) => void
 }) {
   const [spostaAperto, setSpostaAperto] = useState(false)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -883,14 +874,6 @@ function RigaCampo({
             onClick={() => setSpostaAperto(true)}
           >
             <SpostaCampoIcona />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label="Modifica campo"
-            onClick={() => onDialogo({ tipo: "modifica-campo", campo })}
-          >
-            <Pencil className="size-3.5" />
           </Button>
           <BottoneVisibilita
             visible={campo.visible}
@@ -960,31 +943,15 @@ function DialoghiLayout({
   onChiudi: () => void
   onInvia: (metodo: "POST" | "PATCH", corpo: Record<string, unknown>) => Promise<void>
 }) {
-  const campoInModifica = dialogo?.tipo === "modifica-campo" ? dialogo.campo : null
-
   const [label, setLabel] = useState(
     dialogo?.tipo === "rinomina"
       ? dialogo.label
-      : (campoInModifica?.labelOverride ?? ""),
+      : "",
   )
   const [fieldKey, setFieldKey] = useState("")
-  const [tipo, setTipo] = useState<CampoTipo>("text")
-  const [span, setSpan] = useState(campoInModifica?.span ?? 1)
-  const [solaLettura, setSolaLettura] = useState(campoInModifica?.solaLettura ?? false)
-  const [decimali, setDecimali] = useState(
-    campoInModifica?.formato.decimali != null ? String(campoInModifica.formato.decimali) : "",
-  )
-  const [formula, setFormula] = useState(campoInModifica?.formula?.expr ?? "")
   const [inCorso, setInCorso] = useState(false)
 
   if (!dialogo) return null
-
-  // Verifica immediata con lo stesso valutatore che usera' la scheda: un
-  // refuso si vede mentre si scrive, non quando il campo mostra un numero
-  // sbagliato. La mappa vuota basta: interessa la forma, non il risultato.
-  const formulaTrim = formula.trim()
-  const esitoFormula = formulaTrim ? valutaFormula(formulaTrim, new Map()) : null
-  const formulaNonValida = esitoFormula !== null && !esitoFormula.ok
 
   const titolo =
     dialogo.tipo === "pagina"
@@ -992,12 +959,10 @@ function DialoghiLayout({
       : dialogo.tipo === "blocco"
         ? `Nuovo blocco in "${dialogo.paginaLabel}"`
         : dialogo.tipo === "campo"
-          ? `Nuovo campo in "${dialogo.bloccoLabel}"`
-          : dialogo.tipo === "modifica-campo"
-            ? `Modifica "${dialogo.campo.labelOverride ?? dialogo.campo.fieldKey}"`
-            : dialogo.livello === "pagina"
-              ? "Rinomina pagina"
-              : "Rinomina blocco"
+          ? `Aggiungi campo a "${dialogo.bloccoLabel}"`
+          : dialogo.livello === "pagina"
+            ? "Rinomina pagina"
+            : "Rinomina blocco"
 
   async function conferma() {
     if (!dialogo) return
@@ -1012,21 +977,9 @@ function DialoghiLayout({
           tipo: "campo",
           bloccoId: dialogo.bloccoId,
           fieldKey: fieldKey.trim(),
-          label: label.trim() || undefined,
         })
       } else if (dialogo.tipo === "rinomina") {
         await onInvia("PATCH", { tipo: dialogo.livello, id: dialogo.id, label })
-      } else {
-        await onInvia("PATCH", {
-          tipo: "campo",
-          id: dialogo.campo.id,
-          label: label.trim() || undefined,
-          span,
-          solaLettura,
-          formato: decimali === "" ? {} : { decimali: Number(decimali) },
-          // Svuotare la formula rende il campo di nuovo scrivibile.
-          formula: formulaTrim ? { expr: formulaTrim } : null,
-        })
       }
     } finally {
       setInCorso(false)
@@ -1036,9 +989,7 @@ function DialoghiLayout({
   const puoConfermare =
     dialogo.tipo === "campo"
       ? fieldKey.trim().length > 0
-      : dialogo.tipo === "modifica-campo"
-        ? !formulaNonValida
-        : label.trim().length > 0
+      : label.trim().length > 0
 
   return (
     <Dialog open onOpenChange={(aperto) => (!aperto ? onChiudi() : undefined)}>
@@ -1047,10 +998,8 @@ function DialoghiLayout({
           <DialogTitle>{titolo}</DialogTitle>
           <DialogDescription>
             {dialogo.tipo === "campo"
-              ? "Indica la chiave del campo come e' definita nel modulo."
-              : dialogo.tipo === "modifica-campo"
-                ? `Chiave: ${dialogo.campo.fieldKey}. La chiave non cambia, il dato sottostante resta dove si trova.`
-                : "Il nome e' modificabile in seguito."}
+              ? "Seleziona un campo gia' definito nel modulo."
+              : "Il nome e' modificabile in seguito."}
           </DialogDescription>
         </DialogHeader>
 
@@ -1066,114 +1015,6 @@ function DialoghiLayout({
                   placeholder="es. Importo Contrattuale"
                   autoFocus
                 />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="layout-field-label">Etichetta (facoltativa)</Label>
-                <Input
-                  id="layout-field-label"
-                  value={label}
-                  onChange={(e) => setLabel(e.target.value)}
-                  placeholder="Lascia vuoto per usare quella nativa"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="layout-field-tipo">Tipo</Label>
-                <Select value={tipo} onValueChange={(v) => setTipo((v ?? "text") as CampoTipo)}>
-                  <SelectTrigger id="layout-field-tipo">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CAMPO_TIPI.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {CAMPO_TIPO_LABEL[t]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Per un campo esistente il tipo resta quello che ha nel modulo.
-                </p>
-              </div>
-            </>
-          ) : dialogo.tipo === "modifica-campo" ? (
-            <>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="layout-edit-label">Etichetta</Label>
-                <Input
-                  id="layout-edit-label"
-                  value={label}
-                  onChange={(e) => setLabel(e.target.value)}
-                  placeholder={dialogo.campo.fieldKey}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="layout-edit-span">Larghezza</Label>
-                  <Select value={String(span)} onValueChange={(v) => setSpan(Number(v ?? 1))}>
-                    <SelectTrigger id="layout-edit-span">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[1, 2, 3, 4].map((n) => (
-                        <SelectItem key={n} value={String(n)}>
-                          {n} colonn{n === 1 ? "a" : "e"}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="layout-edit-decimali">Decimali</Label>
-                  <Input
-                    id="layout-edit-decimali"
-                    type="number"
-                    min={0}
-                    max={6}
-                    value={decimali}
-                    onChange={(e) => setDecimali(e.target.value)}
-                    placeholder="automatico"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-                <div className="flex flex-col">
-                  <Label htmlFor="layout-edit-readonly">Sola lettura</Label>
-                  <span className="text-xs text-muted-foreground">
-                    Mostra il valore senza permetterne la modifica.
-                  </span>
-                </div>
-                <Switch
-                  id="layout-edit-readonly"
-                  checked={solaLettura}
-                  onCheckedChange={(v) => setSolaLettura(Boolean(v))}
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="layout-edit-formula">Formula</Label>
-                <Textarea
-                  id="layout-edit-formula"
-                  value={formula}
-                  onChange={(e) => setFormula(e.target.value)}
-                  rows={4}
-                  className="font-mono text-xs"
-                  placeholder="{Importo Contrattuale}-{Sconto COMBO}"
-                />
-                {formulaNonValida && esitoFormula && !esitoFormula.ok ? (
-                  <p className="text-xs text-destructive">{esitoFormula.errore}</p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Un campo con formula non si modifica a mano: il valore viene calcolato.
-                    Svuota il riquadro per renderlo di nuovo scrivibile.
-                  </p>
-                )}
-                {dialogo.campo.formula?.origine_zoho ? (
-                  <p className="rounded bg-muted px-2 py-1 font-mono text-[11px] break-all text-muted-foreground">
-                    Originale Zoho: {dialogo.campo.formula.origine_zoho}
-                  </p>
-                ) : null}
               </div>
             </>
           ) : (
@@ -1198,7 +1039,7 @@ function DialoghiLayout({
           </Button>
           <Button onClick={() => void conferma()} disabled={!puoConfermare || inCorso}>
             {inCorso ? <Loader2 className="size-4 animate-spin" /> : null}
-            {dialogo.tipo === "modifica-campo" || dialogo.tipo === "rinomina" ? "Salva" : "Crea"}
+            {dialogo.tipo === "rinomina" ? "Salva" : dialogo.tipo === "campo" ? "Aggiungi" : "Crea"}
           </Button>
         </DialogFooter>
       </DialogContent>

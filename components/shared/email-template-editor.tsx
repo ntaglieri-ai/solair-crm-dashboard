@@ -6,7 +6,6 @@ import StarterKit from "@tiptap/starter-kit"
 import LinkExtension from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
 import TextAlign from "@tiptap/extension-text-align"
-import UnderlineExtension from "@tiptap/extension-underline"
 import {
   AlignCenter,
   AlignLeft,
@@ -137,11 +136,13 @@ export function EmailTemplateEditor({
     immediatelyRender: false,
     editable: !disabled,
     extensions: [
+      // StarterKit include gia' Underline (attivo di default in questa
+      // versione): registrarla anche a parte produceva un warning Tiptap
+      // di "duplicate extension names" a ogni istanza dell'editor.
       StarterKit.configure({
         heading: { levels: [2, 3] },
         link: false,
       }),
-      UnderlineExtension,
       LinkExtension.configure({
         autolink: true,
         linkOnPaste: true,

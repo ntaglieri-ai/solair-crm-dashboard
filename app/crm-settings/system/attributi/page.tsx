@@ -638,76 +638,96 @@ export default function AttributiPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <SectionHeader
-        title="Campi e attributi"
-        description={
-          pending || loadingSchema
-            ? "Salvataggio schema CRM..."
-            : `Tipo, valori e formule dei campi di ${tableForCrmModule(modulo) ?? modulo}. La posizione in scheda si decide in Layout schede.`
-        }
-      />
+      <div className="sticky top-16 z-30 flex flex-col gap-3 bg-muted/30 pb-3">
+        <SectionHeader
+          title="Campi e attributi"
+          description={
+            pending || loadingSchema
+              ? "Salvataggio schema CRM..."
+              : `Tipo, valori e formule dei campi di ${tableForCrmModule(modulo) ?? modulo}. La posizione in scheda si decide in Layout schede.`
+          }
+          action={
+            <Button
+              onClick={() => {
+                if (!canCreateFields) return
+                setNome("")
+                setEtichetta("")
+                setTipo("text")
+                setObbligatorio(false)
+                setValoriNuovi([])
+                setDialogOpen(true)
+              }}
+              disabled={!canCreateFields || pending}
+              className="bg-teal text-teal-foreground hover:bg-teal/90"
+            >
+              <Plus className="size-4" />
+              Nuovo campo
+            </Button>
+          }
+        />
 
-      {apiError ? (
-        <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {apiError}
-        </p>
-      ) : null}
-      {avviso ? (
-        <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
-          {avviso}
-        </p>
-      ) : null}
+        {apiError ? (
+          <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            {apiError}
+          </p>
+        ) : null}
+        {avviso ? (
+          <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
+            {avviso}
+          </p>
+        ) : null}
 
-      <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
-            {MODULI_ATTRIBUTI.map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => {
-                  setModulo(m)
-                  setSearch("")
-                }}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                  modulo === m
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
-          <div className="relative w-full sm:w-80">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Cerca campo..."
-              className="h-9 pl-8"
-            />
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span className="rounded-full bg-muted px-2 py-1">
-            {colonneFiltrate.length} campi
-          </span>
-          <span className="rounded-full bg-muted px-2 py-1">{contaSistema} sistema</span>
-          <span className="rounded-full bg-muted px-2 py-1">
-            {colonne.length - contaSistema} custom
-          </span>
-          {contaTecnici > 0 ? (
-            <label className="ml-auto flex cursor-pointer items-center gap-2">
-              <span>{contaTecnici} campi tecnici</span>
-              <Switch
-                checked={mostraTecnici}
-                onCheckedChange={setMostraTecnici}
-                aria-label="Mostra campi tecnici"
+        <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
+              {MODULI_ATTRIBUTI.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => {
+                    setModulo(m)
+                    setSearch("")
+                  }}
+                  className={cn(
+                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    modulo === m
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+            <div className="relative w-full sm:w-80">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Cerca campo..."
+                className="h-9 pl-8"
               />
-            </label>
-          ) : null}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="rounded-full bg-muted px-2 py-1">
+              {colonneFiltrate.length} campi
+            </span>
+            <span className="rounded-full bg-muted px-2 py-1">{contaSistema} sistema</span>
+            <span className="rounded-full bg-muted px-2 py-1">
+              {colonne.length - contaSistema} custom
+            </span>
+            {contaTecnici > 0 ? (
+              <label className="ml-auto flex cursor-pointer items-center gap-2">
+                <span>{contaTecnici} campi tecnici</span>
+                <Switch
+                  checked={mostraTecnici}
+                  onCheckedChange={setMostraTecnici}
+                  aria-label="Mostra campi tecnici"
+                />
+              </label>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -981,25 +1001,6 @@ export default function AttributiPage() {
             {loadingSchema ? "Caricamento campi…" : "Nessun campo trovato."}
           </div>
         ) : null}
-      </div>
-
-      <div>
-        <Button
-          onClick={() => {
-            if (!canCreateFields) return
-            setNome("")
-            setEtichetta("")
-            setTipo("text")
-            setObbligatorio(false)
-            setValoriNuovi([])
-            setDialogOpen(true)
-          }}
-          disabled={!canCreateFields || pending}
-          className="bg-teal text-teal-foreground hover:bg-teal/90"
-        >
-          <Plus className="size-4" />
-          Nuovo campo
-        </Button>
       </div>
 
       {/* ---- Nuovo campo ---- */}

@@ -1,0 +1,28 @@
+diff --git a/lib/export/file.ts b/lib/export/file.ts
+index e58f90c..42b8685 100644
+--- a/lib/export/file.ts
++++ b/lib/export/file.ts
+@@ -91,15 +91,15 @@ export async function costruisciXlsx(
+     ...righe.map((riga) => colonne.map((c) => ({ value: cella(riga[c.id]) }))),
+   ]
+ 
++  // Senza `fileName` la libreria restituisce direttamente un Blob: e'
++  // l'overload pensato per il browser. Non esiste nessuna opzione `buffer`
++  // — passarla faceva scartare tutti gli overload e il tipo di ritorno
++  // collassava a void.
+   return writeXlsxFile(dati, {
+-    columns: colonne.map((c) => ({ width: Math.min(Math.max(c.label.length + 4, 12), 40) })),
+-    buffer: true,
+-  }).then(
+-    (buffer: ArrayBuffer) =>
+-      new Blob([buffer], {
+-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+-      }),
+-  )
++    columns: colonne.map((c) => ({
++      width: Math.min(Math.max(c.label.length + 4, 12), 40),
++    })),
++  })
+ }
+ 
+ /** Estensione corretta per il formato, usata per comporre il nome del file. */

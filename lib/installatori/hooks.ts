@@ -168,3 +168,44 @@ export async function bulkUpdateInstallatori(
   const failed = countFailures(results)
   if (failed > 0) throw new BulkOperationError(failed, ids.length)
 }
+
+// --- Export ----------------------------------------------------------------
+// Gemelli di fetchClientiForExport / fetchClientiByIdsForExport. Passano dal
+// server e non dalle righe gia' in pagina: e' quello che fa finire l'export
+// nell'audit log e che alza il tetto oltre la pagina corrente.
+
+export interface InstallatoriExportResult {
+  rows: InstallatoreRecord[]
+  total: number
+  truncated: boolean
+  limit: number
+}
+
+export async function fetchInstallatoriForExport(
+  params: InstallatoriListParams,
+): Promise<InstallatoriExportResult> {
+  const sp = buildInstallatoriSearchParams({ ...params, page: 1 })
+  const res = await fetch(`/api/installatori/export?${sp.toString()}`)
+  if (!res.ok) throw new Error(await messaggioErroreExportInstallatori(res))
+  return (await res.json()) as InstallatoriExportResult
+}
+
+/** Export di una selezione: gli id vanno al server (e finiscono nell'audit). */
+export async function fetchInstallatoriByIdsForExport(
+  ids: string[],
+): Promise<InstallatoriExportResult> {
+  const sp = new URLSearchParams({ ids: ids.join(",") })
+  const res = await fetch(`/api/installatori/export?${sp.toString()}`)
+  if (!res.ok) throw new Error(await messaggioErroreExportInstallatori(res))
+  return (await res.json()) as InstallatoriExportResult
+}
+
+/**
+ * Il messaggio del server ha la precedenza: un 403 per permesso di export
+ * mancante spiega cosa chiedere all'amministratore, un generico "non riuscita"
+ * lascerebbe a indovinare.
+ */
+async function messaggioErroreExportInstallatori(res: Response): Promise<string> {
+  const body = (await res.json().catch(() => null)) as { error?: string } | null
+  return body?.error || "Esportazione non riuscita"
+}

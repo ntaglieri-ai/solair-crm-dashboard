@@ -14,6 +14,52 @@ import {
 import { IconSettings } from "@tabler/icons-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useIsMobile } from "@/hooks/use-is-mobile"
+import { ExportDialog } from "@/components/shared/export-dialog"
+import {
+  ExportTruncatoDialog,
+  type ExportTruncatoInfo,
+} from "@/components/shared/export-truncato-dialog"
+import {
+  fetchInstallatoriByIdsForExport,
+  fetchInstallatoriForExport,
+  type InstallatoriExportResult,
+} from "@/lib/installatori/hooks"
+import {
+  estensione,
+  scaricaExport,
+  type ColonnaExport,
+  type FormatoExport,
+} from "@/lib/export/file"
+
+/**
+ * Colonne esportabili degli Installatori. La lista non ha colonne
+ * configurabili come Clienti e Lead, quindi l'elenco e' fisso e ricalca i
+ * campi della scheda; `id` e' la chiave del record, non il nome della colonna
+ * a database.
+ */
+const COLONNE_EXPORT_INSTALLATORI: ColonnaExport[] = [
+  { id: "nome", label: "Nome" },
+  { id: "email", label: "E-mail" },
+  { id: "email_secondaria", label: "E-mail secondaria" },
+  { id: "telefono", label: "Telefono" },
+  { id: "tag", label: "Tag" },
+  { id: "attivo", label: "Attivo" },
+  { id: "canale_preferito", label: "Canale preferito" },
+  { id: "proprietario_nome", label: "Proprietario" },
+  { id: "note", label: "Note" },
+  { id: "created_at", label: "Creato il" },
+  { id: "updated_at", label: "Ultima modifica" },
+]
+
+/** Preselezione del dialog: le colonne che la lista mostra davvero. */
+const COLONNE_EXPORT_INSTALLATORI_ATTIVE = [
+  "nome",
+  "email",
+  "telefono",
+  "tag",
+  "attivo",
+  "proprietario_nome",
+]
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -170,6 +216,60 @@ export function InstallatoriClient({
   const [newOpen, setNewOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<InstallatoreRecord | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  // Export: l'ambito si fissa al clic, formato e colonne si scelgono nel
+  // dialog. La richiesta parte solo alla conferma, cosi' aprire e annullare
+  // non produce ne' traffico ne' una riga di audit.
+  const [exportAmbito, setExportAmbito] = useState<{
+    fetcher: () => Promise<InstallatoriExportResult>
+    descrizione: string
+    base: string
+  } | null>(null)
+  const [exportInCorso, setExportInCorso] = useState(false)
+  const [exportTruncato, setExportTruncato] = useState<ExportTruncatoInfo | null>(null)
+  const pendingExport = useRef<(() => void) | null>(null)
+
+  const eseguiExport = async (formato: FormatoExport, colonne: ColonnaExport[]) => {
+    if (!exportAmbito) return
+    const ambito = exportAmbito
+    setExportInCorso(true)
+    try {
+      const result = await ambito.fetcher()
+      const download = () => {
+        void scaricaExport(
+          result.rows as unknown as Record<string, unknown>[],
+          colonne,
+          formato,
+          `${ambito.base}-${result.rows.length}.${estensione(formato)}`,
+        ).catch((errore) =>
+          toast.error(
+            errore instanceof Error ? errore.message : "Errore nell'esportazione",
+          ),
+        )
+        toast.success("Esportazione avviata", {
+          description: `${result.rows.length} installatori, ${colonne.length} colonne.`,
+        })
+      }
+
+      setExportAmbito(null)
+      if (result.truncated) {
+        setExportTruncato({
+          esportate: result.rows.length,
+          totali: result.total,
+          limite: result.limit,
+          entita: "installatori",
+        })
+        pendingExport.current = download
+        return
+      }
+      download()
+    } catch (error) {
+      // Il messaggio del server ha la precedenza: un 403 per permesso di
+      // export mancante dice cosa chiedere all'amministratore.
+      toast.error(error instanceof Error ? error.message : "Errore nell'esportazione")
+    } finally {
+      setExportInCorso(false)
+    }
+  }
   const [deleteTarget, setDeleteTarget] = useState<InstallatoreRecord | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] =
@@ -338,6 +438,20 @@ export function InstallatoriClient({
             onBulkTransfer={handleBulkTransfer}
             onBulkEmail={() => setBulkEmailOpen(true)}
             onBulkDelete={() => setBulkDeleteOpen(true)}
+            onExportSelezione={() =>
+              setExportAmbito({
+                fetcher: () => fetchInstallatoriByIdsForExport(selectedIds),
+                descrizione: `${selectedIds.length} installatori selezionati`,
+                base: "installatori-selezione",
+              })
+            }
+            onExportFiltrati={() =>
+              setExportAmbito({
+                fetcher: () => fetchInstallatoriForExport(params),
+                descrizione: `${total} installatori corrispondenti ai filtri attivi`,
+                base: "installatori-filtrati",
+              })
+            }
           />
 
           <PannelloFiltri
@@ -641,6 +755,31 @@ export function InstallatoriClient({
         onOpenChange={setBulkEmailOpen}
         recordTipo="installatore"
         recordIds={selectedIds}
+      />
+
+      <ExportDialog
+        open={exportAmbito !== null}
+        onOpenChange={(aperto) => {
+          if (!aperto) setExportAmbito(null)
+        }}
+        descrizioneAmbito={exportAmbito?.descrizione ?? ""}
+        colonneDisponibili={COLONNE_EXPORT_INSTALLATORI}
+        colonneAttive={COLONNE_EXPORT_INSTALLATORI_ATTIVE}
+        inCorso={exportInCorso}
+        onConferma={eseguiExport}
+      />
+
+      <ExportTruncatoDialog
+        info={exportTruncato}
+        onCancel={() => {
+          pendingExport.current = null
+          setExportTruncato(null)
+        }}
+        onConfirm={() => {
+          pendingExport.current?.()
+          pendingExport.current = null
+          setExportTruncato(null)
+        }}
       />
 
       <InstallatoreFormDialog open={newOpen} onOpenChange={setNewOpen} />

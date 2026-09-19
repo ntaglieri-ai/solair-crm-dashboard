@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { usePermissions } from "@/lib/permissions/provider"
 import { cn } from "@/lib/utils"
-import { IconDotsVertical, IconArrowsExchange, IconTrash } from "@tabler/icons-react"
+import { IconDotsVertical, IconArrowsExchange, IconTrash, IconDownload } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import {
@@ -40,6 +40,8 @@ export function InstallatoreActionsMenu({
   onBulkTransfer,
   onBulkEmail,
   onBulkDelete,
+  onExportSelezione,
+  onExportFiltrati,
   triggerClassName,
 }: {
   selectedCount: number
@@ -47,6 +49,10 @@ export function InstallatoreActionsMenu({
   /** Apre il dialog di invio email di massa (gestito da installatori-client). */
   onBulkEmail: () => void
   onBulkDelete: () => void
+  /** Apre il dialog di export sulle righe selezionate. */
+  onExportSelezione: () => void
+  /** Apre il dialog di export su tutto l'elenco filtrato. */
+  onExportFiltrati: () => void
   /** Classi extra per il bottone trigger (es. per ingrandirlo su mobile). */
   triggerClassName?: string
 }) {
@@ -80,6 +86,26 @@ export function InstallatoreActionsMenu({
           }
         />
         <DropdownMenuContent align="end" className="w-60">
+          {/* L'export del filtro non dipende dalla selezione: e' l'unico
+              comando utile anche a selezione vuota, quindi sta fuori dal ramo
+              `hasSelection` insieme al suo gemello sulla selezione. */}
+          {permissions.canRecord("installatori", "export") ? (
+            <>
+              <DropdownMenuGroup>
+                {hasSelection ? (
+                  <DropdownMenuItem onClick={onExportSelezione}>
+                    <IconDownload size={16} stroke={1.8} data-icon="inline-start" />
+                    Esporta selezione ({selectedCount})
+                  </DropdownMenuItem>
+                ) : null}
+                <DropdownMenuItem onClick={onExportFiltrati}>
+                  <IconDownload size={16} stroke={1.8} data-icon="inline-start" />
+                  Esporta elenco filtrato
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+            </>
+          ) : null}
           {hasSelection ? (
             <>
               <DropdownMenuGroup>

@@ -15,6 +15,7 @@
     "migrate:zoho-clienti-allegati": "node --env-file=.env.local scripts/migrations/backfill-zoho-clienti-allegati.mjs"
   },
   "dependencies": {
+    "write-excel-file": "^2.3.2",
     "@base-ui/react": "^1.5.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",

@@ -61,6 +61,13 @@ import {
   ExportTruncatoDialog,
   type ExportTruncatoInfo,
 } from "@/components/shared/export-truncato-dialog"
+import { ExportDialog } from "@/components/shared/export-dialog"
+import {
+  estensione,
+  scaricaExport,
+  type ColonnaExport,
+  type FormatoExport,
+} from "@/lib/export/file"
 import {
   type ClientiListParams,
   type ClientiListResponse,
@@ -104,30 +111,14 @@ function norm(v: string | undefined): string {
   return (v ?? "").trim().toLowerCase()
 }
 
-function downloadClientiCsv(rows: ClienteRecord[], filename: string) {
-  const cols = CLIENTE_COLUMNS.map((c) => c.id)
-  const header = cols.join(";")
-  const body = rows
-    .map((r) =>
-      cols
-        .map((c) => {
-          const v = r[c]
-          const s = Array.isArray(v) ? v.join(", ") : String(v ?? "")
-          return `"${s.replace(/"/g, '""')}"`
-        })
-        .join(";"),
-    )
-    .join("\n")
-  const blob = new Blob([`${header}\n${body}`], {
-    type: "text/csv;charset=utf-8;",
-  })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement("a")
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
-}
+/**
+ * Colonne offerte nel dialog di export. Si escludono i due badge: sono
+ * indicatori grafici calcolati (attivita' aperte, presenza note), in un file
+ * uscirebbero come "true"/"false" senza dire nulla a chi legge.
+ */
+const COLONNE_EXPORT_CLIENTI: ColonnaExport[] = CLIENTE_COLUMNS.filter(
+  (c) => c.id !== "Badge dell'attività" && c.id !== "Badge di nota",
+).map((c) => ({ id: c.id, label: c.label }))
 
 interface ClientiClientProps {
   initialSp: string
@@ -247,6 +238,14 @@ export function ClientiClient({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   // Export troncato: l'avviso e il download che parte solo dopo conferma.
   const [exportTruncato, setExportTruncato] = useState<ExportTruncatoInfo | null>(null)
+  // Ambito scelto al clic ("questi 42" oppure "tutti i filtrati"): il dialog
+  // e' aperto finche' questo non e' null.
+  const [exportAmbito, setExportAmbito] = useState<{
+    fetcher: () => Promise<ClientiExportResult>
+    descrizione: string
+    base: string
+  } | null>(null)
+  const [exportInCorso, setExportInCorso] = useState(false)
   const pendingExport = useRef<(() => void) | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ClienteRecord | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
@@ -512,18 +511,32 @@ export function ClientiClient({
   // dalle righe gia' in pagina, quindi non lasciava alcuna traccia nell'audit
   // log di un'estrazione di dati personali. Il tetto e' molto piu' alto di
   // prima, ma quando c'e' un troncamento va detto prima del download.
-  const runExport = async (
-    fetcher: () => Promise<ClientiExportResult>,
-    filename: (n: number) => string,
-  ) => {
+  // L'ambito si fissa al clic, il formato e le colonne si scelgono nel dialog:
+  // la richiesta al server parte solo alla conferma, cosi' chi apre il dialog
+  // e poi annulla non produce ne' traffico ne' una riga di audit.
+  const eseguiExport = async (formato: FormatoExport, colonne: ColonnaExport[]) => {
+    if (!exportAmbito) return
+    const ambito = exportAmbito
+    setExportInCorso(true)
     try {
-      const result = await fetcher()
+      const result = await ambito.fetcher()
       const download = () => {
-        downloadClientiCsv(result.rows, filename(result.rows.length))
+        void scaricaExport(
+          result.rows as unknown as Record<string, unknown>[],
+          colonne,
+          formato,
+          `${ambito.base}-${result.rows.length}.${estensione(formato)}`,
+        ).catch((errore) =>
+          toast.error(
+            errore instanceof Error ? errore.message : "Errore nell'esportazione",
+          ),
+        )
         toast.success("Esportazione avviata", {
-          description: `${result.rows.length} clienti esportati in CSV.`,
+          description: `${result.rows.length} clienti, ${colonne.length} colonne.`,
         })
       }
+
+      setExportAmbito(null)
       if (result.truncated) {
         setExportTruncato({
           esportate: result.rows.length,
@@ -542,20 +555,24 @@ export function ClientiClient({
       toast.error(
         error instanceof Error ? error.message : "Errore nell'esportazione",
       )
+    } finally {
+      setExportInCorso(false)
     }
   }
 
   const handleBulkExport = () =>
-    runExport(
-      () => fetchClientiByIdsForExport(selectedIds),
-      (n) => `clienti-selezione-${n}.csv`,
-    )
+    setExportAmbito({
+      fetcher: () => fetchClientiByIdsForExport(selectedIds),
+      descrizione: `${selectedIds.length} clienti selezionati`,
+      base: "clienti-selezione",
+    })
 
   const handleExportFiltered = () =>
-    runExport(
-      () => fetchClientiForExport(params),
-      (n) => `clienti-filtrati-${n}.csv`,
-    )
+    setExportAmbito({
+      fetcher: () => fetchClientiForExport(params),
+      descrizione: `${total} clienti corrispondenti ai filtri attivi`,
+      base: "clienti-filtrati",
+    })
 
   const confirmBulkDelete = () => {
     const ids = Array.from(selected)
@@ -863,6 +880,18 @@ export function ClientiClient({
       </BulkSelectionBar>
 
       {/* Avviso export incompleto */}
+      <ExportDialog
+        open={exportAmbito !== null}
+        onOpenChange={(aperto) => {
+          if (!aperto) setExportAmbito(null)
+        }}
+        descrizioneAmbito={exportAmbito?.descrizione ?? ""}
+        colonneDisponibili={COLONNE_EXPORT_CLIENTI}
+        colonneAttive={visibleCols}
+        inCorso={exportInCorso}
+        onConferma={eseguiExport}
+      />
+
       <ExportTruncatoDialog
         info={exportTruncato}
         onCancel={() => {

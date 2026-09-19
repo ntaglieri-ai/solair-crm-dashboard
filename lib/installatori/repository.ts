@@ -358,3 +358,84 @@ export async function getDistinctInstallatoreTags(): Promise<string[]> {
   if (error) throw new Error(`Lettura tag installatori: ${error.message}`)
   return [...new Set((data ?? []).map((row) => row.tag as string))].sort()
 }
+
+// ---------------------------------------------------------------------------
+// Export
+//
+// Gemelli di queryClientiForExport / queryClientiByIdsForExport: stessi tetti,
+// stessa paginazione a blocchi, stessa distinzione fra "esporta il filtro" ed
+// "esporta la selezione". Gli Installatori non avevano alcun export, quindi
+// non c'era nemmeno la riga di audit che le altre due liste scrivono da
+// agosto: l'estrazione passa dal server proprio per lasciarne traccia.
+
+/** Tetto per singolo export. Oltre, il file viene troncato e va dichiarato. */
+export const EXPORT_MAX_ROWS = 5000
+const EXPORT_CHUNK = 500
+
+export interface InstallatoriExportResult {
+  rows: InstallatoreRecord[]
+  total: number
+  truncated: boolean
+  limit: number
+}
+
+export async function queryInstallatoriForExport(
+  params: InstallatoriListParams,
+): Promise<InstallatoriExportResult> {
+  const rows: InstallatoreRecord[] = []
+  let total = 0
+
+  for (let page = 1; rows.length < EXPORT_MAX_ROWS; page += 1) {
+    const res = await queryInstallatori({ ...params, page, pageSize: EXPORT_CHUNK })
+    total = res.total
+    rows.push(...res.rows)
+    if (res.rows.length < EXPORT_CHUNK) break
+  }
+
+  const limitate = rows.slice(0, EXPORT_MAX_ROWS)
+  return {
+    rows: limitate,
+    total,
+    truncated: limitate.length < total,
+    limit: EXPORT_MAX_ROWS,
+  }
+}
+
+export async function queryInstallatoriByIdsForExport(
+  ids: string[],
+): Promise<InstallatoriExportResult> {
+  const unique = Array.from(new Set(ids)).slice(0, EXPORT_MAX_ROWS)
+  if (unique.length === 0) {
+    return { rows: [], total: 0, truncated: false, limit: EXPORT_MAX_ROWS }
+  }
+
+  const supabase = await createClient()
+  const ownerScope = await resolveCurrentOwnerScope("installatori")
+  const rows: InstallatoreRecord[] = []
+
+  // .in() finisce nell'URL della richiesta PostgREST: si spezza la lista per
+  // non superarne la lunghezza massima. Lo scope resta applicato anche qui,
+  // cosi' una selezione non puo' far uscire righe che l'utente non vedrebbe
+  // comunque in lista.
+  for (let i = 0; i < unique.length; i += 200) {
+    let q = supabase
+      .from("installatori")
+      .select(INSTALLATORE_COLUMNS)
+      .in("id", unique.slice(i, i + 200))
+      .order("nome", { ascending: true })
+    q = applyOwnerScope(q, "proprietario_id", ownerScope)
+
+    const { data, error } = await q
+    if (error) throw new Error(`queryInstallatoriByIdsForExport: ${error.message}`)
+    for (const row of data ?? []) {
+      rows.push(await mapOwner(row as unknown as InstallatoreRow))
+    }
+  }
+
+  return {
+    rows,
+    total: unique.length,
+    truncated: rows.length < unique.length,
+    limit: EXPORT_MAX_ROWS,
+  }
+}

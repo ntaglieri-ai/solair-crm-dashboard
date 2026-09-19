@@ -1,0 +1,966 @@
+diff --git a/app/(dashboard)/clienti/clienti-client.tsx b/app/(dashboard)/clienti/clienti-client.tsx
+index aa19fe0..a62f090 100644
+--- a/app/(dashboard)/clienti/clienti-client.tsx
++++ b/app/(dashboard)/clienti/clienti-client.tsx
+@@ -61,6 +61,13 @@ import {
+   ExportTruncatoDialog,
+   type ExportTruncatoInfo,
+ } from "@/components/shared/export-truncato-dialog"
++import { ExportDialog } from "@/components/shared/export-dialog"
++import {
++  estensione,
++  scaricaExport,
++  type ColonnaExport,
++  type FormatoExport,
++} from "@/lib/export/file"
+ import {
+   type ClientiListParams,
+   type ClientiListResponse,
+@@ -104,30 +111,14 @@ function norm(v: string | undefined): string {
+   return (v ?? "").trim().toLowerCase()
+ }
+ 
+-function downloadClientiCsv(rows: ClienteRecord[], filename: string) {
+-  const cols = CLIENTE_COLUMNS.map((c) => c.id)
+-  const header = cols.join(";")
+-  const body = rows
+-    .map((r) =>
+-      cols
+-        .map((c) => {
+-          const v = r[c]
+-          const s = Array.isArray(v) ? v.join(", ") : String(v ?? "")
+-          return `"${s.replace(/"/g, '""')}"`
+-        })
+-        .join(";"),
+-    )
+-    .join("\n")
+-  const blob = new Blob([`${header}\n${body}`], {
+-    type: "text/csv;charset=utf-8;",
+-  })
+-  const url = URL.createObjectURL(blob)
+-  const a = document.createElement("a")
+-  a.href = url
+-  a.download = filename
+-  a.click()
+-  URL.revokeObjectURL(url)
+-}
++/**
++ * Colonne offerte nel dialog di export. Si escludono i due badge: sono
++ * indicatori grafici calcolati (attivita' aperte, presenza note), in un file
++ * uscirebbero come "true"/"false" senza dire nulla a chi legge.
++ */
++const COLONNE_EXPORT_CLIENTI: ColonnaExport[] = CLIENTE_COLUMNS.filter(
++  (c) => c.id !== "Badge dell'attività" && c.id !== "Badge di nota",
++).map((c) => ({ id: c.id, label: c.label }))
+ 
+ interface ClientiClientProps {
+   initialSp: string
+@@ -247,6 +238,14 @@ export function ClientiClient({
+   const [selected, setSelected] = useState<Set<string>>(new Set())
+   // Export troncato: l'avviso e il download che parte solo dopo conferma.
+   const [exportTruncato, setExportTruncato] = useState<ExportTruncatoInfo | null>(null)
++  // Ambito scelto al clic ("questi 42" oppure "tutti i filtrati"): il dialog
++  // e' aperto finche' questo non e' null.
++  const [exportAmbito, setExportAmbito] = useState<{
++    fetcher: () => Promise<ClientiExportResult>
++    descrizione: string
++    base: string
++  } | null>(null)
++  const [exportInCorso, setExportInCorso] = useState(false)
+   const pendingExport = useRef<(() => void) | null>(null)
+   const [deleteTarget, setDeleteTarget] = useState<ClienteRecord | null>(null)
+   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+@@ -512,18 +511,32 @@ export function ClientiClient({
+   // dalle righe gia' in pagina, quindi non lasciava alcuna traccia nell'audit
+   // log di un'estrazione di dati personali. Il tetto e' molto piu' alto di
+   // prima, ma quando c'e' un troncamento va detto prima del download.
+-  const runExport = async (
+-    fetcher: () => Promise<ClientiExportResult>,
+-    filename: (n: number) => string,
+-  ) => {
++  // L'ambito si fissa al clic, il formato e le colonne si scelgono nel dialog:
++  // la richiesta al server parte solo alla conferma, cosi' chi apre il dialog
++  // e poi annulla non produce ne' traffico ne' una riga di audit.
++  const eseguiExport = async (formato: FormatoExport, colonne: ColonnaExport[]) => {
++    if (!exportAmbito) return
++    const ambito = exportAmbito
++    setExportInCorso(true)
+     try {
+-      const result = await fetcher()
++      const result = await ambito.fetcher()
+       const download = () => {
+-        downloadClientiCsv(result.rows, filename(result.rows.length))
++        void scaricaExport(
++          result.rows as unknown as Record<string, unknown>[],
++          colonne,
++          formato,
++          `${ambito.base}-${result.rows.length}.${estensione(formato)}`,
++        ).catch((errore) =>
++          toast.error(
++            errore instanceof Error ? errore.message : "Errore nell'esportazione",
++          ),
++        )
+         toast.success("Esportazione avviata", {
+-          description: `${result.rows.length} clienti esportati in CSV.`,
++          description: `${result.rows.length} clienti, ${colonne.length} colonne.`,
+         })
+       }
++
++      setExportAmbito(null)
+       if (result.truncated) {
+         setExportTruncato({
+           esportate: result.rows.length,
+@@ -542,20 +555,24 @@ export function ClientiClient({
+       toast.error(
+         error instanceof Error ? error.message : "Errore nell'esportazione",
+       )
++    } finally {
++      setExportInCorso(false)
+     }
+   }
+ 
+   const handleBulkExport = () =>
+-    runExport(
+-      () => fetchClientiByIdsForExport(selectedIds),
+-      (n) => `clienti-selezione-${n}.csv`,
+-    )
++    setExportAmbito({
++      fetcher: () => fetchClientiByIdsForExport(selectedIds),
++      descrizione: `${selectedIds.length} clienti selezionati`,
++      base: "clienti-selezione",
++    })
+ 
+   const handleExportFiltered = () =>
+-    runExport(
+-      () => fetchClientiForExport(params),
+-      (n) => `clienti-filtrati-${n}.csv`,
+-    )
++    setExportAmbito({
++      fetcher: () => fetchClientiForExport(params),
++      descrizione: `${total} clienti corrispondenti ai filtri attivi`,
++      base: "clienti-filtrati",
++    })
+ 
+   const confirmBulkDelete = () => {
+     const ids = Array.from(selected)
+@@ -863,6 +880,18 @@ export function ClientiClient({
+       </BulkSelectionBar>
+ 
+       {/* Avviso export incompleto */}
++      <ExportDialog
++        open={exportAmbito !== null}
++        onOpenChange={(aperto) => {
++          if (!aperto) setExportAmbito(null)
++        }}
++        descrizioneAmbito={exportAmbito?.descrizione ?? ""}
++        colonneDisponibili={COLONNE_EXPORT_CLIENTI}
++        colonneAttive={visibleCols}
++        inCorso={exportInCorso}
++        onConferma={eseguiExport}
++      />
++
+       <ExportTruncatoDialog
+         info={exportTruncato}
+         onCancel={() => {
+diff --git a/app/(dashboard)/installatori/installatori-client.tsx b/app/(dashboard)/installatori/installatori-client.tsx
+index 79b90d3..bbece00 100644
+--- a/app/(dashboard)/installatori/installatori-client.tsx
++++ b/app/(dashboard)/installatori/installatori-client.tsx
+@@ -14,6 +14,52 @@ import {
+ import { IconSettings } from "@tabler/icons-react"
+ import { useQueryClient } from "@tanstack/react-query"
+ import { useIsMobile } from "@/hooks/use-is-mobile"
++import { ExportDialog } from "@/components/shared/export-dialog"
++import {
++  ExportTruncatoDialog,
++  type ExportTruncatoInfo,
++} from "@/components/shared/export-truncato-dialog"
++import {
++  fetchInstallatoriByIdsForExport,
++  fetchInstallatoriForExport,
++  type InstallatoriExportResult,
++} from "@/lib/installatori/hooks"
++import {
++  estensione,
++  scaricaExport,
++  type ColonnaExport,
++  type FormatoExport,
++} from "@/lib/export/file"
++
++/**
++ * Colonne esportabili degli Installatori. La lista non ha colonne
++ * configurabili come Clienti e Lead, quindi l'elenco e' fisso e ricalca i
++ * campi della scheda; `id` e' la chiave del record, non il nome della colonna
++ * a database.
++ */
++const COLONNE_EXPORT_INSTALLATORI: ColonnaExport[] = [
++  { id: "nome", label: "Nome" },
++  { id: "email", label: "E-mail" },
++  { id: "email_secondaria", label: "E-mail secondaria" },
++  { id: "telefono", label: "Telefono" },
++  { id: "tag", label: "Tag" },
++  { id: "attivo", label: "Attivo" },
++  { id: "canale_preferito", label: "Canale preferito" },
++  { id: "proprietario_nome", label: "Proprietario" },
++  { id: "note", label: "Note" },
++  { id: "created_at", label: "Creato il" },
++  { id: "updated_at", label: "Ultima modifica" },
++]
++
++/** Preselezione del dialog: le colonne che la lista mostra davvero. */
++const COLONNE_EXPORT_INSTALLATORI_ATTIVE = [
++  "nome",
++  "email",
++  "telefono",
++  "tag",
++  "attivo",
++  "proprietario_nome",
++]
+ import { Button } from "@/components/ui/button"
+ import {
+   Dialog,
+@@ -170,6 +216,60 @@ export function InstallatoriClient({
+   const [newOpen, setNewOpen] = useState(false)
+   const [editTarget, setEditTarget] = useState<InstallatoreRecord | null>(null)
+   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
++  // Export: l'ambito si fissa al clic, formato e colonne si scelgono nel
++  // dialog. La richiesta parte solo alla conferma, cosi' aprire e annullare
++  // non produce ne' traffico ne' una riga di audit.
++  const [exportAmbito, setExportAmbito] = useState<{
++    fetcher: () => Promise<InstallatoriExportResult>
++    descrizione: string
++    base: string
++  } | null>(null)
++  const [exportInCorso, setExportInCorso] = useState(false)
++  const [exportTruncato, setExportTruncato] = useState<ExportTruncatoInfo | null>(null)
++  const pendingExport = useRef<(() => void) | null>(null)
++
++  const eseguiExport = async (formato: FormatoExport, colonne: ColonnaExport[]) => {
++    if (!exportAmbito) return
++    const ambito = exportAmbito
++    setExportInCorso(true)
++    try {
++      const result = await ambito.fetcher()
++      const download = () => {
++        void scaricaExport(
++          result.rows as unknown as Record<string, unknown>[],
++          colonne,
++          formato,
++          `${ambito.base}-${result.rows.length}.${estensione(formato)}`,
++        ).catch((errore) =>
++          toast.error(
++            errore instanceof Error ? errore.message : "Errore nell'esportazione",
++          ),
++        )
++        toast.success("Esportazione avviata", {
++          description: `${result.rows.length} installatori, ${colonne.length} colonne.`,
++        })
++      }
++
++      setExportAmbito(null)
++      if (result.truncated) {
++        setExportTruncato({
++          esportate: result.rows.length,
++          totali: result.total,
++          limite: result.limit,
++          entita: "installatori",
++        })
++        pendingExport.current = download
++        return
++      }
++      download()
++    } catch (error) {
++      // Il messaggio del server ha la precedenza: un 403 per permesso di
++      // export mancante dice cosa chiedere all'amministratore.
++      toast.error(error instanceof Error ? error.message : "Errore nell'esportazione")
++    } finally {
++      setExportInCorso(false)
++    }
++  }
+   const [deleteTarget, setDeleteTarget] = useState<InstallatoreRecord | null>(null)
+   const [settingsOpen, setSettingsOpen] = useState(false)
+   const [settingsSection, setSettingsSection] =
+@@ -338,6 +438,20 @@ export function InstallatoriClient({
+             onBulkTransfer={handleBulkTransfer}
+             onBulkEmail={() => setBulkEmailOpen(true)}
+             onBulkDelete={() => setBulkDeleteOpen(true)}
++            onExportSelezione={() =>
++              setExportAmbito({
++                fetcher: () => fetchInstallatoriByIdsForExport(selectedIds),
++                descrizione: `${selectedIds.length} installatori selezionati`,
++                base: "installatori-selezione",
++              })
++            }
++            onExportFiltrati={() =>
++              setExportAmbito({
++                fetcher: () => fetchInstallatoriForExport(params),
++                descrizione: `${total} installatori corrispondenti ai filtri attivi`,
++                base: "installatori-filtrati",
++              })
++            }
+           />
+ 
+           <PannelloFiltri
+@@ -643,6 +757,31 @@ export function InstallatoriClient({
+         recordIds={selectedIds}
+       />
+ 
++      <ExportDialog
++        open={exportAmbito !== null}
++        onOpenChange={(aperto) => {
++          if (!aperto) setExportAmbito(null)
++        }}
++        descrizioneAmbito={exportAmbito?.descrizione ?? ""}
++        colonneDisponibili={COLONNE_EXPORT_INSTALLATORI}
++        colonneAttive={COLONNE_EXPORT_INSTALLATORI_ATTIVE}
++        inCorso={exportInCorso}
++        onConferma={eseguiExport}
++      />
++
++      <ExportTruncatoDialog
++        info={exportTruncato}
++        onCancel={() => {
++          pendingExport.current = null
++          setExportTruncato(null)
++        }}
++        onConfirm={() => {
++          pendingExport.current?.()
++          pendingExport.current = null
++          setExportTruncato(null)
++        }}
++      />
++
+       <InstallatoreFormDialog open={newOpen} onOpenChange={setNewOpen} />
+       <InstallatoreFormDialog
+         open={editTarget !== null}
+diff --git a/app/api/installatori/export/route.ts b/app/api/installatori/export/route.ts
+new file mode 100644
+index 0000000..9d78ea2
+--- /dev/null
++++ b/app/api/installatori/export/route.ts
+@@ -0,0 +1,95 @@
++// Export degli Installatori. Terzo gemello di app/api/clienti/export/route.ts
++// e app/api/leads/export/route.ts, con le stesse due ragioni per cui e' un
++// endpoint a se': scrivere la riga di audit `export_dati` (che richiede
++// service_role e l'IP della richiesta) e restituire il totale reale invece di
++// lasciare che il client scambi una pagina per l'insieme.
++//
++// Fino al 16/09/2026 gli Installatori non avevano alcun export: l'unico modo
++// di portarsi via l'elenco era copiarlo a mano dallo schermo, cosa che non
++// lascia traccia da nessuna parte. Il permesso `installatori.export` esisteva
++// gia' nel motore dei permessi — non lo verificava nessuno perche' non c'era
++// niente da verificare.
++import { NextResponse, after } from "next/server"
++import { parseInstallatoriSearchParams } from "@/lib/installatori/api-types"
++import {
++  queryInstallatoriByIdsForExport,
++  queryInstallatoriForExport,
++} from "@/lib/installatori/repository"
++import { getCurrentPermissions } from "@/lib/permissions/server"
++import { attoreDaPermessi, logAudit } from "@/lib/audit/log"
++import {
++  criteriDaSearchParams,
++  datiExport,
++  descriviExport,
++  logExportNegato,
++  messaggioExportNegato,
++} from "@/lib/audit/export"
++
++const CHIAVI_FILTRO = ["search", "stato", "tag", "proprietario"]
++
++export async function GET(request: Request) {
++  const permissions = await getCurrentPermissions()
++  const subject = permissions.snapshot.subject
++  if (!subject.userId) {
++    return NextResponse.json({ error: "Non autenticato" }, { status: 401 })
++  }
++
++  const { searchParams } = new URL(request.url)
++  const idsRaw = searchParams.get("ids")
++  const ids = idsRaw ? idsRaw.split(",").filter(Boolean) : null
++  const scope = ids ? "selezione" : "filtro"
++
++  // Permesso di EXPORT, non di view: sono due cose diverse e il motore le
++  // distingue gia'. canRecord copre in un colpo solo sia "non ha accesso al
++  // modulo" sia "ha il modulo ma non l'export".
++  if (!permissions.canRecord("installatori", "export")) {
++    after(() =>
++      logExportNegato({
++        entita: "Installatori",
++        modulo: "installatore",
++        ruoloCode: subject.ruoloCode,
++        scope,
++        criterio: criteriDaSearchParams(searchParams, CHIAVI_FILTRO),
++        idsRichiesti: ids ? ids.length : null,
++        attore: attoreDaPermessi(permissions),
++        request,
++      }),
++    )
++    return NextResponse.json(
++      {
++        error: messaggioExportNegato("Installatori"),
++        permessoMancante: "installatori.export",
++      },
++      { status: 403 },
++    )
++  }
++
++  try {
++    const result = ids
++      ? await queryInstallatoriByIdsForExport(ids)
++      : await queryInstallatoriForExport(parseInstallatoriSearchParams(searchParams))
++
++    after(() =>
++      logAudit({
++        tipo_evento: "export_dati",
++        attore: attoreDaPermessi(permissions),
++        modulo: "installatore",
++        descrizione: descriviExport("Installatori", scope, result),
++        dati_dopo: datiExport(
++          scope,
++          result,
++          criteriDaSearchParams(searchParams, CHIAVI_FILTRO),
++        ),
++        request,
++      }),
++    )
++
++    return NextResponse.json(result, {
++      headers: { "Cache-Control": "private, no-store" },
++    })
++  } catch (error) {
++    const message = error instanceof Error ? error.message : "Errore export Installatori"
++    console.error("[api/installatori/export]", message)
++    return NextResponse.json({ error: message }, { status: 500 })
++  }
++}
+diff --git a/components/installatori/installatore-actions-menu.tsx b/components/installatori/installatore-actions-menu.tsx
+index af1d2c6..f8b22d6 100644
+--- a/components/installatori/installatore-actions-menu.tsx
++++ b/components/installatori/installatore-actions-menu.tsx
+@@ -3,7 +3,7 @@
+ import { useState } from "react"
+ import { usePermissions } from "@/lib/permissions/provider"
+ import { cn } from "@/lib/utils"
+-import { IconDotsVertical, IconArrowsExchange, IconTrash } from "@tabler/icons-react"
++import { IconDotsVertical, IconArrowsExchange, IconTrash, IconDownload } from "@tabler/icons-react"
+ import { Button } from "@/components/ui/button"
+ import { Label } from "@/components/ui/label"
+ import {
+@@ -40,6 +40,8 @@ export function InstallatoreActionsMenu({
+   onBulkTransfer,
+   onBulkEmail,
+   onBulkDelete,
++  onExportSelezione,
++  onExportFiltrati,
+   triggerClassName,
+ }: {
+   selectedCount: number
+@@ -47,6 +49,10 @@ export function InstallatoreActionsMenu({
+   /** Apre il dialog di invio email di massa (gestito da installatori-client). */
+   onBulkEmail: () => void
+   onBulkDelete: () => void
++  /** Apre il dialog di export sulle righe selezionate. */
++  onExportSelezione: () => void
++  /** Apre il dialog di export su tutto l'elenco filtrato. */
++  onExportFiltrati: () => void
+   /** Classi extra per il bottone trigger (es. per ingrandirlo su mobile). */
+   triggerClassName?: string
+ }) {
+@@ -80,6 +86,26 @@ export function InstallatoreActionsMenu({
+           }
+         />
+         <DropdownMenuContent align="end" className="w-60">
++          {/* L'export del filtro non dipende dalla selezione: e' l'unico
++              comando utile anche a selezione vuota, quindi sta fuori dal ramo
++              `hasSelection` insieme al suo gemello sulla selezione. */}
++          {permissions.canRecord("installatori", "export") ? (
++            <>
++              <DropdownMenuGroup>
++                {hasSelection ? (
++                  <DropdownMenuItem onClick={onExportSelezione}>
++                    <IconDownload size={16} stroke={1.8} data-icon="inline-start" />
++                    Esporta selezione ({selectedCount})
++                  </DropdownMenuItem>
++                ) : null}
++                <DropdownMenuItem onClick={onExportFiltrati}>
++                  <IconDownload size={16} stroke={1.8} data-icon="inline-start" />
++                  Esporta elenco filtrato
++                </DropdownMenuItem>
++              </DropdownMenuGroup>
++              <DropdownMenuSeparator />
++            </>
++          ) : null}
+           {hasSelection ? (
+             <>
+               <DropdownMenuGroup>
+diff --git a/components/shared/export-dialog.tsx b/components/shared/export-dialog.tsx
+new file mode 100644
+index 0000000..a479c6e
+--- /dev/null
++++ b/components/shared/export-dialog.tsx
+@@ -0,0 +1,178 @@
++"use client"
++
++// Scelta di formato e colonne prima di un export, condivisa da Clienti, Lead
++// e Installatori.
++//
++// Perche' esiste: l'export scriveva sempre TUTTE le colonne del modulo, in
++// CSV, senza chiedere nulla. Su Clienti sono 170 colonne — un file che nessuno
++// apre volentieri e in cui le tre colonne che servivano davvero stanno in
++// mezzo alle altre. Il default qui e' "le colonne che hai a schermo", perche'
++// e' gia' la selezione che l'utente ha fatto lavorando; "tutte" resta a un
++// clic, perche' e' il comportamento di prima e qualcuno ci fa affidamento.
++
++import { useEffect, useMemo, useState } from "react"
++import { Download, Loader2 } from "lucide-react"
++
++import { Button } from "@/components/ui/button"
++import { Checkbox } from "@/components/ui/checkbox"
++import {
++  Dialog,
++  DialogContent,
++  DialogDescription,
++  DialogFooter,
++  DialogHeader,
++  DialogTitle,
++} from "@/components/ui/dialog"
++import { Label } from "@/components/ui/label"
++import type { ColonnaExport, FormatoExport } from "@/lib/export/file"
++
++export interface ExportDialogProps {
++  open: boolean
++  onOpenChange: (open: boolean) => void
++  /** Titolo dell'ambito: "42 clienti selezionati", "Tutti i lead filtrati". */
++  descrizioneAmbito: string
++  /** Tutte le colonne esportabili del modulo, nell'ordine del modulo. */
++  colonneDisponibili: ColonnaExport[]
++  /** Id delle colonne attive a schermo: sono la preselezione. */
++  colonneAttive: string[]
++  inCorso?: boolean
++  onConferma: (formato: FormatoExport, colonne: ColonnaExport[]) => void
++}
++
++export function ExportDialog({
++  open,
++  onOpenChange,
++  descrizioneAmbito,
++  colonneDisponibili,
++  colonneAttive,
++  inCorso = false,
++  onConferma,
++}: ExportDialogProps) {
++  const [formato, setFormato] = useState<FormatoExport>("csv")
++  const [selezionate, setSelezionate] = useState<Set<string>>(new Set())
++
++  // Le colonne attive cambiano mentre il dialog e' chiuso (l'utente ne
++  // aggiunge una e poi esporta): la preselezione si ricalcola a ogni
++  // apertura, non una volta sola al mount.
++  useEffect(() => {
++    if (!open) return
++    const attiveEsportabili = colonneAttive.filter((id) =>
++      colonneDisponibili.some((c) => c.id === id),
++    )
++    setSelezionate(
++      new Set(
++        attiveEsportabili.length > 0
++          ? attiveEsportabili
++          : colonneDisponibili.map((c) => c.id),
++      ),
++    )
++  }, [open, colonneAttive, colonneDisponibili])
++
++  const colonneScelte = useMemo(
++    () => colonneDisponibili.filter((c) => selezionate.has(c.id)),
++    [colonneDisponibili, selezionate],
++  )
++
++  const toggle = (id: string) => {
++    setSelezionate((precedenti) => {
++      const successive = new Set(precedenti)
++      if (successive.has(id)) successive.delete(id)
++      else successive.add(id)
++      return successive
++    })
++  }
++
++  const tutte = () => setSelezionate(new Set(colonneDisponibili.map((c) => c.id)))
++  const soloAttive = () =>
++    setSelezionate(
++      new Set(colonneAttive.filter((id) => colonneDisponibili.some((c) => c.id === id))),
++    )
++
++  return (
++    <Dialog open={open} onOpenChange={onOpenChange}>
++      <DialogContent className="max-w-xl">
++        <DialogHeader>
++          <DialogTitle>Esporta</DialogTitle>
++          <DialogDescription>{descrizioneAmbito}</DialogDescription>
++        </DialogHeader>
++
++        <div className="flex flex-col gap-4">
++          <div className="flex flex-col gap-2">
++            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
++              Formato
++            </Label>
++            <div className="flex gap-2">
++              <Button
++                type="button"
++                variant={formato === "csv" ? "default" : "outline"}
++                className="flex-1"
++                onClick={() => setFormato("csv")}
++              >
++                CSV
++              </Button>
++              <Button
++                type="button"
++                variant={formato === "xlsx" ? "default" : "outline"}
++                className="flex-1"
++                onClick={() => setFormato("xlsx")}
++              >
++                Excel
++              </Button>
++            </div>
++          </div>
++
++          <div className="flex flex-col gap-2">
++            <div className="flex items-center justify-between">
++              <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
++                Colonne ({colonneScelte.length} di {colonneDisponibili.length})
++              </Label>
++              <div className="flex gap-1">
++                <Button type="button" variant="ghost" size="sm" onClick={soloAttive}>
++                  Solo quelle a schermo
++                </Button>
++                <Button type="button" variant="ghost" size="sm" onClick={tutte}>
++                  Tutte
++                </Button>
++              </div>
++            </div>
++
++            <div className="max-h-64 overflow-y-auto rounded-lg border border-border p-2">
++              {colonneDisponibili.map((colonna) => (
++                <label
++                  key={colonna.id}
++                  className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] hover:bg-muted"
++                >
++                  <Checkbox
++                    checked={selezionate.has(colonna.id)}
++                    onCheckedChange={() => toggle(colonna.id)}
++                  />
++                  <span className="truncate">{colonna.label}</span>
++                </label>
++              ))}
++            </div>
++          </div>
++        </div>
++
++        <DialogFooter>
++          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
++            Annulla
++          </Button>
++          <Button
++            type="button"
++            // Un export senza colonne produrrebbe un file di sole righe vuote:
++            // si blocca qui invece di scaricarlo.
++            disabled={colonneScelte.length === 0 || inCorso}
++            onClick={() => onConferma(formato, colonneScelte)}
++          >
++            {inCorso ? (
++              <Loader2 className="size-4 animate-spin" />
++            ) : (
++              <Download className="size-4" />
++            )}
++            Esporta
++          </Button>
++        </DialogFooter>
++      </DialogContent>
++    </Dialog>
++  )
++}
+diff --git a/lib/export/file.ts b/lib/export/file.ts
+new file mode 100644
+index 0000000..e58f90c
+--- /dev/null
++++ b/lib/export/file.ts
+@@ -0,0 +1,130 @@
++"use client"
++
++/**
++ * Costruzione del file di export, condivisa da Clienti, Lead e Installatori.
++ *
++ * Prima ogni pagina aveva la sua `downloadXCsv()`: due copie quasi identiche
++ * (clienti-client.tsx e leads-client.tsx) che scrivevano sempre TUTTE le
++ * colonne del modulo, ignorando quelle scelte a schermo, e sempre e solo in
++ * CSV. Le differenze fra le due erano accidentali, non volute — il tipo di
++ * cosa che diverge ancora di piu' al terzo modulo.
++ *
++ * Qui il file si costruisce dalle colonne che gli vengono passate: la scelta
++ * di QUALI colonne e' una decisione dell'interfaccia (vedi
++ * components/shared/export-dialog.tsx), non di questo modulo.
++ */
++
++export type FormatoExport = "csv" | "xlsx"
++
++export type ColonnaExport = {
++  /** Chiave con cui leggere il valore dalla riga. */
++  id: string
++  /** Intestazione scritta nel file. */
++  label: string
++}
++
++/**
++ * Da valore del record a cella. Gli array (i Tag, tipicamente) diventano una
++ * lista separata da virgola invece di "[object Object]", che e' quello che
++ * usciva prima su ogni riga con piu' di un tag.
++ */
++function cella(valore: unknown): string {
++  if (valore === null || valore === undefined) return ""
++  if (Array.isArray(valore)) return valore.join(", ")
++  if (typeof valore === "boolean") return valore ? "Sì" : "No"
++  return String(valore)
++}
++
++/**
++ * CSV con separatore `;` (Excel in locale italiano lo usa come separatore di
++ * colonna: con la virgola aprirebbe tutto in una cella sola) e virgolette
++ * raddoppiate secondo RFC 4180.
++ *
++ * Il BOM iniziale non e' decorativo: senza, Excel legge il file come ANSI e
++ * ogni accento diventa un carattere sbagliato — "Città" -> "CittÃ ". Il CSV
++ * esportato finora ne era privo.
++ */
++export function costruisciCsv(
++  righe: Record<string, unknown>[],
++  colonne: ColonnaExport[],
++): Blob {
++  const intestazione = colonne.map((c) => `"${c.label.replace(/"/g, '""')}"`).join(";")
++  const corpo = righe
++    .map((riga) =>
++      colonne
++        .map((c) => `"${cella(riga[c.id]).replace(/"/g, '""')}"`)
++        .join(";"),
++    )
++    .join("\r\n")
++
++  return new Blob([`\uFEFF${intestazione}\r\n${corpo}`], {
++    type: "text/csv;charset=utf-8;",
++  })
++}
++
++/**
++ * Excel vero (.xlsx). La libreria si carica solo quando serve davvero: un
++ * export CSV non deve pagare il peso di un generatore di fogli di calcolo.
++ *
++ * Se l'import fallisce — dipendenza non installata dopo un deploy parziale —
++ * si rilancia un errore leggibile invece di lasciare il pulsante muto.
++ */
++export async function costruisciXlsx(
++  righe: Record<string, unknown>[],
++  colonne: ColonnaExport[],
++): Promise<Blob> {
++  let writeXlsxFile: typeof import("write-excel-file").default
++  try {
++    writeXlsxFile = (await import("write-excel-file")).default
++  } catch {
++    throw new Error(
++      "Formato Excel non disponibile su questa installazione. Esporta in CSV.",
++    )
++  }
++
++  // Tutto testo di proposito: il CRM tiene importi e date come stringhe gia'
++  // formattate per l'italiano ("11.800", "16/09/2026"). Dichiararle numero o
++  // data farebbe reinterpretare a Excel il separatore migliaia e il formato
++  // giorno/mese, cambiando i valori sotto gli occhi di chi legge.
++  const dati = [
++    colonne.map((c) => ({ value: c.label, fontWeight: "bold" as const })),
++    ...righe.map((riga) => colonne.map((c) => ({ value: cella(riga[c.id]) }))),
++  ]
++
++  return writeXlsxFile(dati, {
++    columns: colonne.map((c) => ({ width: Math.min(Math.max(c.label.length + 4, 12), 40) })),
++    buffer: true,
++  }).then(
++    (buffer: ArrayBuffer) =>
++      new Blob([buffer], {
++        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
++      }),
++  )
++}
++
++/** Estensione corretta per il formato, usata per comporre il nome del file. */
++export function estensione(formato: FormatoExport): string {
++  return formato === "xlsx" ? "xlsx" : "csv"
++}
++
++/** Costruisce e scarica. Unico punto in cui si tocca il DOM. */
++export async function scaricaExport(
++  righe: Record<string, unknown>[],
++  colonne: ColonnaExport[],
++  formato: FormatoExport,
++  nomeFile: string,
++): Promise<void> {
++  const blob =
++    formato === "xlsx"
++      ? await costruisciXlsx(righe, colonne)
++      : costruisciCsv(righe, colonne)
++
++  const url = URL.createObjectURL(blob)
++  const a = document.createElement("a")
++  a.href = url
++  a.download = nomeFile
++  a.click()
++  // Rilasciare subito l'URL su Safari annulla il download appena avviato: si
++  // aspetta un giro di event loop.
++  setTimeout(() => URL.revokeObjectURL(url), 0)
++}
+diff --git a/lib/installatori/hooks.ts b/lib/installatori/hooks.ts
+index 7fea2f6..c5b90bc 100644
+--- a/lib/installatori/hooks.ts
++++ b/lib/installatori/hooks.ts
+@@ -168,3 +168,44 @@ export async function bulkUpdateInstallatori(
+   const failed = countFailures(results)
+   if (failed > 0) throw new BulkOperationError(failed, ids.length)
+ }
++
++// --- Export ----------------------------------------------------------------
++// Gemelli di fetchClientiForExport / fetchClientiByIdsForExport. Passano dal
++// server e non dalle righe gia' in pagina: e' quello che fa finire l'export
++// nell'audit log e che alza il tetto oltre la pagina corrente.
++
++export interface InstallatoriExportResult {
++  rows: InstallatoreRecord[]
++  total: number
++  truncated: boolean
++  limit: number
++}
++
++export async function fetchInstallatoriForExport(
++  params: InstallatoriListParams,
++): Promise<InstallatoriExportResult> {
++  const sp = buildInstallatoriSearchParams({ ...params, page: 1 })
++  const res = await fetch(`/api/installatori/export?${sp.toString()}`)
++  if (!res.ok) throw new Error(await messaggioErroreExportInstallatori(res))
++  return (await res.json()) as InstallatoriExportResult
++}
++
++/** Export di una selezione: gli id vanno al server (e finiscono nell'audit). */
++export async function fetchInstallatoriByIdsForExport(
++  ids: string[],
++): Promise<InstallatoriExportResult> {
++  const sp = new URLSearchParams({ ids: ids.join(",") })
++  const res = await fetch(`/api/installatori/export?${sp.toString()}`)
++  if (!res.ok) throw new Error(await messaggioErroreExportInstallatori(res))
++  return (await res.json()) as InstallatoriExportResult
++}
++
++/**
++ * Il messaggio del server ha la precedenza: un 403 per permesso di export
++ * mancante spiega cosa chiedere all'amministratore, un generico "non riuscita"
++ * lascerebbe a indovinare.
++ */
++async function messaggioErroreExportInstallatori(res: Response): Promise<string> {
++  const body = (await res.json().catch(() => null)) as { error?: string } | null
++  return body?.error || "Esportazione non riuscita"
++}
+diff --git a/lib/installatori/repository.ts b/lib/installatori/repository.ts
+index cd4fbbd..790d7a4 100644
+--- a/lib/installatori/repository.ts
++++ b/lib/installatori/repository.ts
+@@ -358,3 +358,84 @@ export async function getDistinctInstallatoreTags(): Promise<string[]> {
+   if (error) throw new Error(`Lettura tag installatori: ${error.message}`)
+   return [...new Set((data ?? []).map((row) => row.tag as string))].sort()
+ }
++
++// ---------------------------------------------------------------------------
++// Export
++//
++// Gemelli di queryClientiForExport / queryClientiByIdsForExport: stessi tetti,
++// stessa paginazione a blocchi, stessa distinzione fra "esporta il filtro" ed
++// "esporta la selezione". Gli Installatori non avevano alcun export, quindi
++// non c'era nemmeno la riga di audit che le altre due liste scrivono da
++// agosto: l'estrazione passa dal server proprio per lasciarne traccia.
++
++/** Tetto per singolo export. Oltre, il file viene troncato e va dichiarato. */
++export const EXPORT_MAX_ROWS = 5000
++const EXPORT_CHUNK = 500
++
++export interface InstallatoriExportResult {
++  rows: InstallatoreRecord[]
++  total: number
++  truncated: boolean
++  limit: number
++}
++
++export async function queryInstallatoriForExport(
++  params: InstallatoriListParams,
++): Promise<InstallatoriExportResult> {
++  const rows: InstallatoreRecord[] = []
++  let total = 0
++
++  for (let page = 1; rows.length < EXPORT_MAX_ROWS; page += 1) {
++    const res = await queryInstallatori({ ...params, page, pageSize: EXPORT_CHUNK })
++    total = res.total
++    rows.push(...res.rows)
++    if (res.rows.length < EXPORT_CHUNK) break
++  }
++
++  const limitate = rows.slice(0, EXPORT_MAX_ROWS)
++  return {
++    rows: limitate,
++    total,
++    truncated: limitate.length < total,
++    limit: EXPORT_MAX_ROWS,
++  }
++}
++
++export async function queryInstallatoriByIdsForExport(
++  ids: string[],
++): Promise<InstallatoriExportResult> {
++  const unique = Array.from(new Set(ids)).slice(0, EXPORT_MAX_ROWS)
++  if (unique.length === 0) {
++    return { rows: [], total: 0, truncated: false, limit: EXPORT_MAX_ROWS }
++  }
++
++  const supabase = await createClient()
++  const ownerScope = await resolveCurrentOwnerScope("installatori")
++  const rows: InstallatoreRecord[] = []
++
++  // .in() finisce nell'URL della richiesta PostgREST: si spezza la lista per
++  // non superarne la lunghezza massima. Lo scope resta applicato anche qui,
++  // cosi' una selezione non puo' far uscire righe che l'utente non vedrebbe
++  // comunque in lista.
++  for (let i = 0; i < unique.length; i += 200) {
++    let q = supabase
++      .from("installatori")
++      .select(INSTALLATORE_COLUMNS)
++      .in("id", unique.slice(i, i + 200))
++      .order("nome", { ascending: true })
++    q = applyOwnerScope(q, "proprietario_id", ownerScope)
++
++    const { data, error } = await q
++    if (error) throw new Error(`queryInstallatoriByIdsForExport: ${error.message}`)
++    for (const row of data ?? []) {
++      rows.push(await mapOwner(row as unknown as InstallatoreRow))
++    }
++  }
++
++  return {
++    rows,
++    total: unique.length,
++    truncated: rows.length < unique.length,
++    limit: EXPORT_MAX_ROWS,
++  }
++}
+diff --git a/package.json b/package.json
+index d531d7e..ed889d6 100644
+--- a/package.json
++++ b/package.json
+@@ -15,6 +15,7 @@
+     "migrate:zoho-clienti-allegati": "node --env-file=.env.local scripts/migrations/backfill-zoho-clienti-allegati.mjs"
+   },
+   "dependencies": {
++    "write-excel-file": "^2.3.2",
+     "@base-ui/react": "^1.5.0",
+     "@dnd-kit/core": "^6.3.1",
+     "@dnd-kit/sortable": "^10.0.0",

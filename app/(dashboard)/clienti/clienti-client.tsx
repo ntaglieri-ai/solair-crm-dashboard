@@ -607,7 +607,7 @@ export function ClientiClient({
   return (
     <div
       ref={rootRef}
-      className="flex min-w-0 flex-col gap-2.5 lg:h-auto lg:gap-5 lg:overflow-visible"
+      className="flex min-w-0 flex-col gap-2 lg:h-auto lg:gap-3 lg:overflow-visible"
       style={mobileAvailH ? { height: mobileAvailH, overflow: "hidden" } : undefined}
     >
       {/* Header pagina */}
@@ -799,7 +799,7 @@ export function ClientiClient({
 
       {/* Footer paginazione — sticky solo su mobile, in flusso normale da lg in su */}
       {total > 0 && (
-        <div className="sticky bottom-0 z-30 -mx-5 flex shrink-0 items-center justify-between gap-2 border-t border-border bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:static lg:mx-0 lg:flex-wrap lg:border-t-0 lg:bg-transparent lg:px-0 lg:py-0 lg:backdrop-blur-none">
+        <div className="sticky bottom-0 z-30 -mx-5 flex shrink-0 items-center justify-between gap-2 border-t border-border bg-background/95 px-3 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:static lg:mx-0 lg:flex-wrap lg:border-t-0 lg:bg-transparent lg:px-0 lg:py-0 lg:backdrop-blur-none">
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <span className="hidden truncate text-sm text-muted-foreground lg:inline">
               {rangeStart}–{rangeEnd} di {total.toLocaleString("it-IT")}

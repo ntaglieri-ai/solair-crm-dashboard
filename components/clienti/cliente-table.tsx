@@ -485,13 +485,19 @@ export function ClienteTable({
       </colgroup>
       <TableHeader className={cn(LIGHTNING.header, stuck && LIGHTNING.headerStuck)}>
           <TableRow className="hover:bg-transparent">
-            {/* Selezione */}
-            <TableHead className={cn(LIGHTNING.headCell, "sticky left-0 z-30 w-11 !border-b-teal/35 !bg-[linear-gradient(135deg,rgb(46_139_114/0.18),rgb(59_130_246/0.12))]")}>
-              <Checkbox
-                checked={allSelected}
-                onCheckedChange={onToggleAll}
-                aria-label="Seleziona tutti"
-              />
+            {/* Selezione. Sfondo OPACO, non il gradiente semitrasparente
+                usato dalle altre intestazioni: questa cella resta ferma
+                mentre il corpo scorre di lato, e con un fondo translucido
+                le colonne che le passano sotto traspaiono e cancellano
+                visivamente la casella. */}
+            <TableHead className={cn(LIGHTNING.headCell, "sticky left-0 z-30 w-11 !border-b-teal/35 !bg-secondary")}>
+              <div className="flex items-center justify-center">
+                <Checkbox
+                  checked={allSelected}
+                  onCheckedChange={onToggleAll}
+                  aria-label="Seleziona tutti"
+                />
+              </div>
             </TableHead>
             {columns.map((col) => {
               const left = isLeftAligned(col.id)
@@ -601,7 +607,10 @@ export function ClienteTable({
                 LIGHTNING.headCell,
                 LIGHTNING.headLabel,
                 LIGHTNING.headActions,
-                "!border-b-teal/35 !bg-[linear-gradient(135deg,rgb(46_139_114/0.18),rgb(59_130_246/0.12))]",
+                // Come la cella di selezione: opaca, perche' e' sticky a
+                // destra e il gradiente translucido lasciava trasparire le
+                // colonne che le scorrono sotto.
+                "!border-b-teal/35 !bg-secondary",
               )}
               style={{
                 width: CLIENTE_ACTIONS_COLUMN_WIDTH,

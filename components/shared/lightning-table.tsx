@@ -73,11 +73,19 @@ export const LIGHTNING = {
   cellLeader:
     "sticky left-0 z-10 transition-shadow group-hover/row:shadow-[inset_4px_0_0_0_var(--teal)] group-data-[state=selected]/row:shadow-[inset_4px_0_0_0_var(--info)]",
 
-  /** Cella delle azioni (sticky a destra). */
+  /**
+   * Cella delle azioni (sticky a destra).
+   *
+   * Sfondo pieno e non translucido: queste celle restano ferme mentre il
+   * corpo scorre in orizzontale, e con uno sfondo al 95% le colonne che
+   * passano sotto traspaiono — sui tre puntini sembravano sparire
+   * (segnalato da Nando il 16/09). La leggibilita' di cio' che sta fermo
+   * viene prima dell'effetto vetro.
+   */
   headActions:
-    "sticky right-0 z-40 border-l border-l-border/80 bg-secondary/95 text-center shadow-[-16px_0_24px_-18px_rgb(15_23_42/0.58)] backdrop-blur-md",
+    "sticky right-0 z-40 border-l border-l-border/80 bg-secondary text-center shadow-[-16px_0_24px_-18px_rgb(15_23_42/0.58)]",
   cellActions:
-    "sticky right-0 z-20 border-l border-l-border/80 bg-card/95 text-right shadow-[-16px_0_22px_-18px_rgb(15_23_42/0.62)] backdrop-blur-md group-hover/row:bg-teal/10 group-data-[state=selected]/row:bg-info/10",
+    "sticky right-0 z-20 border-l border-l-border/80 bg-card text-right shadow-[-16px_0_22px_-18px_rgb(15_23_42/0.62)] group-hover/row:bg-teal/10 group-data-[state=selected]/row:bg-info/10",
 } as const
 
 export type Density = "comoda" | "normale" | "densa"

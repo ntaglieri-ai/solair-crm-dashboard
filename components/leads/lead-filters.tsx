@@ -9,6 +9,7 @@ import { useTags } from "@/lib/tag-store"
 import { MultiFilterSelect, type MultiFilterOption } from "@/components/shared/multi-filter-select"
 import { hasFilterValues } from "@/lib/shared/filter-values"
 import { useLeadFieldOptions } from "@/lib/leads/use-lead-field-options"
+import { cn } from "@/lib/utils"
 
 export type ScoreFilter = "all" | "caldo" | "medio" | "freddo"
 type ScoreFilterValue = Exclude<ScoreFilter, "all">
@@ -78,18 +79,29 @@ export function countActiveLeadFilters(filters: LeadFilterState): number {
 export function LeadSearchInput({
   value,
   onChange,
+  compact = false,
 }: {
   value: string
   onChange: (v: string) => void
+  /** In riga con i pulsanti dell'header (desktop): stessa altezza, meno ingombro. */
+  compact?: boolean
 }) {
   return (
     <div className="relative min-w-0 flex-1">
-      <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground sm:left-4 sm:size-5" />
+      <Search
+        className={cn(
+          "absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground",
+          !compact && "sm:left-4 sm:size-5",
+        )}
+      />
       <Input
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Cerca lead per nome, email o telefono"
-        className="h-10 rounded-lg border-border bg-card pl-10 text-sm shadow-sm sm:h-12 sm:pl-12 sm:text-[15px]"
+        placeholder={compact ? "Cerca lead..." : "Cerca lead per nome, email o telefono"}
+        className={cn(
+          "h-10 rounded-lg border-border bg-card pl-10 text-sm shadow-sm",
+          !compact && "sm:h-12 sm:pl-12 sm:text-[15px]",
+        )}
         aria-label="Cerca lead"
       />
     </div>

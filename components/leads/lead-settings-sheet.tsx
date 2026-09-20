@@ -133,7 +133,7 @@ const DENSITY_OPTIONS: {
 ]
 
 /** Scelte di default; l'elenco Clienti ne passa una piu' lunga (arriva a 100). */
-const ROWS_OPTIONS = [10, 30, 50]
+const ROWS_OPTIONS = [10, 30, 50, 200]
 
 function SettingRow({
   title,

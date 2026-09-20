@@ -85,6 +85,7 @@ export function LeadActionsMenu({
   selectedRows,
   tags,
   onCheckDuplicates,
+  onExportFiltered,
   onExportSelection,
   onBulkTransfer,
   onBulkUpdate,
@@ -101,7 +102,6 @@ export function LeadActionsMenu({
   tags: string[]
   onOpenSettings: (section: SettingsSectionId) => void
   onCheckDuplicates: () => void
-  onImport: () => void
   onExportFiltered: () => void
   onExportSelection: () => void
   onBulkTransfer: (owner: string) => void
@@ -341,6 +341,10 @@ export function LeadActionsMenu({
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuLabel>Dati e vista</DropdownMenuLabel>
+                <DropdownMenuItem onClick={onExportFiltered}>
+                  <IconDownload size={16} stroke={1.8} data-icon="inline-start" />
+                  Esporta
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setDialog("fullscreen")}>
                   <IconTable size={16} stroke={1.8} data-icon="inline-start" />
                   Vista tabellare avanzata

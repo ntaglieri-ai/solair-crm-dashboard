@@ -8,8 +8,6 @@ import {
   Plus,
   X,
   Loader2,
-  Upload,
-  Download,
   SlidersHorizontal,
 } from "lucide-react"
 import { IconSettings } from "@tabler/icons-react"
@@ -46,7 +44,6 @@ import {
   type SettingsSectionId,
 } from "@/components/leads/lead-settings-sheet"
 import { LeadActionsMenu } from "@/components/leads/lead-actions-menu"
-import { LeadImportDialog } from "@/components/leads/lead-import-dialog"
 import {
   ExportTruncatoDialog,
   type ExportTruncatoInfo,
@@ -100,6 +97,7 @@ const ROWS_ITEMS: Record<string, string> = {
   "20": "20 righe",
   "30": "30 righe",
   "50": "50 righe",
+  "200": "200 righe",
 }
 
 /** Viste rapide del drawer Filtri (Tutti/Da contattare/…). */
@@ -174,7 +172,6 @@ export function LeadsClient({
   const preferenceKey = `solair:leads:view:${preferenceOwner}:v3`
   const queryClient = useQueryClient()
   const [newLeadOpen, setNewLeadOpen] = useState(false)
-  const [importOpen, setImportOpen] = useState(false)
   const [filters, setFilters] = useState<LeadFilterState>(DEFAULT_FILTERS)
   const [advanced, setAdvanced] = useState<AdvancedFilterState>(EMPTY_ADVANCED)
   const [onlyDuplicates, setOnlyDuplicates] = useState(false)
@@ -760,7 +757,18 @@ export function LeadsClient({
             ) : null}
           </p>
         </div>
-        <div className="grid w-full grid-cols-3 gap-1.5 lg:flex lg:w-auto lg:flex-wrap lg:justify-end lg:gap-2">
+        <div className="flex w-full flex-col gap-1.5 lg:w-auto lg:flex-row lg:items-center lg:gap-3">
+          {/* Ricerca in riga con i pulsanti: solo da lg in su, per non rubare
+              spazio ai pulsanti quando vanno a capo su schermi piu' stretti
+              (sotto lg resta la barra dedicata, piu' comoda al tocco). */}
+          <div className="hidden lg:block lg:w-56 xl:w-64">
+            <LeadSearchInput
+              compact
+              value={filters.search}
+              onChange={(v) => handleFilterChange({ ...filters, search: v })}
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-1.5 lg:flex lg:w-auto lg:flex-wrap lg:justify-end lg:gap-2">
           {/* Impostazioni lead (generali, vista colonne) */}
           <LeadSettingsSheet
             open={settingsOpen}
@@ -796,7 +804,6 @@ export function LeadsClient({
             tags={allTags}
             onOpenSettings={openSettings}
             onCheckDuplicates={handleCheckDuplicates}
-            onImport={() => setImportOpen(true)}
             onExportFiltered={handleExportFiltered}
             onExportSelection={handleBulkExport}
             onBulkTransfer={handleBulkOwner}
@@ -807,24 +814,6 @@ export function LeadsClient({
             onBulkEmail={() => setBulkEmailOpen(true)}
             onBulkDelete={() => setBulkDeleteOpen(true)}
           />
-
-          <Button
-            variant="outline"
-            className="h-11 w-full gap-1.5 bg-card px-2 text-xs lg:h-10 lg:w-auto lg:gap-2 lg:px-3.5 lg:text-sm"
-            onClick={() => setImportOpen(true)}
-          >
-            <Upload className="size-[22px] lg:size-4" />
-            Importa
-          </Button>
-
-          <Button
-            variant="outline"
-            className="h-11 w-full gap-1.5 bg-card px-2 text-xs lg:h-10 lg:w-auto lg:gap-2 lg:px-3.5 lg:text-sm"
-            onClick={handleExportFiltered}
-          >
-            <Download className="size-[22px] lg:size-4" />
-            Esporta
-          </Button>
 
           <AdvancedFilters
             inline={!isMobile}
@@ -876,6 +865,7 @@ export function LeadsClient({
             <span className="lg:hidden">Nuovo</span>
             <span className="hidden lg:inline">Nuovo lead</span>
           </Button>
+          </div>
         </div>
       </div>
 
@@ -896,8 +886,9 @@ export function LeadsClient({
         </div>
       ) : null}
 
-      {/* Barra di ricerca — sempre su una riga, tutto il resto vive nel drawer "Filtri" */}
-      <div className="flex min-w-0 flex-row items-center gap-2 rounded-lg border border-border bg-card p-1 shadow-sm lg:p-2">
+      {/* Barra di ricerca dedicata: solo sotto lg, dove la ricerca compatta in
+          riga con i pulsanti dell'header non c'e' (vedi sopra). */}
+      <div className="flex min-w-0 flex-row items-center gap-2 rounded-lg border border-border bg-card p-1 shadow-sm lg:hidden">
         <LeadSearchInput
           value={filters.search}
           onChange={(v) => handleFilterChange({ ...filters, search: v })}
@@ -1145,8 +1136,6 @@ export function LeadsClient({
         onOpenChange={setNewLeadOpen}
         onCreate={handleCreateLead}
       />
-
-      <LeadImportDialog open={importOpen} onOpenChange={setImportOpen} />
     </div>
   )
 }

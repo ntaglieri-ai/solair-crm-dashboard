@@ -107,7 +107,7 @@ export const DEFAULT_LIST_PARAMS: LeadListParams = {
 }
 
 // Numero di lead pre-caricati lato server al primo render della pagina.
-export const INITIAL_PAGE_SIZE = 50
+export const INITIAL_PAGE_SIZE = 200
 
 // Parametri usati per il prefetch server-side iniziale. DEVONO coincidere con
 // lo stato iniziale di LeadsClient così che la chiave React Query corrisponda

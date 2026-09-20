@@ -86,7 +86,7 @@ function Greeting({
           Il tuo spazio di lavoro
         </div>
         <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
-          Buongiorno, {name.split(" ")[0]}
+          Ciao, {name.split(" ")[0]}
         </h1>
         <p className="mt-2 text-base text-muted-foreground">{subtitle}</p>
       </div>

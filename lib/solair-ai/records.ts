@@ -167,24 +167,64 @@ export async function inserisciRevisioni(
 ): Promise<void> {
   if (righe.length === 0) return
   const supabase = await createClient()
-  const { error } = await supabase.from("crm_revisioni_pending").upsert(
-    righe.map((riga) => ({
-      record_tipo: entita,
-      record_id: recordId,
-      campo: riga.campo.campo,
-      campo_etichetta: riga.campo.etichetta,
-      valore_attuale: riga.valoreAttuale,
-      valore_proposto: riga.campo.valore,
-      fonte_documento: riga.campo.fonte,
-      stato: "pending" as const,
-      creato_da: utenteId,
-    })),
-    // L'indice unico parziale copre le sole righe pendenti: una seconda
-    // lettura dello stesso documento aggiorna la proposta invece di
-    // accodarne una gemella.
-    { onConflict: "record_tipo,record_id,campo" },
+
+  // L'indice unico su (record_tipo, record_id, campo) e' parziale (solo le
+  // righe pendenti): PostgREST non puo' farci puntare un upsert con
+  // ON CONFLICT, quindi si cerca a mano la pendente esistente e si aggiorna
+  // quella, invece di accodarne una gemella.
+  const { data: esistenti, error: erroreLettura } = await supabase
+    .from("crm_revisioni_pending")
+    .select("id, campo")
+    .eq("record_tipo", entita)
+    .eq("record_id", recordId)
+    .eq("stato", "pending")
+    .in(
+      "campo",
+      righe.map((riga) => riga.campo.campo),
+    )
+
+  if (erroreLettura) throw new Error(`Revisioni non registrate: ${erroreLettura.message}`)
+
+  const idPerCampo = new Map(
+    (esistenti ?? []).map((riga) => [riga.campo as string, riga.id as string]),
   )
-  if (error) throw new Error(`Revisioni non registrate: ${error.message}`)
+
+  const daAggiornare = righe.filter((riga) => idPerCampo.has(riga.campo.campo))
+  const daCreare = righe.filter((riga) => !idPerCampo.has(riga.campo.campo))
+
+  for (const riga of daAggiornare) {
+    const { error } = await supabase
+      .from("crm_revisioni_pending")
+      .update({
+        campo_etichetta: riga.campo.etichetta,
+        valore_attuale: riga.valoreAttuale,
+        valore_proposto: riga.campo.valore,
+        fonte_documento: riga.campo.fonte,
+        creato_da: utenteId,
+        creato_il: new Date().toISOString(),
+      })
+      .eq("id", idPerCampo.get(riga.campo.campo))
+
+    if (error) throw new Error(`Revisioni non registrate: ${error.message}`)
+  }
+
+  if (daCreare.length > 0) {
+    const { error } = await supabase.from("crm_revisioni_pending").insert(
+      daCreare.map((riga) => ({
+        record_tipo: entita,
+        record_id: recordId,
+        campo: riga.campo.campo,
+        campo_etichetta: riga.campo.etichetta,
+        valore_attuale: riga.valoreAttuale,
+        valore_proposto: riga.campo.valore,
+        fonte_documento: riga.campo.fonte,
+        stato: "pending" as const,
+        creato_da: utenteId,
+      })),
+    )
+
+    if (error) throw new Error(`Revisioni non registrate: ${error.message}`)
+  }
 }
 
 /**

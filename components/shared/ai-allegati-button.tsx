@@ -148,9 +148,15 @@ export function AiAllegatiButton({
         return
       }
 
-      toast.success("Scheda aggiornata da allegati", {
-        description: `${corpo.aggiornati.length} campi scritti, ${corpo.inRevisione.length} in revisione.`,
-      })
+      if (corpo.aggiornati.length === 0 && corpo.inRevisione.length === 0) {
+        toast.info("Nessuna modifica necessaria", {
+          description: "I documenti confermano solo dati già presenti in scheda.",
+        })
+      } else {
+        toast.success("Scheda aggiornata da allegati", {
+          description: `${corpo.aggiornati.length} campi scritti, ${corpo.inRevisione.length} in revisione.`,
+        })
+      }
       setOpen(false)
       setProposta(null)
       router.refresh()

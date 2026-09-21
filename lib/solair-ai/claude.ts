@@ -2,6 +2,7 @@ import "server-only"
 
 import { richiediMessaggioClaude } from "./anthropic"
 import { CAMPI_AI } from "./campi"
+import { estraiContenutoDaBuffer } from "./estrazione-file"
 import type { ContenutoFile } from "./nextcloud"
 import type { SolairAiKnowledgeSnippet } from "./indice"
 import { ENTITA_AI, ENTITA_LABEL, isEntitaAI } from "./tipi"
@@ -330,10 +331,28 @@ export async function leggiDocumenti(params: {
         source: { type: "base64", media_type: contenuto.mediaType, data: contenuto.base64 },
       })
     } else {
-      // Nessun parser dedicato: il contenuto grezzo va al modello cosi'
-      // com'e'. Su un formato binario leggera' quello che riesce a leggere,
-      // e se non trova niente restituira' semplicemente zero campi.
-      const testo = Buffer.from(contenuto.base64, "base64").toString("utf8")
+      // docx/xlsx/pptx/odt/rtf/zip/testo semplice: si estrae il testo vero
+      // (stessa lettura dell'indice documentale) invece di spedire al
+      // modello i byte grezzi decodificati come UTF-8. Su un binario
+      // compresso come un .docx quella decodifica produce solo rumore
+      // illeggibile — ed e' anche piu' lenta, perche' gonfia il messaggio di
+      // caratteri senza senso invece del testo utile.
+      let testo: string
+      try {
+        const estratto = await estraiContenutoDaBuffer({
+          nome: contenuto.file.nome,
+          path: contenuto.file.path,
+          buffer: Buffer.from(contenuto.base64, "base64"),
+          contentType: null,
+          usaClaude: false,
+        })
+        testo =
+          estratto.stato === "unsupported"
+            ? `[Formato non leggibile automaticamente: ${estratto.errore ?? "sconosciuto"}]`
+            : estratto.testo || "[File vuoto o senza testo estraibile]"
+      } catch (errore) {
+        testo = `[Lettura fallita: ${errore instanceof Error ? errore.message : "errore sconosciuto"}]`
+      }
       blocchi.push({ type: "text", text: testo.slice(0, 200_000) })
     }
   }

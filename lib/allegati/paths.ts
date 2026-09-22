@@ -1,19 +1,8 @@
 // Calcolo dei percorsi cartella per gli allegati record (Lead/Cliente/
 // Installatori). Ogni modulo punta allo spazio Nextcloud scelto per il suo
 // archivio; il percorso resta deterministico per poterlo ricalcolare.
-//
-// ATTENZIONE: TEAM_FOLDER_ROOT va confermato con un test dal vivo (un
-// upload reale) prima di considerarlo definitivo — verificato che
-// l'account "solair-storage" vede questi percorsi sotto
-// solair-storage:/Solair-FileManager/Vendita-Digitale/..., ma le funzioni
-// admin-webdav.ts qui operano con l'account ADMIN (nextcloudAdminConfig),
-// che potrebbe vedere la stessa Team Folder "Solair" con un path leggermente
-// diverso alla radice. Se il primo upload di prova fallisce con 404/409,
-// aggiusta SOLO questa costante.
 
 export type AllegatoRecordTipo = "lead" | "cliente" | "installatore"
-
-const TEAM_FOLDER_ROOT = "Solair/Vendita-Digitale"
 
 /**
  * I Clienti stanno nell'archivio storico, non sotto Vendita-Digitale.
@@ -25,11 +14,12 @@ const TEAM_FOLDER_ROOT = "Solair/Vendita-Digitale"
  */
 const ARCHIVIO_CLIENTI = "Solair/Solair-Group/Clienti"
 const ARCHIVIO_LEADS = "Solair/Solair-Group/Leads"
+const ARCHIVIO_INSTALLATORI = "Solair/Solair-Group/Logistica/Installatori"
 
 const BASE_BY_TIPO: Record<AllegatoRecordTipo, string> = {
   lead: ARCHIVIO_LEADS,
   cliente: ARCHIVIO_CLIENTI,
-  installatore: `${TEAM_FOLDER_ROOT}/INSTALLATORI`,
+  installatore: ARCHIVIO_INSTALLATORI,
 }
 
 export function sanitizeName(name: string): string {

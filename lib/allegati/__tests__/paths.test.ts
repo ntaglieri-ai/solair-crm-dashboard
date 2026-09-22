@@ -36,7 +36,7 @@ describe("folderPathForRecord — altri moduli", () => {
     // Li' le cartelle le crea il CRM: il suffisso evita che due omonimi
     // finiscano nella stessa.
     const path = folderPathForRecord("lead", "aaaaaaaa-bbbb-cccc-dddd-eeeeee123456", "Mario Rossi")
-    expect(path).toBe("Solair/Vendita-Digitale/Preventivi progetto 2.0/Mario Rossi - 123456")
+    expect(path).toBe("Solair/Solair-Group/Leads/Mario Rossi - 123456")
   })
 
   it("gli Installatori restano dov'erano", () => {

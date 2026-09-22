@@ -1,7 +1,6 @@
 // Calcolo dei percorsi cartella per gli allegati record (Lead/Cliente/
-// Installatori). Riusa la struttura cartelle già esistente e migrata da
-// Zoho (decisione presa il 25/07 con Nando, dopo aver ispezionato il
-// contenuto reale con rclone) — nessuna struttura parallela nuova.
+// Installatori). Ogni modulo punta allo spazio Nextcloud scelto per il suo
+// archivio; il percorso resta deterministico per poterlo ricalcolare.
 //
 // ATTENZIONE: TEAM_FOLDER_ROOT va confermato con un test dal vivo (un
 // upload reale) prima di considerarlo definitivo — verificato che
@@ -25,9 +24,10 @@ const TEAM_FOLDER_ROOT = "Solair/Vendita-Digitale"
  * avere i documenti in due posti a seconda di chi li ha caricati.
  */
 const ARCHIVIO_CLIENTI = "Solair/Solair-Group/Clienti"
+const ARCHIVIO_LEADS = "Solair/Solair-Group/Leads"
 
 const BASE_BY_TIPO: Record<AllegatoRecordTipo, string> = {
-  lead: `${TEAM_FOLDER_ROOT}/Preventivi progetto 2.0`,
+  lead: ARCHIVIO_LEADS,
   cliente: ARCHIVIO_CLIENTI,
   installatore: `${TEAM_FOLDER_ROOT}/INSTALLATORI`,
 }

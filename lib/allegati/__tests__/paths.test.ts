@@ -39,9 +39,9 @@ describe("folderPathForRecord — altri moduli", () => {
     expect(path).toBe("Solair/Solair-Group/Leads/Mario Rossi - 123456")
   })
 
-  it("gli Installatori restano dov'erano", () => {
+  it("gli Installatori puntano all'archivio di Logistica", () => {
     const path = folderPathForRecord("installatore", "aaaaaaaa-bbbb-cccc-dddd-eeeeee123456", "Rossi Impianti")
-    expect(path.startsWith("Solair/Vendita-Digitale/INSTALLATORI/")).toBe(true)
+    expect(path).toBe("Solair/Solair-Group/Logistica/Installatori/Rossi Impianti - 123456")
   })
 })
 

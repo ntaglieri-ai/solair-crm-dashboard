@@ -1,19 +1,26 @@
 // Delta finale Zoho -> CRM dal backup completo Zoho (Data_001.zip).
 //
-// Step (--step create|link|update, anche separati da virgola, oppure "all"):
-//   create  clienti, lead e compiti presenti nel backup e assenti nel CRM →
-//           creati con il loro ID Zoho. I lead Zoho che hanno un candidato
-//           nello step "link" NON vengono creati (sarebbero duplicati).
-//   link    lead CRM con zoho_id null ↔ lead Zoho assenti dal CRM, con match
-//           email → telefono (ultime 10 cifre) → nome. Ambigui: solo report.
-//   update  record in comune con "Ora modifica" Zoho più recente del
-//           riferimento Zoho salvato nel CRM:
-//             - non modificato nel CRM dopo l'ultimo allineamento → aggiorna
-//               i campi mappati (mai svuotando un campo CRM) e zoho_modified_at;
-//             - modificato anche nel CRM → non toccato, riga in conflitti.csv.
-//           "Modificato nel CRM" = updated_at (l'unica colonna di ultima
-//           modifica scritta dall'app su leads/clienti/compiti; nessun trigger)
-//           successivo all'ultimo allineamento Zoho.
+// Zoho è il sistema operativo, il CRM è in test: dove i due divergono vince Zoho.
+//
+// Step (--step create|link|update|fix-decimali, anche separati da virgola,
+// oppure "all"):
+//   create        clienti, lead e compiti presenti nel backup e assenti nel CRM
+//                 → creati con il loro ID Zoho. Non vengono creati: i lead Zoho
+//                 con un candidato di link (inclusi gli ambigui, solo report) e i
+//                 compiti non collegati a un lead/cliente del CRM ("no_correlato").
+//   link          lead CRM con zoho_id null ↔ lead Zoho assenti dal CRM, con match
+//                 email → telefono (ultime 10 cifre) → nome. Ambigui (di solito
+//                 lead doppi in Zoho): solo report.
+//   update        record in comune con "Ora modifica" Zoho più recente di quella
+//                 salvata nel CRM (o senza riferimento, es. lead appena collegati):
+//                 Zoho vince anche sui record modificati nel CRM. Si scrivono solo
+//                 i campi con un valore in Zoho (un campo vuoto non tocca il CRM),
+//                 mai i proprietari, più zoho_modified_at.
+//   fix-decimali  tutti i clienti in comune: i campi numerici presi dal backup
+//                 (il vecchio import aveva perso il separatore decimale).
+//
+// Report: create.csv, link.csv e update-campi.csv (una riga per campo che
+// cambia, da update e fix-decimali) + riepilogo per step e per campo a console.
 //
 // Nessuna cancellazione. Default dry-run: scrive solo i CSV di report.
 // Uso:
@@ -60,11 +67,11 @@ const backupArg = argument("backup")
 const stepArg = argument("step")
 if (!backupArg || !stepArg) {
   console.error(
-    "Uso: final-zoho-delta.mjs --backup <cartella> --step create|link|update|all [--out <cartella>] [--apply]",
+    "Uso: final-zoho-delta.mjs --backup <cartella> --step create|link|update|fix-decimali|all [--out <cartella>] [--apply]",
   )
   process.exit(1)
 }
-const STEP_ORDER = ["create", "link", "update"]
+const STEP_ORDER = ["create", "link", "update", "fix-decimali"]
 const steps =
   stepArg === "all"
     ? STEP_ORDER
@@ -598,8 +605,14 @@ function computeLinks() {
       })
     }
   }
-  return { links, ambiguous, withCandidates: new Set(proposals.map((p) => p.zohoId)) }
+  return {
+    links,
+    ambiguous,
+    withCandidates: new Set(proposals.map((p) => p.zohoId)),
+    ambiguousIds: new Set(ambiguous.map((p) => p.zohoId)),
+  }
 }
+
 
 // ─── Step create ────────────────────────────────────────────────────────────
 
@@ -618,16 +631,19 @@ function buildNewRecord(name, zohoId, row) {
   return record
 }
 
-function resolveCorrelato(record, leadIds, clienteIds) {
-  const zohoId = normalizeZohoId(record.correlato_zoho_id)
-  if (!zohoId) return "nessuno"
-  const lead = leadIds.get(zohoId)
-  const cliente = clienteIds.get(zohoId)
-  if (lead && cliente) return "ambiguo"
-  if (!lead && !cliente) return "non risolto"
-  record.correlato_id = lead ?? cliente
-  record.correlato_tipo = lead ? "lead" : "cliente"
-  return record.correlato_tipo
+// Lead/cliente collegato a un compito: "Correlato a" e, in mancanza, "Nome
+// contatto" (in Zoho può puntare a un lead). null = nessun collegamento valido.
+function compitoCorrelato(record, leadIds, clienteIds) {
+  for (const column of ["correlato_zoho_id", "nome_contatto_zoho_id"]) {
+    const zohoId = normalizeZohoId(record[column])
+    if (!zohoId) continue
+    const lead = leadIds.get(zohoId)
+    const cliente = clienteIds.get(zohoId)
+    if (lead && cliente) return { ambiguous: true, zohoId }
+    if (lead) return { id: lead, tipo: "lead", zohoId }
+    if (cliente) return { id: cliente, tipo: "cliente", zohoId }
+  }
+  return null
 }
 
 function tagKey(value) {
@@ -664,37 +680,65 @@ async function assignLeadTags(inserted) {
   return assignments.length
 }
 
+async function insertRecords(name, records) {
+  const inserted = []
+  for (let i = 0; i < records.length; i += 100) {
+    const { data, error } = await supabase
+      .from(MODULES[name].table)
+      .insert(records.slice(i, i + 100))
+      .select(`id,${MODULES[name].key}`)
+    if (error) throw new Error(`Inserimento ${name}: ${error.message}`)
+    inserted.push(...(data ?? []))
+  }
+  return inserted
+}
+
+function fieldCounts(records) {
+  const counts = {}
+  for (const record of records) {
+    for (const [column, value] of Object.entries(record)) {
+      if (value !== null && value !== undefined && value !== "") counts[column] = (counts[column] ?? 0) + 1
+    }
+  }
+  return Object.fromEntries(Object.entries(counts).sort((a, b) => b[1] - a[1]))
+}
+
 async function stepCreate() {
-  const { withCandidates } = computeLinks()
+  const { withCandidates, ambiguousIds } = computeLinks()
   const report = []
   const summary = {}
   const plan = {}
-  for (const name of ["clienti", "leads", "compiti"]) {
-    const missing = [...backup[name]].filter(([zohoId]) => !crm[name].byZohoId.has(zohoId))
-    const skipped = name === "leads" ? missing.filter(([zohoId]) => withCandidates.has(zohoId)) : []
-    const toCreate = missing.filter(([zohoId]) => !(name === "leads" && withCandidates.has(zohoId)))
-    plan[name] = toCreate.map(([zohoId, row]) => ({ zohoId, row, record: buildNewRecord(name, zohoId, row) }))
-    summary[name] = { assentiNelCrm: missing.length, daCreare: toCreate.length }
-    if (name === "leads") summary[name].rinviatiAlLink = skipped.length
-  }
+  const missing = (name) => [...backup[name]].filter(([zohoId]) => !crm[name].byZohoId.has(zohoId))
 
-  // Correlati dei compiti: verso lead/clienti già nel CRM o creati qui sopra.
+  for (const name of ["clienti", "leads"]) {
+    const absent = missing(name)
+    const toCreate = name === "leads" ? absent.filter(([zohoId]) => !withCandidates.has(zohoId)) : absent
+    plan[name] = toCreate.map(([zohoId, row]) => ({ zohoId, row, record: buildNewRecord(name, zohoId, row) }))
+    summary[name] = { assentiNelCrm: absent.length, daCreare: toCreate.length }
+  }
+  const leadsAbsent = missing("leads")
+  summary.leads.ambigui_soloReport = leadsAbsent.filter(([z]) => ambiguousIds.has(z)).length
+  summary.leads.rinviatiAlLink = leadsAbsent.filter(([z]) => withCandidates.has(z) && !ambiguousIds.has(z)).length
+
+  // Compiti: solo se collegati a un lead/cliente del CRM (o creato qui sopra).
+  const pending = "(creato in questo step)"
   const leadIds = new Map([...crm.leads.byZohoId].map(([z, r]) => [z, r.id]))
   const clienteIds = new Map([...crm.clienti.byZohoId].map(([z, r]) => [z, r.id]))
-  const correlati = {}
-  const pendingCorrelati = []
-  for (const item of plan.compiti) {
-    let outcome = resolveCorrelato(item.record, leadIds, clienteIds)
-    const zohoRef = normalizeZohoId(item.record.correlato_zoho_id)
-    if (outcome === "non risolto" && (plan.leads.some((l) => l.zohoId === zohoRef) || plan.clienti.some((c) => c.zohoId === zohoRef))) {
-      outcome = "record creato in questo step"
-      pendingCorrelati.push(item)
-    }
-    correlati[outcome] = (correlati[outcome] ?? 0) + 1
+  for (const { zohoId } of plan.leads) leadIds.set(zohoId, pending)
+  for (const { zohoId } of plan.clienti) clienteIds.set(zohoId, pending)
+  const compitiAbsent = missing("compiti")
+  plan.compiti = []
+  const noCorrelato = []
+  for (const [zohoId, row] of compitiAbsent) {
+    const record = buildNewRecord("compiti", zohoId, row)
+    const correlato = compitoCorrelato(record, leadIds, clienteIds)
+    if (correlato && !correlato.ambiguous) plan.compiti.push({ zohoId, row, record })
+    else noCorrelato.push({ zohoId, record, ambiguous: Boolean(correlato?.ambiguous) })
   }
-  summary.compiti.correlati = correlati
+  summary.compiti = { assentiNelCrm: compitiAbsent.length, daCreare: plan.compiti.length, no_correlato: noCorrelato.length }
 
   for (const name of ["clienti", "leads", "compiti"]) {
+    summary[name].campi = fieldCounts(plan[name].map((item) => item.record))
     for (const { zohoId, record } of plan[name]) {
       report.push({
         azione: apply ? "creato" : "da creare",
@@ -706,38 +750,44 @@ async function stepCreate() {
       })
     }
   }
-  for (const [zohoId] of [...backup.leads].filter(([z]) => !crm.leads.byZohoId.has(z) && withCandidates.has(z))) {
-    report.push({ azione: "rinviato al link", modulo: "lead", id_crm: "", zoho_id: zohoId, nome: backup.leads.get(zohoId)["Nome e cognome"], campi: "" })
+  for (const { zohoId, record, ambiguous } of noCorrelato) {
+    report.push({
+      azione: "no_correlato",
+      modulo: "compito",
+      id_crm: "",
+      zoho_id: zohoId,
+      nome: record.oggetto,
+      campi: `${ambiguous ? "id presente sia tra i lead sia tra i clienti; " : ""}correlato_zoho_id=${formatValue(record.correlato_zoho_id)} | nome_contatto_zoho_id=${formatValue(record.nome_contatto_zoho_id)}`,
+    })
+  }
+  for (const [zohoId, row] of leadsAbsent.filter(([z]) => withCandidates.has(z))) {
+    report.push({
+      azione: ambiguousIds.has(zohoId) ? "ambiguo" : "rinviato al link",
+      modulo: "lead",
+      id_crm: "",
+      zoho_id: zohoId,
+      nome: row["Nome e cognome"],
+      campi: "",
+    })
   }
 
   if (apply) {
+    for (const { zohoId } of plan.clienti) clienteIds.delete(zohoId)
+    for (const { zohoId } of plan.leads) leadIds.delete(zohoId)
+    for (const inserted of await insertRecords("clienti", plan.clienti.map((item) => item.record))) {
+      clienteIds.set(normalizeZohoId(inserted.zoho_record_id), inserted.id)
+    }
     const insertedLeads = []
-    for (const name of ["clienti", "leads", "compiti"]) {
-      if (name === "compiti") {
-        for (const item of pendingCorrelati) {
-          const z = normalizeZohoId(item.record.correlato_zoho_id)
-          resolveCorrelato(item.record, leadIds, clienteIds)
-          if (!item.record.correlato_id) summary.compiti.correlati[`non risolto (${z})`] = 1
-        }
-      }
-      for (let i = 0; i < plan[name].length; i += 100) {
-        const batch = plan[name].slice(i, i + 100)
-        const { data, error } = await supabase
-          .from(MODULES[name].table)
-          .insert(batch.map((item) => item.record))
-          .select(`id,${MODULES[name].key}`)
-        if (error) throw new Error(`Inserimento ${name}: ${error.message}`)
-        for (const inserted of data ?? []) {
-          const zohoId = normalizeZohoId(inserted[MODULES[name].key])
-          if (name === "leads") {
-            leadIds.set(zohoId, inserted.id)
-            insertedLeads.push({ id: inserted.id, row: backup.leads.get(zohoId) })
-          }
-          if (name === "clienti") clienteIds.set(zohoId, inserted.id)
-        }
-      }
+    for (const inserted of await insertRecords("leads", plan.leads.map((item) => item.record))) {
+      leadIds.set(inserted.zoho_id, inserted.id)
+      insertedLeads.push({ id: inserted.id, row: backup.leads.get(inserted.zoho_id) })
     }
     summary.leads.tagAssegnati = await assignLeadTags(insertedLeads)
+    const compiti = plan.compiti.map(({ record }) => {
+      const correlato = compitoCorrelato(record, leadIds, clienteIds)
+      return { ...record, correlato_id: correlato.id, correlato_tipo: correlato.tipo }
+    })
+    await insertRecords("compiti", compiti)
     crm = await loadCrm()
   }
 
@@ -769,18 +819,17 @@ async function stepLink() {
       campi: `${item.reason}: ${item.candidates.map((lead) => lead.nome_lead ?? joinName(lead.nome, lead.cognome)).join(" / ")}`,
     })
   }
-  const byLevel = links.reduce((acc, link) => ((acc[link.level] = (acc[link.level] ?? 0) + 1), acc), {})
-
   const summary = {
     leadCrmSenzaZohoId: crm.leads.rows.filter((lead) => !lead.zoho_id).length,
     leadZohoAssentiNelCrm: [...backup.leads.keys()].filter((z) => !crm.leads.byZohoId.has(z)).length,
     daCollegare: links.length,
-    perCriterio: byLevel,
-    ambigui: ambiguous.length,
+    perCriterio: links.reduce((acc, link) => ((acc[link.level] = (acc[link.level] ?? 0) + 1), acc), {}),
+    ambigui_soloReport: ambiguous.length,
+    campi: { zoho_id: links.length },
   }
 
-  let written = 0
   if (apply) {
+    let written = 0
     await pool(
       links,
       async (link) => {
@@ -796,139 +845,177 @@ async function stepLink() {
       },
       "link",
     )
+    summary.collegati = written
     crm = await loadCrm()
+  } else {
+    // Dry-run: simula il collegamento, così l'update vede anche questi lead.
+    for (const link of links) {
+      link.lead.zoho_id = link.zohoId
+      crm.leads.byZohoId.set(link.zohoId, link.lead)
+    }
   }
-
-  if (apply) summary.collegati = written
   return { report, summary }
 }
 
-// ─── Step update ────────────────────────────────────────────────────────────
+// ─── Step update / fix-decimali ─────────────────────────────────────────────
 
-// Tolleranza per gli arrotondamenti tra timestamp scritti nella stessa insert.
-const CRM_EDIT_TOLERANCE_MS = 1000
-
-function lastAlignment(name, record) {
-  const marks = [millis(record.zoho_modified_at), millis(record.zoho_synced_at)]
-  // Compiti: zoho_modified_at mai valorizzato dall'import; l'allineamento è
-  // l'import stesso (created_at dei record importati).
-  if (name === "compiti") marks.push(millis(record.created_at))
-  const valid = marks.filter((value) => value !== null)
-  return valid.length > 0 ? Math.max(...valid) : null
+// I proprietari non si aggiornano mai da Zoho (né l'uuid né i riferimenti Zoho).
+const OWNER_COLUMNS = {
+  clienti: new Set(["clienti_proprietario_id", "clienti_proprietario_zoho_id", "clienti_proprietario"]),
+  leads: new Set(["lead_proprietario_id", "zoho_owner_id"]),
+  compiti: new Set(["proprietario_id", "proprietario_zoho_id", "proprietario_nome"]),
 }
 
+const fieldRows = []
+
+function recordChanges(step, name, record, changes) {
+  const module = MODULES[name]
+  for (const change of changes) {
+    fieldRows.push({
+      step,
+      tipo: module.label,
+      id: record.id,
+      nome: module.nameOf(record),
+      campo: change.column,
+      valore_crm: change.from,
+      valore_zoho: change.to,
+    })
+  }
+}
+
+function perField(changesByRecord) {
+  const counts = {}
+  for (const changes of changesByRecord) {
+    for (const { column } of changes) counts[column] = (counts[column] ?? 0) + 1
+  }
+  return Object.fromEntries(Object.entries(counts).sort((a, b) => b[1] - a[1]))
+}
+
+async function writeChanges(writes, label) {
+  let written = 0
+  await pool(
+    writes,
+    async ({ name, record, payload }) => {
+      const { data, error } = await supabase
+        .from(MODULES[name].table)
+        .update(payload)
+        .eq("id", record.id)
+        .select("id")
+      if (error) throw new Error(`${label} ${name} ${record.id}: ${error.message}`)
+      written += data?.length ?? 0
+    },
+    label,
+  )
+  return written
+}
+
+// Campi da aggiornare: solo quelli con un valore in Zoho e diversi dal CRM.
 function updateChanges(name, record, row) {
   const module = MODULES[name]
+  const owners = OWNER_COLUMNS[name]
   const changes = []
-  const payload = {}
   for (const field of module.fields) {
+    if (owners.has(field.column) || field.column === "zoho_modified_at") continue
     const value = zohoFieldValue(module, field, row)
-    // Mai svuotare un campo CRM con un valore Zoho vuoto (o assente dal backup).
     if (value === undefined || value === null) continue
-    if (field.column === "zoho_modified_at") continue
     if (sameValue(field, record[field.column], value)) continue
     changes.push({ column: field.column, from: record[field.column], to: value })
-    payload[field.column] = value
   }
   for (const [column, value] of Object.entries(resolvedRefs(name, row))) {
-    if (value === null || record[column] === value) continue
+    if (owners.has(column) || value === null || record[column] === value) continue
     changes.push({ column, from: record[column], to: value })
-    payload[column] = value
   }
-  return { changes, payload }
+  return changes
 }
 
 async function stepUpdate() {
-  const report = []
-  const conflicts = []
   const summary = {}
   const writes = []
-
   for (const name of ["clienti", "leads", "compiti"]) {
     const module = MODULES[name]
-    const counts = { inComune: 0, zohoPiuRecente: 0, aggiornabili: 0, conflitti: 0, senzaDifferenze: 0, senzaRiferimentoZoho: 0 }
-    const fieldStats = {}
+    const counts = { inComune: 0, zohoPiuRecente: 0, senzaRiferimentoZoho: 0, conCampiModificati: 0, soloZohoModifiedAt: 0 }
+    const changesByRecord = []
     for (const [zohoId, row] of backup[name]) {
       const record = crm[name].byZohoId.get(zohoId)
       if (!record) continue
       counts.inComune += 1
+      // Si aggiorna quando Zoho è più recente del riferimento salvato nel CRM,
+      // o quando il CRM non ha un riferimento (es. lead appena collegati).
       const zohoModified = millis(module.timestamp(row["Ora modifica"]))
       const crmReference = millis(record.zoho_modified_at ?? (name === "compiti" ? record.ora_modifica : null))
-      if (crmReference === null) {
-        counts.senzaRiferimentoZoho += 1
-        continue
-      }
-      if (zohoModified === null || zohoModified <= crmReference) continue
+      if (crmReference === null) counts.senzaRiferimentoZoho += 1
+      else if (zohoModified === null || zohoModified <= crmReference) continue
       counts.zohoPiuRecente += 1
 
-      const { changes, payload } = updateChanges(name, record, row)
+      const changes = updateChanges(name, record, row)
       const newZohoModified = [
         module.timestamp(row["Orario del registro delle modifiche"]),
         module.timestamp(row["Ora modifica"]),
       ].filter(Boolean).sort().at(-1)
-      const aligned = lastAlignment(name, record)
-      const editedInCrm = millis(record.updated_at) > aligned + CRM_EDIT_TOLERANCE_MS
-      const base = {
-        modulo: module.label,
-        id_crm: record.id,
-        zoho_id: zohoId,
-        nome: module.nameOf(record) ?? module.nameOf(mapZohoRow(module, row)),
+      if (changes.length > 0) counts.conCampiModificati += 1
+      else counts.soloZohoModifiedAt += 1
+      if (newZohoModified && millis(newZohoModified) !== millis(record.zoho_modified_at)) {
+        changes.push({ column: "zoho_modified_at", from: record.zoho_modified_at, to: newZohoModified })
       }
-
-      if (editedInCrm) {
-        counts.conflitti += 1
-        conflicts.push({
-          ...base,
-          azione: "conflitto",
-          campi: `CRM updated_at ${record.updated_at} > allineamento ${new Date(aligned).toISOString()}; Zoho Ora modifica ${row["Ora modifica"]}` +
-            (changes.length > 0 ? ` || ${describeChanges(changes)}` : " || nessun campo diverso"),
-        })
-        continue
-      }
-      if (changes.length === 0) counts.senzaDifferenze += 1
-      else counts.aggiornabili += 1
-      for (const change of changes) fieldStats[change.column] = (fieldStats[change.column] ?? 0) + 1
-      report.push({
-        ...base,
-        azione: changes.length > 0 ? (apply ? "aggiornato" : "da aggiornare") : "solo zoho_modified_at",
-        campi: describeChanges([
-          ...changes,
-          { column: "zoho_modified_at", from: record.zoho_modified_at, to: newZohoModified },
-        ]),
-      })
-      writes.push({ name, record, payload: { ...payload, zoho_modified_at: newZohoModified } })
+      if (changes.length === 0) continue
+      changesByRecord.push(changes)
+      recordChanges("update", name, record, changes)
+      const payload = Object.fromEntries(changes.map(({ column, to }) => [column, to]))
+      writes.push({ name, record, payload })
+      // Stato simulato per gli step successivi (fix-decimali) nello stesso run.
+      Object.assign(record, payload)
     }
-    counts.campiPiuModificati = Object.fromEntries(
-      Object.entries(fieldStats).sort((a, b) => b[1] - a[1]).slice(0, 10),
-    )
+    counts.campi = perField(changesByRecord)
     summary[name] = counts
   }
-
   if (apply) {
-    let written = 0
-    let skippedConcurrent = 0
-    await pool(
-      writes,
-      async ({ name, record, payload }) => {
-        // Guardia: se nel frattempo il record è stato modificato nel CRM,
-        // updated_at è cambiato e l'update non tocca nulla.
-        const { data, error } = await supabase
-          .from(MODULES[name].table)
-          .update(payload)
-          .eq("id", record.id)
-          .eq("updated_at", record.updated_at)
-          .select("id")
-        if (error) throw new Error(`Update ${name} ${record.id}: ${error.message}`)
-        if (data?.length) written += 1
-        else skippedConcurrent += 1
-      },
-      "update",
-    )
-    summary.scritti = written
-    summary.saltatiPerModificaConcorrente = skippedConcurrent
+    summary.scritti = await writeChanges(writes, "update")
+    crm = await loadCrm()
   }
+  return { summary }
+}
 
-  return { report, conflicts, summary }
+const NUMERIC_CLIENTE_FIELDS = CLIENTE_FIELDS.filter((field) => field.type === "numeric")
+
+async function stepFixDecimali() {
+  const writes = []
+  const changesByRecord = []
+  let inComune = 0
+  for (const [zohoId, row] of backup.clienti) {
+    const record = crm.clienti.byZohoId.get(zohoId)
+    if (!record) continue
+    inComune += 1
+    const changes = []
+    for (const field of NUMERIC_CLIENTE_FIELDS) {
+      const value = zohoFieldValue(MODULES.clienti, field, row)
+      if (value === undefined || value === null) continue
+      if (sameValue(field, record[field.column], value)) continue
+      changes.push({ column: field.column, from: record[field.column], to: value })
+    }
+    if (changes.length === 0) continue
+    changesByRecord.push(changes)
+    recordChanges("fix-decimali", "clienti", record, changes)
+    const payload = Object.fromEntries(changes.map(({ column, to }) => [column, to]))
+    writes.push({ name: "clienti", record, payload })
+    Object.assign(record, payload)
+  }
+  const summary = {
+    clienti: { inComune, conCampiModificati: writes.length, campi: perField(changesByRecord) },
+  }
+  if (apply) {
+    summary.scritti = await writeChanges(writes, "fix-decimali")
+    crm = await loadCrm()
+  }
+  return { summary }
+}
+
+function writeFieldReport() {
+  const header = ["step", "tipo", "id", "nome", "campo", "valore_crm", "valore_zoho"]
+  const lines = [header.join(",")]
+  for (const row of fieldRows) lines.push(header.map((key) => csvCell(row[key])).join(","))
+  const path = join(outDir, "update-campi.csv")
+  writeFileSync(path, `﻿${lines.join("\n")}\n`, "utf8")
+  return path
 }
 
 // ─── Main ───────────────────────────────────────────────────────────────────
@@ -951,12 +1038,15 @@ for (const step of STEP_ORDER.filter((value) => steps.includes(value))) {
     const { report, summary } = await stepLink()
     console.log(JSON.stringify(summary, null, 2))
     console.log(`→ ${writeReport("link.csv", report)}`)
+  } else if (step === "update") {
+    console.log(JSON.stringify((await stepUpdate()).summary, null, 2))
   } else {
-    const { report, conflicts, summary } = await stepUpdate()
-    console.log(JSON.stringify(summary, null, 2))
-    console.log(`→ ${writeReport("update.csv", report)}`)
-    console.log(`→ ${writeReport("conflitti.csv", conflicts)}`)
+    console.log(JSON.stringify((await stepFixDecimali()).summary, null, 2))
   }
+}
+
+if (steps.includes("update") || steps.includes("fix-decimali")) {
+  console.log(`\n→ ${writeFieldReport()} (${fieldRows.length} righe)`)
 }
 
 if (!apply) console.log("\nDry-run completato: nessun dato scritto. Aggiungi --apply per scrivere.")

@@ -35,7 +35,7 @@
 //   - compiti: orario convertito da Europe/Rome a UTC, ID Zoho con "zcrm_"
 //     (formato dell'import compiti già in produzione).
 import { execFile } from "node:child_process"
-import { mkdirSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import process from "node:process"
 import { promisify } from "node:util"
@@ -240,9 +240,9 @@ const COMPITO_FIELDS = [
   { zoho: "Nome contatto", column: "nome_contatto", type: "text" },
   { zoho: "Correlato a.id", column: "correlato_zoho_id", type: "zoho_ref" },
   { zoho: "Correlato a", column: "correlato_nome", type: "text" },
-  { zoho: "Stato", column: "stato", type: "text" },
-  { zoho: "Priorità", column: "priorita", type: "text" },
-  { zoho: "Ripeti", column: "ripeti", type: "text" },
+  { zoho: "Stato", column: "stato", type: "stato_compito" },
+  { zoho: "Priorità", column: "priorita", type: "priorita_compito" },
+  { zoho: "Ripeti", column: "ripeti", type: "ripeti" },
   { zoho: "Promemoria", column: "promemoria", type: "timestamp" },
   { zoho: "Creato da.id", column: "creato_da_zoho_id", type: "zoho_ref" },
   { zoho: "Creato da", column: "creato_da_nome", type: "text" },
@@ -257,6 +257,26 @@ const COMPITO_FIELDS = [
   { zoho: "Ora ultima attività", column: "ora_ultima_attivita", type: "timestamp" },
   { zoho: "Orario del registro delle modifiche", column: "zoho_modified_at", type: "timestamp" },
 ]
+
+// Stato/priorità compiti come in scripts/import-zoho-compiti.mjs (set canonico
+// usato da UI e kanban).
+const STATO_COMPITO_CANONICO = new Map([
+  ["non iniziato", "Non iniziato"],
+  ["da fare", "Non iniziato"],
+  ["in corso", "In corso"],
+  ["rinviato", "Rinviato"],
+  ["differito", "Rinviato"],
+  ["posticipato", "Rinviato"],
+  ["in attesa di input", "In attesa di input"],
+  ["in attesa", "In attesa di input"],
+  ["completato", "Completato"],
+  ["completata", "Completato"],
+])
+const PRIORITA_COMPITO_CANONICA = new Map([
+  ["Altissimo", "Alto"],
+  ["Normale", "Medio"],
+  ["Bassissimo", "Basso"],
+])
 
 // Come origineLeadValue in import-zoho-leads.mjs: Zoho a volte mette una data.
 function origineLeadValue(row) {
@@ -327,6 +347,18 @@ function zohoFieldValue(module, field, row) {
       return module.timestamp(raw)
     case "origine_lead":
       return origineLeadValue(row)
+    case "stato_compito": {
+      const stato = nullable(raw)
+      return stato ? STATO_COMPITO_CANONICO.get(stato.toLowerCase()) ?? stato : null
+    }
+    case "priorita_compito": {
+      const priorita = nullable(raw)
+      return priorita ? PRIORITA_COMPITO_CANONICA.get(priorita) ?? priorita : null
+    }
+    case "ripeti":
+      // Il backup completo usa il formato interno Zoho ("daily*#1^0*#...") e
+      // non l'RRULE degli export salvato nel CRM: non confrontabile, ignorato.
+      return String(raw ?? "").includes("*#") ? undefined : nullable(raw)
     default:
       return nullable(raw)
   }
@@ -857,7 +889,26 @@ async function stepLink() {
   return { report, summary }
 }
 
-// ─── Step update / fix-decimali ─────────────────────────────────────────────
+// ─── Step update: merge a tre vie / fix-decimali ────────────────────────────
+//
+// Base = valore del campo al momento dell'import da Zoho, letto dagli export
+// Zoho usati dagli import (--base-dir, default ~/Downloads: Lead_*/Leads_*,
+// Clienti_*, Compiti_* in .csv o .zip con dentro un .csv). Il CRM non ha uno
+// storico campo per campo (attivita.campo è sempre vuoto, audit_log non
+// salva dati_prima), quindi non è una fonte possibile.
+// Per ogni record si usa la versione dell'export il cui orario di modifica
+// coincide con quello salvato nel CRM (zoho_modified_at; compiti: ora_modifica).
+//
+// Per campo, con B = base, Z = backup, C = CRM:
+//   Z == B                → niente (al massimo è cambiato solo il CRM)
+//   Z vuoto               → niente (un vuoto Zoho non svuota mai il CRM)
+//   C vuoto               → aggiorna da Zoho (un vuoto CRM non è una modifica:
+//                           l'import non popolava alcuni campi)
+//   Z != B, C == B        → aggiorna da Zoho
+//   Z != B, C != B, C == Z → niente
+//   Z != B, C != B, C != Z → revisione.csv
+// Record senza base (lead nati nel CRM e collegati, versioni non trovate):
+// solo i campi vuoti nel CRM, più stato_lead per i lead nati nel CRM.
 
 // I proprietari non si aggiornano mai da Zoho (né l'uuid né i riferimenti Zoho).
 const OWNER_COLUMNS = {
@@ -865,8 +916,134 @@ const OWNER_COLUMNS = {
   leads: new Set(["lead_proprietario_id", "zoho_owner_id"]),
   compiti: new Set(["proprietario_id", "proprietario_zoho_id", "proprietario_nome"]),
 }
+const EMAIL_COLUMNS = new Set(["email", "e_mail_secondaria", "e_mail_enel_gaudi"])
+
+const BASE_FILE_PATTERNS = {
+  leads: /^Leads?_(\d{4}_\d{2}_\d{2})\.(csv|zip)$/,
+  clienti: /^Clienti_(\d{4}_\d{2}_\d{2})\.(csv|zip)$/,
+  compiti: /^Compiti_(\d{4}_\d{2}_\d{2})\.(csv|zip)$/,
+}
+
+const baseDir = resolve(expandHome(argument("base-dir") ?? "~/Downloads"))
+
+async function readBaseFile(path) {
+  if (path.endsWith(".csv")) {
+    return parse(readFileSync(path), { bom: true, columns: true, skip_empty_lines: true, relax_column_count: true })
+  }
+  const { stdout: listing } = await execFileAsync("unzip", ["-Z1", path], { encoding: "utf8" })
+  const entry = listing.split("\n").find((name) => name.endsWith(".csv"))
+  if (!entry) return null
+  const { stdout } = await execFileAsync("unzip", ["-p", path, entry], { encoding: "utf8", maxBuffer: 200 * 1024 * 1024 })
+  return parse(stdout, { bom: true, columns: true, skip_empty_lines: true, relax_column_count: true })
+}
+
+// Versioni base per modulo: zohoId → [{ file, row }], dalla più recente.
+async function loadBaseVersions() {
+  const files = readdirSync(baseDir)
+  const versions = {}
+  const used = {}
+  for (const [name, pattern] of Object.entries(BASE_FILE_PATTERNS)) {
+    // Una sola fonte per data: il .csv se c'è (lo zip ne è la copia compressa).
+    const byDate = new Map()
+    for (const file of files) {
+      const match = file.match(pattern)
+      if (!match) continue
+      if (!byDate.has(match[1]) || match[2] === "csv") byDate.set(match[1], file)
+    }
+    versions[name] = new Map()
+    used[name] = []
+    for (const [, file] of [...byDate].sort((a, b) => b[0].localeCompare(a[0]))) {
+      const rows = await readBaseFile(join(baseDir, file))
+      if (!rows) continue
+      used[name].push(`${file} (${rows.length})`)
+      for (const row of rows) {
+        const zohoId = normalizeZohoId(row["ID record"])
+        if (!zohoId) continue
+        if (!versions[name].has(zohoId)) versions[name].set(zohoId, [])
+        versions[name].get(zohoId).push({ file, row })
+      }
+    }
+  }
+  return { versions, used }
+}
+
+// Record mai modificato nel CRM dopo l'import (compiti: nessun zoho_modified_at,
+// l'import ha scritto created_at = updated_at).
+function untouchedInCrm(name, record) {
+  const aligned = name === "compiti" ? record.created_at : record.zoho_modified_at
+  return Boolean(aligned && record.updated_at) && millis(record.updated_at) <= millis(aligned) + 1000
+}
+
+function crmReference(name, record) {
+  return millis(name === "compiti" ? record.ora_modifica : record.zoho_modified_at)
+}
+
+function versionStamp(name, row) {
+  const module = MODULES[name]
+  const raw = name === "compiti"
+    ? row["Ora modifica"]
+    : row["Orario del registro delle modifiche"] ?? row["Ora modifica"]
+  return millis(module.timestamp(raw))
+}
+
+function findBase(name, record, zohoId) {
+  const reference = crmReference(name, record)
+  if (reference === null) return null
+  return (baseVersions[name].get(zohoId) ?? []).find(({ row }) => versionStamp(name, row) === reference) ?? null
+}
+
+// Il vecchio import clienti toglieva i punti dai numeri ("6.37" → 637): nel
+// confronto con la base quel valore vale come "non modificato nel CRM".
+function legacyClienteNumber(raw) {
+  const normalized = String(raw ?? "").trim().replace(/\./g, "").replace(",", ".")
+  if (!normalized) return null
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const NUMERIC_TEXT = /^-?\d+(?:\.\d+)?$/
+
+function sameForMerge(field, a, b) {
+  if (EMAIL_COLUMNS.has(field.column)) {
+    return String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase()
+  }
+  // Campi testo con numeri: il backup scrive "2500.0" dove l'export aveva "2500".
+  const textA = String(a ?? "").trim()
+  const textB = String(b ?? "").trim()
+  if (NUMERIC_TEXT.test(textA) && NUMERIC_TEXT.test(textB)) return Number(textA) === Number(textB)
+  return sameValue(field, a, b)
+}
+
+function isEmpty(value) {
+  return value === null || value === undefined || String(value).trim() === ""
+}
+
+function rawValue(field, row) {
+  const header = fieldHeaders(field).find((name) => name in row)
+  return header === undefined ? undefined : row[header]
+}
+
+// Campi confrontabili di un modulo: mapping + riferimenti non-proprietari.
+function mergeFields(name) {
+  const owners = OWNER_COLUMNS[name]
+  const fields = MODULES[name].fields.filter(
+    (field) => !owners.has(field.column) && field.column !== "zoho_modified_at",
+  )
+  const refs = Object.keys(resolvedRefs(name, {}))
+    .filter((column) => !owners.has(column))
+    .map((column) => ({ column, type: "ref" }))
+  return [...fields, ...refs]
+}
+
+function fieldValue(name, field, row) {
+  if (field.type === "ref") return resolvedRefs(name, row)[field.column]
+  return zohoFieldValue(MODULES[name], field, row)
+}
 
 const fieldRows = []
+const reviewRows = []
+let baseVersions = null
+let baseSources = null
 
 function recordChanges(step, name, record, changes) {
   const module = MODULES[name]
@@ -877,17 +1054,16 @@ function recordChanges(step, name, record, changes) {
       id: record.id,
       nome: module.nameOf(record),
       campo: change.column,
+      regola: change.rule,
       valore_crm: change.from,
       valore_zoho: change.to,
     })
   }
 }
 
-function perField(changesByRecord) {
+function countBy(items, key) {
   const counts = {}
-  for (const changes of changesByRecord) {
-    for (const { column } of changes) counts[column] = (counts[column] ?? 0) + 1
-  }
+  for (const item of items) counts[key(item)] = (counts[key(item)] ?? 0) + 1
   return Object.fromEntries(Object.entries(counts).sort((a, b) => b[1] - a[1]))
 }
 
@@ -909,63 +1085,132 @@ async function writeChanges(writes, label) {
   return written
 }
 
-// Campi da aggiornare: solo quelli con un valore in Zoho e diversi dal CRM.
-function updateChanges(name, record, row) {
-  const module = MODULES[name]
-  const owners = OWNER_COLUMNS[name]
+function mergeRecord(name, record, row, base) {
   const changes = []
-  for (const field of module.fields) {
-    if (owners.has(field.column) || field.column === "zoho_modified_at") continue
-    const value = zohoFieldValue(module, field, row)
-    if (value === undefined || value === null) continue
-    if (sameValue(field, record[field.column], value)) continue
-    changes.push({ column: field.column, from: record[field.column], to: value })
+  const reviews = []
+  let baseMismatch = []
+  // Lead nati nel CRM (appena collegati): nessuna versione Zoho importata.
+  const crmBorn = name === "leads" && record.zoho_modified_at == null
+  for (const field of mergeFields(name)) {
+    const zoho = fieldValue(name, field, row)
+    if (zoho === undefined || zoho === null) continue
+    const crmValue = record[field.column]
+    if (sameForMerge(field, crmValue, zoho)) continue
+
+    if (!base || (field.type !== "ref" && rawValue(field, base.row) === undefined)) {
+      // Senza base per il campo: solo se il CRM è vuoto (e stato_lead dei nati nel CRM).
+      if (isEmpty(crmValue)) changes.push({ column: field.column, from: crmValue, to: zoho, rule: "vuoto nel CRM" })
+      else if (crmBorn && field.column === "stato_lead") changes.push({ column: field.column, from: crmValue, to: zoho, rule: "stato_lead lead nato nel CRM" })
+      continue
+    }
+
+    const baseValue = fieldValue(name, field, base.row)
+    if (isEmpty(crmValue)) {
+      // Campo vuoto nel CRM: non lo consideriamo una modifica utente (l'import
+      // non popolava alcuni campi, es. iva, installatore_id, rating).
+      if (!sameForMerge(field, baseValue, zoho) || !isEmpty(baseValue)) {
+        changes.push({ column: field.column, from: crmValue, to: zoho, rule: "vuoto nel CRM" })
+      }
+      continue
+    }
+    if (sameForMerge(field, baseValue, zoho)) continue
+    const crmUnchanged =
+      sameForMerge(field, baseValue, crmValue) ||
+      (name === "clienti" && field.type === "numeric" &&
+        crmValue !== null && legacyClienteNumber(rawValue(field, base.row)) === Number(crmValue))
+    if (crmUnchanged) {
+      changes.push({ column: field.column, from: crmValue, to: zoho, rule: "cambiato solo in Zoho" })
+    } else {
+      reviews.push({ column: field.column, base: baseValue, zoho, crm: crmValue })
+    }
   }
-  for (const [column, value] of Object.entries(resolvedRefs(name, row))) {
-    if (owners.has(column) || value === null || record[column] === value) continue
-    changes.push({ column, from: record[column], to: value })
+  if (base && untouchedInCrm(name, record)) {
+    // Record mai toccato nel CRM: C deve coincidere con B. Se no, è un artefatto
+    // dell'import (diagnostica per verificare la base).
+    baseMismatch = mergeFields(name)
+      .filter((field) => field.type === "ref" || rawValue(field, base.row) !== undefined)
+      .filter((field) => {
+        const baseValue = fieldValue(name, field, base.row)
+        if (baseValue === null && isEmpty(record[field.column])) return false
+        if (name === "clienti" && field.type === "numeric" && record[field.column] !== null &&
+            legacyClienteNumber(rawValue(field, base.row)) === Number(record[field.column])) return false
+        return !sameForMerge(field, baseValue, record[field.column])
+      })
+      .map((field) => field.column)
   }
-  return changes
+  return { changes, reviews, baseMismatch }
 }
 
 async function stepUpdate() {
-  const summary = {}
+  const summary = { fontiBase: baseSources }
   const writes = []
   for (const name of ["clienti", "leads", "compiti"]) {
     const module = MODULES[name]
-    const counts = { inComune: 0, zohoPiuRecente: 0, senzaRiferimentoZoho: 0, conCampiModificati: 0, soloZohoModifiedAt: 0 }
-    const changesByRecord = []
+    const counts = {
+      inComune: 0,
+      conBase: 0,
+      senzaBase_natiNelCrm: 0,
+      senzaBase_versioneNonTrovata: 0,
+      recordAggiornati: 0,
+      recordConRevisione: 0,
+    }
+    const allChanges = []
+    const allReviews = []
+    const mismatches = []
+    let untouchedChecked = 0
     for (const [zohoId, row] of backup[name]) {
       const record = crm[name].byZohoId.get(zohoId)
       if (!record) continue
       counts.inComune += 1
-      // Si aggiorna quando Zoho è più recente del riferimento salvato nel CRM,
-      // o quando il CRM non ha un riferimento (es. lead appena collegati).
-      const zohoModified = millis(module.timestamp(row["Ora modifica"]))
-      const crmReference = millis(record.zoho_modified_at ?? (name === "compiti" ? record.ora_modifica : null))
-      if (crmReference === null) counts.senzaRiferimentoZoho += 1
-      else if (zohoModified === null || zohoModified <= crmReference) continue
-      counts.zohoPiuRecente += 1
+      const base = findBase(name, record, zohoId)
+      if (base) counts.conBase += 1
+      else if (name === "leads" && record.zoho_modified_at == null) counts.senzaBase_natiNelCrm += 1
+      else counts.senzaBase_versioneNonTrovata += 1
 
-      const changes = updateChanges(name, record, row)
-      const newZohoModified = [
+      const { changes, reviews, baseMismatch } = mergeRecord(name, record, row, base)
+      if (base && untouchedInCrm(name, record)) {
+        untouchedChecked += 1
+        mismatches.push(...baseMismatch)
+      }
+      for (const review of reviews) {
+        reviewRows.push({
+          tipo: module.label,
+          id: record.id,
+          nome: module.nameOf(record),
+          campo: review.column,
+          base: review.base,
+          zoho: review.zoho,
+          crm: review.crm,
+        })
+      }
+      allReviews.push(...reviews)
+      if (reviews.length > 0) counts.recordConRevisione += 1
+
+      // zoho_modified_at avanza solo se non resta nulla in revisione.
+      const zohoModified = [
         module.timestamp(row["Orario del registro delle modifiche"]),
         module.timestamp(row["Ora modifica"]),
       ].filter(Boolean).sort().at(-1)
-      if (changes.length > 0) counts.conCampiModificati += 1
-      else counts.soloZohoModifiedAt += 1
-      if (newZohoModified && millis(newZohoModified) !== millis(record.zoho_modified_at)) {
-        changes.push({ column: "zoho_modified_at", from: record.zoho_modified_at, to: newZohoModified })
+      if (reviews.length === 0 && zohoModified &&
+          (record.zoho_modified_at == null || millis(zohoModified) > millis(record.zoho_modified_at))) {
+        changes.push({ column: "zoho_modified_at", from: record.zoho_modified_at, to: zohoModified, rule: "riferimento Zoho" })
       }
       if (changes.length === 0) continue
-      changesByRecord.push(changes)
+      if (changes.some((change) => change.column !== "zoho_modified_at")) counts.recordAggiornati += 1
+      allChanges.push(...changes)
       recordChanges("update", name, record, changes)
       const payload = Object.fromEntries(changes.map(({ column, to }) => [column, to]))
       writes.push({ name, record, payload })
       // Stato simulato per gli step successivi (fix-decimali) nello stesso run.
       Object.assign(record, payload)
     }
-    counts.campi = perField(changesByRecord)
+    counts.aggiornamentiPerCampo = countBy(allChanges, (change) => change.column)
+    counts.aggiornamentiPerRegola = countBy(allChanges, (change) => change.rule)
+    counts.revisionePerCampo = countBy(allReviews, (review) => review.column)
+    counts.verificaBase = {
+      recordMaiModificatiNelCrm: untouchedChecked,
+      campiCrmDiversiDallaBase: countBy(mismatches.map((column) => ({ column })), (item) => item.column),
+    }
     summary[name] = counts
   }
   if (apply) {
@@ -975,12 +1220,16 @@ async function stepUpdate() {
   return { summary }
 }
 
+// fix-decimali: corregge solo i numeri rovinati dal vecchio import clienti
+// (valore CRM = valore Zoho senza punto decimale). Le altre differenze
+// numeriche restano al merge a tre vie.
 const NUMERIC_CLIENTE_FIELDS = CLIENTE_FIELDS.filter((field) => field.type === "numeric")
 
 async function stepFixDecimali() {
   const writes = []
-  const changesByRecord = []
+  const allChanges = []
   let inComune = 0
+  let altreDifferenze = 0
   for (const [zohoId, row] of backup.clienti) {
     const record = crm.clienti.byZohoId.get(zohoId)
     if (!record) continue
@@ -988,19 +1237,28 @@ async function stepFixDecimali() {
     const changes = []
     for (const field of NUMERIC_CLIENTE_FIELDS) {
       const value = zohoFieldValue(MODULES.clienti, field, row)
-      if (value === undefined || value === null) continue
+      if (value === undefined || value === null || record[field.column] === null) continue
       if (sameValue(field, record[field.column], value)) continue
-      changes.push({ column: field.column, from: record[field.column], to: value })
+      if (legacyClienteNumber(rawValue(field, row)) !== Number(record[field.column])) {
+        altreDifferenze += 1
+        continue
+      }
+      changes.push({ column: field.column, from: record[field.column], to: value, rule: "decimale perso nell'import" })
     }
     if (changes.length === 0) continue
-    changesByRecord.push(changes)
+    allChanges.push(...changes)
     recordChanges("fix-decimali", "clienti", record, changes)
     const payload = Object.fromEntries(changes.map(({ column, to }) => [column, to]))
     writes.push({ name: "clienti", record, payload })
     Object.assign(record, payload)
   }
   const summary = {
-    clienti: { inComune, conCampiModificati: writes.length, campi: perField(changesByRecord) },
+    clienti: {
+      inComune,
+      recordCorretti: writes.length,
+      correzioniPerCampo: countBy(allChanges, (change) => change.column),
+      altreDifferenzeNumeriche_nonToccate: altreDifferenze,
+    },
   }
   if (apply) {
     summary.scritti = await writeChanges(writes, "fix-decimali")
@@ -1009,11 +1267,10 @@ async function stepFixDecimali() {
   return { summary }
 }
 
-function writeFieldReport() {
-  const header = ["step", "tipo", "id", "nome", "campo", "valore_crm", "valore_zoho"]
+function writeCsv(name, header, rows) {
   const lines = [header.join(",")]
-  for (const row of fieldRows) lines.push(header.map((key) => csvCell(row[key])).join(","))
-  const path = join(outDir, "update-campi.csv")
+  for (const row of rows) lines.push(header.map((key) => csvCell(row[key])).join(","))
+  const path = join(outDir, name)
   writeFileSync(path, `﻿${lines.join("\n")}\n`, "utf8")
   return path
 }
@@ -1039,6 +1296,7 @@ for (const step of STEP_ORDER.filter((value) => steps.includes(value))) {
     console.log(JSON.stringify(summary, null, 2))
     console.log(`→ ${writeReport("link.csv", report)}`)
   } else if (step === "update") {
+    ;({ versions: baseVersions, used: baseSources } = await loadBaseVersions())
     console.log(JSON.stringify((await stepUpdate()).summary, null, 2))
   } else {
     console.log(JSON.stringify((await stepFixDecimali()).summary, null, 2))
@@ -1046,7 +1304,12 @@ for (const step of STEP_ORDER.filter((value) => steps.includes(value))) {
 }
 
 if (steps.includes("update") || steps.includes("fix-decimali")) {
-  console.log(`\n→ ${writeFieldReport()} (${fieldRows.length} righe)`)
+  const campi = writeCsv("update-campi.csv", ["step", "tipo", "id", "nome", "campo", "regola", "valore_crm", "valore_zoho"], fieldRows)
+  console.log(`\n→ ${campi} (${fieldRows.length} righe)`)
+}
+if (steps.includes("update")) {
+  const revisione = writeCsv("revisione.csv", ["tipo", "id", "nome", "campo", "base", "zoho", "crm"], reviewRows)
+  console.log(`→ ${revisione} (${reviewRows.length} righe)`)
 }
 
 if (!apply) console.log("\nDry-run completato: nessun dato scritto. Aggiungi --apply per scrivere.")

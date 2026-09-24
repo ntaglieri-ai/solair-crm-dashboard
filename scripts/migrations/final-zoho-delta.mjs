@@ -19,8 +19,11 @@
 //   fix-decimali  tutti i clienti in comune: i campi numerici presi dal backup
 //                 (il vecchio import aveva perso il separatore decimale).
 //
-// Report: create.csv, link.csv e update-campi.csv (una riga per campo che
-// cambia, da update e fix-decimali) + riepilogo per step e per campo a console.
+// Report: create.csv, link.csv, update-campi.csv (una riga per campo che
+// cambia, da update e fix-decimali), revisione.csv, revisione-clienti.csv,
+// revisione-lead.csv, valori-non-mappati.csv + riepilogo per step e per campo.
+// Lo script scrive solo i campi del mapping Zoho → CRM: l'elenco viene
+// stampato all'avvio e ogni scrittura è verificata contro di esso.
 //
 // Nessuna cancellazione. Default dry-run: scrive solo i CSV di report.
 // Uso:
@@ -529,6 +532,43 @@ const installatoreByZohoId = new Map(
 
 let crm = await loadCrm()
 
+// Campi a tendina: le colonne con opzioni attive in crm_column_values, la stessa
+// fonte dei menu nel CRM (i valori salvati sono le etichette). Lo script non
+// crea, rinomina o cancella opzioni: un valore Zoho si scrive solo se coincide
+// (senza badare a maiuscole) con un'opzione esistente, altrimenti finisce in
+// valori-non-mappati.csv.
+// Multiselect clienti (valori separati da ";"): lib/clienti/picklist-options.ts.
+const MULTISELECT_COLUMNS = {
+  clienti: new Set(["stato_sollecito", "zona", "tipo_ctr", "intervento_1", "intervento_2", "mod_pagamento_ct3_0", "stato_provvigione", "tipo_di_tensione"]),
+}
+const PICKLISTS = {}
+for (const row of await fetchAll("crm_column_values", "id,table_name,column_name,value,label,active")) {
+  if (!row.active) continue
+  const label = String(row.label || row.value).trim()
+  PICKLISTS[row.table_name] ??= new Map()
+  const columns = PICKLISTS[row.table_name]
+  if (!columns.has(row.column_name)) columns.set(row.column_name, new Map())
+  columns.get(row.column_name).set(label.toLowerCase(), label)
+}
+
+function isPicklist(name, column) {
+  return Boolean(PICKLISTS[MODULES[name].table]?.has(column))
+}
+
+// → { value: etichetta canonica, ok: false se non corrisponde a un'opzione }
+function canonicalOption(name, column, value) {
+  const options = PICKLISTS[MODULES[name].table]?.get(column)
+  if (!options || value === null || value === undefined) return { value, ok: true }
+  const parts = MULTISELECT_COLUMNS[name]?.has(column)
+    ? String(value).split(";").map((part) => part.trim()).filter(Boolean)
+    : [String(value).trim()]
+  const mapped = parts.map((part) => options.get(part.toLowerCase()))
+  if (mapped.length === 0 || mapped.some((label) => label === undefined)) return { value, ok: false }
+  return { value: mapped.join(";"), ok: true }
+}
+
+const unmappedRows = []
+
 // Riferimenti interni (uuid) risolti dagli ID Zoho, come negli import esistenti.
 function resolvedRefs(name, row) {
   if (name === "clienti") {
@@ -660,7 +700,24 @@ function buildNewRecord(name, zohoId, row) {
   if (createdAt) record.created_at = createdAt
   if (modifiedAt) record.updated_at = modifiedAt
   if (name === "clienti") record.ora_modifica ??= modifiedAt
+  // Tendine: solo opzioni già esistenti; gli altri valori non vengono scritti.
+  const unmapped = []
+  for (const [column, value] of Object.entries(record)) {
+    const option = canonicalOption(name, column, value)
+    if (option.ok) record[column] = option.value
+    else {
+      unmapped.push({ column, value })
+      delete record[column]
+    }
+  }
+  Object.defineProperty(record, "unmapped", { value: unmapped, enumerable: false })
   return record
+}
+
+function logUnmapped(name, id, nome, unmapped) {
+  for (const { column, value } of unmapped) {
+    unmappedRows.push({ tipo: MODULES[name].label, id, nome, campo: column, valore_zoho: value })
+  }
 }
 
 // Lead/cliente collegato a un compito: "Correlato a" e, in mancanza, "Nome
@@ -713,6 +770,7 @@ async function assignLeadTags(inserted) {
 }
 
 async function insertRecords(name, records) {
+  for (const record of records) assertWritable(name, "create", record)
   const inserted = []
   for (let i = 0; i < records.length; i += 100) {
     const { data, error } = await supabase
@@ -771,7 +829,10 @@ async function stepCreate() {
 
   for (const name of ["clienti", "leads", "compiti"]) {
     summary[name].campi = fieldCounts(plan[name].map((item) => item.record))
+    const unmapped = plan[name].flatMap(({ record }) => record.unmapped)
+    if (unmapped.length > 0) summary[name].valoriNonMappati = countBy(unmapped, (item) => item.column)
     for (const { zohoId, record } of plan[name]) {
+      logUnmapped(name, `zoho:${zohoId}`, MODULES[name].nameOf(record), record.unmapped)
       report.push({
         azione: apply ? "creato" : "da creare",
         modulo: MODULES[name].label,
@@ -866,6 +927,7 @@ async function stepLink() {
       links,
       async (link) => {
         // Guardia: collega solo se il lead è ancora senza zoho_id.
+        assertWritable("leads", "update", { zoho_id: link.zohoId })
         const { data, error } = await supabase
           .from("leads")
           .update({ zoho_id: link.zohoId })
@@ -900,15 +962,21 @@ async function stepLink() {
 // coincide con quello salvato nel CRM (zoho_modified_at; compiti: ora_modifica).
 //
 // Per campo, con B = base, Z = backup, C = CRM:
-//   Z == B                → niente (al massimo è cambiato solo il CRM)
 //   Z vuoto               → niente (un vuoto Zoho non svuota mai il CRM)
-//   C vuoto               → aggiorna da Zoho (un vuoto CRM non è una modifica:
-//                           l'import non popolava alcuni campi)
-//   Z != B, C == B        → aggiorna da Zoho
-//   Z != B, C != B, C == Z → niente
-//   Z != B, C != B, C != Z → revisione.csv
-// Record senza base (lead nati nel CRM e collegati, versioni non trovate):
-// solo i campi vuoti nel CRM, più stato_lead per i lead nati nel CRM.
+//   Z == C                → niente
+//   ora_ultima_attivita, ora_modifica → vince il più recente tra Z e C
+//   stato_lead            → sempre Z
+//   C vuoto               → Z (un vuoto CRM non è una modifica: l'import non
+//                           popolava alcuni campi)
+//   Z == B                → niente (al massimo è cambiato solo il CRM)
+//   Z != B, C == B        → Z
+//   Z != B, C != B, C != Z → conflitto: campaign_name vince il CRM; descrizione
+//                           = testo CRM + riga vuota + testo Zoho (se non già
+//                           contenuto); gli altri campi in revisione.csv
+//                           (+ revisione-clienti.csv / revisione-lead.csv).
+// Record senza base (lead nati nel CRM e collegati): solo i campi vuoti nel
+// CRM, più stato_lead. Tendine: solo opzioni già esistenti nel CRM, gli altri
+// valori in valori-non-mappati.csv. Proprietari mai aggiornati.
 
 // I proprietari non si aggiornano mai da Zoho (né l'uuid né i riferimenti Zoho).
 const OWNER_COLUMNS = {
@@ -1036,8 +1104,43 @@ function mergeFields(name) {
 }
 
 function fieldValue(name, field, row) {
-  if (field.type === "ref") return resolvedRefs(name, row)[field.column]
-  return zohoFieldValue(MODULES[name], field, row)
+  const value = field.type === "ref"
+    ? resolvedRefs(name, row)[field.column]
+    : zohoFieldValue(MODULES[name], field, row)
+  if (value === undefined || value === null) return value
+  return canonicalOption(name, field.column, value).value
+}
+
+// Campi che lo script può scrivere: solo quelli del mapping Zoho → CRM (più le
+// colonne tecniche di allineamento). Ogni scrittura viene verificata qui.
+let WRITABLE = null
+
+function writableColumns() {
+  const result = {}
+  for (const [name, module] of Object.entries(MODULES)) {
+    const update = new Set([...mergeFields(name).map((field) => field.column), "zoho_modified_at"])
+    if (name === "clienti") for (const field of NUMERIC_CLIENTE_FIELDS) update.add(field.column)
+    if (name === "leads") update.add("zoho_id")
+    const create = new Set([
+      module.key,
+      ...module.fields.map((field) => field.column),
+      ...Object.keys(resolvedRefs(name, {})),
+      "created_at",
+      "updated_at",
+      ...(name === "clienti" ? ["ora_modifica"] : []),
+      ...(name === "compiti" ? ["correlato_id", "correlato_tipo"] : []),
+    ])
+    result[name] = { update, create }
+  }
+  return result
+}
+
+function assertWritable(name, kind, payload) {
+  const allowed = WRITABLE[name][kind]
+  const outside = Object.keys(payload).filter((column) => !allowed.has(column))
+  if (outside.length > 0) {
+    throw new Error(`${name}: tentata scrittura di campi fuori mapping (${outside.join(", ")})`)
+  }
 }
 
 const fieldRows = []
@@ -1072,6 +1175,7 @@ async function writeChanges(writes, label) {
   await pool(
     writes,
     async ({ name, record, payload }) => {
+      assertWritable(name, "update", payload)
       const { data, error } = await supabase
         .from(MODULES[name].table)
         .update(payload)
@@ -1085,22 +1189,48 @@ async function writeChanges(writes, label) {
   return written
 }
 
+// Orari di sistema: vince il più recente tra Zoho e CRM, mai in revisione.
+const LATEST_WINS = new Set(["ora_ultima_attivita", "ora_modifica"])
+
+function normalizedText(value) {
+  return String(value ?? "").replace(/\s+/g, " ").trim()
+}
+
+// Conflitto su descrizione: testo CRM + testo Zoho (riga vuota), se non già contenuto.
+function appendDescrizione(crmValue, zohoValue) {
+  if (normalizedText(crmValue).includes(normalizedText(zohoValue))) return crmValue
+  return `${String(crmValue).trimEnd()}\n\n${String(zohoValue).trim()}`
+}
+
 function mergeRecord(name, record, row, base) {
   const changes = []
   const reviews = []
+  const unmapped = []
+  const resolved = []
   let baseMismatch = []
-  // Lead nati nel CRM (appena collegati): nessuna versione Zoho importata.
-  const crmBorn = name === "leads" && record.zoho_modified_at == null
+  const propose = (column, from, to, rule) => {
+    if (!canonicalOption(name, column, to).ok) unmapped.push({ column, value: to })
+    else changes.push({ column, from, to, rule })
+  }
   for (const field of mergeFields(name)) {
     const zoho = fieldValue(name, field, row)
     if (zoho === undefined || zoho === null) continue
-    const crmValue = record[field.column]
+    const column = field.column
+    const crmValue = record[column]
     if (sameForMerge(field, crmValue, zoho)) continue
 
+    if (LATEST_WINS.has(column)) {
+      if (isEmpty(crmValue) || millis(zoho) > millis(crmValue)) propose(column, crmValue, zoho, "orario più recente")
+      continue
+    }
+    if (name === "leads" && column === "stato_lead") {
+      propose(column, crmValue, zoho, "stato_lead sempre da Zoho")
+      continue
+    }
+
     if (!base || (field.type !== "ref" && rawValue(field, base.row) === undefined)) {
-      // Senza base per il campo: solo se il CRM è vuoto (e stato_lead dei nati nel CRM).
-      if (isEmpty(crmValue)) changes.push({ column: field.column, from: crmValue, to: zoho, rule: "vuoto nel CRM" })
-      else if (crmBorn && field.column === "stato_lead") changes.push({ column: field.column, from: crmValue, to: zoho, rule: "stato_lead lead nato nel CRM" })
+      // Senza base per il campo (es. lead nati nel CRM): solo se il CRM è vuoto.
+      if (isEmpty(crmValue)) propose(column, crmValue, zoho, "vuoto nel CRM")
       continue
     }
 
@@ -1108,20 +1238,24 @@ function mergeRecord(name, record, row, base) {
     if (isEmpty(crmValue)) {
       // Campo vuoto nel CRM: non lo consideriamo una modifica utente (l'import
       // non popolava alcuni campi, es. iva, installatore_id, rating).
-      if (!sameForMerge(field, baseValue, zoho) || !isEmpty(baseValue)) {
-        changes.push({ column: field.column, from: crmValue, to: zoho, rule: "vuoto nel CRM" })
-      }
+      propose(column, crmValue, zoho, "vuoto nel CRM")
       continue
     }
     if (sameForMerge(field, baseValue, zoho)) continue
     const crmUnchanged =
       sameForMerge(field, baseValue, crmValue) ||
       (name === "clienti" && field.type === "numeric" &&
-        crmValue !== null && legacyClienteNumber(rawValue(field, base.row)) === Number(crmValue))
+        legacyClienteNumber(rawValue(field, base.row)) === Number(crmValue))
     if (crmUnchanged) {
-      changes.push({ column: field.column, from: crmValue, to: zoho, rule: "cambiato solo in Zoho" })
+      propose(column, crmValue, zoho, "cambiato solo in Zoho")
+    } else if (column === "campaign_name") {
+      resolved.push({ column, rule: "conflitto: vince il CRM" })
+    } else if (column === "descrizione") {
+      const merged = appendDescrizione(crmValue, zoho)
+      if (merged === crmValue) resolved.push({ column, rule: "conflitto: testo Zoho già contenuto" })
+      else propose(column, crmValue, merged, "conflitto: descrizione accodata")
     } else {
-      reviews.push({ column: field.column, base: baseValue, zoho, crm: crmValue })
+      reviews.push({ column, base: baseValue, zoho, crm: crmValue })
     }
   }
   if (base && untouchedInCrm(name, record)) {
@@ -1138,7 +1272,7 @@ function mergeRecord(name, record, row, base) {
       })
       .map((field) => field.column)
   }
-  return { changes, reviews, baseMismatch }
+  return { changes, reviews, unmapped, resolved, baseMismatch }
 }
 
 async function stepUpdate() {
@@ -1156,6 +1290,8 @@ async function stepUpdate() {
     }
     const allChanges = []
     const allReviews = []
+    const allUnmapped = []
+    const allResolved = []
     const mismatches = []
     let untouchedChecked = 0
     for (const [zohoId, row] of backup[name]) {
@@ -1167,7 +1303,10 @@ async function stepUpdate() {
       else if (name === "leads" && record.zoho_modified_at == null) counts.senzaBase_natiNelCrm += 1
       else counts.senzaBase_versioneNonTrovata += 1
 
-      const { changes, reviews, baseMismatch } = mergeRecord(name, record, row, base)
+      const { changes, reviews, unmapped, resolved, baseMismatch } = mergeRecord(name, record, row, base)
+      logUnmapped(name, record.id, module.nameOf(record), unmapped)
+      allUnmapped.push(...unmapped)
+      allResolved.push(...resolved)
       if (base && untouchedInCrm(name, record)) {
         untouchedChecked += 1
         mismatches.push(...baseMismatch)
@@ -1207,6 +1346,8 @@ async function stepUpdate() {
     counts.aggiornamentiPerCampo = countBy(allChanges, (change) => change.column)
     counts.aggiornamentiPerRegola = countBy(allChanges, (change) => change.rule)
     counts.revisionePerCampo = countBy(allReviews, (review) => review.column)
+    counts.conflittiRisoltiSenzaRevisione = countBy(allResolved, (item) => `${item.column}: ${item.rule}`)
+    counts.valoriNonMappatiPerCampo = countBy(allUnmapped, (item) => item.column)
     counts.verificaBase = {
       recordMaiModificatiNelCrm: untouchedChecked,
       campiCrmDiversiDallaBase: countBy(mismatches.map((column) => ({ column })), (item) => item.column),
@@ -1275,9 +1416,48 @@ function writeCsv(name, header, rows) {
   return path
 }
 
+// Una riga per record, con base / Zoho / CRM affiancati per ogni campo in conflitto.
+function reviewSummary(tipo, routePath) {
+  const rows = reviewRows.filter((row) => row.tipo === tipo)
+  const fields = Object.keys(countBy(rows, (row) => row.campo))
+  const byRecord = new Map()
+  for (const row of rows) {
+    if (!byRecord.has(row.id)) byRecord.set(row.id, { id: row.id, nome: row.nome, scheda: `/${routePath}/${row.id}`, conflicts: {} })
+    byRecord.get(row.id).conflicts[row.campo] = row
+  }
+  const header = ["nome", "scheda", "n_campi", "campi_in_conflitto", ...fields.flatMap((field) => [`${field} · base`, `${field} · Zoho`, `${field} · CRM`]), "id"]
+  const out = [...byRecord.values()]
+    .sort((a, b) => String(a.nome ?? "").localeCompare(String(b.nome ?? ""), "it"))
+    .map((record) => {
+      const line = {
+        nome: record.nome,
+        scheda: record.scheda,
+        n_campi: Object.keys(record.conflicts).length,
+        campi_in_conflitto: Object.keys(record.conflicts).join(", "),
+        id: record.id,
+      }
+      for (const field of fields) {
+        const conflict = record.conflicts[field]
+        line[`${field} · base`] = conflict?.base ?? ""
+        line[`${field} · Zoho`] = conflict?.zoho ?? ""
+        line[`${field} · CRM`] = conflict?.crm ?? ""
+      }
+      return line
+    })
+  return { header, rows: out }
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 mkdirSync(outDir, { recursive: true })
+WRITABLE = writableColumns()
+console.log("Campi che lo script può scrivere (qualunque altro campo non viene mai toccato):")
+for (const [name, { update, create }] of Object.entries(WRITABLE)) {
+  const onlyCreate = [...create].filter((column) => !update.has(column))
+  console.log(`  ${name} — update/link/fix-decimali (${update.size}): ${[...update].sort().join(", ")}`)
+  console.log(`  ${name} — in più solo alla creazione (${onlyCreate.length}): ${onlyCreate.sort().join(", ")}`)
+}
+console.log("  create lead: anche tabelle tag (solo nuovi tag lead) e lead_tags (solo per i lead creati).")
 console.log(`Modalità: ${apply ? "APPLY (scrittura su Supabase)" : "dry-run"}`)
 console.log(`Backup: ${zipPath}`)
 console.log(`Report: ${outDir}`)
@@ -1310,6 +1490,14 @@ if (steps.includes("update") || steps.includes("fix-decimali")) {
 if (steps.includes("update")) {
   const revisione = writeCsv("revisione.csv", ["tipo", "id", "nome", "campo", "base", "zoho", "crm"], reviewRows)
   console.log(`→ ${revisione} (${reviewRows.length} righe)`)
+  for (const [tipo, file, path] of [["cliente", "revisione-clienti.csv", "clienti"], ["lead", "revisione-lead.csv", "leads"]]) {
+    const { header, rows } = reviewSummary(tipo, path)
+    console.log(`→ ${writeCsv(file, header, rows)} (${rows.length} record)`)
+  }
+}
+if (steps.includes("create") || steps.includes("update")) {
+  const nonMappati = writeCsv("valori-non-mappati.csv", ["tipo", "id", "nome", "campo", "valore_zoho"], unmappedRows)
+  console.log(`→ ${nonMappati} (${unmappedRows.length} righe)`)
 }
 
 if (!apply) console.log("\nDry-run completato: nessun dato scritto. Aggiungi --apply per scrivere.")

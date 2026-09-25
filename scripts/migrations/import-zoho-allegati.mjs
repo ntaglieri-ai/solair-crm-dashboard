@@ -18,15 +18,21 @@
 // Il file si carica nella radice della cartella con il nome Zoho ("Nome file").
 //
 // Regole:
-//   - mai rinominare, spostare o cancellare: solo MKCOL (provisioning) e PUT
-//     di file nuovi;
+//   - mai spostare o cancellare, né rinominare file: solo MKCOL (provisioning),
+//     PUT di file nuovi e il MOVE delle cartelle simili descritto sotto;
 //   - stesso nome + stessa dimensione ovunque nella cartella del record
 //     (ricerca ricorsiva) → skip_presente; vale anche per "<nome> (zoho)",
 //     così un rilancio non ricarica i file già rinominati;
 //   - stesso nome, dimensione diversa → upload_rinominato con " (zoho)",
 //     mai sovrascrivere;
-//   - cartella assente → creata solo con provisionaCartellaRecord, la funzione
-//     usata dall'app alla creazione di cliente/lead;
+//   - cartella assente → se nell'archivio c'è UNA sola cartella con lo stesso
+//     nome scritto diversamente ("Rossi Mario" per "Mario Rossi"), viene
+//     rinominata nel nome esatto atteso dal CRM (MOVE senza sovrascrittura) e
+//     i file vanno lì; se ce n'è più d'una, se la stessa cartella corrisponde a
+//     più record o se è già la cartella esatta di un altro cliente → solo
+//     report, nessuna azione. Senza cartelle simili, la cartella nasce con
+//     provisionaCartellaRecord, la funzione usata dall'app alla creazione di
+//     cliente/lead. Nessun'altra cartella viene rinominata;
 //   - record assente dal CRM, record senza nome (la cartella sarebbe la radice
 //     dell'archivio) o file assente negli zip → solo report.
 // Idempotente e ripartibile: lo stato è Nextcloud stesso.
@@ -58,7 +64,7 @@ registerHooks({
   },
 })
 
-const { listFolder, uploadFile } = await import("../../lib/nextcloud/admin-webdav.ts")
+const { listFolder, moveFile, uploadFile } = await import("../../lib/nextcloud/admin-webdav.ts")
 const { folderPathForRecord, nomeSenzaCollisioni, sanitizeName, splitEstensione } = await import(
   "../../lib/allegati/paths.ts"
 )
@@ -314,7 +320,7 @@ async function listaAlbero(folderPath) {
 // Cartelle dell'archivio con lo stesso nome scritto diversamente ("Rossi
 // Mario" per "Mario Rossi", maiuscole, accenti, spazi attorno ai trattini):
 // il CRM non le vede, ma creare la cartella esatta divide i documenti in due
-// posti. Solo segnalazione nel report, nessuna azione.
+// posti. Restituisce tutte le candidate: si rinomina solo se è una sola.
 function chiaveNome(nome) {
   return nome
     .toLowerCase()
@@ -335,13 +341,16 @@ function cartellaSimile(cartella) {
       listFolder(base).then((result) => {
         const map = new Map()
         for (const item of result.ok ? result.items : []) {
-          if (item.isFolder) map.set(chiaveNome(item.nome), item.path)
+          if (!item.isFolder) continue
+          const chiave = chiaveNome(item.nome)
+          if (!map.has(chiave)) map.set(chiave, [])
+          map.get(chiave).push(item.path)
         }
         return map
       }),
     )
   }
-  return archivi.get(base).then((map) => map.get(chiaveNome(cartella.split("/").pop())) ?? "")
+  return archivi.get(base).then((map) => map.get(chiaveNome(cartella.split("/").pop())) ?? [])
 }
 
 function nomeZoho(nome) {
@@ -469,22 +478,114 @@ for (const piano of piani) {
 
 // ─── Esecuzione per cartella ────────────────────────────────────────────────
 
+async function esisteCartella(path) {
+  const result = await conRetry(`list ${path}`, async () => {
+    const listing = await listFolder(path)
+    if (!listing.ok) throw davError(listing, "PROPFIND fallita")
+    return listing
+  })
+  return result.status !== 404
+}
+
+// Prima passata: per ogni cartella mancante, cosa fare della cartella simile.
+// Serve vedere tutti i gruppi insieme: una cartella simile rivendicata da due
+// record non va assegnata a nessuno dei due.
+async function pianificaCartelle(gruppi) {
+  const mancanti = []
+  let indice = 0
+  async function worker() {
+    while (indice < gruppi.length) {
+      const gruppo = gruppi[indice++]
+      if (await esisteCartella(gruppo.cartella)) {
+        gruppo.cartellaAzione = "esistente"
+        continue
+      }
+      gruppo.simili = await cartellaSimile(gruppo.cartella)
+      mancanti.push(gruppo)
+    }
+  }
+  await Promise.all(Array.from({ length: concurrency }, worker))
+
+  const rivendicate = new Map()
+  for (const gruppo of mancanti) {
+    for (const path of gruppo.simili) rivendicate.set(path, (rivendicate.get(path) ?? 0) + 1)
+  }
+
+  // Cartelle simili che sono già la cartella esatta di un altro cliente.
+  const nomiCandidati = [...new Set(mancanti.filter((g) => g.tipo === "cliente").flatMap((g) => g.simili))].map(
+    (path) => path.split("/").pop(),
+  )
+  const cartelleDiClienti = new Set()
+  for (let index = 0; index < nomiCandidati.length; index += 100) {
+    const chunk = nomiCandidati.slice(index, index + 100)
+    const { data, error } = await supabase
+      .from("clienti")
+      .select("id,nome_clienti")
+      .in("nome_clienti", chunk)
+    if (error) throw new Error(`clienti per nome: ${error.message}`)
+    for (const cliente of data ?? []) {
+      cartelleDiClienti.add(folderPathForRecord("cliente", cliente.id, cliente.nome_clienti ?? ""))
+    }
+  }
+
+  for (const gruppo of mancanti) {
+    const [simile] = gruppo.simili
+    if (gruppo.simili.length === 0) gruppo.cartellaAzione = "cartella_creata"
+    else if (gruppo.simili.length > 1) gruppo.cartellaAzione = "cartella_simile_multipla"
+    else if (rivendicate.get(simile) > 1) gruppo.cartellaAzione = "cartella_simile_contesa"
+    else if (cartelleDiClienti.has(simile)) gruppo.cartellaAzione = "cartella_di_altro_record"
+    else gruppo.cartellaAzione = "rinominata"
+  }
+}
+
 async function processaCartella(gruppo) {
-  const albero = await listaAlbero(gruppo.cartella)
-  const simile = albero.exists ? "" : await cartellaSimile(gruppo.cartella)
-  if (!albero.exists) {
-    report.push({
-      ...gruppo.recordInfo,
-      azione: "cartella_creata",
-      modulo: gruppo.modulo,
-      cartella: gruppo.cartella,
-      cartella_simile: simile,
-    })
+  const simile = (gruppo.simili ?? []).join(" | ")
+  const rigaCartella = {
+    ...gruppo.recordInfo,
+    azione: gruppo.cartellaAzione,
+    modulo: gruppo.modulo,
+    cartella: gruppo.cartella,
+    cartella_simile: simile,
+  }
+
+  if (["cartella_simile_multipla", "cartella_simile_contesa", "cartella_di_altro_record"].includes(gruppo.cartellaAzione)) {
+    report.push(rigaCartella)
+    for (const file of gruppo.files) {
+      report.push({ ...file.base, azione: gruppo.cartellaAzione, cartella_simile: simile })
+    }
+    return
+  }
+
+  let albero
+  if (gruppo.cartellaAzione === "rinominata") {
+    const [attuale] = gruppo.simili
+    report.push({ ...rigaCartella, cartella_attuale: attuale, cartella_nuova: gruppo.cartella })
     if (apply) {
+      // Ricontrollo subito prima del MOVE; moveFile usa comunque Overwrite: F.
+      if (await esisteCartella(gruppo.cartella)) {
+        throw new Error(`la cartella ${gruppo.cartella} esiste già: rinomina annullata`)
+      }
+      const moved = await moveFile(attuale, gruppo.cartella)
+      if (!moved.ok) throw davError(moved, "rinomina cartella fallita")
+      // Stessa struttura di una cartella nata dall'app (lead: Documenti obbligatori).
       const result = await provisionaCartellaRecord(gruppo.tipo, gruppo.record.id, gruppo.record.nome)
       if (!result.ok) throw davError(result, "provisioning cartella fallito")
-      if (result.path !== gruppo.cartella) {
-        throw new Error(`provisioning su percorso inatteso: ${result.path} ≠ ${gruppo.cartella}`)
+      albero = await listaAlbero(gruppo.cartella)
+    } else {
+      // Dry-run: si valutano i file sulla cartella attuale, con i percorsi che avranno dopo.
+      albero = await listaAlbero(attuale)
+      albero.files = albero.files.map((item) => ({ ...item, path: gruppo.cartella + item.path.slice(attuale.length) }))
+    }
+  } else {
+    albero = await listaAlbero(gruppo.cartella)
+    if (!albero.exists) {
+      report.push(rigaCartella)
+      if (apply) {
+        const result = await provisionaCartellaRecord(gruppo.tipo, gruppo.record.id, gruppo.record.nome)
+        if (!result.ok) throw davError(result, "provisioning cartella fallito")
+        if (result.path !== gruppo.cartella) {
+          throw new Error(`provisioning su percorso inatteso: ${result.path} ≠ ${gruppo.cartella}`)
+        }
       }
     }
   }
@@ -530,6 +631,7 @@ async function processaCartella(gruppo) {
 }
 
 const gruppi = [...perCartella.values()]
+await pianificaCartelle(gruppi)
 let prossimo = 0
 let fatti = 0
 async function worker() {
@@ -556,31 +658,36 @@ try {
   mkdirSync(outDir, { recursive: true })
   const reportPath = writeCsv(
     "allegati.csv",
-    ["azione", "modulo", "record_tipo", "record", "nome_record", "cartella", "file", "nome_nextcloud", "dimensione", "zoho_allegato", "zoho_record", "presente", "cartella_simile", "errore"],
+    ["azione", "modulo", "record_tipo", "record", "nome_record", "cartella", "file", "nome_nextcloud", "dimensione", "zoho_allegato", "zoho_record", "presente", "cartella_attuale", "cartella_nuova", "cartella_simile", "errore"],
     report,
   )
 
-  const AZIONI = ["upload", "upload_rinominato", "skip_presente", "cartella_creata", "record_non_trovato", "record_senza_nome", "file_mancante_nel_backup", "modulo_non_gestito", "errore"]
-  const perModulo = new Map()
-  for (const row of report) {
-    if (!perModulo.has(row.modulo)) perModulo.set(row.modulo, Object.fromEntries(AZIONI.map((a) => [a, 0])))
-    perModulo.get(row.modulo)[row.azione] += 1
+  const AZIONI = ["upload", "upload_rinominato", "skip_presente", "cartella_creata", "rinominata", "cartella_simile_multipla", "cartella_simile_contesa", "cartella_di_altro_record", "record_non_trovato", "record_senza_nome", "file_mancante_nel_backup", "modulo_non_gestito", "errore"]
+  // Righe allegato (hanno "file") e righe cartella contate separatamente.
+  function riepilogo(titolo, righe) {
+    const perModulo = new Map()
+    for (const row of righe) {
+      if (!perModulo.has(row.modulo)) perModulo.set(row.modulo, Object.fromEntries(AZIONI.map((a) => [a, 0])))
+      perModulo.get(row.modulo)[row.azione] += 1
+    }
+    const totali = Object.fromEntries(AZIONI.map((a) => [a, 0]))
+    for (const counts of perModulo.values()) for (const a of AZIONI) totali[a] += counts[a]
+    const colonne = AZIONI.filter((a) => totali[a] > 0)
+    const tabella = {}
+    for (const [modulo, counts] of [...perModulo.entries(), ["TOTALE", totali]]) {
+      tabella[modulo] = Object.fromEntries(colonne.map((a) => [a, counts[a]]))
+    }
+    console.log(`\n${titolo}:`)
+    console.table(tabella)
   }
-  const totali = Object.fromEntries(AZIONI.map((a) => [a, 0]))
-  for (const counts of perModulo.values()) for (const a of AZIONI) totali[a] += counts[a]
-  const colonne = AZIONI.filter((a) => totali[a] > 0)
-  const tabella = {}
-  for (const [modulo, counts] of [...perModulo.entries(), ["TOTALE", totali]]) {
-    tabella[modulo] = Object.fromEntries(colonne.map((a) => [a, counts[a]]))
-  }
-  console.log("\nRiepilogo per modulo e azione (cartella_creata conta le cartelle, le altre gli allegati):")
-  console.table(tabella)
-  const simili = report.filter((row) => row.azione === "cartella_creata" && row.cartella_simile)
-  if (simili.length > 0) {
-    console.log(
-      `\nCartelle da creare con una cartella simile già in archivio (colonna cartella_simile): ${simili.length}`,
-    )
-    for (const row of simili) console.log(`  ${row.cartella}  ~  ${row.cartella_simile}`)
+  riepilogo("Allegati per modulo e azione", report.filter((row) => row.file))
+  riepilogo("Cartelle per modulo e azione", report.filter((row) => !row.file))
+  const cartelle = report.filter((row) => !row.file && row.cartella_simile)
+  if (cartelle.length > 0) {
+    console.log(`\nCartelle simili (${cartelle.length}):`)
+    for (const row of cartelle) {
+      console.log(`  [${row.azione}] ${row.cartella_simile}  →  ${row.cartella}`)
+    }
   }
   console.log(`Report: ${reportPath}`)
   if (!apply) console.log("Dry-run: nessuna cartella creata, nessun file caricato. Rilancia con --apply per scrivere.")

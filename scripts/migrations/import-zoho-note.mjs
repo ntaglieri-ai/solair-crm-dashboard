@@ -10,6 +10,8 @@
 //   Tasks          → compito      (compiti.zoho_record_id, salvato con "zcrm_")
 //   CustomModule2  → installatore (installatori.zoho_id)
 //   CustomModule1 (Scadenze) e ogni altro modulo: non importati, solo report.
+// Un modulo il cui record_tipo non è ammesso da attivita_record_tipo_check
+// (oggi: Installatori) è modulo_non_gestito, anche nel dry-run.
 // Gli ID sono confrontati senza prefisso "zcrm_" da entrambe le parti.
 //
 // Testo: titolo (se c'è) in testa, HTML ridotto a testo semplice, menzioni
@@ -77,6 +79,12 @@ const MODULI = {
   Tasks: { recordTipo: "compito", table: "compiti", key: "zoho_record_id" },
   CustomModule2: { recordTipo: "installatore", table: "installatori", key: "zoho_id" },
 }
+// Valori ammessi dal vincolo attivita_record_tipo_check sul DB di produzione
+// (letto il 2026-09-25, non presente nelle migrazioni del repo):
+//   CHECK (record_tipo = ANY (ARRAY['lead', 'cliente', 'compito']))
+// Un record_tipo fuori da questa lista fa rifiutare l'intero blocco di insert.
+const RECORD_TIPI_AMMESSI = new Set(["lead", "cliente", "compito"])
+
 const NOMI_MODULO = {
   Contacts: "Clienti",
   Leads: "Lead",
@@ -292,7 +300,7 @@ for (const row of notes) {
   const zohoNoteId = normalizeZohoId(row["ID record"])
   const modulo = nullable(row["Parent Id.Module"]) ?? "?"
   const parentId = normalizeZohoId(row["ID  principale.id"] ?? row["ID principale.id"])
-  const config = MODULI[modulo]
+  const config = RECORD_TIPI_AMMESSI.has(MODULI[modulo]?.recordTipo) ? MODULI[modulo] : undefined
   const autoreZohoId = normalizeZohoId(row["Creato da.id"])
   const autore = crmUserFor(autoreZohoId)
   const nomeAutoreZoho = nomeUtenteZoho(autoreZohoId) ?? (autoreZohoId || "utente sconosciuto")
@@ -371,6 +379,11 @@ console.log(`Report: ${reportPath}`)
 if (!apply) {
   console.log(`\nDry-run: ${daCreare.length} note da creare. Rilancia con --apply per scriverle.`)
   process.exit(0)
+}
+
+const fuoriVincolo = daCreare.filter((nota) => !RECORD_TIPI_AMMESSI.has(nota.record_tipo))
+if (fuoriVincolo.length > 0) {
+  throw new Error(`record_tipo non ammessi da attivita_record_tipo_check: ${[...new Set(fuoriVincolo.map((n) => n.record_tipo))].join(", ")}`)
 }
 
 let inserite = 0

@@ -3,8 +3,7 @@ import type { ClienteRecord } from "@/lib/mock-data"
 import { parseClientiSearchParams } from "@/lib/clienti/api-types"
 import { queryClienti, createClienteRecord } from "@/lib/clienti/repository"
 import { requireApiRecord } from "@/lib/permissions/server"
-import { ensureFolder } from "@/lib/nextcloud/admin-webdav"
-import { folderPathForRecord } from "@/lib/allegati/paths"
+import { provisionaCartellaRecord } from "@/lib/allegati/provisioning"
 
 export async function GET(request: Request) {
   const guard = await requireApiRecord("clienti", "view")
@@ -40,8 +39,7 @@ export async function POST(request: Request) {
   // raggiungibile anche da PC/telefono senza passare dal CRM — sempre in
   // background, mai bloccante (decisione 25/07, stesso pattern di Lead).
   after(async () => {
-    const path = folderPathForRecord("cliente", created.id, created["Nome Clienti"])
-    const result = await ensureFolder(path)
+    const result = await provisionaCartellaRecord("cliente", created.id, created["Nome Clienti"])
     if (!result.ok) {
       console.error(`[allegati] creazione cartella cliente ${created.id} fallita:`, result.error)
     }

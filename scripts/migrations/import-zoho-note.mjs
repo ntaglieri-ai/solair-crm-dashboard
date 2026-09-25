@@ -11,7 +11,7 @@
 //   CustomModule2  → installatore (installatori.zoho_id)
 //   CustomModule1 (Scadenze) e ogni altro modulo: non importati, solo report.
 // Un modulo il cui record_tipo non è ammesso da attivita_record_tipo_check
-// (oggi: Installatori) è modulo_non_gestito, anche nel dry-run.
+// è modulo_non_gestito, anche nel dry-run.
 // Gli ID sono confrontati senza prefisso "zcrm_" da entrambe le parti.
 //
 // Testo: titolo (se c'è) in testa, HTML ridotto a testo semplice, menzioni
@@ -30,7 +30,8 @@
 // Nessuna cancellazione, nessuna modifica. Default dry-run: scrive solo il report.
 // Uso:
 //   node --env-file=.env.local scripts/migrations/import-zoho-note.mjs \
-//     --backup ~/migrazione-finale/zoho-backup [--out <cartella>] [--apply]
+//     --backup ~/migrazione-finale/zoho-backup [--out <cartella>] [--solo-autori] [--apply]
+// --solo-autori esegue solo la correzione autori (vedi sotto), senza import.
 import { execFile } from "node:child_process"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
@@ -59,9 +60,10 @@ function expandHome(path) {
 }
 
 const apply = process.argv.includes("--apply")
+const soloAutori = process.argv.includes("--solo-autori")
 const backupArg = argument("backup")
 if (!backupArg) {
-  console.error("Uso: import-zoho-note.mjs --backup <cartella> [--out <cartella>] [--apply]")
+  console.error("Uso: import-zoho-note.mjs --backup <cartella> [--out <cartella>] [--solo-autori] [--apply]")
   process.exit(1)
 }
 const backupDir = resolve(expandHome(backupArg))
@@ -80,10 +82,11 @@ const MODULI = {
   CustomModule2: { recordTipo: "installatore", table: "installatori", key: "zoho_id" },
 }
 // Valori ammessi dal vincolo attivita_record_tipo_check sul DB di produzione
-// (letto il 2026-09-25, non presente nelle migrazioni del repo):
-//   CHECK (record_tipo = ANY (ARRAY['lead', 'cliente', 'compito']))
+// (verificato il 2026-09-25 dopo la migrazione manuale che ha aggiunto
+// 'installatore'; il vincolo non è nelle migrazioni del repo):
+//   CHECK (record_tipo = ANY (ARRAY['lead', 'cliente', 'compito', 'installatore']))
 // Un record_tipo fuori da questa lista fa rifiutare l'intero blocco di insert.
-const RECORD_TIPI_AMMESSI = new Set(["lead", "cliente", "compito"])
+const RECORD_TIPI_AMMESSI = new Set(["lead", "cliente", "compito", "installatore"])
 
 const NOMI_MODULO = {
   Contacts: "Clienti",
@@ -258,7 +261,19 @@ console.log(`Note Zoho già in timeline: ${imported.size}`)
 
 // ─── Conversione ────────────────────────────────────────────────────────────
 
+// Utenti Zoho che né zoho_id né email collegano all'utente CRM giusto:
+// id Zoho → email dell'utente CRM.
+const ABBINAMENTI_UTENTI = new Map([
+  // Vecchio account Zoho "Cristian Virzi" (cristian.virz25@gmail.com).
+  ["667429000000850051", "cristian.virzi@solairgroup.it"],
+])
+for (const [zohoId, email] of ABBINAMENTI_UTENTI) {
+  if (!crmUserByEmail.has(email)) throw new Error(`Abbinamento ${zohoId}: nessun utente CRM con email ${email}`)
+}
+
 function crmUserFor(zohoUserId) {
+  const abbinato = ABBINAMENTI_UTENTI.get(zohoUserId)
+  if (abbinato) return crmUserByEmail.get(abbinato)
   const byId = crmUserByZohoId.get(zohoUserId)
   if (byId) return byId
   const email = zohoUserById.get(zohoUserId)?.email
@@ -374,7 +389,57 @@ if (menzioniNonRisolte.size > 0) {
 }
 console.log(`Report: ${reportPath}`)
 
+// ─── Correzione autori ──────────────────────────────────────────────────────
+// Note già importate quando l'autore Zoho non era abbinato (ABBINAMENTI_UTENTI):
+// autore null e testo "Nota Zoho di <nome>\n\n…". Si imposta l'autore e si
+// toglie il prefisso. Solo se: nota importata da Zoho, autore ancora null,
+// autore Zoho abbinato secondo il backup, prefisso esatto, e il testo senza
+// prefisso coincide con quello che l'import produrrebbe oggi (così si toglie
+// solo il prefisso, nient'altro). Si aggiornano solo utente_id e testo.
+
+const noteByZohoId = new Map(notes.map((row) => [normalizeZohoId(row["ID record"]), row]))
+const candidateAutori = await fetchAll("attivita", "id,zoho_note_id,testo,utente_id", (query) =>
+  query.not("zoho_note_id", "is", null).is("utente_id", null).eq("tipo", "nota").like("testo", "Nota Zoho di %"),
+)
+const correzioni = []
+const reportAutori = []
+for (const nota of candidateAutori) {
+  const row = noteByZohoId.get(nota.zoho_note_id)
+  const autoreZohoId = normalizeZohoId(row?.["Creato da.id"])
+  if (!row || !ABBINAMENTI_UTENTI.has(autoreZohoId)) continue
+  const autore = crmUserFor(autoreZohoId)
+  const prefisso = `Nota Zoho di ${nomeUtenteZoho(autoreZohoId) ?? autoreZohoId}\n\n`
+  const testo = nota.testo.startsWith(prefisso) ? nota.testo.slice(prefisso.length) : null
+  const atteso = testoNota(row, null).testo
+  const azione = testo === null ? "saltata_prefisso_diverso" : testo !== atteso ? "saltata_testo_diverso" : "correggi"
+  reportAutori.push({ azione, attivita_id: nota.id, zoho_note_id: nota.zoho_note_id, autore: autore.nome, anteprima: anteprima(nota.testo) })
+  if (azione === "correggi") correzioni.push({ id: nota.id, utente_id: autore.id, testo })
+}
+const reportAutoriPath = writeCsv("autori-corretti.csv", ["azione", "attivita_id", "zoho_note_id", "autore", "anteprima"], reportAutori)
+console.log(`\nCorrezione autori: ${correzioni.length} note da correggere, ${reportAutori.length - correzioni.length} saltate → ${reportAutoriPath}`)
+
+if (apply && correzioni.length > 0) {
+  let corrette = 0
+  for (const correzione of correzioni) {
+    // is(utente_id, null): se nel frattempo qualcuno ha assegnato un autore, non si tocca.
+    const { data, error } = await supabase
+      .from("attivita")
+      .update({ utente_id: correzione.utente_id, testo: correzione.testo })
+      .eq("id", correzione.id)
+      .is("utente_id", null)
+      .select("id")
+    if (error) throw new Error(`Correzione autore ${correzione.id}: ${error.message}`)
+    corrette += data?.length ?? 0
+  }
+  console.log(`Autori corretti: ${corrette} su ${correzioni.length}.`)
+}
+
 // ─── Scrittura ──────────────────────────────────────────────────────────────
+
+if (soloAutori) {
+  console.log("--solo-autori: import delle note non eseguito.")
+  process.exit(0)
+}
 
 if (!apply) {
   console.log(`\nDry-run: ${daCreare.length} note da creare. Rilancia con --apply per scriverle.`)

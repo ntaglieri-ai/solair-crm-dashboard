@@ -567,6 +567,77 @@ function canonicalOption(name, column, value) {
   return { value: mapped.join(";"), ok: true }
 }
 
+// Tipi reali delle colonne, dallo schema OpenAPI di PostgREST: il mapping
+// Zoho → CRM può dichiarare "text" una colonna che nel DB è numeric (es.
+// clienti.iva, dove Zoho ha anche "IVA INCLUSA"). Un valore che il DB
+// rifiuterebbe non va scritto: finisce in valori-non-mappati.csv, così
+// emerge già nel dry-run e l'apply non si ferma a metà.
+const COLUMN_FORMATS = await (async () => {
+  const response = await fetch(`${supabaseUrl}/rest/v1/`, {
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      Accept: "application/openapi+json",
+    },
+  })
+  if (!response.ok) throw new Error(`Schema PostgREST: HTTP ${response.status}`)
+  const { definitions } = await response.json()
+  const formats = {}
+  for (const module of Object.values(MODULES)) {
+    const properties = definitions?.[module.table]?.properties
+    if (!properties) throw new Error(`Schema PostgREST senza la tabella ${module.table}`)
+    formats[module.table] = new Map(Object.entries(properties).map(([column, def]) => [column, def.format]))
+  }
+  return formats
+})()
+
+const NUMERIC_FORMATS = new Set(["numeric", "double precision", "real"])
+const INTEGER_FORMATS = new Set(["integer", "bigint", "smallint"])
+const DECIMAL_TEXT = /^[+-]?\d+(?:[.,]\d+)?$/
+const DATE_TEXT = /^\d{4}-\d{2}-\d{2}$/
+
+// → { ok, value (eventualmente convertito), reason }
+function dbValue(name, column, value) {
+  const format = COLUMN_FORMATS[MODULES[name].table].get(column)
+  if (value === null || value === undefined || !format) return { ok: true, value }
+  if (NUMERIC_FORMATS.has(format) || INTEGER_FORMATS.has(format)) {
+    let number = null
+    if (typeof value === "number") number = value
+    else if (DECIMAL_TEXT.test(String(value).trim())) number = Number(String(value).trim().replace(",", "."))
+    if (number === null || !Number.isFinite(number)) return { ok: false, reason: `non è un numero (${format})` }
+    if (INTEGER_FORMATS.has(format) && !Number.isInteger(number)) return { ok: false, reason: `non è un intero (${format})` }
+    return { ok: true, value: number }
+  }
+  if (format === "boolean") {
+    const bool = typeof value === "boolean" ? value : booleanValue(value)
+    return bool === null ? { ok: false, reason: "non è un booleano" } : { ok: true, value: bool }
+  }
+  if (format === "date") {
+    const text = String(value).trim().slice(0, 10)
+    const valid = DATE_TEXT.test(text) && !Number.isNaN(new Date(`${text}T00:00:00Z`).valueOf())
+    return valid ? { ok: true, value: text } : { ok: false, reason: "non è una data" }
+  }
+  if (format.startsWith("timestamp")) {
+    return Number.isNaN(new Date(value).valueOf()) ? { ok: false, reason: "non è una data/ora" } : { ok: true, value }
+  }
+  return { ok: true, value }
+}
+
+// Tendina + tipo della colonna, nello stesso ordine in create e update.
+function writableValue(name, column, value) {
+  const option = canonicalOption(name, column, value)
+  if (!option.ok) return { ok: false, reason: "non corrisponde a un'opzione della tendina" }
+  return dbValue(name, column, option.value)
+}
+
+// Ultima difesa prima di ogni insert/update: nessun valore rifiutabile dal DB.
+function assertDbValues(name, payload) {
+  const invalid = Object.entries(payload).filter(([column, value]) => !dbValue(name, column, value).ok)
+  if (invalid.length > 0) {
+    throw new Error(`${name}: valori non validi per il DB (${invalid.map(([c, v]) => `${c}=${v}`).join(", ")})`)
+  }
+}
+
 const unmappedRows = []
 
 // Riferimenti interni (uuid) risolti dagli ID Zoho, come negli import esistenti.
@@ -700,13 +771,14 @@ function buildNewRecord(name, zohoId, row) {
   if (createdAt) record.created_at = createdAt
   if (modifiedAt) record.updated_at = modifiedAt
   if (name === "clienti") record.ora_modifica ??= modifiedAt
-  // Tendine: solo opzioni già esistenti; gli altri valori non vengono scritti.
+  // Tendine: solo opzioni già esistenti; numeri, date e booleani solo se
+  // validi per la colonna. Gli altri valori non vengono scritti.
   const unmapped = []
   for (const [column, value] of Object.entries(record)) {
-    const option = canonicalOption(name, column, value)
-    if (option.ok) record[column] = option.value
+    const checked = writableValue(name, column, value)
+    if (checked.ok) record[column] = checked.value
     else {
-      unmapped.push({ column, value })
+      unmapped.push({ column, value, reason: checked.reason })
       delete record[column]
     }
   }
@@ -715,8 +787,8 @@ function buildNewRecord(name, zohoId, row) {
 }
 
 function logUnmapped(name, id, nome, unmapped) {
-  for (const { column, value } of unmapped) {
-    unmappedRows.push({ tipo: MODULES[name].label, id, nome, campo: column, valore_zoho: value })
+  for (const { column, value, reason } of unmapped) {
+    unmappedRows.push({ tipo: MODULES[name].label, id, nome, campo: column, valore_zoho: value, motivo: reason })
   }
 }
 
@@ -770,7 +842,10 @@ async function assignLeadTags(inserted) {
 }
 
 async function insertRecords(name, records) {
-  for (const record of records) assertWritable(name, "create", record)
+  for (const record of records) {
+    assertWritable(name, "create", record)
+    assertDbValues(name, record)
+  }
   const inserted = []
   for (let i = 0; i < records.length; i += 100) {
     const { data, error } = await supabase
@@ -1176,6 +1251,7 @@ async function writeChanges(writes, label) {
     writes,
     async ({ name, record, payload }) => {
       assertWritable(name, "update", payload)
+      assertDbValues(name, payload)
       const { data, error } = await supabase
         .from(MODULES[name].table)
         .update(payload)
@@ -1209,8 +1285,9 @@ function mergeRecord(name, record, row, base) {
   const resolved = []
   let baseMismatch = []
   const propose = (column, from, to, rule) => {
-    if (!canonicalOption(name, column, to).ok) unmapped.push({ column, value: to })
-    else changes.push({ column, from, to, rule })
+    const checked = writableValue(name, column, to)
+    if (!checked.ok) unmapped.push({ column, value: to, reason: checked.reason })
+    else changes.push({ column, from, to: checked.value, rule })
   }
   for (const field of mergeFields(name)) {
     const zoho = fieldValue(name, field, row)
@@ -1384,7 +1461,12 @@ async function stepFixDecimali() {
         altreDifferenze += 1
         continue
       }
-      changes.push({ column: field.column, from: record[field.column], to: value, rule: "decimale perso nell'import" })
+      const checked = dbValue("clienti", field.column, value)
+      if (!checked.ok) {
+        logUnmapped("clienti", record.id, MODULES.clienti.nameOf(record), [{ column: field.column, value, reason: checked.reason }])
+        continue
+      }
+      changes.push({ column: field.column, from: record[field.column], to: checked.value, rule: "decimale perso nell'import" })
     }
     if (changes.length === 0) continue
     allChanges.push(...changes)
@@ -1496,7 +1578,7 @@ if (steps.includes("update")) {
   }
 }
 if (steps.includes("create") || steps.includes("update")) {
-  const nonMappati = writeCsv("valori-non-mappati.csv", ["tipo", "id", "nome", "campo", "valore_zoho"], unmappedRows)
+  const nonMappati = writeCsv("valori-non-mappati.csv", ["tipo", "id", "nome", "campo", "valore_zoho", "motivo"], unmappedRows)
   console.log(`→ ${nonMappati} (${unmappedRows.length} righe)`)
 }
 

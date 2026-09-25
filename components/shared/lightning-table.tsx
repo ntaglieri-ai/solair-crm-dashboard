@@ -26,6 +26,20 @@ import { cn } from "@/lib/utils"
  *  - Barra di accento a sinistra sulla riga sotto il cursore, che
  *    sostituisce il solo cambio di fondo nel dire "sei qui".
  */
+/**
+ * Fondi di hover/selezione per le celle sticky, gia' "stesi" sul card.
+ *
+ * `bg-teal/10` e' translucido: sulle celle ferme, mentre il corpo scorre
+ * in orizzontale, la colonna che passa sotto traspariva proprio al
+ * passaggio del mouse (testo dell'ultima colonna sovrapposto alle azioni,
+ * segnalato da Nando il 25/09). color-mix da' lo stesso colore visivo
+ * ma opaco.
+ */
+const STICKY_HOVER =
+  "group-hover/row:bg-[color-mix(in_oklab,var(--teal)_10%,var(--card))]"
+const STICKY_SELECTED =
+  "group-data-[state=selected]/row:bg-[color-mix(in_oklab,var(--info)_10%,var(--card))]"
+
 export const LIGHTNING = {
   /** <thead> sticky. `stuck` aggiunge l'ombra quando il corpo scorre. */
   header:
@@ -62,8 +76,7 @@ export const LIGHTNING = {
    * selezione, e la riga sembra spezzata in tre. Qui ripetono gli stessi
    * fondi di `row`, agganciati al gruppo della riga.
    */
-  cellSticky:
-    "bg-card group-hover/row:bg-teal/10 group-data-[state=selected]/row:bg-info/10",
+  cellSticky: `bg-card ${STICKY_HOVER} ${STICKY_SELECTED}`,
 
   /**
    * Prima cella (sticky a sinistra): porta anche la barra di accento che
@@ -84,8 +97,7 @@ export const LIGHTNING = {
    */
   headActions:
     "sticky right-0 z-40 border-l border-l-border/80 bg-secondary text-center shadow-[-16px_0_24px_-18px_rgb(15_23_42/0.58)]",
-  cellActions:
-    "sticky right-0 z-20 border-l border-l-border/80 bg-card text-right shadow-[-16px_0_22px_-18px_rgb(15_23_42/0.62)] group-hover/row:bg-teal/10 group-data-[state=selected]/row:bg-info/10",
+  cellActions: `sticky right-0 z-20 border-l border-l-border/80 bg-card text-right shadow-[-16px_0_22px_-18px_rgb(15_23_42/0.62)] ${STICKY_HOVER} ${STICKY_SELECTED}`,
 } as const
 
 export type Density = "comoda" | "normale" | "densa"

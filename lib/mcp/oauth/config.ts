@@ -11,10 +11,11 @@
 // Chi puo' collegare il connettore
 
 /**
- * I tre ruoli abilitati, con lo stesso identico perimetro: non c'e'
- * differenziazione fra loro qui dentro. Cio' che l'uno vede e l'altro no
- * dipende dalla RLS di Supabase, che vale per la sessione di ciascuno esattamente
- * come nel CRM — questo elenco decide solo chi entra dalla porta.
+ * I tre ruoli abilitati a collegare il connettore. Questo elenco decide solo
+ * chi entra dalla porta: cosa ciascuno vede dipende dalla RLS di Supabase, che
+ * vale per la sua sessione esattamente come nel CRM, e dal perimetro a fasce
+ * di lib/mcp/denylist.ts, dove SUPERADMIN e ADMIN leggono anche il registro di
+ * audit mentre DIRECTOR no.
  */
 export const RUOLI_AMMESSI = ["SUPERADMIN", "ADMIN", "DIRECTOR"] as const
 

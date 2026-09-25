@@ -69,7 +69,9 @@ export function registraToolTrasversali(server: McpServer): void {
       assertNomeDb("Tabella", tabella)
       const colonnaChiave = chiave ?? "id"
       assertNomeDb("Colonna chiave", colonnaChiave)
-      assertTabellaScrivibile(tabella)
+      // Il ruolo arriva dal contesto della richiesta: il perimetro e' a fasce
+      // e senza ruolo darebbe il messaggio della fascia sbagliata.
+      assertTabellaScrivibile(tabella, identitaMcpDalContesto()?.ruolo)
 
       const patch = Object.fromEntries(Object.entries(campi).filter(([, valore]) => valore !== undefined))
       if (Object.keys(patch).length === 0) throw new Error("Nessun campo da aggiornare")

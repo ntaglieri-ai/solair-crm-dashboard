@@ -21,10 +21,10 @@ function davRoot(username: string): string {
   return `${nextcloudBaseUrl()}/remote.php/dav/files/${encodeURIComponent(username)}`
 }
 
+// Solo le proprietà lette da parsePropfind (il nome si ricava dall'href).
 const PROPFIND_BODY = `<?xml version="1.0"?>
-<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
+<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns">
   <d:prop>
-    <d:displayname/>
     <d:getlastmodified/>
     <d:getcontentlength/>
     <d:getcontenttype/>

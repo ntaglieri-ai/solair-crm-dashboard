@@ -2,7 +2,7 @@ import "server-only"
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 
-import { applicaPerimetro } from "@/lib/mcp/denylist"
+import { applicaPerimetro, type RuoloMcp } from "@/lib/mcp/denylist"
 import { accessTokenUtente } from "@/lib/mcp/token"
 
 /**
@@ -20,7 +20,13 @@ function env(nome: string): string {
   return valore
 }
 
-export async function creaClientMcp(authUserId: string): Promise<SupabaseClient> {
+export async function creaClientMcp(
+  authUserId: string,
+  // Il perimetro e' a fasce e il ruolo decide quali vede: va passato qui,
+  // dove il client nasce, perche' il Proxy lo cattura una volta sola. Se
+  // manca, `applicaPerimetro` applica la fascia piu' chiusa.
+  ruolo?: RuoloMcp | null,
+): Promise<SupabaseClient> {
   const token = await accessTokenUtente(authUserId)
   const client = createClient(
     env("NEXT_PUBLIC_SUPABASE_URL"),
@@ -30,5 +36,5 @@ export async function creaClientMcp(authUserId: string): Promise<SupabaseClient>
       auth: { persistSession: false, autoRefreshToken: false },
     },
   )
-  return applicaPerimetro(client)
+  return applicaPerimetro(client, ruolo)
 }

@@ -78,7 +78,7 @@ export async function POST(request: Request) {
 
   try {
     await server.connect(transport)
-    const client = await creaClientMcp(identita.authUserId)
+    const client = await creaClientMcp(identita.authUserId, identita.ruolo)
     // Il contesto avvolge l'intera gestione della richiesta: i tool girano
     // dentro handleRequest, quindi e' li' che i repository devono trovare il
     // client di QUESTO utente al posto di quello a cookie — e li' che il

@@ -131,10 +131,10 @@ export async function downloadAdminFile(fullPath: string): Promise<Response> {
   return res
 }
 
+// Solo le proprietà lette dal parser di listFolder (il nome si ricava dall'href).
 const PROPFIND_BODY = `<?xml version="1.0"?>
-<d:propfind xmlns:d="DAV:">
+<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns">
   <d:prop>
-    <d:displayname/>
     <d:getcontentlength/>
     <d:getlastmodified/>
     <d:getetag/>

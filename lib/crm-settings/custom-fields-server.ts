@@ -24,6 +24,29 @@ export async function loadRecordCustomFieldValues(
   permissionModule: FieldModuleKey,
   recordId: string,
 ): Promise<CustomFieldValue[]> {
+  // Il try/catch e' quello che rende vera la promessa scritta qui sopra. Il
+  // controllo `if (fieldsError)` intercetta solo gli errori che Supabase
+  // restituisce come valore: non un'eccezione lanciata prima della query. E'
+  // successo davvero — il perimetro MCP negava `crm_custom_fields` e il throw
+  // scavalcava ogni guardia, facendo fallire l'intera scheda cliente da
+  // connettore invece di far mancare i soli campi personalizzati.
+  try {
+    return await caricaValoriCampiCustom(supabase, table, permissionModule, recordId)
+  } catch (errore) {
+    console.warn(
+      `[custom-fields] valori non caricati per ${table}/${recordId}:`,
+      errore instanceof Error ? errore.message : errore,
+    )
+    return []
+  }
+}
+
+async function caricaValoriCampiCustom(
+  supabase: SupabaseClient,
+  table: string,
+  permissionModule: FieldModuleKey,
+  recordId: string,
+): Promise<CustomFieldValue[]> {
   const { data: fields, error: fieldsError } = await supabase
     .from("crm_custom_fields")
     .select("field_key, label, tipo, column_name, required, options")
@@ -78,13 +101,20 @@ export async function loadEditableCustomFieldMetadata(
   supabase: SupabaseClient,
   table: string,
 ): Promise<CustomFieldMetadata[] | null> {
-  const { data, error } = await supabase
-    .from("crm_custom_fields")
-    .select("field_key,column_name,label,tipo,required,options")
-    .eq("table_name", table)
-    .eq("visible", true)
-    .eq("system", false)
-    .is("deleted_at", null)
-  if (error) return null
-  return (data ?? []) as CustomFieldMetadata[]
+  // Stesso motivo del try/catch in loadRecordCustomFieldValues: qui `null`
+  // significa gia' "non disponibile" e i chiamanti lo gestiscono, quindi
+  // un'eccezione non deve poter propagare al posto suo.
+  try {
+    const { data, error } = await supabase
+      .from("crm_custom_fields")
+      .select("field_key,column_name,label,tipo,required,options")
+      .eq("table_name", table)
+      .eq("visible", true)
+      .eq("system", false)
+      .is("deleted_at", null)
+    if (error) return null
+    return (data ?? []) as CustomFieldMetadata[]
+  } catch {
+    return null
+  }
 }

@@ -982,7 +982,7 @@ function Pagamenti({ cliente }: { cliente: ClienteRecord }) {
           <DataField label="Importo TICA">{euro(cliente["Importo TICA"])}</DataField>
         </CampoProtetto>
         <CampoProtetto modulo="clienti" campo="iva">
-          <DataField label="IVA">{cliente.IVA ? `${cliente.IVA}%` : "—"}</DataField>
+          <DataField label="IVA">{cliente.IVA?.trim() || "—"}</DataField>
         </CampoProtetto>
         <DataField label="Iva Reverse charge">
           <Switch
@@ -1364,7 +1364,8 @@ function Comunicazioni({ cliente }: { cliente: ClienteRecord }) {
     { label: "Messaggio ordine merce", sent: Boolean(cliente["Messaggio ordine merce"]) },
     { label: "Messaggio in esecuzione", sent: Boolean(cliente["Messaggio in esecuzione"]) },
     { label: "Telefonata post installazione", sent: Boolean(cliente["Telefonata post installazione"]) },
-    { label: "Messaggio Fattura", sent: Boolean(cliente["Messaggio Fattura"]) },
+    // Tendina Zoho (I/II/III Fattura): inviato se ha un valore qualsiasi.
+    { label: "Messaggio Fattura", sent: Boolean(cliente["Messaggio Fattura"]?.trim()) },
   ]
   return (
     <div className="flex flex-col gap-3">

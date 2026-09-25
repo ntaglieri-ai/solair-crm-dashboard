@@ -1,3 +1,9 @@
+-- ⚠ SUPERATA — NON ESEGUIRE.
+-- Mai eseguita sul DB. Sostituita da 20260926_clienti_tendine_iva_messaggio_fattura.sql
+-- (backup delle colonne, valori svuotati e riscritti da Zoho, vista ricreata
+-- dalla definizione reale, metadati in crm_custom_fields).
+-- Rinominata in .sql.superata perché nessuno strumento la prenda come migrazione.
+
 -- Riallinea i tipi locali Clienti ai campi picklist dichiarati dal layout Zoho.
 -- Non modifica layout, formule o raggruppamenti: cambia solo il tipo fisico
 -- delle colonne che erano state importate come numeric/boolean ma in Zoho sono

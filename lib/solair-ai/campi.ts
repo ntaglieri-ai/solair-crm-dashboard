@@ -87,7 +87,7 @@ const CAMPI_CLIENTE: CampoAI[] = [
   { column: "importo_contrattuale", etichetta: "Importo contrattuale", tipo: "numero" },
   { column: "importo_finanziamento", etichetta: "Importo finanziamento", tipo: "numero" },
   { column: "modalita_di_pagamento", etichetta: "Modalita di pagamento", tipo: "testo" },
-  { column: "iva", etichetta: "IVA", tipo: "numero" },
+  { column: "iva", etichetta: "IVA", tipo: "testo", nota: "Tendina: IVA INCLUSA oppure IMPONIBILE." },
   { column: "data_sopralluogo", etichetta: "Data sopralluogo", tipo: "data" },
   { column: "data_installazione_ultimata", etichetta: "Data installazione ultimata", tipo: "data" },
   { column: "wallbox", etichetta: "Wallbox", tipo: "booleano" },

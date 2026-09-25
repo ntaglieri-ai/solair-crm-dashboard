@@ -29,6 +29,8 @@
 // Uso:
 //   node --env-file=.env.local scripts/migrations/final-zoho-delta.mjs \
 //     --backup ~/migrazione-finale/zoho-backup --step all [--out <cartella>] [--apply]
+//   solo alcuni campi: --step update --campi iva,messaggio_fattura (non avanza
+//   zoho_modified_at)
 //
 // Orari: il backup è in CET (Europe/Rome) senza offset. Si rispetta la
 // convenzione già presente in ciascuna tabella, così i confronti restano
@@ -75,12 +77,21 @@ if (!backupArg || !stepArg) {
   process.exit(1)
 }
 const STEP_ORDER = ["create", "link", "update", "fix-decimali"]
+// --campi col1,col2: l'update considera solo queste colonne (per ogni modulo
+// che le ha) e NON avanza zoho_modified_at, perché gli altri campi del record
+// non sono stati allineati. Solo con --step update.
+const campiFilter = argument("campi")
+  ? new Set(argument("campi").split(",").map((value) => value.trim()).filter(Boolean))
+  : null
 const steps =
   stepArg === "all"
     ? STEP_ORDER
     : stepArg.split(",").map((value) => value.trim())
 for (const step of steps) {
   if (!STEP_ORDER.includes(step)) throw new Error(`Step sconosciuto: ${step}`)
+}
+if (campiFilter && (steps.length !== 1 || steps[0] !== "update")) {
+  throw new Error("--campi si usa solo con --step update")
 }
 const backupDir = resolve(expandHome(backupArg))
 const zipPath = join(backupDir, "Data_001.zip")
@@ -1175,7 +1186,8 @@ function mergeFields(name) {
   const refs = Object.keys(resolvedRefs(name, {}))
     .filter((column) => !owners.has(column))
     .map((column) => ({ column, type: "ref" }))
-  return [...fields, ...refs]
+  const all = [...fields, ...refs]
+  return campiFilter ? all.filter((field) => campiFilter.has(field.column)) : all
 }
 
 function fieldValue(name, field, row) {
@@ -1353,6 +1365,12 @@ function mergeRecord(name, record, row, base) {
 }
 
 async function stepUpdate() {
+  if (campiFilter) {
+    const noti = new Set(Object.values(MODULES).flatMap((module) => module.fields.map((field) => field.column)))
+    const ignoti = [...campiFilter].filter((column) => !noti.has(column))
+    if (ignoti.length > 0) throw new Error(`--campi: colonne non presenti nel mapping: ${ignoti.join(", ")}`)
+    console.log(`Update limitato a: ${[...campiFilter].join(", ")}`)
+  }
   const summary = { fontiBase: baseSources }
   const writes = []
   for (const name of ["clienti", "leads", "compiti"]) {
@@ -1407,7 +1425,7 @@ async function stepUpdate() {
         module.timestamp(row["Orario del registro delle modifiche"]),
         module.timestamp(row["Ora modifica"]),
       ].filter(Boolean).sort().at(-1)
-      if (reviews.length === 0 && zohoModified &&
+      if (!campiFilter && reviews.length === 0 && zohoModified &&
           (record.zoho_modified_at == null || millis(zohoModified) > millis(record.zoho_modified_at))) {
         changes.push({ column: "zoho_modified_at", from: record.zoho_modified_at, to: zohoModified, rule: "riferimento Zoho" })
       }

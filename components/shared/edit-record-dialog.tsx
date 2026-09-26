@@ -118,7 +118,9 @@ export function outgoingEditValue(field: EditField, value: EditValue): unknown {
   }
   if (field.type === "multiselect") {
     const values = Array.isArray(value) ? value : splitMultiValue(value)
-    return values.length ? values.join("; ") : null
+    // ";" senza spazi: lo stesso formato dei valori multipli importati da
+    // Zoho, cosi' un salvataggio dal CRM non rende "diverso" un valore uguale.
+    return values.length ? values.join(";") : null
   }
   return String(value)
 }

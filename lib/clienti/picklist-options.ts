@@ -224,6 +224,18 @@ export const CLIENTI_FIELD_OPTION_DEFINITIONS = [
 
 export type ClienteOptionColumn = (typeof CLIENTI_FIELD_OPTION_DEFINITIONS)[number]["column"]
 
+/**
+ * Colonne a scelta multipla dei Clienti ("A;B" in una colonna text): le
+ * tendine multiple qui sopra piu' Stato, le cui opzioni vivono in
+ * crm_stato_cliente. Filtri e ricerche le confrontano sui singoli valori.
+ */
+export const COLONNE_MULTIPLE_CLIENTI: ReadonlySet<string> = new Set([
+  ...CLIENTI_FIELD_OPTION_DEFINITIONS.filter((definition) => definition.kind === "multiselect").map(
+    (definition) => definition.column as string,
+  ),
+  "stato",
+])
+
 export const CLIENTI_OPTION_COLUMNS = CLIENTI_FIELD_OPTION_DEFINITIONS.map(
   (definition) => definition.column,
 ) as ClienteOptionColumn[]

@@ -30,7 +30,9 @@
 //   node --env-file=.env.local scripts/migrations/final-zoho-delta.mjs \
 //     --backup ~/migrazione-finale/zoho-backup --step all [--out <cartella>] [--apply]
 //   solo alcuni campi: --step update --campi iva,messaggio_fattura (non avanza
-//   zoho_modified_at)
+//   zoho_modified_at); con --solo-multipli, solo i record con più valori
+//   ("A;B") in Zoho in quei campi; --moduli clienti limita ai moduli indicati;
+//   --zoho-vince scrive il valore Zoho quando è diverso, senza merge a tre vie
 //
 // Orari: il backup è in CET (Europe/Rome) senza offset. Si rispetta la
 // convenzione già presente in ciascuna tabella, così i confronti restano
@@ -83,6 +85,21 @@ const STEP_ORDER = ["create", "link", "update", "fix-decimali"]
 const campiFilter = argument("campi")
   ? new Set(argument("campi").split(",").map((value) => value.trim()).filter(Boolean))
   : null
+// --solo-multipli (con --campi): solo i record che in Zoho hanno più valori
+// ("A;B") in almeno uno dei campi scelti.
+const soloMultipli = process.argv.includes("--solo-multipli")
+// --zoho-vince (con --campi): nei campi scelti vale il valore Zoho quando è
+// diverso, senza merge a tre vie. Per riallineamenti mirati in cui il CRM non
+// ha una versione base utilizzabile (es. un valore scartato da un update
+// precedente mentre zoho_modified_at avanzava). Ogni scrittura resta in
+// update-campi.csv con il valore CRM precedente.
+const zohoVince = process.argv.includes("--zoho-vince")
+// --moduli clienti,leads (con --campi): l'update considera solo questi moduli.
+// Serve quando una colonna ha lo stesso nome in più moduli (es. stato su
+// clienti e compiti).
+const moduliFilter = argument("moduli")
+  ? new Set(argument("moduli").split(",").map((value) => value.trim()).filter(Boolean))
+  : null
 const steps =
   stepArg === "all"
     ? STEP_ORDER
@@ -92,6 +109,12 @@ for (const step of steps) {
 }
 if (campiFilter && (steps.length !== 1 || steps[0] !== "update")) {
   throw new Error("--campi si usa solo con --step update")
+}
+if (soloMultipli && !campiFilter) throw new Error("--solo-multipli si usa solo insieme a --campi")
+if (moduliFilter && !campiFilter) throw new Error("--moduli si usa solo insieme a --campi")
+if (zohoVince && !campiFilter) throw new Error("--zoho-vince si usa solo insieme a --campi")
+for (const modulo of moduliFilter ?? []) {
+  if (!["clienti", "leads", "compiti"].includes(modulo)) throw new Error(`Modulo sconosciuto: ${modulo}`)
 }
 const backupDir = resolve(expandHome(backupArg))
 const zipPath = join(backupDir, "Data_001.zip")
@@ -550,7 +573,7 @@ let crm = await loadCrm()
 // valori-non-mappati.csv.
 // Multiselect clienti (valori separati da ";"): lib/clienti/picklist-options.ts.
 const MULTISELECT_COLUMNS = {
-  clienti: new Set(["stato_sollecito", "zona", "tipo_ctr", "intervento_1", "intervento_2", "mod_pagamento_ct3_0", "stato_provvigione", "tipo_di_tensione"]),
+  clienti: new Set(["stato", "stato_sollecito", "zona", "tipo_ctr", "intervento_1", "intervento_2", "mod_pagamento_ct3_0", "stato_provvigione", "tipo_di_tensione"]),
 }
 const PICKLISTS = {}
 for (const row of await fetchAll("crm_column_values", "id,table_name,column_name,value,label,active")) {
@@ -1308,6 +1331,11 @@ function mergeRecord(name, record, row, base) {
     const crmValue = record[column]
     if (sameForMerge(field, crmValue, zoho)) continue
 
+    if (zohoVince) {
+      propose(column, crmValue, zoho, "Zoho vince (--zoho-vince)")
+      continue
+    }
+
     if (LATEST_WINS.has(column)) {
       if (isEmpty(crmValue) || millis(zoho) > millis(crmValue)) propose(column, crmValue, zoho, "orario più recente")
       continue
@@ -1369,11 +1397,16 @@ async function stepUpdate() {
     const noti = new Set(Object.values(MODULES).flatMap((module) => module.fields.map((field) => field.column)))
     const ignoti = [...campiFilter].filter((column) => !noti.has(column))
     if (ignoti.length > 0) throw new Error(`--campi: colonne non presenti nel mapping: ${ignoti.join(", ")}`)
-    console.log(`Update limitato a: ${[...campiFilter].join(", ")}`)
+    console.log(
+      `Update limitato a: ${[...campiFilter].join(", ")}` +
+        (moduliFilter ? ` | moduli: ${[...moduliFilter].join(", ")}` : "") +
+        (soloMultipli ? " | solo record con più valori in Zoho" : "") +
+        (zohoVince ? " | Zoho vince" : ""),
+    )
   }
   const summary = { fontiBase: baseSources }
   const writes = []
-  for (const name of ["clienti", "leads", "compiti"]) {
+  for (const name of ["clienti", "leads", "compiti"].filter((modulo) => !moduliFilter || moduliFilter.has(modulo))) {
     const module = MODULES[name]
     const counts = {
       inComune: 0,
@@ -1392,6 +1425,7 @@ async function stepUpdate() {
     for (const [zohoId, row] of backup[name]) {
       const record = crm[name].byZohoId.get(zohoId)
       if (!record) continue
+      if (soloMultipli && !mergeFields(name).some((field) => String(rawValue(field, row) ?? "").includes(";"))) continue
       counts.inComune += 1
       const base = findBase(name, record, zohoId)
       if (base) counts.conBase += 1

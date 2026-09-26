@@ -24,9 +24,10 @@ import {
 import {
   SEDE_LABELS,
   type ClienteRecord,
-  type StatoCliente,
   type SedeLabel,
 } from "@/lib/mock-data"
+import { MultiFilterSelect } from "@/components/shared/multi-filter-select"
+import { unisciValoriMultipli } from "@/lib/clienti/valori-multipli"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
 import { option } from "@/lib/crm-settings/column-values"
@@ -37,7 +38,8 @@ interface FormState {
   cognome: string
   email: string
   cellulare: string
-  stato: StatoCliente
+  /** Stato a scelta multipla: si salva come "A;B". */
+  stato: string[]
   sede: SedeLabel
   proprietario: string
   installatore: string
@@ -78,7 +80,6 @@ export function NewClienteDialog({
     { includeFallback: true },
   ).options
   const statoValues = (statoOptions ?? []).map((s) => s.valore)
-  const STATO_ITEMS = Object.fromEntries(statoValues.map((s) => [s, s]))
   const SEDE_ITEMS = Object.fromEntries(sedeOptions.map((s) => [s.value, s.label]))
   const ownerItems = Object.fromEntries(owners.map((owner) => [owner.id, owner.nome]))
   const installerItems = Object.fromEntries(installers.map((installer) => [installer.id, installer.nome]))
@@ -88,12 +89,12 @@ export function NewClienteDialog({
       cognome: "",
       email: "",
       cellulare: "",
-      stato: statoValues[0] ?? "Da sollecitare",
+      stato: [],
       sede: sedeOptions[0]?.value ?? SEDE_LABELS[0],
       proprietario: "",
       installatore: "",
     }),
-    [sedeOptions, statoValues],
+    [sedeOptions],
   )
   const [form, setForm] = useState<FormState>(() => defaultForm)
 
@@ -123,7 +124,7 @@ export function NewClienteDialog({
       InstallatoreId: form.installatore || null,
       "Creato da": form.proprietario,
       "Ora creazione": stamp,
-      Stato: form.stato,
+      Stato: unisciValoriMultipli(form.stato),
     }
     setSaving(true)
     try {
@@ -189,25 +190,15 @@ export function NewClienteDialog({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="cli-stato">Stato</Label>
-            <Select
-              items={STATO_ITEMS}
+            <Label>Stato</Label>
+            <MultiFilterSelect
+              ariaLabel="Stato"
+              allLabel="Nessuno stato"
               value={form.stato}
-              onValueChange={(v) => set("stato", v as StatoCliente)}
-            >
-              <SelectTrigger id="cli-stato">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {statoValues.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
+              onValueChange={(v) => set("stato", v)}
+              options={statoValues.map((s) => ({ value: s, label: s }))}
+              className="h-9 w-full bg-card"
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="cli-sede">Sede</Label>

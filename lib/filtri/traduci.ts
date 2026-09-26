@@ -5,6 +5,7 @@ import {
   type Gruppo,
   type Nodo,
 } from "./albero"
+import { contieneUnoDi, nonContieneNessunoDi } from "./multivalore"
 
 /**
  * Dall'albero del filtro all'interrogazione.
@@ -52,16 +53,36 @@ function giorniFa(giorni: number): string {
   return data.toISOString()
 }
 
+type ColonnaPer = (chiave: string) => { colonna: string; multipla: boolean } | null
+
 function condizione(
   nodo: Condizione,
-  colonnaPer: (chiave: string) => string | null,
+  colonnaPer: ColonnaPer,
 ): string | null {
-  const colonna = colonnaPer(nodo.campo)
+  const risolta = colonnaPer(nodo.campo)
   // Nessuna colonna: e' un campo su una tabella collegata, tradotto altrove.
-  if (!colonna) return null
+  if (!risolta) return null
+  const { colonna, multipla } = risolta
 
   const [primo, secondo] = nodo.valori
   if (!operatoreSenzaValore(nodo.operatore) && primo === undefined) return null
+
+  // Colonna a scelta multipla ("A;B"): uguaglianza e appartenenza si
+  // valutano sui singoli valori (vedi multivalore.ts). "contiene" e simili
+  // restano ricerche di testo sulla stringa intera.
+  if (multipla) {
+    const valori = nodo.valori.map((valore) => String(valore))
+    switch (nodo.operatore) {
+      case "uguale":
+        return contieneUnoDi(colonna, [String(primo)])
+      case "diverso":
+        return nonContieneNessunoDi(colonna, [String(primo)])
+      case "uno_di":
+        return contieneUnoDi(colonna, valori)
+      case "nessuno_di":
+        return nonContieneNessunoDi(colonna, valori)
+    }
+  }
 
   switch (nodo.operatore) {
     case "contiene":
@@ -107,7 +128,7 @@ function condizione(
 
 function nodoTradotto(
   nodo: Nodo,
-  colonnaPer: (chiave: string) => string | null,
+  colonnaPer: ColonnaPer,
 ): string | null {
   if (nodo.tipo === "condizione") return condizione(nodo, colonnaPer)
 
@@ -133,14 +154,17 @@ export function traduciAlbero(
   gruppo: Gruppo,
   catalogo: readonly CampoFiltrabile[],
   colonnaPerCampo: Record<string, string>,
+  /** Colonne a scelta multipla ("A;B"), confrontate sui singoli valori. */
+  colonneMultiple: ReadonlySet<string> = new Set(),
 ): EsitoTraduzione {
   const conosciuti = new Set(catalogo.map((campo) => campo.chiave))
 
-  const colonnaPer = (chiave: string): string | null => {
+  const colonnaPer: ColonnaPer = (chiave) => {
     // Doppia rete: la chiave deve stare nel catalogo E avere una colonna
     // dichiarata. Nessun nome di colonna arriva mai da fuori.
     if (!conosciuti.has(chiave)) return null
-    return colonnaPerCampo[chiave] ?? null
+    const colonna = colonnaPerCampo[chiave]
+    return colonna ? { colonna, multipla: colonneMultiple.has(colonna) } : null
   }
 
   try {

@@ -28,8 +28,9 @@ import { applyOwnerScope, filterCurrentAccessibleRecordIds, resolveCurrentOwnerS
 import {
   EMPTY_FILTER_VALUE,
   activeFilterValues,
-  postgrestInList,
 } from "@/lib/shared/filter-values"
+import { condizioniElemento } from "@/lib/filtri/multivalore"
+import { COLONNE_MULTIPLE_CLIENTI } from "./picklist-options"
 
 // Colonne proiettate in lettura — mai SELECT * dal client. La lista deve pero'
 // caricare tutti i campi Cliente selezionabili, altrimenti una colonna visibile
@@ -257,7 +258,7 @@ export async function queryClienti(
     const catalogo = catalogoClientiCompleto()
     const validato = validaAlbero(params.albero, catalogo)
     if (validato.ok) {
-      const tradotto = traduciAlbero(validato.gruppo, catalogo, COLONNE_CLIENTI)
+      const tradotto = traduciAlbero(validato.gruppo, catalogo, COLONNE_CLIENTI, COLONNE_MULTIPLE_CLIENTI)
       if (tradotto.ok && tradotto.espressione) {
         listQ = listQ.or(tradotto.espressione)
         countQ = countQ.or(tradotto.espressione)
@@ -281,18 +282,17 @@ export async function queryClienti(
   }
   const statoValues = activeFilterValues(params.stato)
   if (statoValues.length > 0) {
+    // Stato e' a scelta multipla ("A;B"): esce il cliente con ALMENO UNO
+    // degli stati scelti, confrontati sui singoli valori (multivalore.ts).
     const wantsEmpty = statoValues.includes(EMPTY_FILTER_VALUE)
     const realValues = statoValues.filter((value) => value !== EMPTY_FILTER_VALUE)
-    if (wantsEmpty && realValues.length > 0) {
-      const filter = `stato.in.(${postgrestInList(realValues)}),stato.is.null,stato.eq.`
+    const filter = [
+      ...condizioniElemento("stato", realValues),
+      ...(wantsEmpty ? ["stato.is.null", "stato.eq."] : []),
+    ].join(",")
+    if (filter) {
       listQ = listQ.or(filter)
       countQ = countQ.or(filter)
-    } else if (wantsEmpty) {
-      listQ = listQ.or("stato.is.null,stato.eq.")
-      countQ = countQ.or("stato.is.null,stato.eq.")
-    } else {
-      listQ = listQ.in("stato", realValues)
-      countQ = countQ.in("stato", realValues)
     }
   }
   const sedeValues = activeFilterValues(params.sede)
@@ -551,7 +551,8 @@ export async function updateClienteRecord(
   if (patch.Cellulare !== undefined) row.cellulare = patch.Cellulare
   if (patch["Codice fiscale"] !== undefined)
     row.codice_fiscale = patch["Codice fiscale"]
-  if (patch.Stato !== undefined) row.stato = patch.Stato
+  // Togliere l'ultimo stato lascia il campo vuoto (null), non una stringa vuota.
+  if (patch.Stato !== undefined) row.stato = patch.Stato || null
   if (patch.Sede !== undefined) row.sede = patch.Sede
   if (patch["Clienti Proprietario"] !== undefined)
     row.clienti_proprietario_id = patch["Clienti Proprietario"]

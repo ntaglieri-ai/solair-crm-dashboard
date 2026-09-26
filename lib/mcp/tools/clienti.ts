@@ -14,6 +14,8 @@ import {
 import { CLIENTI_RECORD_FIELDS } from "@/lib/clienti/zoho-fields"
 import { CLIENTE_COLUMNS, type ClienteRecord } from "@/lib/mock-data"
 import { clientMcpObbligatorio } from "@/lib/mcp/context"
+import { normalizzaStatoCliente } from "@/lib/clienti/stato-cliente-validazione"
+import { valoriMultipli } from "@/lib/clienti/valori-multipli"
 import { registraTool } from "@/lib/mcp/registra-tool"
 
 /**
@@ -119,10 +121,14 @@ export function registraToolClienti(server: McpServer): void {
     titolo: "Cerca clienti",
     descrizione:
       "Cerca clienti con i filtri della lista CRM (testo su nome, email, cellulare e codice fiscale; " +
-      "stato, sede, proprietario, installatore) e restituisce una pagina di risultati con il totale.",
+      "stato, sede, proprietario, installatore) e restituisce una pagina di risultati con il totale. " +
+      "Lo stato e' a scelta multipla: passando piu' stati esce il cliente che ne ha ALMENO UNO.",
     schema: {
       cerca: z.string().trim().optional(),
-      stato: z.string().trim().optional(),
+      stato: z
+        .union([z.string().trim(), z.array(z.string().trim())])
+        .optional()
+        .describe('Uno stato, piu\' stati separati da ";" o un elenco.'),
       sede: z.string().trim().optional(),
       proprietario: z.string().trim().optional().describe("id utente del proprietario."),
       installatore: z.string().trim().optional().describe("id installatore."),
@@ -140,7 +146,7 @@ export function registraToolClienti(server: McpServer): void {
         sortBy: (args.ordina_per ?? DEFAULT_CLIENTI_PARAMS.sortBy) as ClientiListParams["sortBy"],
         sortDir: args.direzione ?? "desc",
         search: args.cerca ?? "",
-        stato: args.stato ? [args.stato] : [],
+        stato: valoriMultipli(args.stato),
         sede: args.sede ? [args.sede] : [],
         proprietario: args.proprietario ? [args.proprietario] : [],
         installatore: args.installatore ? [args.installatore] : [],
@@ -208,7 +214,10 @@ export function registraToolClienti(server: McpServer): void {
       email: z.string().trim().optional(),
       cellulare: z.string().trim().optional(),
       codice_fiscale: z.string().trim().optional(),
-      stato: z.string().trim().optional(),
+      stato: z
+        .union([z.string().trim(), z.array(z.string().trim())])
+        .optional()
+        .describe('Stato a scelta multipla: uno stato, piu\' stati separati da ";" o un elenco.'),
       sede: z.string().trim().optional(),
       proprietario_id: z.string().uuid().optional().describe("id utente (da crm_utenti_lookup)."),
       installatore: z.string().trim().optional().describe("Nome dell'installatore (colonna testuale storica)."),
@@ -225,7 +234,9 @@ export function registraToolClienti(server: McpServer): void {
         "E-mail": args.email,
         Cellulare: args.cellulare,
         "Codice fiscale": args.codice_fiscale,
-        Stato: args.stato as ClienteRecord["Stato"],
+        Stato: (args.stato === undefined
+          ? undefined
+          : await normalizzaStatoCliente(clientMcpObbligatorio(), args.stato)) as ClienteRecord["Stato"],
         Sede: args.sede as ClienteRecord["Sede"],
         "Clienti Proprietario": args.proprietario_id,
         Installatore: args.installatore,
@@ -257,6 +268,10 @@ export function registraToolClienti(server: McpServer): void {
       const patch = versoClienteDaCampiLiberi(campi)
       const passati = Object.keys(patch)
       if (passati.length === 0) throw new Error("Nessun campo da aggiornare")
+      // Stato a scelta multipla: ogni parte deve essere uno stato configurato.
+      if ("Stato" in patch) {
+        patch.Stato = (await normalizzaStatoCliente(clientMcpObbligatorio(), patch.Stato)) as ClienteRecord["Stato"]
+      }
       const aggiornato = await updateClienteRecord(id, patch)
       if (!aggiornato) throw new Error(`Aggiornamento non riuscito: nessun cliente con id ${id}`)
       return { dati: { id, aggiornati: passati }, righe: 1 }

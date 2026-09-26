@@ -48,6 +48,7 @@ import { SEDE_LABELS, type ClienteRecord } from "@/lib/mock-data"
 import { ClienteTagPicker } from "./cliente-tag-controls"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
+import { alternaValoreMultiplo, valoriMultipli } from "@/lib/clienti/valori-multipli"
 import { CLIENTI_FIELD_OPTION_DEFINITIONS } from "@/lib/clienti/picklist-options"
 import { useClienteFieldOptions } from "@/lib/clienti/use-cliente-field-options"
 import { usePermissions } from "@/lib/permissions/provider"
@@ -311,18 +312,23 @@ export function ClienteRowContextMenu({
                 Cambia stato
               </ContextMenuSubTrigger>
               <ContextMenuSubContent>
+                {/* Stato a scelta multipla: ogni voce aggiunge o toglie
+                    quello stato, gli altri restano. La spunta segna gli
+                    stati gia' presenti. */}
                 {(statoOptions ?? []).map((opt) => opt.valore).map((s) => (
                   <ContextMenuItem
                     key={s}
                     onClick={() => {
-                      setStato(s)
-                      onUpdate(cliente, { Stato: s })
-                      toast.success("Stato aggiornato", {
-                        description: `${cliente["Nome Clienti"]} → ${s}`,
+                      const presente = valoriMultipli(stato).includes(s)
+                      const nuovo = alternaValoreMultiplo(stato, s)
+                      setStato(nuovo)
+                      onUpdate(cliente, { Stato: nuovo })
+                      toast.success(presente ? "Stato tolto" : "Stato aggiunto", {
+                        description: `${cliente["Nome Clienti"]} → ${valoriMultipli(nuovo).join(", ") || "nessuno stato"}`,
                       })
                     }}
                   >
-                    {stato === s ? (
+                    {valoriMultipli(stato).includes(s) ? (
                       <IconCheck size={15} stroke={2} className="text-teal" />
                     ) : (
                       <span className="size-[15px]" />

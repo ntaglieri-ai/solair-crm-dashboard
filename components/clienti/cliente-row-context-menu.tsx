@@ -104,7 +104,6 @@ export function ClienteRowContextMenu({
   const router = useRouter()
   const [tagOpen, setTagOpen] = useState(false)
   const [owner, setOwner] = useState(cliente["Clienti Proprietario"] ?? "")
-  const [stato, setStato] = useState(cliente.Stato)
   const [confirmDel, setConfirmDel] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
@@ -314,21 +313,24 @@ export function ClienteRowContextMenu({
               <ContextMenuSubContent>
                 {/* Stato a scelta multipla: ogni voce aggiunge o toglie
                     quello stato, gli altri restano. La spunta segna gli
-                    stati gia' presenti. */}
+                    stati gia' presenti. Si parte sempre da cliente.Stato,
+                    il valore attuale della riga (l'aggiornamento
+                    ottimistico della lista lo cambia subito): una copia
+                    locale presa al montaggio restava indietro e un clic
+                    successivo riscriveva lo stato appena tolto. */}
                 {(statoOptions ?? []).map((opt) => opt.valore).map((s) => (
                   <ContextMenuItem
                     key={s}
                     onClick={() => {
-                      const presente = valoriMultipli(stato).includes(s)
-                      const nuovo = alternaValoreMultiplo(stato, s)
-                      setStato(nuovo)
+                      const presente = valoriMultipli(cliente.Stato).includes(s)
+                      const nuovo = alternaValoreMultiplo(cliente.Stato, s)
                       onUpdate(cliente, { Stato: nuovo })
                       toast.success(presente ? "Stato tolto" : "Stato aggiunto", {
                         description: `${cliente["Nome Clienti"]} → ${valoriMultipli(nuovo).join(", ") || "nessuno stato"}`,
                       })
                     }}
                   >
-                    {valoriMultipli(stato).includes(s) ? (
+                    {valoriMultipli(cliente.Stato).includes(s) ? (
                       <IconCheck size={15} stroke={2} className="text-teal" />
                     ) : (
                       <span className="size-[15px]" />

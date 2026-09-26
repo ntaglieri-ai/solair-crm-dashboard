@@ -13,9 +13,14 @@ export async function GET(request: Request) {
   const params = parseClientiSearchParams(searchParams)
   const result = await queryClienti(params)
 
+  // Mai in cache: la lista si rilegge subito dopo ogni modifica (refetch
+  // dopo l'aggiornamento ottimistico). Con "s-maxage=30,
+  // stale-while-revalidate=60" il browser poteva restituire la risposta
+  // precedente per un minuto, e la lista tornava a mostrare lo stato appena
+  // tolto. Stessa intestazione della lista Lead.
   return NextResponse.json(result, {
     headers: {
-      "Cache-Control": "s-maxage=30, stale-while-revalidate=60",
+      "Cache-Control": "private, no-store",
     },
   })
 }

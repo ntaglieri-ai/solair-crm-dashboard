@@ -27,6 +27,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: (ta
   return query
 } }) }))
 import { updateClienteRecord } from "../repository"
+import { alternaValoreMultiplo } from "../valori-multipli"
 
 beforeEach(() => {
   state.row = { id: "client", nome_clienti: "Test", data_sopralluogo: "2026-09-04", updated_at: "2026-09-04" }
@@ -75,6 +76,21 @@ describe("client persistence", () => {
   it("keeps an empty imported client status empty instead of inventing a default", async () => {
     state.row.stato = null
     const result = await updateClienteRecord("client", { Nome: "Test" })
+    expect(result?.Stato).toBe("")
+  })
+  it("removes one of several states and leaves the field empty when the last one goes", async () => {
+    state.row.stato = "Da installare;Da sollecitare;In stand-by"
+    // Stesso calcolo del menu contestuale "Cambia stato": parte dal valore attuale.
+    let result = await updateClienteRecord("client", { Stato: alternaValoreMultiplo(state.row.stato, "In stand-by") })
+    expect(state.writes.at(-1)?.stato).toBe("Da installare;Da sollecitare")
+    expect(result?.Stato).toBe("Da installare;Da sollecitare")
+
+    state.row.stato = "Logistica"
+    const error = vi.fn()
+    result = await updateClienteRecord("client", { Stato: alternaValoreMultiplo(state.row.stato, "Logistica") }, error)
+    expect(error).not.toHaveBeenCalled()
+    expect(state.writes.at(-1)?.stato).toBeNull()
+    expect(state.row.stato).toBeNull()
     expect(result?.Stato).toBe("")
   })
   it("surfaces database errors without reporting success", async () => {

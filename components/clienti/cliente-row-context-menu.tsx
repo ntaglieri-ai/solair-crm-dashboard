@@ -49,6 +49,7 @@ import { ClienteTagPicker } from "./cliente-tag-controls"
 import { useClienteTags } from "@/lib/cliente-tag-store"
 import { useStatoClienteQuery } from "@/lib/clienti/stato-cliente-store"
 import { alternaValoreMultiplo, valoriMultipli } from "@/lib/clienti/valori-multipli"
+import { proprietarioSpuntato } from "@/lib/clienti/proprietario-menu"
 import { CLIENTI_FIELD_OPTION_DEFINITIONS } from "@/lib/clienti/picklist-options"
 import { useClienteFieldOptions } from "@/lib/clienti/use-cliente-field-options"
 import { usePermissions } from "@/lib/permissions/provider"
@@ -103,7 +104,6 @@ export function ClienteRowContextMenu({
   const permissions = usePermissions()
   const router = useRouter()
   const [tagOpen, setTagOpen] = useState(false)
-  const [owner, setOwner] = useState(cliente["Clienti Proprietario"] ?? "")
   const [confirmDel, setConfirmDel] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
@@ -287,14 +287,13 @@ export function ClienteRowContextMenu({
                   <ContextMenuItem
                     key={option.id}
                     onClick={() => {
-                      setOwner(option.id)
                       onUpdate(cliente, { "Clienti Proprietario": option.id })
                       toast.success("Proprietario aggiornato", {
                         description: `${cliente["Nome Clienti"]} → ${option.nome}`,
                       })
                     }}
                   >
-                    {owner === option.id ? (
+                    {proprietarioSpuntato(cliente, option.id) ? (
                       <IconCheck size={15} stroke={2} className="text-teal" />
                     ) : (
                       <span className="size-[15px]" />
